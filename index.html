@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeKeepBitcoin | Self-Custody & OpSec Hub</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-DJBQMJ0NFT"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-DJBQMJ0NFT');
+    </script>
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --text-muted: #888888;
+            --primary: #f7931a;      /* Bitcoin Orange */
+            --primary-hover: #ffaa33;
+            --danger: #cf6679;
+            --success: #03dac6;      /* Cypherpunk Teal */
+            --input-bg: #2c2c2c;
+            --border-color: #333333;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* --- Layout Containers --- */
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+        /* --- Hero Section --- */
+        .hero {
+            text-align: center;
+            padding: 4rem 20px 3rem;
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(180deg, rgba(247,147,26,0.05) 0%, rgba(18,18,18,1) 100%);
+        }
+        .hero h1 { font-size: 3.5rem; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 3px; font-weight: 800; }
+        .hero h1 span { color: var(--primary); }
+        .hero p { font-size: 1.25rem; color: var(--text-muted); max-width: 650px; margin: 0 auto 1.5rem; }
+        
+        .trust-badge {
+            display: inline-block;
+            background: rgba(3, 218, 198, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            font-size: 0.9rem;
+        }
+
+        /* --- Disclaimer --- */
+        .disclaimer-box {
+            background: rgba(207, 102, 121, 0.05);
+            border-left: 4px solid var(--danger);
+            padding: 15px 20px;
+            margin: 3rem auto 0;
+            max-width: 800px;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+        .disclaimer-box strong { color: var(--danger); }
+
+        /* --- Grid & Cards --- */
+        .section-header {
+            display: flex; align-items: center; margin: 4rem 0 2rem;
+            border-bottom: 2px solid var(--border-color); padding-bottom: 10px;
+        }
+        .section-header h2 { margin: 0; font-size: 1.8rem; color: var(--text-color); }
+        .section-header span { color: var(--primary); margin-right: 12px; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 25px; }
+
+        .card {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 25px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+            position: relative; display: flex; flex-direction: column;
+        }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-color: #444; }
+        .card.featured:hover { border-color: var(--primary); box-shadow: 0 10px 30px rgba(247, 147, 26, 0.15); }
+        
+        .card h3 { margin: 0 0 15px 0; font-size: 1.4rem; color: #fff; }
+        .card p { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 25px; flex-grow: 1; }
+
+        /* --- Badges --- */
+        .badge {
+            position: absolute; top: 25px; right: 25px; font-size: 0.75rem; font-weight: bold;
+            padding: 4px 10px; border-radius: 20px; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .badge.live { background: rgba(3, 218, 198, 0.1); color: var(--success); border: 1px solid var(--success); }
+        .badge.soon { background: rgba(255, 255, 255, 0.05); color: #888; border: 1px solid #444; }
+        .badge.hot { background: rgba(247, 147, 26, 0.1); color: var(--primary); border: 1px solid var(--primary); }
+
+        /* --- Buttons --- */
+        .btn {
+            display: block; width: 100%; padding: 12px; font-size: 1rem;
+            background: var(--primary); color: #121212; border: none; border-radius: 6px;
+            cursor: pointer; transition: all 0.3s; font-weight: bold; text-transform: uppercase;
+            letter-spacing: 1px; text-align: center; text-decoration: none; box-sizing: border-box;
+        }
+        .btn:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(247, 147, 26, 0.3); }
+        .btn-disabled { background: var(--input-bg); color: #666; cursor: not-allowed; border: 1px dashed #444; }
+        .btn-disabled:hover { background: var(--input-bg); transform: none; box-shadow: none; }
+
+        /* --- Footer --- */
+        footer {
+            margin-top: 5rem; padding: 3rem 20px; background: var(--card-bg);
+            border-top: 1px solid var(--border-color); text-align: center;
+            color: var(--text-muted); font-size: 0.9rem;
+        }
+        footer a { color: var(--primary); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <header class="hero">
+        <h1>SafeKeep<span>Bitcoin</span></h1>
+        <p>The open-source resource hub for Bitcoin operational security, offline cryptographic tools, and self-custody architecture.</p>
+        <div class="trust-badge">🛡️ 100% Offline-Capable Cryptographic Tools</div>
+    </header>
+
+    <main class="container">
+        
+        <div class="disclaimer-box">
+            <strong>⚠️ Transparency & Liability:</strong> This homepage uses basic analytics to track visitor count. However, all cryptographic tools (like the Seed XOR Calculator) are hosted on separate, strictly tracker-free pages designed to be downloaded and run on air-gapped machines. Always independently verify processes and conduct recovery drills with small test amounts before securing life-changing wealth.
+        </div>
+
+        <div class="section-header">
+            <span>🏁</span><h2> Start Here: Foundations</h2>
+        </div>
+        <div class="grid">
+            <div class="card">
+                <span class="badge soon">Drafting</span>
+                <h3>Bitcoin Threat Models</h3>
+                <p>Security starts by defining the adversary. Are you protecting against a burglar, a house fire, an exchange collapse, or your own memory failure?</p>
+                <a href="#" class="btn btn-disabled">Read Guide</a>
+            </div>
+            <div class="card">
+                <span class="badge soon">Drafting</span>
+                <h3>The Zero-to-Cypherpunk Guide</h3>
+                <p>A definitive, step-by-step checklist for moving off exchanges, verifying hardware wallet firmware, and establishing a secure baseline.</p>
+                <a href="#" class="btn btn-disabled">Read Guide</a>
+            </div>
+            <div class="card">
+                <span class="badge soon">Drafting</span>
+                <h3>Recovery Drills 101</h3>
+                <p>A backup isn't a backup until you've successfully restored it. Learn how to safely wipe your device, recover the seed, and verify your addresses.</p>
+                <a href="#" class="btn btn-disabled">View Playbook</a>
+            </div>
+        </div>
+
+        <div class="section-header">
+            <span>💻</span><h2> Offline Cryptographic Tools</h2>
+        </div>
+        <div class="grid">
+            <div class="card featured">
+                <span class="badge live">Live</span>
+                <h3>Seed XOR Calculator</h3>
+                <p>Mathematically split your BIP39 seed phrase into 2, 3, or 4 distinct shares using Exclusive OR logic. Replicates hardware wallet functionality offline.</p>
+                <a href="app.html" class="btn">Launch Offline App</a>
+            </div>
+            <div class="card featured">
+                <span class="badge hot">Planned</span>
+                <h3>Visual Architecture Builder</h3>
+                <p>Design your self-custody layout visually. Select Single-Sig, Multisig, or XOR, and generate a printable security diagram for your vault.</p>
+                <a href="#" class="btn btn-disabled">In Development</a>
+            </div>
+            <div class="card">
+                <span class="badge soon">Planned</span>
+                <h3>Dice-to-Seed Generator</h3>
+                <p>Generate a verifiable, high-entropy seed phrase by rolling physical casino dice. Calculates the SHA-256 checksum entirely locally.</p>
+                <a href="dice-to-seed.html" class="btn">Launch Offline App</a>
+            </div>
+            <div class="card">
+                <span class="badge soon">Planned</span>
+                <h3>Passphrase Generator</h3>
+                <p>Generate secure, high-entropy passphrases (the "25th word") using the EFF diceware wordlist for hidden wallet creation.</p>
+                <a href="#" class="btn btn-disabled">In Development</a>
+            </div>
+        </div>
+
+        <div class="section-header">
+            <span>🔒</span><h2> OpSec & Physical Security</h2>
+        </div>
+        <div class="grid">
+            <div class="card">
+                <span class="badge soon">Drafting</span>
+                <h3>Bitcoin Estate Planning</h3>
+                <p>Downloadable templates and OpSec strategies for passing your Bitcoin to heirs without compromising your seed phrase while alive.</p>
+                <a href="#" class="btn btn-disabled">View Resources</a>
+            </div>
+            <div class="card">
+                <span class="badge soon">Drafting</span>
+                <h3>Geographic Redundancy</h3>
+                <p>How to safely distribute physical backups across multiple locations (safe deposit boxes, trusted relatives, decoy wallets) without creating single points of failure.</p>
+                <a href="#" class="btn btn-disabled">Read Article</a>
+            </div>
+            <div class="card">
+                <span class="badge soon">Drafting</span>
+                <h3>Steel Backup Stress Tests</h3>
+                <p>A curated breakdown of the best physical metal storage solutions, analyzing resistance to house fires, crushing, and corrosion.</p>
+                <a href="#" class="btn btn-disabled">View Research</a>
+            </div>
+        </div>
+
+        <div class="section-header">
+            <span>🧠</span><h2> Technical Concepts</h2>
+        </div>
+        <div class="grid">
+            
+            <div class="card">
+                <h3>Seed XOR vs. Multisig</h3>
+                <p>A deep dive into the technical tradeoffs between splitting a seed at the base cryptographic layer (XOR) versus on-chain Multi-Signature setups.</p>
+                <a href="xor-vs-multisig.html" class="btn">Read Article</a>
+            </div>
+            
+            <div class="card">
+                <span class="badge soon">Planned</span>
+                <h3>Air-Gapped Workflows</h3>
+                <p>Master the art of signing transactions without an internet connection using PSBTs, QR codes, and microSD cards.</p>
+                <a href="#" class="btn btn-disabled">In Development</a>
+            </div>
+
+            <div class="card">
+                <span class="badge soon">Planned</span>
+                <h3>Coin Control & UTXOs</h3>
+                <p>Why treating Bitcoin like digital cash improves your on-chain privacy, and how to manage UTXOs to save on future transaction fees.</p>
+                <a href="#" class="btn btn-disabled">In Development</a>
+            </div>
+
+        </div>
+
+    </main>
+
+    <footer>
+        <p>SafeKeepBitcoin tools are designed to be saved locally and run on strictly air-gapped machines.</p>
+        <p>Seed XOR standards championed by the open-source community and <a href="https://coinkite.com/" target="_blank">Coinkite</a>.</p>
+    </footer>
+
+</body>
+</html>
