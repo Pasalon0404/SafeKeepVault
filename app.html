@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed XOR Tool</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --text-muted: #888888;
+            --primary: #f7931a;      /* Bitcoin Orange */
+            --primary-hover: #ffaa33;
+            --danger: #cf6679;
+            --success: #03dac6;      /* Cypherpunk Teal/Green */
+            --input-bg: #2c2c2c;
+            --border-color: #333333;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            line-height: 1.6;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border: 1px solid var(--border-color);
+        }
+
+        h1 { 
+            text-align: center; color: var(--text-color);
+            border-bottom: 2px solid var(--primary); padding-bottom: 1rem; 
+            text-transform: uppercase; letter-spacing: 2px; font-weight: 800;
+        }
+
+        .tabs { display: flex; margin-bottom: 2rem; gap: 10px; }
+        .tab-btn {
+            flex: 1; padding: 12px; font-size: 1rem; cursor: pointer;
+            background: var(--input-bg); color: var(--text-color); 
+            border: 1px solid var(--border-color); border-radius: 6px; 
+            transition: all 0.3s ease; text-transform: uppercase;
+            letter-spacing: 1px; font-weight: bold;
+        }
+        .tab-btn:hover { background: #3a3a3a; }
+        .tab-btn.active { 
+            background: var(--primary); color: #121212; 
+            border-color: var(--primary); box-shadow: 0 0 15px rgba(247, 147, 26, 0.3);
+        }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.4s; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- New Grid & Input Styles --- */
+        .controls-container {
+            display: flex; justify-content: space-around; flex-wrap: wrap; gap: 15px;
+            margin-bottom: 1.5rem; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 6px;
+        }
+        .control-group { display: flex; align-items: center; gap: 10px; }
+        .control-group label { margin: 0; color: var(--text-color); display: inline-block; font-weight: bold;}
+        .radio-group { display: flex; gap: 15px; }
+        .radio-group label { cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: normal; }
+
+        .input-group { margin-bottom: 2rem; position: relative; }
+        .group-label { display: block; font-weight: bold; margin-bottom: 1rem; color: #bbb; border-bottom: 1px dashed var(--border-color); padding-bottom: 5px; }
+        
+        .seed-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        @media (max-width: 600px) {
+            .seed-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (max-width: 450px) {
+            .seed-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .word-box {
+            display: flex; align-items: center;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px; padding: 6px 8px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .word-box:focus-within { border-color: var(--primary); box-shadow: 0 0 5px rgba(247, 147, 26, 0.4); }
+        .word-box.invalid { border-color: var(--danger); box-shadow: 0 0 5px rgba(207, 102, 121, 0.4); }
+        
+        .word-box span { color: var(--text-muted); font-size: 0.8em; width: 22px; user-select: none; }
+        .word-box input {
+            width: 100%; background: transparent; border: none;
+            color: var(--primary); font-family: 'Courier New', Courier, monospace;
+            font-size: 15px; outline: none; padding: 0; margin: 0;
+        }
+
+        .obfuscated { filter: blur(6px); transition: filter 0.3s; }
+        .obfuscated:hover, .obfuscated:focus-within { filter: blur(0); }
+
+        /* --- Buttons & Utilities --- */
+        .btn {
+            display: block; width: 100%; padding: 14px; font-size: 1.1rem;
+            background: var(--primary); color: #121212; border: none;
+            border-radius: 6px; cursor: pointer; transition: all 0.3s;
+            font-weight: bold; text-transform: uppercase; letter-spacing: 1px;
+            margin-top: 1rem;
+        }
+        .btn:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(247, 147, 26, 0.4); }
+        .btn:active { transform: translateY(0); }
+
+        .action-buttons { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .copy-btn {
+            padding: 8px 16px; font-size: 0.85rem;
+            background: transparent; color: var(--primary); 
+            border: 1px solid var(--primary); border-radius: 4px; 
+            cursor: pointer; transition: all 0.2s; font-weight: bold; text-transform: uppercase;
+        }
+        .copy-btn:hover { background: var(--primary); color: #121212; }
+
+        .error { color: #121212; background: var(--danger); padding: 10px; border-radius: 4px; font-weight: bold; margin-top: 15px; display: none; text-align: center;}
+        
+        .result-box {
+            margin-top: 2rem; padding: 1.5rem; border: 1px solid var(--success);
+            border-radius: 6px; background: rgba(3, 218, 198, 0.05); display: none;
+        }
+        .result-box h3 { margin-top: 0; color: var(--success); display: flex; align-items: center; gap: 8px;}
+        .result-text {
+            font-family: 'Courier New', Courier, monospace; font-size: 1.15rem; word-break: break-all; color: var(--text-color);
+            background: var(--input-bg); padding: 12px; border-radius: 4px; border: 1px solid #444;
+            filter: blur(5px); transition: filter 0.3s; cursor: pointer; user-select: none;
+        }
+        .result-text:hover, .result-text:focus { filter: blur(0); user-select: text; color: var(--primary); }
+        .reveal-hint { font-size: 0.85em; color: var(--text-muted); margin: 6px 0 12px; font-style: italic;}
+        .share-section { margin-top: 1.5rem; border-top: 1px dashed var(--border-color); padding-top: 1.5rem;}
+        .warning-text { font-size: 0.95em; color: var(--danger); text-align: center; margin-bottom: 2rem; background: rgba(207, 102, 121, 0.1); padding: 10px; border-radius: 6px; border: 1px dashed var(--danger); }
+
+        /* QR Code Styles */
+        .qr-container {
+            margin-top: 15px; display: none; background: #ffffff; 
+            padding: 15px; border-radius: 8px; width: max-content;
+            border: 3px solid var(--border-color);
+        }
+        .qr-container.obfuscated-qr .qr-code-box { filter: blur(12px); transition: filter 0.3s; cursor: pointer; }
+        .qr-container.obfuscated-qr:hover .qr-code-box, .qr-container.obfuscated-qr:focus .qr-code-box { filter: blur(0); }
+        .qr-code-box { display: flex; justify-content: center; background: white; padding: 10px; border-radius: 4px;}
+        .qr-reveal-hint { color: #333; font-size: 0.85em; text-align: center; margin-bottom: 5px; font-weight: bold;}
+
+        /* --- Print Styles for Paper Backups --- */
+        @media print {
+            body { background: white; color: black; margin: 0; padding: 0; }
+            .card { box-shadow: none; border: none; padding: 0; margin: 0; }
+            
+            /* Hide all interactive UI elements and warnings */
+            .tabs, .controls-container, .btn, .action-buttons, .warning-text, .reveal-hint, .input-group, .qr-reveal-hint { 
+                display: none !important; 
+            }
+            
+            /* Force results to show clearly without blur */
+            .result-box { border: none !important; background: transparent !important; padding: 0 !important; margin: 0 !important; }
+            .result-text { filter: blur(0) !important; color: black !important; background: transparent !important; border: none !important; font-size: 14pt; padding: 0; }
+            
+            /* Layout the shares neatly */
+            .share-section { border-top: 1px solid #ccc !important; padding-top: 20px !important; margin-top: 20px !important; page-break-inside: avoid; }
+            h1, h3, label { color: black !important; }
+            
+            /* Force QR codes to render crisply on paper */
+            .qr-container { display: block !important; filter: blur(0) !important; border: none !important; padding: 0 !important; margin-top: 15px !important; }
+            .qr-container.obfuscated-qr .qr-code-box { filter: blur(0) !important; }
+        }
+    </style>
+</head>
+<body>
+
+<datalist id="bip39-words"></datalist>
+
+<div class="card">
+    <h1>Seed XOR Tool</h1>
+    <p class="warning-text"><strong>&#9888; SECURITY WARNING:</strong> For secure air-gapped use, right-click this page and select "Save As... -> Webpage, Complete" so the QR script is saved locally before going offline.</p>
+
+    <div class="controls-container">
+        <div class="control-group">
+            <label>Length:</label>
+            <div class="radio-group">
+                <label><input type="radio" name="seedLength" value="12" checked onchange="updateUI()"> 12</label>
+                <label><input type="radio" name="seedLength" value="24" onchange="updateUI()"> 24</label>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Shares:</label>
+            <div class="radio-group">
+                <label><input type="radio" name="numShares" value="2" checked onchange="updateUI()"> 2</label>
+                <label><input type="radio" name="numShares" value="3" onchange="updateUI()"> 3</label>
+                <label><input type="radio" name="numShares" value="4" onchange="updateUI()"> 4</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="merge" onclick="switchTab('merge')">Merge Seeds</button>
+        <button class="tab-btn" data-tab="split" onclick="switchTab('split')">Split Seed</button>
+    </div>
+
+    <div id="merge-tab" class="tab-content active">
+        <div id="merge-inputs-container"></div>
+        
+        <button class="btn" onclick="handleMerge()">XOR Merge Seeds</button>
+        <div id="merge-error" class="error"></div>
+        
+        <div id="merge-result" class="result-box">
+            <h3>&#10003; Original Seed Recovered:</h3>
+            <div id="merge-output" class="result-text" tabindex="0"></div>
+            <p class="reveal-hint">Hover or tap to reveal words</p>
+            <div class="action-buttons">
+                <button class="copy-btn" onclick="copyText('merge-output', this)">Copy to Clipboard</button>
+                <button class="copy-btn qr-btn" onclick="toggleQR('qr-merge', 'merge-output', this)">Show QR Code</button>
+            </div>
+            <div id="qr-merge" class="qr-container obfuscated-qr" tabindex="0">
+                <p class="qr-reveal-hint">Hover or tap to reveal QR</p>
+                <div class="qr-code-box"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="split-tab" class="tab-content">
+        <div class="input-group">
+            <label class="group-label">Original Seed to Split</label>
+            <div id="grid-split-orig" class="seed-grid obfuscated"></div>
+        </div>
+        <button class="btn" onclick="handleSplit()">Generate XOR Shares</button>
+        <div id="split-error" class="error"></div>
+        
+        <div id="split-result" class="result-box">
+            <h3>&#10003; Split Successful!</h3>
+            <p style="color: #ccc; font-size: 0.9em;">Keep <strong>ALL</strong> of these shares secure. You cannot recover the original seed if you lose even one.</p>
+            
+            <div id="split-shares-container"></div>
+            
+            <button class="btn" style="margin-top: 2rem; background: #e0e0e0; color: #121212;" onclick="window.print()">🖨️ Print Paper Backup</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // 1. DATA — Full BIP39 English Wordlist
+    // ==========================================
+    const WORDLIST = ["abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid", "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual", "adapt", "add", "addict", "address", "adjust", "admit", "adult", "advance", "advice", "aerobic", "affair", "afford", "afraid", "again", "age", "agent", "agree", "ahead", "aim", "air", "airport", "aisle", "alarm", "album", "alcohol", "alert", "alien", "all", "alley", "allow", "almost", "alone", "alpha", "already", "also", "alter", "always", "amateur", "amazing", "among", "amount", "amused", "analyst", "anchor", "ancient", "anger", "angle", "angry", "animal", "ankle", "announce", "annual", "another", "answer", "antenna", "antique", "anxiety", "any", "apart", "apology", "appear", "apple", "approve", "april", "arch", "arctic", "area", "arena", "argue", "arm", "armed", "armor", "army", "around", "arrange", "arrest", "arrive", "arrow", "art", "artefact", "artist", "artwork", "ask", "aspect", "assault", "asset", "assist", "assume", "asthma", "athlete", "atom", "attack", "attend", "attitude", "attract", "auction", "audit", "august", "aunt", "author", "auto", "autumn", "average", "avocado", "avoid", "awake", "aware", "away", "awesome", "awful", "awkward", "axis", "baby", "bachelor", "bacon", "badge", "bag", "balance", "balcony", "ball", "bamboo", "banana", "banner", "bar", "barely", "bargain", "barrel", "base", "basic", "basket", "battle", "beach", "bean", "beauty", "because", "become", "beef", "before", "begin", "behave", "behind", "believe", "below", "belt", "bench", "benefit", "best", "betray", "better", "between", "beyond", "bicycle", "bid", "bike", "bind", "biology", "bird", "birth", "bitter", "black", "blade", "blame", "blanket", "blast", "bleak", "bless", "blind", "blood", "blossom", "blouse", "blue", "blur", "blush", "board", "boat", "body", "boil", "bomb", "bone", "bonus", "book", "boost", "border", "boring", "borrow", "boss", "bottom", "bounce", "box", "boy", "bracket", "brain", "brand", "brass", "brave", "bread", "breeze", "brick", "bridge", "brief", "bright", "bring", "brisk", "broccoli", "broken", "bronze", "broom", "brother", "brown", "brush", "bubble", "buddy", "budget", "buffalo", "build", "bulb", "bulk", "bullet", "bundle", "bunker", "burden", "burger", "burst", "bus", "business", "busy", "butter", "buyer", "buzz", "cabbage", "cabin", "cable", "cactus", "cage", "cake", "call", "calm", "camera", "camp", "can", "canal", "cancel", "candy", "cannon", "canoe", "canvas", "canyon", "capable", "capital", "captain", "car", "carbon", "card", "cargo", "carpet", "carry", "cart", "case", "cash", "casino", "castle", "casual", "cat", "catalog", "catch", "category", "cattle", "caught", "cause", "caution", "cave", "ceiling", "celery", "cement", "census", "century", "cereal", "certain", "chair", "chalk", "champion", "change", "chaos", "chapter", "charge", "chase", "chat", "cheap", "check", "cheese", "chef", "cherry", "chest", "chicken", "chief", "child", "chimney", "choice", "choose", "chronic", "chuckle", "chunk", "churn", "cigar", "cinnamon", "circle", "citizen", "city", "civil", "claim", "clap", "clarify", "claw", "clay", "clean", "clerk", "clever", "click", "client", "cliff", "climb", "clinic", "clip", "clock", "clog", "close", "cloth", "cloud", "clown", "club", "clump", "cluster", "clutch", "coach", "coast", "coconut", "code", "coffee", "coil", "coin", "collect", "color", "column", "combine", "come", "comfort", "comic", "common", "company", "concert", "conduct", "confirm", "congress", "connect", "consider", "control", "convince", "cook", "cool", "copper", "copy", "coral", "core", "corn", "correct", "cost", "cotton", "couch", "country", "couple", "course", "cousin", "cover", "coyote", "crack", "cradle", "craft", "cram", "crane", "crash", "crater", "crawl", "crazy", "cream", "credit", "creek", "crew", "cricket", "crime", "crisp", "critic", "crop", "cross", "crouch", "crowd", "crucial", "cruel", "cruise", "crumble", "crunch", "crush", "cry", "crystal", "cube", "culture", "cup", "cupboard", "curious", "current", "curtain", "curve", "cushion", "custom", "cute", "cycle", "dad", "damage", "damp", "dance", "danger", "daring", "dash", "daughter", "dawn", "day", "deal", "debate", "debris", "decade", "december", "decide", "decline", "decorate", "decrease", "deer", "defense", "define", "defy", "degree", "delay", "deliver", "demand", "demise", "denial", "dentist", "deny", "depart", "depend", "deposit", "depth", "deputy", "derive", "describe", "desert", "design", "desk", "despair", "destroy", "detail", "detect", "develop", "device", "devote", "diagram", "dial", "diamond", "diary", "dice", "diesel", "diet", "differ", "digital", "dignity", "dilemma", "dinner", "dinosaur", "direct", "dirt", "disagree", "discover", "disease", "dish", "dismiss", "disorder", "display", "distance", "divert", "divide", "divorce", "dizzy", "doctor", "document", "dog", "doll", "dolphin", "domain", "donate", "donkey", "donor", "door", "dose", "double", "dove", "draft", "dragon", "drama", "drastic", "draw", "dream", "dress", "drift", "drill", "drink", "drip", "drive", "drop", "drum", "dry", "duck", "dumb", "dune", "during", "dust", "dutch", "duty", "dwarf", "dynamic", "eager", "eagle", "early", "earn", "earth", "easily", "east", "easy", "echo", "ecology", "economy", "edge", "edit", "educate", "effort", "egg", "eight", "either", "elbow", "elder", "electric", "elegant", "element", "elephant", "elevator", "elite", "else", "embark", "embody", "embrace", "emerge", "emotion", "employ", "empower", "empty", "enable", "enact", "end", "endless", "endorse", "enemy", "energy", "enforce", "engage", "engine", "enhance", "enjoy", "enlist", "enough", "enrich", "enroll", "ensure", "enter", "entire", "entry", "envelope", "episode", "equal", "equip", "era", "erase", "erode", "erosion", "error", "erupt", "escape", "essay", "essence", "estate", "eternal", "ethics", "evidence", "evil", "evoke", "evolve", "exact", "example", "excess", "exchange", "excite", "exclude", "excuse", "execute", "exercise", "exhaust", "exhibit", "exile", "exist", "exit", "exotic", "expand", "expect", "expire", "explain", "expose", "express", "extend", "extra", "eye", "eyebrow", "fabric", "face", "faculty", "fade", "faint", "faith", "fall", "false", "fame", "family", "famous", "fan", "fancy", "fantasy", "farm", "fashion", "fat", "fatal", "father", "fatigue", "fault", "favorite", "feature", "february", "federal", "fee", "feed", "feel", "female", "fence", "festival", "fetch", "fever", "few", "fiber", "fiction", "field", "figure", "file", "film", "filter", "final", "find", "fine", "finger", "finish", "fire", "firm", "first", "fiscal", "fish", "fit", "fitness", "fix", "flag", "flame", "flash", "flat", "flavor", "flee", "flight", "flip", "float", "flock", "floor", "flower", "fluid", "flush", "fly", "foam", "focus", "fog", "foil", "fold", "follow", "food", "foot", "force", "forest", "forget", "fork", "fortune", "forum", "forward", "fossil", "foster", "found", "fox", "fragile", "frame", "frequent", "fresh", "friend", "fringe", "frog", "front", "frost", "frown", "frozen", "fruit", "fuel", "fun", "funny", "furnace", "fury", "future", "gadget", "gain", "galaxy", "gallery", "game", "gap", "garage", "garbage", "garden", "garlic", "garment", "gas", "gasp", "gate", "gather", "gauge", "gaze", "general", "genius", "genre", "gentle", "genuine", "gesture", "ghost", "giant", "gift", "giggle", "ginger", "giraffe", "girl", "give", "glad", "glance", "glare", "glass", "glide", "glimpse", "globe", "gloom", "glory", "glove", "glow", "glue", "goat", "goddess", "gold", "good", "goose", "gorilla", "gospel", "gossip", "govern", "gown", "grab", "grace", "grain", "grant", "grape", "grass", "gravity", "great", "green", "grid", "grief", "grit", "grocery", "group", "grow", "grunt", "guard", "guess", "guide", "guilt", "guitar", "gun", "gym", "habit", "hair", "half", "hammer", "hamster", "hand", "happy", "harbor", "hard", "harsh", "harvest", "hat", "have", "hawk", "hazard", "head", "health", "heart", "heavy", "hedgehog", "height", "hello", "helmet", "help", "hen", "hero", "hidden", "high", "hill", "hint", "hip", "hire", "history", "hobby", "hockey", "hold", "hole", "holiday", "hollow", "home", "honey", "hood", "hope", "horn", "horror", "horse", "hospital", "host", "hotel", "hour", "hover", "hub", "huge", "human", "humble", "humor", "hundred", "hungry", "hunt", "hurdle", "hurry", "hurt", "husband", "hybrid", "ice", "icon", "idea", "identify", "idle", "ignore", "ill", "illegal", "illness", "image", "imitate", "immense", "immune", "impact", "impose", "improve", "impulse", "inch", "include", "income", "increase", "index", "indicate", "indoor", "industry", "infant", "inflict", "inform", "inhale", "inherit", "initial", "inject", "injury", "inmate", "inner", "innocent", "input", "inquiry", "insane", "insect", "inside", "inspire", "install", "intact", "interest", "into", "invest", "invite", "involve", "iron", "island", "isolate", "issue", "item", "ivory", "jacket", "jaguar", "jar", "jazz", "jealous", "jeans", "jelly", "jewel", "job", "join", "joke", "journey", "joy", "judge", "juice", "jump", "jungle", "junior", "junk", "just", "kangaroo", "keen", "keep", "ketchup", "key", "kick", "kid", "kidney", "kind", "kingdom", "kiss", "kit", "kitchen", "kite", "kitten", "kiwi", "knee", "knife", "knock", "know", "lab", "label", "labor", "ladder", "lady", "lake", "lamp", "language", "laptop", "large", "later", "latin", "laugh", "laundry", "lava", "law", "lawn", "lawsuit", "layer", "lazy", "leader", "leaf", "learn", "leave", "lecture", "left", "leg", "legal", "legend", "leisure", "lemon", "lend", "length", "lens", "leopard", "lesson", "letter", "level", "liar", "liberty", "library", "license", "life", "lift", "light", "like", "limb", "limit", "link", "lion", "liquid", "list", "little", "live", "lizard", "load", "loan", "lobster", "local", "lock", "logic", "lonely", "long", "loop", "lottery", "loud", "lounge", "love", "loyal", "lucky", "luggage", "lumber", "lunar", "lunch", "luxury", "lyrics", "machine", "mad", "magic", "magnet", "maid", "mail", "main", "major", "make", "mammal", "man", "manage", "mandate", "mango", "mansion", "manual", "maple", "marble", "march", "margin", "marine", "market", "marriage", "mask", "mass", "master", "match", "material", "math", "matrix", "matter", "maximum", "maze", "meadow", "mean", "measure", "meat", "mechanic", "medal", "media", "melody", "melt", "member", "memory", "mention", "menu", "mercy", "merge", "merit", "merry", "mesh", "message", "metal", "method", "middle", "midnight", "milk", "million", "mimic", "mind", "minimum", "minor", "minute", "miracle", "mirror", "misery", "miss", "mistake", "mix", "mixed", "mixture", "mobile", "model", "modify", "mom", "moment", "monitor", "monkey", "monster", "month", "moon", "moral", "more", "morning", "mosquito", "mother", "motion", "motor", "mountain", "mouse", "move", "movie", "much", "muffin", "mule", "multiply", "muscle", "museum", "mushroom", "music", "must", "mutual", "myself", "mystery", "myth", "naive", "name", "napkin", "narrow", "nasty", "nation", "nature", "near", "neck", "need", "negative", "neglect", "neither", "nephew", "nerve", "nest", "net", "network", "neutral", "never", "news", "next", "nice", "night", "noble", "noise", "nominee", "noodle", "normal", "north", "nose", "notable", "note", "nothing", "notice", "novel", "now", "nuclear", "number", "nurse", "nut", "oak", "obey", "object", "oblige", "obscure", "observe", "obtain", "obvious", "occur", "ocean", "october", "odor", "off", "offer", "office", "often", "oil", "okay", "old", "olive", "olympic", "omit", "once", "one", "onion", "online", "only", "open", "opera", "opinion", "oppose", "option", "orange", "orbit", "orchard", "order", "ordinary", "organ", "orient", "original", "orphan", "ostrich", "other", "outdoor", "outer", "output", "outside", "oval", "oven", "over", "own", "owner", "oxygen", "oyster", "ozone", "pact", "paddle", "page", "pair", "palace", "palm", "panda", "panel", "panic", "panther", "paper", "parade", "parent", "park", "parrot", "party", "pass", "patch", "path", "patient", "patrol", "pattern", "pause", "pave", "payment", "peace", "peanut", "pear", "peasant", "pelican", "pen", "penalty", "pencil", "people", "pepper", "perfect", "permit", "person", "pet", "phone", "photo", "phrase", "physical", "piano", "picnic", "picture", "piece", "pig", "pigeon", "pill", "pilot", "pink", "pioneer", "pipe", "pistol", "pitch", "pizza", "place", "planet", "plastic", "plate", "play", "please", "pledge", "pluck", "plug", "plunge", "poem", "poet", "point", "polar", "pole", "police", "pond", "pony", "pool", "popular", "portion", "position", "possible", "post", "potato", "pottery", "poverty", "powder", "power", "practice", "praise", "predict", "prefer", "prepare", "present", "pretty", "prevent", "price", "pride", "primary", "print", "priority", "prison", "private", "prize", "problem", "process", "produce", "profit", "program", "project", "promote", "proof", "property", "prosper", "protect", "proud", "provide", "public", "pudding", "pull", "pulp", "pulse", "pumpkin", "punch", "pupil", "puppy", "purchase", "purity", "purpose", "purse", "push", "put", "puzzle", "pyramid", "quality", "quantum", "quarter", "question", "quick", "quit", "quiz", "quote", "rabbit", "raccoon", "race", "rack", "radar", "radio", "rail", "rain", "raise", "rally", "ramp", "ranch", "random", "range", "rapid", "rare", "rate", "rather", "raven", "raw", "razor", "ready", "real", "reason", "rebel", "rebuild", "recall", "receive", "recipe", "record", "recycle", "reduce", "reflect", "reform", "refuse", "region", "regret", "regular", "reject", "relax", "release", "relief", "rely", "remain", "remember", "remind", "remove", "render", "renew", "rent", "reopen", "repair", "repeat", "replace", "report", "require", "rescue", "resemble", "resist", "resource", "response", "result", "retire", "retreat", "return", "reunion", "reveal", "review", "reward", "rhythm", "rib", "ribbon", "rice", "rich", "ride", "ridge", "rifle", "right", "rigid", "ring", "riot", "ripple", "risk", "ritual", "rival", "river", "road", "roast", "robot", "robust", "rocket", "romance", "roof", "rookie", "room", "rose", "rotate", "rough", "round", "route", "royal", "rubber", "rude", "rug", "rule", "run", "runway", "rural", "sad", "saddle", "sadness", "safe", "sail", "salad", "salmon", "salon", "salt", "salute", "same", "sample", "sand", "satisfy", "satoshi", "sauce", "sausage", "save", "say", "scale", "scan", "scare", "scatter", "scene", "scheme", "school", "science", "scissors", "scorpion", "scout", "scrap", "screen", "script", "scrub", "sea", "search", "season", "seat", "second", "secret", "section", "security", "seed", "seek", "segment", "select", "sell", "seminar", "senior", "sense", "sentence", "series", "service", "session", "settle", "setup", "seven", "shadow", "shaft", "shallow", "share", "shed", "shell", "sheriff", "shield", "shift", "shine", "ship", "shiver", "shock", "shoe", "shoot", "shop", "short", "shoulder", "shove", "shrimp", "shrug", "shuffle", "shy", "sibling", "sick", "side", "siege", "sight", "sign", "silent", "silk", "silly", "silver", "similar", "simple", "since", "sing", "siren", "sister", "situate", "six", "size", "skate", "sketch", "ski", "skill", "skin", "skirt", "skull", "slab", "slam", "sleep", "slender", "slice", "slide", "slight", "slim", "slogan", "slot", "slow", "slush", "small", "smart", "smile", "smoke", "smooth", "snack", "snake", "snap", "sniff", "snow", "soap", "soccer", "social", "sock", "soda", "soft", "solar", "soldier", "solid", "solution", "solve", "someone", "song", "soon", "sorry", "sort", "soul", "sound", "soup", "source", "south", "space", "spare", "spatial", "spawn", "speak", "special", "speed", "spell", "spend", "sphere", "spice", "spider", "spike", "spin", "spirit", "split", "spoil", "sponsor", "spoon", "sport", "spot", "spray", "spread", "spring", "spy", "square", "squeeze", "squirrel", "stable", "stadium", "staff", "stage", "stairs", "stamp", "stand", "start", "state", "stay", "steak", "steel", "stem", "step", "stereo", "stick", "still", "sting", "stock", "stomach", "stone", "stool", "story", "stove", "strategy", "street", "strike", "strong", "struggle", "student", "stuff", "stumble", "style", "subject", "submit", "subway", "success", "such", "sudden", "suffer", "sugar", "suggest", "suit", "summer", "sun", "sunny", "sunset", "super", "supply", "supreme", "sure", "surface", "surge", "surprise", "surround", "survey", "suspect", "sustain", "swallow", "swamp", "swap", "swarm", "swear", "sweet", "swift", "swim", "swing", "switch", "sword", "symbol", "symptom", "syrup", "system", "table", "tackle", "tag", "tail", "talent", "talk", "tank", "tape", "target", "task", "taste", "tattoo", "taxi", "teach", "team", "tell", "ten", "tenant", "tennis", "tent", "term", "test", "text", "thank", "that", "theme", "then", "theory", "there", "they", "thing", "this", "thought", "three", "thrive", "throw", "thumb", "thunder", "ticket", "tide", "tiger", "tilt", "timber", "time", "tiny", "tip", "tired", "tissue", "title", "toast", "tobacco", "today", "toddler", "toe", "together", "toilet", "token", "tomato", "tomorrow", "tone", "tongue", "tonight", "tool", "tooth", "top", "topic", "topple", "torch", "tornado", "tortoise", "toss", "total", "tourist", "toward", "tower", "town", "toy", "track", "trade", "traffic", "tragic", "train", "transfer", "trap", "trash", "travel", "tray", "treat", "tree", "trend", "trial", "tribe", "trick", "trigger", "trim", "trip", "trophy", "trouble", "truck", "true", "truly", "trumpet", "trust", "truth", "try", "tube", "tuition", "tumble", "tuna", "tunnel", "turkey", "turn", "turtle", "twelve", "twenty", "twice", "twin", "twist", "two", "type", "typical", "ugly", "umbrella", "unable", "unaware", "uncle", "uncover", "under", "undo", "unfair", "unfold", "unhappy", "uniform", "unique", "unit", "universe", "unknown", "unlock", "until", "unusual", "unveil", "update", "upgrade", "uphold", "upon", "upper", "upset", "urban", "urge", "usage", "use", "used", "useful", "useless", "usual", "utility", "vacant", "vacuum", "vague", "valid", "valley", "valve", "van", "vanish", "vapor", "various", "vast", "vault", "vehicle", "velvet", "vendor", "venture", "venue", "verb", "verify", "version", "very", "vessel", "veteran", "viable", "vibrant", "vicious", "victory", "video", "view", "village", "vintage", "violin", "virtual", "virus", "visa", "visit", "visual", "vital", "vivid", "vocal", "voice", "void", "volcano", "volume", "vote", "voyage", "wage", "wagon", "wait", "walk", "wall", "walnut", "want", "warfare", "warm", "warrior", "wash", "wasp", "waste", "water", "wave", "way", "wealth", "weapon", "wear", "weasel", "weather", "web", "wedding", "weekend", "weird", "welcome", "west", "wet", "whale", "what", "wheat", "wheel", "when", "where", "whip", "whisper", "wide", "width", "wife", "wild", "will", "win", "window", "wine", "wing", "wink", "winner", "winter", "wire", "wisdom", "wise", "wish", "witness", "wolf", "woman", "wonder", "wood", "wool", "word", "work", "world", "worry", "worth", "wrap", "wreck", "wrestle", "wrist", "write", "wrong", "yard", "year", "yellow", "you", "young", "youth", "zebra", "zero", "zone", "zoo"];
+
+    // ==========================================
+    // 2. UTILS & CRYPTO
+    // ==========================================
+    function toBinStr(num, length) { return num.toString(2).padStart(length, '0'); }
+
+    async function sha256(byteArray) {
+        const hashBuffer = await crypto.subtle.digest('SHA-256', byteArray);
+        return new Uint8Array(hashBuffer);
+    }
+
+    async function mnemonicToEntropy(mnemonic) {
+        const words = mnemonic.trim().toLowerCase().split(/\s+/);
+        if (words.length !== 12 && words.length !== 24)
+            throw new Error("Seed phrase must be exactly 12 or 24 words.");
+
+        let bitString = '';
+        for (const w of words) {
+            const index = WORDLIST.indexOf(w);
+            if (index === -1) throw new Error(`Invalid word: "${w}". Check spelling.`);
+            bitString += toBinStr(index, 11);
+        }
+
+        const entropyBitsLen = words.length === 12 ? 128 : 256;
+        const checksumLen    = words.length === 12 ? 4   : 8;
+        const entropyBits    = bitString.slice(0, entropyBitsLen);
+        const providedCS     = bitString.slice(entropyBitsLen);
+
+        const entropyBytes = new Uint8Array(entropyBitsLen / 8);
+        for (let i = 0; i < entropyBytes.length; i++)
+            entropyBytes[i] = parseInt(entropyBits.slice(i * 8, i * 8 + 8), 2);
+
+        const hashBytes = await sha256(entropyBytes);
+        let hashBits = '';
+        for (const b of hashBytes) hashBits += toBinStr(b, 8);
+        const expectedCS = hashBits.slice(0, checksumLen);
+
+        if (providedCS !== expectedCS)
+            throw new Error("Invalid checksum! The seed phrase entered is mathematically invalid.");
+
+        return entropyBytes;
+    }
+
+    async function entropyToMnemonic(entropyBytes) {
+        const byteLen = entropyBytes.length;
+        if (byteLen !== 16 && byteLen !== 32) throw new Error("Entropy must be 16 or 32 bytes.");
+        const checksumLen = byteLen === 16 ? 4 : 8;
+
+        const hashBytes = await sha256(entropyBytes);
+        let hashBits = '';
+        for (const b of hashBytes) hashBits += toBinStr(b, 8);
+        const checksumBits = hashBits.slice(0, checksumLen);
+
+        let entropyBits = '';
+        for (const b of entropyBytes) entropyBits += toBinStr(b, 8);
+
+        const totalBits = entropyBits + checksumBits;
+        const words = [];
+        for (let i = 0; i < totalBits.length; i += 11)
+            words.push(WORDLIST[parseInt(totalBits.slice(i, i + 11), 2)]);
+        return words.join(' ');
+    }
+
+    function xorBytes(a, b) {
+        if (a.length !== b.length) throw new Error("Seeds must be the same length.");
+        const out = new Uint8Array(a.length);
+        for (let i = 0; i < a.length; i++) out[i] = a[i] ^ b[i];
+        return out;
+    }
+
+    function generateRandomEntropy(byteLen) {
+        const arr = new Uint8Array(byteLen);
+        window.crypto.getRandomValues(arr);
+        return arr;
+    }
+
+    // ==========================================
+    // 3. UI, GRID & AUTOCOMPLETE LOGIC
+    // ==========================================
+    
+    function initDatalist() {
+        const dl = document.getElementById('bip39-words');
+        WORDLIST.forEach(word => {
+            const opt = document.createElement('option');
+            opt.value = word;
+            dl.appendChild(opt);
+        });
+    }
+
+    function buildGrid(containerId, length) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = ''; 
+        
+        for (let i = 1; i <= length; i++) {
+            const box = document.createElement('div');
+            box.className = 'word-box';
+            
+            const span = document.createElement('span');
+            span.textContent = i + '.';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'word-input';
+            input.setAttribute('list', 'bip39-words');
+            input.setAttribute('autocomplete', 'off'); 
+            
+            input.addEventListener('blur', (e) => {
+                const val = e.target.value.trim().toLowerCase();
+                if (val && !WORDLIST.includes(val)) {
+                    box.classList.add('invalid');
+                } else {
+                    box.classList.remove('invalid');
+                    e.target.value = val; 
+                }
+            });
+
+            input.addEventListener('paste', handlePaste);
+
+            box.appendChild(span);
+            box.appendChild(input);
+            container.appendChild(box);
+        }
+    }
+
+    function handlePaste(e) {
+        e.preventDefault();
+        const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+        const words = pasteData.trim().toLowerCase().split(/\s+/);
+        
+        if (words.length !== 12 && words.length !== 24) {
+            alert("Pasted text must be exactly 12 or 24 words.");
+            return;
+        }
+
+        const currentLength = parseInt(document.querySelector('input[name="seedLength"]:checked').value);
+        if (words.length !== currentLength) {
+            document.querySelector(`input[name="seedLength"][value="${words.length}"]`).checked = true;
+            updateUI(); 
+        }
+        
+        const container = e.target.closest('.seed-grid');
+        const inputs = container.querySelectorAll('.word-input');
+        
+        words.forEach((w, i) => {
+            if (inputs[i]) {
+                inputs[i].value = w;
+                if (!WORDLIST.includes(w)) {
+                    inputs[i].parentElement.classList.add('invalid');
+                } else {
+                    inputs[i].parentElement.classList.remove('invalid');
+                }
+            }
+        });
+    }
+
+    // Called whenever length (12/24) OR number of shares (2/3/4) changes
+    function updateUI() {
+        const length = parseInt(document.querySelector('input[name="seedLength"]:checked').value);
+        const shares = parseInt(document.querySelector('input[name="numShares"]:checked').value);
+
+        // 1. Rebuild the Split Tab Input (Always 1 grid)
+        buildGrid('grid-split-orig', length);
+
+        // 2. Rebuild the Merge Tab Inputs (Dynamically N grids)
+        const mergeContainer = document.getElementById('merge-inputs-container');
+        mergeContainer.innerHTML = '';
+        for (let i = 1; i <= shares; i++) {
+            const group = document.createElement('div');
+            group.className = 'input-group';
+            group.innerHTML = `
+                <label class="group-label">Seed Share ${i}</label>
+                <div id="grid-merge-${i}" class="seed-grid obfuscated"></div>
+            `;
+            mergeContainer.appendChild(group);
+            buildGrid(`grid-merge-${i}`, length);
+        }
+
+        // Hide results since inputs changed
+        document.querySelectorAll('.error, .result-box').forEach(el => el.style.display = 'none');
+        clearQRCodes();
+    }
+
+    function getSeedFromGrid(containerId) {
+        const container = document.getElementById(containerId);
+        const inputs = container.querySelectorAll('.word-input');
+        const words = [];
+        
+        for (let i = 0; i < inputs.length; i++) {
+            const val = inputs[i].value.trim().toLowerCase();
+            if (!val) {
+                inputs[i].parentElement.classList.add('invalid');
+                throw new Error(`Word #${i+1} is missing.`);
+            }
+            if (!WORDLIST.includes(val)) {
+                inputs[i].parentElement.classList.add('invalid');
+                throw new Error(`Word #${i+1} ("${val}") is not a valid BIP39 word.`);
+            }
+            words.push(val);
+        }
+        return words.join(' ');
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(tab + '-tab').classList.add('active');
+        document.querySelectorAll('.error, .result-box').forEach(el => el.style.display = 'none');
+        clearQRCodes();
+    }
+
+    function showError(id, msg) {
+        const el = document.getElementById(id);
+        el.textContent = 'Error: ' + msg;
+        el.style.display = 'block';
+        document.querySelectorAll('.result-box').forEach(b => b.style.display = 'none');
+    }
+
+    function copyText(id, btn) {
+        navigator.clipboard.writeText(document.getElementById(id).textContent)
+            .then(() => {
+                const orig = btn.textContent;
+                btn.textContent = '\u2713 COPIED!';
+                setTimeout(() => btn.textContent = orig, 1800);
+            })
+            .catch(() => alert('Copy failed — please select and copy manually.'));
+    }
+
+    function clearQRCodes() {
+        document.querySelectorAll('.qr-container').forEach(container => {
+            const box = container.querySelector('.qr-code-box');
+            if(box) box.innerHTML = '';
+            container.style.display = 'none';
+        });
+        document.querySelectorAll('.qr-btn').forEach(btn => btn.textContent = 'Show QR Code');
+    }
+
+    function toggleQR(containerId, textId, btn) {
+        if (typeof QRCode === 'undefined') {
+            alert("QR library not loaded! If you are completely offline, ensure you downloaded the full webpage.");
+            return;
+        }
+
+        const container = document.getElementById(containerId);
+        const qrBox = container.querySelector('.qr-code-box');
+        
+        if (container.style.display === 'block') {
+            container.style.display = 'none';
+            btn.textContent = 'Show QR Code';
+        } else {
+            if (qrBox.innerHTML === '') {
+                const text = document.getElementById(textId).textContent;
+                new QRCode(qrBox, {
+                    text: text, width: 300, height: 300,
+                    colorDark : "#000000", colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.L
+                });
+            }
+            container.style.display = 'block';
+            btn.textContent = 'Hide QR Code';
+        }
+    }
+
+    // ==========================================
+    // 4. EXECUTION
+    // ==========================================
+    
+    async function handleMerge() {
+        document.getElementById('merge-error').style.display = 'none';
+        clearQRCodes();
+        try {
+            const sharesCount = parseInt(document.querySelector('input[name="numShares"]:checked').value);
+            let combinedEntropy = null;
+
+            // Loop through all visible grids and sequentially XOR them together
+            for (let i = 1; i <= sharesCount; i++) {
+                const seedWords = getSeedFromGrid(`grid-merge-${i}`);
+                const entropy = await mnemonicToEntropy(seedWords);
+                
+                if (!combinedEntropy) {
+                    combinedEntropy = entropy; // First share becomes the baseline
+                } else {
+                    combinedEntropy = xorBytes(combinedEntropy, entropy); // XOR the next share against the running total
+                }
+            }
+            
+            document.getElementById('merge-output').textContent = await entropyToMnemonic(combinedEntropy);
+            document.getElementById('merge-result').style.display = 'block';
+        } catch (e) { showError('merge-error', e.message); }
+    }
+
+    async function handleSplit() {
+        document.getElementById('split-error').style.display = 'none';
+        clearQRCodes();
+        try {
+            const seedOriginal = getSeedFromGrid('grid-split-orig');
+            const origEntropy = await mnemonicToEntropy(seedOriginal);
+            const sharesCount = parseInt(document.querySelector('input[name="numShares"]:checked').value);
+            
+            let entropies = [];
+            let rollingXor = origEntropy;
+
+            // Generate (N - 1) random shares and XOR them against the original
+            for (let i = 0; i < sharesCount - 1; i++) {
+                const randEntropy = generateRandomEntropy(origEntropy.length);
+                entropies.push(randEntropy);
+                rollingXor = xorBytes(rollingXor, randEntropy);
+            }
+            // The final share is the mathematical remainder (the rolling XOR result)
+            entropies.push(rollingXor);
+
+            // Render the HTML for the outputs dynamically
+            const container = document.getElementById('split-shares-container');
+            container.innerHTML = '';
+            
+            for (let i = 0; i < sharesCount; i++) {
+                const mnemonic = await entropyToMnemonic(entropies[i]);
+                const isLastShare = (i === sharesCount - 1);
+                const labelText = isLastShare ? `Share ${i+1} (XOR Result)` : `Share ${i+1} (Randomly Generated)`;
+                const borderStyle = (i === 0) ? 'style="border-top: none; padding-top: 0;"' : '';
+
+                const shareHTML = `
+                    <div class="share-section" ${borderStyle}>
+                        <label style="color: var(--text-color);">${labelText}:</label>
+                        <div id="split-output-${i+1}" class="result-text" tabindex="0">${mnemonic}</div>
+                        <p class="reveal-hint">Hover or tap to reveal words</p>
+                        <div class="action-buttons">
+                            <button class="copy-btn" onclick="copyText('split-output-${i+1}', this)">Copy Share ${i+1}</button>
+                            <button class="copy-btn qr-btn" onclick="toggleQR('qr-split-${i+1}', 'split-output-${i+1}', this)">Show QR Code</button>
+                        </div>
+                        <div id="qr-split-${i+1}" class="qr-container obfuscated-qr" tabindex="0">
+                            <p class="qr-reveal-hint">Hover or tap to reveal QR</p>
+                            <div class="qr-code-box"></div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', shareHTML);
+            }
+
+            document.getElementById('split-result').style.display = 'block';
+        } catch (e) { showError('split-error', e.message); }
+    }
+
+    // Initialize the page on load
+    window.onload = () => {
+        initDatalist();
+        updateUI(); 
+    };
+</script>
+</body>
+</html>
