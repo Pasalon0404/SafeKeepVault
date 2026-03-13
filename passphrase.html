@@ -171,11 +171,15 @@
   <div class="output-box">
     <div class="passphrase-text" id="passphrase-display">Click Generate</div>
     
-    <div class="entropy-info">
+ <div class="entropy-info">
       <span>Estimated Entropy: <span class="entropy-val" id="entropy-bits">0 bits</span></span>
       <span id="strength-label" style="color: var(--teal);">Waiting</span>
     </div>
     <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+    
+    <div style="margin-top: 18px; font-size: 0.82rem; color: #aaa; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px; border: 1px dashed var(--border); text-align: left;">
+      <strong>&#9432; IMPORTANT:</strong> The spaces between these words are literal characters. When entering this passphrase into your hardware wallet, you <strong>must type the spaces</strong> exactly as shown.
+    </div>
   </div>
 
   <button class="btn-generate" onclick="generatePassphrase()">Generate New Passphrase</button>
@@ -283,7 +287,7 @@ function generatePassphrase() {
         words[randIndex] += SYMBOLS[getCryptoRandomInt(SYMBOLS.length)];
     }
 
-    const passphrase = words.join('-');
+    const passphrase = words.join(' ');
     document.getElementById('passphrase-display').textContent = passphrase;
     
     // Store globally for copy and QR
