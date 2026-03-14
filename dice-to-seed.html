@@ -337,7 +337,7 @@ async function generateSeed() {
         
         // Generate first 5 addresses safely
         for(let i=0; i < 5; i++) {
-            const childNode = accountNode.derive(`0/${i}`);
+            const childNode = hdkey.derive(`${basePath}/0/${i}`);
             let address = "";
             
             if (pathType === '84') {
