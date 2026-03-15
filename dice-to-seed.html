@@ -146,7 +146,9 @@
     <h3>Generated Seed Phrase</h3>
     <div class="seed-output" id="seed-output"></div>
     <div class="action-buttons">
+        <button class="copy-btn" onclick="copyText('seed-output', this)">📋 Copy Seed</button>
         <button class="copy-btn qr-btn" onclick="toggleQR('qr-seed', 'seed-output', this)">Show Seed QR</button>
+        <button class="copy-btn" onclick="copyQRImage('qr-seed', this)">📋 Copy QR</button>
     </div>
     <div id="qr-seed" class="qr-container obfuscated-qr" tabindex="0">
         <p class="qr-reveal-hint">Hover or tap to reveal QR</p>
@@ -159,7 +161,9 @@
             <label>Master Public Key (xpub)</label>
             <div style="font-family: var(--mono); font-size: 0.9rem; word-break: break-all; margin-bottom: 10px; color: var(--orange);" id="xpub-output-val">Calculating...</div>
             <div class="action-buttons" style="margin-bottom: 0;">
+                <button class="copy-btn" onclick="copyText('xpub-output-val', this)">📋 Copy Xpub</button>
                 <button class="copy-btn qr-btn" id="xpub-qr-btn" onclick="toggleQR('qr-xpub', 'xpub-output-val', this)" disabled>Show Xpub QR</button>
+                <button class="copy-btn" onclick="copyQRImage('qr-xpub', this)">📋 Copy QR</button>
             </div>
             <div id="qr-xpub" class="qr-container obfuscated-qr" tabindex="0" style="margin-top: 10px; margin-bottom: 0;">
                 <p class="qr-reveal-hint">Hover or tap to reveal QR</p>
@@ -238,6 +242,53 @@ async function getEntropyAndMnemonic(diceStr, wordCount) {
 // ==========================================
 // 2. UI LOGIC & EXECUTION
 // ==========================================
+
+function copyText(id, btn) {
+    const textToCopy = document.getElementById(id).innerText;
+    navigator.clipboard.writeText(textToCopy)
+        .then(() => {
+            const orig = btn.textContent;
+            btn.textContent = '\u2713 COPIED!';
+            setTimeout(() => btn.textContent = orig, 1800);
+        })
+        .catch(() => alert('Copy failed — please select and copy manually.'));
+}
+
+async function copyQRImage(containerId, btn) {
+    const container = document.getElementById(containerId);
+    const canvas = container.querySelector('canvas');
+    const img = container.querySelector('img');
+
+    if (!canvas && (!img || !img.src)) {
+        alert("Please reveal the QR code first before copying.");
+        return;
+    }
+
+    try {
+        let targetCanvas = canvas;
+        if (!canvas && img) {
+            targetCanvas = document.createElement('canvas');
+            targetCanvas.width = img.width || 250;
+            targetCanvas.height = img.height || 250;
+            const ctx = targetCanvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+        }
+
+        targetCanvas.toBlob(async (blob) => {
+            if (!blob) throw new Error("Canvas is empty");
+            const item = new ClipboardItem({ "image/png": blob });
+            await navigator.clipboard.write([item]);
+            
+            const orig = btn.textContent;
+            btn.textContent = '\u2713 QR COPIED!';
+            setTimeout(() => btn.textContent = orig, 1800);
+        }, 'image/png');
+        
+    } catch (err) {
+        console.error(err);
+        alert('Copying images to clipboard is not supported in this browser or offline mode.');
+    }
+}
 
 function clearQRs() {
     document.querySelectorAll('.qr-container').forEach(c => {
