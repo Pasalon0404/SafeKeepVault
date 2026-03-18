@@ -1,0 +1,22 @@
+{
+  "name": "seed-xor-tool",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "node build-offline.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@scure/bip32": "^2.0.1",
+    "@scure/bip39": "^2.0.1",
+    "@scure/btc-signer": "^2.0.1",
+    "bip39": "^3.1.0",
+    "bip85": "^0.0.3",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "vite": "^8.0.0",
+    "vite-plugin-node-polyfills": "^0.25.0",
+    "vite-plugin-singlefile": "^2.3.2"
+  }
+}

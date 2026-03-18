@@ -97,29 +97,78 @@
         .qr-btn:hover { background: rgba(247, 147, 26, 0.1); }
         
         .qr-placeholder {
-            width: 220px; height: 220px; margin: 15px auto 0; /* Added margin-top to separate from button */
+            width: 220px; height: 220px; margin: 15px auto 0;
             border: 2px dashed #555; display: flex; align-items: center; justify-content: center;
             background: white; color: black; font-weight: bold; font-size: 0.8rem; text-align: center;
             padding: 10px; box-sizing: border-box;
         }
         .qr-placeholder img, .qr-placeholder canvas { max-width: 100%; height: auto; }
 
-        /* Print Styles */
+        /* --- PRINT ONLY ELEMENTS --- */
+        .print-only { display: none; }
+
+        /* --- PRINT STYLES --- */
         @media print {
-            .controls, .qr-btn, .opsec-warning { display: none; }
-            .canvas { border: none; padding: 0; background: white; color: black; gap: 20px; }
-            .key-box, .coordinator { border: 2px solid black; background: white; color: black; }
-            input, textarea { border: 1px dashed #ccc; background: transparent; color: black; }
-            input::placeholder, textarea::placeholder { color: #aaa; }
-            .input-group label { color: #555; }
-            .recovery-section { border-top: 2px solid black; page-break-inside: avoid; }
+            @page { size: portrait; margin: 0.75in; }
+            body { background: white; color: black; padding: 0; margin: 0; }
+            
+            /* Hide UI Elements */
+            .controls, .qr-btn, .opsec-warning, h2 { display: none !important; }
+            
+            /* Show Print Elements */
+            .print-only { display: block; }
+            
+            /* Document Header */
+            .print-header { 
+                text-align: center; margin-bottom: 30px; 
+                border-bottom: 2px solid black; padding-bottom: 15px; 
+            }
+            .print-header h1 { margin: 0 0 5px 0; font-size: 22pt; text-transform: uppercase; letter-spacing: 1px; }
+            .print-header p { margin: 0; font-weight: bold; font-size: 12pt; letter-spacing: 2px; }
+
+            /* Canvas Layout */
+            .canvas { border: none; padding: 0; background: transparent; gap: 25px; }
+            
+            /* Box Layouts */
+            .key-box, .coordinator { 
+                border: 2px solid black; background: white; color: black; 
+                break-inside: avoid; /* Prevents boxes from splitting across pages */
+                box-shadow: none; margin-bottom: 15px; padding: 15px 25px;
+            }
+            
+            /* Typography & Colors for Print */
+            .input-group label { color: #333; font-size: 0.7rem; }
+            
+            /* Transform inputs into form lines */
+            input, textarea { 
+                border: none; border-bottom: 1px dashed #888; 
+                background: transparent; color: black; border-radius: 0;
+                padding: 5px 0; margin-bottom: 5px; font-family: monospace;
+            }
+            textarea { border: 1px dashed #888; padding: 10px; }
+            
+            /* Hide placeholder text from physically printing */
+            input::placeholder, textarea::placeholder { color: transparent; }
+            
+            /* Recovery Section */
+            .recovery-section { border-top: 2px solid black; break-inside: avoid; padding-top: 20px; }
+            .qr-placeholder { border: 1px solid black; break-inside: avoid; }
+
+            /* Signature Footer */
+            .print-footer { margin-top: 50px; break-inside: avoid; }
+            .signature-block { display: flex; justify-content: space-between; margin-top: 60px; }
+            .signature-block div { 
+                width: 45%; border-top: 1px solid black; 
+                padding-top: 5px; font-size: 0.85rem; text-transform: uppercase; 
+                text-align: left; 
+            }
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Visual Architecture Builder</h2>
+    <h2 style="margin-bottom: 0;">Visual Architecture Builder</h2>
     
     <div class="controls">
         <label>Architecture:</label>
@@ -134,8 +183,20 @@
         <button onclick="window.print()">Print / Save PDF</button>
     </div>
 
+    <div class="print-header print-only">
+        <h1>Self-Custody Architecture</h1>
+        <p>CONFIDENTIAL RECOVERY DOCUMENT</p>
+    </div>
+
     <div class="canvas" id="canvas">
         </div>
+
+    <div class="print-footer print-only">
+        <div class="signature-block">
+            <div>Prepared By (Signature)</div>
+            <div>Date</div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -196,7 +257,6 @@
             return;
         }
 
-        // Clear the placeholder text or previous QR code
         qrCanvas.innerHTML = '';
 
         try {
@@ -208,7 +268,6 @@
                 colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.L
             });
-            // Remove the dashed border to make it look cleaner once generated
             qrCanvas.style.border = "none"; 
             qrCanvas.style.padding = "0"; 
         } catch (e) {
@@ -223,7 +282,6 @@
         const type = archType.value;
         let html = '';
 
-        // MULTISIG LOGIC
         if (type.startsWith('multi')) {
             const parts = type.split('-');
             const totalKeys = parseInt(parts[1][1]);
@@ -249,7 +307,6 @@
             }
             html += `</div>`;
         } 
-        // SINGLE-SIG LOGIC
         else if (type === 'single') {
             html += `
                 <div class="coordinator">
@@ -273,7 +330,6 @@
                 </div>
             `;
         }
-        // SEED XOR LOGIC
         else if (type.startsWith('xor')) {
             const parts = type.split('-');
             const totalShares = parseInt(parts[1]);
@@ -301,14 +357,11 @@
             html += `</div>`;
         }
 
-        // Append the universal recovery block
         html += generateRecoveryBlock();
         canvas.innerHTML = html;
     }
 
     archType.addEventListener('change', renderArchitecture);
-    
-    // Initial render on load
     renderArchitecture();
 </script>
 <script type="module">

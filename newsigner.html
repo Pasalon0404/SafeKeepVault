@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PSBT Signer v2.0 | SafeKeepBitcoin</title>
+    
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --accent-color: #f7931a;
+            --box-bg: #1e1e1e;
+            --border-color: #333;
+            --error-color: #ff5252;
+            --success-color: #4caf50;
+            --warning-color: #ff9800;
+            --info-color: #2196F3;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body { 
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            max-width: 900px; 
+            margin: 20px auto; 
+            padding: 20px; 
+            line-height: 1.6;
+        }
+
+        .header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        h2 { 
+            border-bottom: 2px solid var(--accent-color); 
+            padding-bottom: 10px; 
+            margin-bottom: 20px;
+        }
+
+        .network-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .network-selector select {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--box-bg);
+            color: var(--text-color);
+        }
+
+        .step { 
+            background: var(--box-bg);
+            margin-bottom: 25px; 
+            padding: 20px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 8px; 
+            transition: border-color 0.3s ease;
+        }
+
+        .step:hover {
+            border-color: var(--accent-color);
+        }
+
+        input[type="file"], input[type="text"], input[type="password"], input[type="number"] { 
+            width: 100%;
+            background: var(--box-bg); 
+            color: var(--text-color); 
+            border: 1px solid var(--border-color); 
+            padding: 10px; 
+            border-radius: 4px; 
+            margin-top: 10px;
+            box-sizing: border-box;
+        }
+
+        textarea { 
+            width: 100%; 
+            background: var(--box-bg); 
+            color: var(--text-color); 
+            border: 1px solid var(--border-color); 
+            padding: 10px; 
+            border-radius: 4px; 
+            margin-top: 10px;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        button { 
+            padding: 12px 20px; 
+            background: var(--accent-color); 
+            color: #000; 
+            font-weight: bold;
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 16px;
+            width: 100%;
+            margin-top: 15px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover { 
+            background: #e08216; 
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        #status { 
+            margin-top: 15px; 
+            font-weight: bold; 
+            text-align: center; 
+            padding: 10px;
+            border-radius: 4px;
+            min-height: 20px;
+        }
+
+        .error { 
+            color: var(--error-color); 
+            background: rgba(255, 82, 82, 0.1);
+        }
+
+        .success { 
+            color: var(--success-color); 
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .partial { 
+            color: var(--info-color); 
+            background: rgba(33, 150, 243, 0.1);
+        }
+
+        .warning {
+            color: var(--warning-color);
+            background: rgba(255, 152, 0, 0.1);
+        }
+
+        #txDetails {
+            background: var(--bg-color);
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            color: var(--text-color);
+            margin-top: 10px;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .tx-section {
+            margin-bottom: 20px;
+        }
+
+        .tx-section h4 {
+            margin: 0 0 10px 0;
+            color: var(--accent-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+        }
+
+        .output-item, .input-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            border-left: 4px solid var(--info-color);
+        }
+
+        .output-item.change-output {
+            border-left-color: var(--success-color);
+        }
+
+        .output-item.destination-output {
+            border-left-color: var(--error-color);
+        }
+
+        .output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .output-type {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .output-type.change {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .output-type.destination {
+            background: var(--error-color);
+            color: white;
+        }
+
+        .output-amount {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .btc-amount {
+            font-size: 14px;
+            color: var(--info-color);
+            margin-left: 10px;
+        }
+
+        .output-address {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            margin-top: 10px;
+        }
+
+        .address-label {
+            font-size: 12px;
+            color: var(--text-color);
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        .address-value {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            word-break: break-all;
+            line-height: 1.4;
+        }
+
+        .script-hex {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: var(--warning-color);
+            background: rgba(255, 152, 0, 0.1);
+            padding: 5px;
+            border-radius: 3px;
+            margin-top: 5px;
+        }
+
+        .copy-btn {
+            background: var(--info-color);
+            color: white;
+            padding: 5px 10px;
+            font-size: 12px;
+            margin-left: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 3px;
+        }
+
+        .security-model {
+            background: rgba(33, 150, 243, 0.1);
+            border: 1px solid var(--info-color);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .fee-info {
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid var(--warning-color);
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .fee-rate {
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .download-area {
+            margin-top: 15px;
+            text-align: center;
+        }
+
+        .download-link {
+            display: inline-block;
+            padding: 10px 20px;
+            background: var(--success-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 5px;
+            transition: opacity 0.3s ease;
+        }
+
+        .download-link:hover {
+            opacity: 0.8;
+        }
+
+        .download-link.partial {
+            background: var(--info-color);
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .control-buttons button {
+            width: auto;
+            flex: 1;
+        }
+
+        .warning-text {
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid var(--warning-color);
+            color: var(--warning-color);
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+
+        .offline-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--warning-color);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .offline-indicator.show {
+            display: block;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* Loading indicator for libraries */
+        .library-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            font-size: 18px;
+        }
+
+        /* Checkbox styling */
+        .option-checkbox {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .option-checkbox input[type="checkbox"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+
+        .option-checkbox label {
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        /* QR Code styles */
+        .qr-section {
+            background: var(--box-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .qr-section h4 {
+            margin: 0 0 15px 0;
+            color: var(--accent-color);
+            text-align: center;
+        }
+
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .qr-item {
+            text-align: center;
+            max-width: 100%;
+        }
+
+        .qr-item h5 {
+            margin: 0 0 10px 0;
+            color: var(--info-color);
+            font-size: 14px;
+        }
+
+        .qr-canvas {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            display: inline-block;
+            max-width: 100%;
+            overflow: auto;
+        }
+
+        .qr-canvas canvas {
+            max-width: 100%;
+            height: auto !important;
+        }
+
+        .qr-info {
+            font-size: 12px;
+            color: var(--text-color);
+            margin-top: 8px;
+            opacity: 0.8;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                margin: 10px;
+                padding: 15px;
+            }
+            
+            .header {
+                justify-content: center;
+            }
+            
+            .control-buttons {
+                flex-direction: column;
+            }
+
+            .output-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+
+            .address-value {
+                font-size: 13px;
+            }
+
+            .qr-container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="library-loading" id="libraryLoading">
+        <div style="text-align: center;">
+            <div class="spinner"></div>
+            <div>Loading Bitcoin libraries...</div>
+        </div>
+    </div>
+
+    <div class="offline-indicator" id="offlineIndicator">
+        📡 You are offline. Some features may be limited.
+    </div>
+
+    <div class="header">
+        <div class="network-selector">
+            <label for="networkSelect">Network:</label>
+            <select id="networkSelect" aria-label="Select Bitcoin network">
+                <option value="testnet">Testnet</option>
+                <option value="mainnet">Mainnet</option>
+                <option value="signet">Signet</option>
+                <option value="regtest">Regtest</option>
+            </select>
+        </div>
+    </div>
+
+    <h2>Offline PSBT Signer v2.0</h2>
+
+    <div class="warning-text">
+        <strong>⚠️ Security Warning:</strong> This tool signs transactions locally in your browser. However, it loads libraries from the internet. For maximum security, verify the source code and consider hosting locally. Only use with small amounts.
+    </div>
+
+    <div class="step">
+        <h3>1. Load Unsigned PSBT</h3>
+        <input type="file" id="psbtInput" accept=".psbt" aria-label="Select PSBT file" />
+    </div>
+
+    <div class="step" id="reviewStep" style="display: none;">
+        <h3 style="color: var(--info-color); margin-top: 0;">🔍 Review Transaction</h3>
+        <p style="font-size: 0.9em; margin-bottom: 5px;">Verify these amounts match what you expect before entering your seed.</p>
+        <div id="txDetails"></div>
+    </div>
+
+    <div class="step" id="signingStep" style="display: none;">
+        <h3 id="step2Header">2. Enter Seed Phrase</h3>
+        <p id="step2Desc" style="font-size: 0.9em; color: var(--text-color);">
+            Enter your 12 or 24-word BIP39 mnemonic.
+        </p>
+        
+        <label for="seedPhrase" class="sr-only">Seed Phrase</label>
+        <textarea id="seedPhrase" rows="3" placeholder="abandon abandon abandon..." aria-label="Enter your BIP39 seed phrase"></textarea>
+        
+        <label for="passphrase" class="sr-only">Optional BIP39 Passphrase</label>
+        <div style="margin-top: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 0.9em; color: var(--text-color);">
+                Optional BIP39 Passphrase (leave blank if none):
+            </label>
+            <input type="password" id="passphrase" placeholder="Your secret passphrase..." aria-label="Optional BIP39 passphrase" />
+        </div>
+
+        <div id="feeRateSection" style="display: none; margin-top: 15px;">
+            <label for="feeRate" style="display: block; margin-bottom: 5px; font-size: 0.9em; color: var(--text-color);">
+                Fee Rate (sat/vB):
+            </label>
+            <input type="number" id="feeRate" min="1" step="0.1" placeholder="e.g., 10" aria-label="Fee rate in satoshis per vbyte" />
+            <p style="font-size: 0.8em; color: var(--text-color); margin-top: 5px;">
+                Leave empty to use the fee from the PSBT.
+            </p>
+        </div>
+
+        <div class="option-checkbox" id="rawHexOption" style="display: none;">
+            <input type="checkbox" id="includeRawHex" />
+            <label for="includeRawHex">
+                📄 Also generate raw transaction hex file
+                <div style="font-size: 12px; color: var(--text-color); opacity: 0.7; margin-top: 2px;">
+                    For developers, advanced users, or manual broadcasting
+                </div>
+            </label>
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>3. Sign Transaction</h3>
+        <button id="signBtn">Sign & Generate File</button>
+        <div class="control-buttons">
+            <button id="resetBtn" type="button">Clear All</button>
+            <button id="helpBtn" type="button">Help</button>
+        </div>
+        <div id="status" aria-live="polite"></div>
+        <div id="downloadArea"></div>
+        <div id="qrDisplay" style="display: none;"></div>
+    </div>
+
+    <script type="module">
+        // Wait for libraries to load
+        let librariesLoaded = false;
+        let btc, mnemonicToSeedSync, HDKey, QRCode;
+
+        async function loadLibraries() {
+            try {
+                // Fetch everything natively as ES Modules using jsdelivr's +esm bundler
+                const [btcModule, bip39Module, bip32Module, qrModule] = await Promise.all([
+                    import('https://cdn.jsdelivr.net/npm/@scure/btc-signer@1.4.0/+esm'),
+                    import('https://cdn.jsdelivr.net/npm/@scure/bip39@1.3.0/+esm'),
+                    import('https://cdn.jsdelivr.net/npm/@scure/bip32@1.4.0/+esm'),
+                    import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm')
+                ]);
+                
+                btc = btcModule;
+                mnemonicToSeedSync = bip39Module.mnemonicToSeedSync;
+                HDKey = bip32Module.HDKey;
+                // Grab the default export from the QR package
+                QRCode = qrModule.default || qrModule;
+                
+                librariesLoaded = true;
+                document.getElementById('libraryLoading').style.display = 'none';
+                console.log('Libraries loaded successfully');
+            } catch (error) {
+                console.error('Failed to load libraries:', error);
+                document.getElementById('libraryLoading').innerHTML = `
+                    <div style="text-align: center; color: var(--error-color);">
+                        <div>❌ Failed to load libraries</div>
+                        <div style="font-size: 14px; margin-top: 10px;">
+                            Please check your internet connection and try refreshing the page.
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Network configuration
+        const NETWORKS = {
+            mainnet: {
+                bech32: 'bc',
+                pubKeyHash: 0x00,
+                scriptHash: 0x05,
+                bip32: { public: 0x0488b21e, private: 0x0488ade4 }
+            },
+            testnet: {
+                bech32: 'tb',
+                pubKeyHash: 0x6f,
+                scriptHash: 0xc4,
+                bip32: { public: 0x043587cf, private: 0x04358394 }
+            },
+            signet: {
+                bech32: 'tb',
+                pubKeyHash: 0x6f,
+                scriptHash: 0xc4,
+                bip32: { public: 0x043587cf, private: 0x04358394 }
+            },
+            regtest: {
+                bech32: 'bcrt',
+                pubKeyHash: 0x6f,
+                scriptHash: 0xc4,
+                bip32: { public: 0x043587cf, private: 0x04358394 }
+            }
+        };
+
+        // State management
+        let currentNetwork = 'testnet';
+        let loadedPsbtBytes = null;
+        let transactionIsFinalized = false;
+
+        // Utility functions
+        function formatPath(path) {
+            if (!path) return null;
+            if (typeof path === 'string') {
+                if (path.startsWith('m/')) return path;
+                if (path.startsWith('/')) return 'm' + path;
+                return 'm/' + path;
+            }
+            if (Array.isArray(path) || ArrayBuffer.isView(path) || typeof path.length === 'number') {
+                let str = 'm';
+                for (let j = 0; j < path.length; j++) {
+                    const n = Number(path[j]) >>> 0; 
+                    const isHardened = n >= 0x80000000;
+                    str += '/' + (isHardened ? `${n - 0x80000000}'` : `${n}`);
+                }
+                return str;
+            }
+            return null;
+        }
+
+        function formatAmount(satoshis) {
+            const sats = Number(satoshis).toLocaleString();
+            const btc = (Number(satoshis) / 100000000).toFixed(8);
+            return { sats, btc };
+        }
+
+        function bytesToHex(bytes) {
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function bytesToBase64(bytes) {
+            let binary = '';
+            const len = bytes.byteLength || bytes.length;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary);
+        }
+
+        function showStatus(message, type = '') {
+            const statusEl = document.getElementById('status');
+            statusEl.className = type ? type : '';
+            statusEl.innerHTML = type === 'error' ? 
+                `<span style="color: var(--error-color);">❌ ${message}</span>` :
+                message;
+        }
+
+        function showSpinner() {
+            return '<div class="spinner"></div>Processing...';
+        }
+
+        function zeroFillArray(arr) {
+            if (arr && arr.fill) {
+                arr.fill(0);
+            }
+        }
+
+        function clearSensitiveData() {
+            document.getElementById('seedPhrase').value = '';
+            document.getElementById('passphrase').value = '';
+            
+            if (loadedPsbtBytes) {
+                zeroFillArray(loadedPsbtBytes);
+                loadedPsbtBytes = null;
+            }
+        }
+
+        // Check network status
+        function updateNetworkStatus() {
+            const indicator = document.getElementById('offlineIndicator');
+            if (!navigator.onLine) {
+                indicator.classList.add('show');
+            } else {
+                indicator.classList.remove('show');
+            }
+        }
+
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+
+        // QR Code generation
+        async function generateQRCode(text, containerId, title) {
+            try {
+                if (!QRCode) {
+                    throw new Error('QR Code library failed to load.');
+                }
+                
+                const canvas = document.createElement('canvas');
+                
+                // Significantly increased width to 600px
+                await QRCode.toCanvas(canvas, text, {
+                    width: 600,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                });
+                
+                // Create QR item container
+                const qrItem = document.createElement('div');
+                qrItem.className = 'qr-item';
+                
+                const titleEl = document.createElement('h5');
+                titleEl.textContent = title;
+                
+                const canvasWrapper = document.createElement('div');
+                canvasWrapper.className = 'qr-canvas';
+                canvasWrapper.appendChild(canvas);
+                
+                const infoEl = document.createElement('div');
+                infoEl.className = 'qr-info';
+                infoEl.textContent = 'Scan with mobile wallet';
+                
+                qrItem.appendChild(titleEl);
+                qrItem.appendChild(canvasWrapper);
+                qrItem.appendChild(infoEl);
+                
+                document.getElementById(containerId).appendChild(qrItem);
+                
+            } catch (error) {
+                console.error('Failed to generate QR code:', error);
+                
+                // If the PSBT is too massive for a single static QR frame, it throws a specific error
+                let errMsg = error.message;
+                if (errMsg && errMsg.includes("too big")) {
+                    errMsg = "Transaction is too large for a single static QR code. Please download the file instead.";
+                }
+
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'error';
+                errorMsg.textContent = `QR code generation failed: ${errMsg}`;
+                document.getElementById(containerId).appendChild(errorMsg);
+            }
+        }
+
+        // Parse script and get address or hex
+        function parseOutputScript(script) {
+            try {
+                const decodedScript = btc.OutScript.decode(script);
+                
+                try {
+                    const address = btc.Address(NETWORKS[currentNetwork]).encode(decodedScript);
+                    return {
+                        address: address,
+                        type: getScriptType(decodedScript),
+                        scriptHex: bytesToHex(script)
+                    };
+                } catch (addressErr) {
+                    return {
+                        address: null,
+                        type: getScriptType(decodedScript),
+                        scriptHex: bytesToHex(script)
+                    };
+                }
+            } catch (scriptErr) {
+                return {
+                    address: null,
+                    type: 'Unknown',
+                    scriptHex: bytesToHex(script)
+                };
+            }
+        }
+
+        // Get human-readable script type
+        function getScriptType(decoded) {
+            if (decoded.type === 'p2pkh') return 'Pay to Public Key Hash';
+            if (decoded.type === 'p2sh') return 'Pay to Script Hash';
+            if (decoded.type === 'p2wpkh') return 'Pay to Witness Public Key Hash';
+            if (decoded.type === 'p2wsh') return 'Pay to Witness Script Hash';
+            if (decoded.type === 'taproot') return 'Taproot';
+            return 'Custom Script';
+        }
+
+        // PSBT parsing and display
+        async function parseAndDisplayPSBT(file) {
+            if (!librariesLoaded) {
+                showStatus('Error: Libraries are still loading. Please wait...', 'error');
+                return;
+            }
+
+            try {
+                showStatus(showSpinner());
+                
+                const arrayBuffer = await file.arrayBuffer();
+                loadedPsbtBytes = new Uint8Array(arrayBuffer);
+                
+                const tx = btc.Transaction.fromPSBT(loadedPsbtBytes, { 
+                    network: NETWORKS[currentNetwork] 
+                });
+                
+                // Parse security model
+                const { walletType, totalKeys, requiredSigs } = parseSecurityModel(tx);
+                
+                // Parse outputs
+                const outputsInfo = parseOutputs(tx);
+                
+                // Parse inputs and calculate fee
+                const inputsInfo = parseInputs(tx);
+                
+                // Build display
+                buildTransactionDisplay(walletType, totalKeys, requiredSigs, outputsInfo, inputsInfo);
+                
+                // Show signing step
+                document.getElementById('signingStep').style.display = 'block';
+                document.getElementById('reviewStep').style.display = 'block';
+                
+                // Show fee rate input if needed
+                if (!inputsInfo.canCalculateFee) {
+                    document.getElementById('feeRateSection').style.display = 'block';
+                }
+                
+                // Show raw hex option
+                document.getElementById('rawHexOption').style.display = 'flex';
+                
+                showStatus('✅ PSBT loaded successfully!', 'success');
+                
+            } catch (error) {
+                console.error("Parse Error:", error);
+                showStatus(`Error decoding PSBT: ${error.message}`, 'error');
+                document.getElementById('reviewStep').style.display = 'block';
+            }
+        }
+
+        function parseSecurityModel(tx) {
+            try {
+                const firstInput = tx.inputs[0];
+                let totalKeys = 1;
+                let requiredSigs = 1;
+                let walletType = 'Single-Signature (1-of-1)';
+
+                if (firstInput.bip32Derivation) {
+                    totalKeys = firstInput.bip32Derivation.length;
+                } else if (firstInput.tapBip32Derivation) {
+                    totalKeys = firstInput.tapBip32Derivation.length;
+                }
+
+                if (totalKeys > 1) {
+                    requiredSigs = "Multiple"; 
+                    const script = firstInput.witnessScript || firstInput.redeemScript;
+                    
+                    if (script && script[script.length - 1] === 174) { // OP_M
+                        const possibleM = script[0] - 80;
+                        if (possibleM > 0 && possibleM <= totalKeys) {
+                            requiredSigs = possibleM;
+                        }
+                    }
+                    
+                    walletType = `${requiredSigs}-of-${totalKeys} Multi-Signature`;
+                }
+
+                return { walletType, totalKeys, requiredSigs };
+            } catch (err) {
+                console.warn("Could not determine wallet type.", err);
+                return { walletType: 'Unknown', totalKeys: 1, requiredSigs: 1 };
+            }
+        }
+
+        function parseOutputs(tx) {
+            const outputs = [];
+            let totalOut = 0n;
+            
+            tx.outputs.forEach((out, index) => {
+                totalOut += out.amount;
+                const { sats, btc } = formatAmount(out.amount);
+                
+                const scriptInfo = parseOutputScript(out.script);
+                const isChange = !!(out.bip32Derivation || out.tapBip32Derivation);
+                
+                outputs.push({
+                    index,
+                    amount: out.amount,
+                    sats,
+                    btc,
+                    address: scriptInfo.address,
+                    scriptType: scriptInfo.type,
+                    scriptHex: scriptInfo.scriptHex,
+                    isChange
+                });
+            });
+            
+            return { outputs, totalOut };
+        }
+
+        function parseInputs(tx) {
+            let totalIn = 0n;
+            let canCalculateFee = true;
+            
+            tx.inputs.forEach((input) => {
+                if (input.witnessUtxo) {
+                    totalIn += input.witnessUtxo.amount;
+                } else {
+                    canCalculateFee = false; 
+                }
+            });
+            
+            return { totalIn, canCalculateFee };
+        }
+
+        function buildTransactionDisplay(walletType, totalKeys, requiredSigs, outputsInfo, inputsInfo) {
+            let html = '';
+            
+            // Security model
+            html += `<div class="security-model">
+                <h4 style="color: var(--info-color); margin-top: 0;">🔐 Security Model</h4>
+                <p style="margin: 0;"><strong>${walletType}</strong></p>
+                ${totalKeys > 1 ? 
+                    `<p style="font-size: 0.9em; margin: 5px 0 0 0; color: var(--text-color);">
+                        This is a multi-sig transaction. Enter ONE of the seed phrases that is part of this setup.
+                    </p>` : ''
+                }
+            </div>`;
+            
+            // Outputs
+            html += `<div class="tx-section">
+                <h4>📤 Outputs (${outputsInfo.outputs.length})</h4>`;
+            
+            outputsInfo.outputs.forEach((output, idx) => {
+                const cssClass = output.isChange ? 'change-output' : 'destination-output';
+                const typeClass = output.isChange ? 'change' : 'destination';
+                const label = output.isChange ? '🔄 CHANGE' : '📍 SENDING TO';
+                
+                html += `<div class="output-item ${cssClass}">
+                    <div class="output-header">
+                        <div class="output-type ${typeClass}">${label}</div>
+                        <div class="output-amount">
+                            ${output.sats} sats 
+                            <span class="btc-amount">(${output.btc} BTC)</span>
+                        </div>
+                    </div>
+                    <div class="output-address">
+                        <div class="address-label">Address:</div>
+                        <div class="address-value">
+                            ${output.address ? 
+                                `${output.address}
+                                <button class="copy-btn" onclick="copyToClipboard('${output.address}')" aria-label="Copy address">📋 Copy</button>` : 
+                                `No standard address for this output`
+                            }
+                        </div>
+                        ${output.scriptType !== 'Unknown' ? 
+                            `<div style="margin-top: 5px; font-size: 12px; color: var(--text-color); opacity: 0.7;">
+                                Script Type: ${output.scriptType}
+                            </div>` : ''
+                        }
+                        ${output.scriptHex ? 
+                            `<div class="script-hex">
+                                Script Hex: ${output.scriptHex}
+                            </div>` : ''
+                        }
+                    </div>
+                </div>`;
+            });
+            
+            html += `</div>`;
+            
+            // Fee information
+            let feeHtml = `<div class="fee-info">
+                <h4 style="color: var(--warning-color); margin-top: 0;">⛏️ Fee Information</h4>`;
+            
+            if (inputsInfo.canCalculateFee) {
+                const fee = inputsInfo.totalIn - outputsInfo.totalOut;
+                const { sats: feeSats, btc: feeBtc } = formatAmount(fee);
+                
+                let feeRateInfo = '';
+                try {
+                    const tx = btc.Transaction.fromPSBT(loadedPsbtBytes, { network: NETWORKS[currentNetwork] });
+                    const vSize = tx.vsize || (tx.weight / 4);
+                    const rate = (Number(fee) / vSize).toFixed(2);
+                    feeRateInfo = `<div class="fee-rate">Fee rate: ${rate} sat/vB</div>`;
+                } catch (e) {
+                    feeRateInfo = '<div class="fee-rate">Fee rate: Unknown</div>';
+                }
+                
+                feeHtml += `<div><strong>Total Fee:</strong> ${feeSats} sats (${feeBtc} BTC)</div>
+                           ${feeRateInfo}`;
+            } else {
+                feeHtml += `<div style="color: var(--warning-color);">
+                    ⚠️ Cannot calculate exact fee (legacy inputs detected)
+                </div>`;
+            }
+            
+            feeHtml += `</div>`;
+            html += feeHtml;
+            
+            document.getElementById('txDetails').innerHTML = html;
+        }
+
+        // Clipboard functionality
+        window.copyToClipboard = function(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showStatus('📋 Address copied to clipboard!', 'success');
+                setTimeout(() => showStatus(''), 2000);
+            }).catch(() => {
+                showStatus('❌ Failed to copy address', 'error');
+            });
+        };
+
+        // Deep extract path logic and bulletproof signing engine
+        async function signTransaction() {
+            if (!librariesLoaded) {
+                showStatus('Error: Libraries are still loading. Please wait...', 'error');
+                return;
+            }
+
+            const seedText = document.getElementById('seedPhrase').value.trim().toLowerCase().replace(/\s+/g, ' ');
+            const passphraseText = document.getElementById('passphrase').value;
+            const includeRawHex = document.getElementById('includeRawHex').checked;
+            
+            if (!loadedPsbtBytes || !seedText) {
+                showStatus('Error: Please provide both a PSBT file and a seed phrase.', 'error');
+                return;
+            }
+
+            const signBtn = document.getElementById('signBtn');
+            signBtn.disabled = true;
+            showStatus(showSpinner());
+
+            try {
+                document.getElementById('downloadArea').innerHTML = '';
+                document.getElementById('qrDisplay').innerHTML = '';
+                document.getElementById('qrDisplay').style.display = 'none';
+                
+                const tx = btc.Transaction.fromPSBT(loadedPsbtBytes, { 
+                    network: NETWORKS[currentNetwork] 
+                });
+
+                let seed;
+                try {
+                    seed = mnemonicToSeedSync(seedText, passphraseText);
+                } catch (e) {
+                    throw new Error("Invalid seed phrase. Check for typos or extra words.");
+                }
+
+                const masterKey = HDKey.fromMasterSeed(seed, NETWORKS[currentNetwork].bip32);
+
+                // Helper to count the absolute number of signatures present on the PSBT
+                const getSigCount = (t) => {
+                    let count = 0;
+                    t.inputs.forEach(inp => {
+                        if (inp.partialSig) count += (inp.partialSig instanceof Map) ? inp.partialSig.size : (Array.isArray(inp.partialSig) ? inp.partialSig.length : Object.keys(inp.partialSig).length);
+                        if (inp.tapKeySig) count++;
+                        if (inp.tapScriptSig) count += (inp.tapScriptSig instanceof Map) ? inp.tapScriptSig.size : (Array.isArray(inp.tapScriptSig) ? inp.tapScriptSig.length : Object.keys(inp.tapScriptSig).length);
+                        if (inp.finalScriptWitness && inp.finalScriptWitness.length > 0) count++;
+                        if (inp.finalScriptSig && inp.finalScriptSig.length > 0) count++;
+                    });
+                    return count;
+                };
+
+                const initialSigs = getSigCount(tx);
+                const pathsToTry = new Set();
+
+                // Recursively hunt down ANY object named "path" anywhere in the PSBT input
+                const extractPaths = (obj) => {
+                    if (!obj) return;
+                    if (typeof obj === 'object') {
+                        if (obj.path) {
+                            const p = formatPath(obj.path);
+                            if (p) pathsToTry.add(p);
+                        }
+                        if (obj instanceof Map) {
+                            for (const v of obj.values()) extractPaths(v);
+                        } else if (Array.isArray(obj)) {
+                            for (const v of obj) extractPaths(v);
+                        } else {
+                            for (const k in obj) {
+                                if (Object.prototype.hasOwnProperty.call(obj, k)) {
+                                    extractPaths(obj[k]);
+                                }
+                            }
+                        }
+                    }
+                };
+
+                tx.inputs.forEach(inp => {
+                    extractPaths(inp.bip32Derivation);
+                    extractPaths(inp.tapBip32Derivation);
+                });
+
+                // Ultimate fallback: Just in case the wallet generated a PSBT with absolutely NO path metadata, 
+                // load up the most common hardware wallet derivation paths to brute force the sign logic.
+                const purposes = [44, 49, 84, 86]; // Legacy, Segwit, Native Segwit, Taproot
+                const coins = [0, 1]; // Mainnet and Testnet
+                for (let p of purposes) {
+                    for (let c of coins) {
+                        for (let ch = 0; ch <= 1; ch++) {
+                            for (let idx = 0; idx < 15; idx++) {
+                                pathsToTry.add(`m/${p}'/${c}'/0'/${ch}/${idx}`);
+                            }
+                        }
+                    }
+                }
+
+                // Attempt signing against all collected paths.
+                for (const path of pathsToTry) {
+                    try {
+                        const childKey = masterKey.derive(path);
+                        if (childKey.privateKey) {
+                            // tx.sign automatically maps the private key to the correct inputs
+                            tx.sign(childKey.privateKey);
+                        }
+                    } catch (e) {
+                        // Suppress expected internal errors when a path's key simply doesn't belong to this transaction
+                    }
+                }
+
+                const finalSigs = getSigCount(tx);
+                const signaturesAdded = finalSigs - initialSigs;
+
+                if (signaturesAdded === 0) {
+                    if (initialSigs > 0) {
+                        throw new Error(`No new signatures were added. The transaction already has ${initialSigs} signature(s). Either it is fully signed, or this seed doesn't belong to the remaining signers.`);
+                    } else {
+                        throw new Error("No signatures were added. Ensure the seed phrase matches this transaction's derivation paths and the correct network is selected.");
+                    }
+                }
+
+                transactionIsFinalized = false;
+                try {
+                    tx.finalize(); 
+                    transactionIsFinalized = true;
+                } catch (e) {
+                    // This throws intentionally if a multisig wallet is only partially signed
+                    console.log('Transaction partially signed but not ready to broadcast yet.');
+                }
+                
+                const signedPsbtBytes = tx.toPSBT();
+                
+                // Erase seed data immediately
+                zeroFillArray(seed);
+                clearSensitiveData();
+                
+                offerDownloads(signedPsbtBytes, transactionIsFinalized, signaturesAdded, includeRawHex);
+                
+                // Generate QR displays
+                await displayQRCode(signedPsbtBytes, transactionIsFinalized, includeRawHex);
+
+            } catch (error) {
+                console.error("Signing Error:", error);
+                showStatus(`Error signing PSBT: ${error.message}`, 'error');
+            } finally {
+                signBtn.disabled = false;
+            }
+        }
+
+        async function displayQRCode(signedPsbtBytes, isFinalized, includeRawHex) {
+            try {
+                const qrDisplay = document.getElementById('qrDisplay');
+                
+                let html = '<div class="qr-section">';
+                html += '<h4>📱 QR Code Results</h4>';
+                html += '<div class="qr-container" id="qrContainer"></div>';
+                html += '</div>';
+                
+                qrDisplay.innerHTML = html;
+                qrDisplay.style.display = 'block';
+                
+                // Generate PSBT QR code
+                const psbtBase64 = bytesToBase64(signedPsbtBytes);
+                await generateQRCode(psbtBase64, 'qrContainer', 
+                    isFinalized ? 'Finalized PSBT' : 'Partial PSBT');
+                
+                // Generate raw hex QR code if requested and available
+                if (includeRawHex && isFinalized) {
+                    try {
+                        const tx = btc.Transaction.fromPSBT(signedPsbtBytes, { 
+                            network: NETWORKS[currentNetwork] 
+                        });
+                        await generateQRCode(tx.hex, 'qrContainer', 'Raw Transaction Hex');
+                    } catch (e) {
+                        console.warn('Could not generate raw hex QR:', e);
+                    }
+                }
+                
+            } catch (error) {
+                console.error('QR code display error:', error);
+                showStatus('⚠️ QR code generation failed', 'warning');
+            }
+        }
+
+        function offerDownloads(signedPsbtBytes, isFinalized, signaturesAdded, includeRawHex) {
+            const downloadArea = document.getElementById('downloadArea');
+            const blob = new Blob([signedPsbtBytes], { type: "application/octet-stream" });
+            const url = URL.createObjectURL(blob);
+            
+            const newSuffix = isFinalized ? '-finalized.psbt' : '-partial.psbt';
+            const originalName = document.getElementById('psbtInput').files[0].name;
+            const downloadName = originalName.replace('.psbt', newSuffix);
+            
+            downloadArea.innerHTML = '';
+            
+            // Always show PSBT download
+            const psbtLink = document.createElement('a');
+            psbtLink.href = url;
+            psbtLink.download = downloadName;
+            psbtLink.className = `download-link ${isFinalized ? '' : 'partial'}`;
+            psbtLink.innerText = isFinalized ? '💾 Download Finalized PSBT' : '💾 Download Partial PSBT';
+            downloadArea.appendChild(psbtLink);
+            
+            // Only show raw hex download if requested AND transaction is finalized
+            if (includeRawHex && isFinalized) {
+                try {
+                    const tx = btc.Transaction.fromPSBT(signedPsbtBytes, { 
+                        network: NETWORKS[currentNetwork] 
+                    });
+                    const hexBlob = new Blob([tx.hex], { type: 'text/plain' });
+                    const hexUrl = URL.createObjectURL(hexBlob);
+                    
+                    const hexLink = document.createElement('a');
+                    hexLink.href = hexUrl;
+                    hexLink.download = downloadName.replace('.psbt', '-rawtx.txt');
+                    hexLink.className = 'download-link';
+                    hexLink.innerText = '📄 Download Raw Transaction Hex';
+                    downloadArea.appendChild(hexLink);
+                    
+                } catch (e) {
+                    console.warn('Could not generate raw hex:', e);
+                    showStatus('⚠️ Could not generate raw transaction hex', 'warning');
+                }
+            } else if (includeRawHex && !isFinalized) {
+                showStatus('ℹ️ Raw hex not available for partial signatures', 'partial');
+            }
+            
+            if (isFinalized) {
+                showStatus(`🎉 Success! Added ${signaturesAdded} signature(s). Ready to broadcast!`, 'success');
+            } else {
+                showStatus(`✍️ Success! Added ${signaturesAdded} signature(s). Collect more signatures.`, 'partial');
+            }
+        }
+
+        // Reset functionality
+        function resetAll() {
+            document.getElementById('psbtInput').value = '';
+            document.getElementById('seedPhrase').value = '';
+            document.getElementById('passphrase').value = '';
+            document.getElementById('feeRate').value = '';
+            document.getElementById('includeRawHex').checked = false;
+            document.getElementById('reviewStep').style.display = 'none';
+            document.getElementById('signingStep').style.display = 'none';
+            document.getElementById('downloadArea').innerHTML = '';
+            document.getElementById('qrDisplay').innerHTML = '';
+            document.getElementById('qrDisplay').style.display = 'none';
+            document.getElementById('status').innerHTML = '';
+            document.getElementById('status').className = '';
+            
+            clearSensitiveData();
+            
+            showStatus('🔄 Cleared all data.', 'success');
+            setTimeout(() => showStatus(''), 2000);
+        }
+
+        // Help functionality
+        function showHelp() {
+            const helpText = `
+🔒 PSBT Signing Help
+
+1. Load your unsigned PSBT file
+2. Review the transaction details carefully
+3. Enter your BIP39 seed phrase (12 or 24 words)
+4. Optionally enter your BIP39 passphrase
+5. Optionally check "Also generate raw transaction hex" for developers
+6. Click "Sign & Generate File"
+
+⚠️ Security Notes:
+• This tool signs transactions locally in your browser
+• Verify all addresses and amounts match your expectations
+• Only use with small amounts for testing
+• Clear all data after signing
+
+📱 QR Code Features:
+• QR codes are automatically generated after successful signing
+• Scan the PSBT QR code with a mobile wallet
+• Perfect for air-gapped wallet transfers
+• Works with most modern Bitcoin wallets
+
+📞 Support:
+If you encounter issues, check that:
+• Your seed phrase matches the wallet that created the PSBT
+• You're on the correct network (mainnet/testnet)
+• The PSBT file is valid and unencrypted
+• Check browser console for debug information
+            `;
+            
+            alert(helpText);
+        }
+
+        // Initialize everything when libraries are loaded
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadLibraries();
+            
+            if (!librariesLoaded) {
+                showStatus('Failed to load required libraries. Please check your internet connection.', 'error');
+                return;
+            }
+
+            updateNetworkStatus();
+            
+            document.getElementById('networkSelect').addEventListener('change', (e) => {
+                currentNetwork = e.target.value;
+                if (loadedPsbtBytes) {
+                    document.getElementById('psbtInput').value = '';
+                    resetAll();
+                }
+            });
+            
+            document.getElementById('psbtInput').addEventListener('change', async (e) => {
+                if (!e.target.files.length) {
+                    document.getElementById('reviewStep').style.display = 'none';
+                    document.getElementById('signingStep').style.display = 'none';
+                    return;
+                }
+                
+                await parseAndDisplayPSBT(e.target.files[0]);
+            });
+            
+            document.getElementById('signBtn').addEventListener('click', signTransaction);
+            document.getElementById('resetBtn').addEventListener('click', resetAll);
+            document.getElementById('helpBtn').addEventListener('click', showHelp);
+            
+            window.addEventListener('beforeunload', clearSensitiveData);
+        });
+
+        setInterval(updateNetworkStatus, 5000);
+    </script>
+</body>
+</html>

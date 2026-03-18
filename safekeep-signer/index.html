@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PSBT Signer v2.0 | SafeKeepBitcoin</title>
+    
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --accent-color: #f7931a;
+            --box-bg: #1e1e1e;
+            --border-color: #333;
+            --error-color: #ff5252;
+            --success-color: #4caf50;
+            --warning-color: #ff9800;
+            --info-color: #2196F3;
+        }
+
+        * { box-sizing: border-box; }
+
+        body { 
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            max-width: 900px; 
+            margin: 20px auto; 
+            padding: 20px; 
+            line-height: 1.6;
+        }
+
+        .header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        h2 { 
+            border-bottom: 2px solid var(--accent-color); 
+            padding-bottom: 10px; 
+            margin-bottom: 20px;
+        }
+
+        .network-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .network-selector select {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--box-bg);
+            color: var(--text-color);
+        }
+
+        .step { 
+            background: var(--box-bg);
+            margin-bottom: 25px; 
+            padding: 20px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 8px; 
+            transition: border-color 0.3s ease;
+        }
+
+        .step:hover { border-color: var(--accent-color); }
+
+        input[type="file"], input[type="text"], input[type="password"], input[type="number"], textarea { 
+            width: 100%;
+            background: var(--box-bg); 
+            color: var(--text-color); 
+            border: 1px solid var(--border-color); 
+            padding: 10px; 
+            border-radius: 4px; 
+            margin-top: 10px;
+            box-sizing: border-box;
+        }
+        
+        textarea { resize: vertical; }
+
+        button { 
+            padding: 12px 20px; 
+            background: var(--accent-color); 
+            color: #000; 
+            font-weight: bold;
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 16px;
+            width: 100%;
+            margin-top: 15px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover { background: #e08216; }
+        button:disabled { background: #666; cursor: not-allowed; opacity: 0.6; }
+
+        #status { 
+            margin-top: 15px; 
+            font-weight: bold; 
+            text-align: center; 
+            padding: 10px;
+            border-radius: 4px;
+            min-height: 20px;
+        }
+
+        .error { color: var(--error-color); background: rgba(255, 82, 82, 0.1); }
+        .success { color: var(--success-color); background: rgba(76, 175, 80, 0.1); }
+        .partial { color: var(--info-color); background: rgba(33, 150, 243, 0.1); }
+        .warning { color: var(--warning-color); background: rgba(255, 152, 0, 0.1); }
+
+        #txDetails {
+            background: var(--bg-color);
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            color: var(--text-color);
+            margin-top: 10px;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .tx-section { margin-bottom: 20px; }
+        .tx-section h4 {
+            margin: 0 0 10px 0;
+            color: var(--accent-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+        }
+
+        .output-item, .input-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            border-left: 4px solid var(--info-color);
+        }
+        .output-item.change-output { border-left-color: var(--success-color); }
+        .output-item.destination-output { border-left-color: var(--error-color); }
+
+        .output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .output-type {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .output-type.change { background: var(--success-color); color: white; }
+        .output-type.destination { background: var(--error-color); color: white; }
+
+        .output-amount {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .btc-amount { font-size: 14px; color: var(--info-color); margin-left: 10px; }
+
+        .output-address {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            margin-top: 10px;
+        }
+
+        .address-label { font-size: 12px; color: var(--text-color); margin-bottom: 5px; opacity: 0.8; }
+        .address-value { font-family: 'Courier New', Courier, monospace; font-size: 14px; word-break: break-all; line-height: 1.4; }
+
+        .script-hex {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: var(--warning-color);
+            background: rgba(255, 152, 0, 0.1);
+            padding: 5px;
+            border-radius: 3px;
+            margin-top: 5px;
+        }
+
+        .copy-btn {
+            background: var(--info-color);
+            color: white;
+            padding: 5px 10px;
+            font-size: 12px;
+            margin-left: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 3px;
+        }
+
+        .security-model {
+            background: rgba(33, 150, 243, 0.1);
+            border: 1px solid var(--info-color);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .fee-info {
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid var(--warning-color);
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .fee-rate { font-size: 0.9em; margin-top: 5px; }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .download-area { margin-top: 15px; text-align: center; }
+
+        .download-link {
+            display: inline-block;
+            padding: 10px 20px;
+            background: var(--success-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 5px;
+            transition: opacity 0.3s ease;
+        }
+
+        .download-link:hover { opacity: 0.8; }
+        .download-link.partial { background: var(--info-color); }
+
+        .control-buttons { display: flex; gap: 10px; margin-top: 15px; }
+        .control-buttons button { width: auto; flex: 1; }
+
+        .warning-text {
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid var(--warning-color);
+            color: var(--warning-color);
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+
+        .offline-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--success-color);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .option-checkbox {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+        .option-checkbox input[type="checkbox"] { margin-right: 10px; transform: scale(1.2); }
+        .option-checkbox label { cursor: pointer; font-size: 14px; }
+
+        .qr-section {
+            background: var(--box-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .qr-section h4 { margin: 0 0 15px 0; color: var(--accent-color); text-align: center; }
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .qr-item { text-align: center; max-width: 100%; }
+        .qr-item h5 { margin: 0 0 10px 0; color: var(--info-color); font-size: 14px; }
+        .qr-canvas {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            display: inline-block;
+            max-width: 100%;
+            overflow: auto;
+        }
+        .qr-canvas canvas { max-width: 100%; height: auto !important; }
+        .qr-info { font-size: 12px; color: var(--text-color); margin-top: 8px; opacity: 0.8; }
+
+        @media (max-width: 600px) {
+            body { margin: 10px; padding: 15px; }
+            .header { justify-content: center; }
+            .control-buttons { flex-direction: column; }
+            .output-header { flex-direction: column; align-items: flex-start; gap: 5px; }
+            .address-value { font-size: 13px; }
+            .qr-container { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-indicator" id="offlineIndicator">
+        ✅ Running Airgapped Safely
+    </div>
+
+    <div class="header">
+        <div class="network-selector">
+            <label for="networkSelect">Network:</label>
+            <select id="networkSelect" aria-label="Select Bitcoin network">
+                <option value="testnet">Testnet</option>
+                <option value="mainnet">Mainnet</option>
+                <option value="signet">Signet</option>
+                <option value="regtest">Regtest</option>
+            </select>
+        </div>
+    </div>
+
+    <h2>Offline PSBT Signer v2.0</h2>
+
+    <div class="warning-text">
+        <strong>⚠️ Security:</strong> This tool is running locally and completely offline. All signatures and cryptographic operations occur securely without external network calls.
+    </div>
+
+    <div class="step">
+        <h3>1. Load Unsigned PSBT</h3>
+        <input type="file" id="psbtInput" accept=".psbt" aria-label="Select PSBT file" />
+    </div>
+
+    <div class="step" id="reviewStep" style="display: none;">
+        <h3 style="color: var(--info-color); margin-top: 0;">🔍 Review Transaction</h3>
+        <p style="font-size: 0.9em; margin-bottom: 5px;">Verify these amounts match what you expect before entering your seed.</p>
+        <div id="txDetails"></div>
+    </div>
+
+    <div class="step" id="signingStep" style="display: none;">
+        <h3 id="step2Header">2. Enter Seed Phrase</h3>
+        <p id="step2Desc" style="font-size: 0.9em; color: var(--text-color);">
+            Enter your 12 or 24-word BIP39 mnemonic.
+        </p>
+        
+        <label for="seedPhrase" class="sr-only">Seed Phrase</label>
+        <textarea id="seedPhrase" rows="3" placeholder="abandon abandon abandon..." aria-label="Enter your BIP39 seed phrase"></textarea>
+        
+        <label for="passphrase" class="sr-only">Optional BIP39 Passphrase</label>
+        <div style="margin-top: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 0.9em; color: var(--text-color);">
+                Optional BIP39 Passphrase (leave blank if none):
+            </label>
+            <input type="password" id="passphrase" placeholder="Your secret passphrase..." aria-label="Optional BIP39 passphrase" />
+        </div>
+
+        <div id="feeRateSection" style="display: none; margin-top: 15px;">
+            <label for="feeRate" style="display: block; margin-bottom: 5px; font-size: 0.9em; color: var(--text-color);">
+                Fee Rate (sat/vB):
+            </label>
+            <input type="number" id="feeRate" min="1" step="0.1" placeholder="e.g., 10" aria-label="Fee rate in satoshis per vbyte" />
+            <p style="font-size: 0.8em; color: var(--text-color); margin-top: 5px;">
+                Leave empty to use the fee from the PSBT.
+            </p>
+        </div>
+
+        <div class="option-checkbox" id="rawHexOption" style="display: none;">
+            <input type="checkbox" id="includeRawHex" />
+            <label for="includeRawHex">
+                📄 Also generate raw transaction hex file
+                <div style="font-size: 12px; color: var(--text-color); opacity: 0.7; margin-top: 2px;">
+                    For developers, advanced users, or manual broadcasting
+                </div>
+            </label>
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>3. Sign Transaction</h3>
+        <button id="signBtn">Sign & Generate File</button>
+        <div class="control-buttons">
+            <button id="resetBtn" type="button">Clear All</button>
+            <button id="helpBtn" type="button">Help</button>
+        </div>
+        <div id="status" aria-live="polite"></div>
+        <div id="downloadArea"></div>
+        <div id="qrDisplay" style="display: none;"></div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>

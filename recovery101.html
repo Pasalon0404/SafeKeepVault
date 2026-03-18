@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recovery Drills 101 - Safe Keep Bitcoin</title>
+    <style>
+        :root {
+            --bg-deep: #121212;
+            --bg-card: #1e1e1e;
+            --text-primary: #f5f5f5;
+            --text-secondary: #a3a3a3;
+            --btc-orange: #f7931a;
+            --border-color: #333333;
+            --error-red: #ff4444;
+            --success-green: #00C853;
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            line-height: 1.7;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- Header Styles --- */
+        .site-header {
+            width: 100%;
+            padding: 20px 30px;
+            background-color: var(--bg-deep);
+            border-bottom: 1px solid #2a2a2a;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+
+        .logo .highlight {
+            color: var(--btc-orange);
+        }
+        /* --------------------- */
+
+        .guide-container {
+            background-color: var(--bg-card);
+            max-width: 900px;
+            width: 100%;
+            padding: 50px;
+            margin: 50px 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: var(--text-primary);
+            font-size: 2.5rem;
+            margin-top: 0;
+            margin-bottom: 15px;
+            line-height: 1.2;
+        }
+
+        h2 {
+            color: var(--text-primary);
+            font-size: 1.8rem;
+            margin-top: 50px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            color: var(--btc-orange);
+            font-size: 1.4rem;
+            margin-top: 35px;
+            margin-bottom: 15px;
+        }
+
+        p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        strong {
+            color: var(--text-primary);
+        }
+
+        ul, ol {
+            margin-bottom: 25px;
+            padding-left: 25px;
+            color: var(--text-secondary);
+        }
+
+        li {
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: var(--border-color);
+            margin: 50px 0;
+        }
+
+        .intro-text {
+            font-size: 1.25rem;
+            color: var(--text-primary);
+            font-weight: 300;
+        }
+
+        .warning-box {
+            background-color: rgba(255, 68, 68, 0.05);
+            border-left: 4px solid var(--error-red);
+            padding: 20px 25px;
+            margin: 30px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .warning-box p {
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .success-box {
+            background-color: rgba(0, 200, 83, 0.05);
+            border-left: 4px solid var(--success-green);
+            padding: 20px 25px;
+            margin: 30px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .success-box p {
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 768px) {
+            .site-header {
+                padding: 15px 20px;
+            }
+            .guide-container {
+                margin: 20px 0;
+                padding: 30px 20px;
+                border: none;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    
+    <header class="site-header">
+        <a href="index.html" class="logo">SafeKeep<span class="highlight">Bitcoin</span></a>
+    </header>
+
+    <div class="guide-container">
+        <h1>Recovery Drills 101</h1>
+        <p class="intro-text">A backup is not a backup until you have successfully restored it. If you have a steel plate locked in a safe but have never proven it works, you don't have security—you have hope.</p>
+        <p class="intro-text">Hardware wallets fail. Firmware updates brick devices. Pins get forgotten. You must train for the day your primary device dies. This guide outlines the mandatory "Nuke and Restore" drill every self-custodian must master.</p>
+
+        <div class="warning-box">
+            <p><strong>The Golden Rule Still Applies:</strong> During a recovery drill, you will be handling your raw seed phrase. Never type it into a computer keyboard. Never take a photo of it. You will only ever input these words using the physical buttons on your hardware wallet.</p>
+        </div>
+
+        <hr>
+
+        <h2>Phase I: The Pre-Flight Check</h2>
+        <p>Before you intentionally wipe your device, you must securely document your wallet's current state. If you wipe the device without knowing exactly what to look for when you restore it, you will have no way to verify success.</p>
+        
+        <ol>
+            <li><strong>Connect Your Coordinator:</strong> Open Sparrow Wallet and connect your hardware device (via USB or SD card, depending on your setup).</li>
+            <li><strong>Document the Master Fingerprint:</strong> Every seed phrase generates a unique 8-character Master Fingerprint (e.g., <code>7a3b9c12</code>). Write this down on a temporary piece of scrap paper.</li>
+            <li><strong>Document the First Receiving Address:</strong> Navigate to the "Receive" tab in Sparrow. Note down the very first receiving address at index 0 (it will likely start with <code>bc1q...</code>). Write down the first and last 6 characters.</li>
+            <li><strong>Document the Derivation Path:</strong> Ensure you know the path your wallet uses (usually <code>m/84'/0'/0'</code> for Native Segwit).</li>
+        </ol>
+
+        <h2>Phase II: Nuke and Restore</h2>
+        <p>This is where you simulate a catastrophic hardware failure.</p>
+
+        <ol>
+            <li><strong>Factory Reset:</strong> Navigate to your hardware wallet's settings (whether it's a Coldcard, Trezor, or BitBox) and execute a factory reset. The device will wipe its memory completely. It now knows nothing about your Bitcoin.</li>
+            <li><strong>Retrieve Your Backup:</strong> Fetch your physical steel or paper backup from its secure location.</li>
+            <li><strong>Initiate Recovery:</strong> Select "Restore Wallet" or "Recover from Seed" on your freshly wiped hardware device.</li>
+            <li><strong>Input the Entropy:</strong> Carefully enter your 12 or 24 words using the device's physical buttons. Take your time. A single wrong letter can result in an invalid checksum.</li>
+            <li><strong>Apply the Passphrase (If Applicable):</strong> If you use a BIP39 passphrase (the "25th word"), you must enter it perfectly now. Remember, passphrases are case-sensitive and space-sensitive.</li>
+        </ol>
+
+        <h2>Phase III: The Moment of Truth</h2>
+        <p>Your hardware wallet is now restored, but the drill isn't over until you verify the cryptography mathematically matches your pre-flight check.</p>
+
+        <ol>
+            <li><strong>Check the Fingerprint:</strong> Look at the device screen or reconnect it to Sparrow Wallet. Does the new Master Fingerprint match the one you wrote down in Phase I? If yes, your 12/24 words are perfect.</li>
+            <li><strong>Check the Address:</strong> Navigate to the "Receive" tab in Sparrow. Does the first receiving address exactly match the <code>bc1q...</code> address you wrote down earlier? If yes, your derivation path and passphrase are perfect.</li>
+        </ol>
+
+        <div class="success-box">
+            <p><strong>Drill Complete:</strong> If the Master Fingerprint and the Receiving Address match perfectly, you have successfully proven your sovereignty. You can confidently rely on your physical backup. Destroy the temporary scrap paper used in Phase I.</p>
+        </div>
+
+        <hr>
+
+        <h2>Advanced Considerations</h2>
+
+        <h3>BIP-85 Derived Seeds</h3>
+        <p>If you are acting as the "Uncle Jim" of your family—using your main hardware wallet to securely generate deterministic BIP-85 child seeds for friends or relatives—a successful recovery drill of your master seed is exponentially more important. Because BIP-85 derivation is purely mathematical, successfully restoring your master seed guarantees the immediate, fully intact recovery of every single child seed you have ever generated.</p>
+
+        <h3>Frequency of Drills</h3>
+        <p>How often should you run a Nuke and Restore drill?</p>
+        <ul>
+            <li><strong>Initially:</strong> Always perform this drill with a small test amount ($10) <em>before</em> moving your main stack to a new wallet.</li>
+            <li><strong>Annually:</strong> Run this drill once a year to ensure your physical backups haven't degraded and that you still remember the exact mechanics of your setup.</li>
+            <li><strong>After Major Changes:</strong> Perform a drill after moving to a new house, updating to a major new firmware version, or changing your security architecture.</li>
+        </ul>
+
+    </div>
+</body>
+</html>

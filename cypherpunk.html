@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Zero-to-Cypherpunk Guide - Safe Keep Bitcoin</title>
+    <style>
+        :root {
+            --bg-deep: #121212;
+            --bg-card: #1e1e1e;
+            --text-primary: #f5f5f5;
+            --text-secondary: #a3a3a3;
+            --btc-orange: #f7931a;
+            --border-color: #333333;
+            --error-red: #ff4444;
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            line-height: 1.7;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- Header Styles --- */
+        .site-header {
+            width: 100%;
+            padding: 20px 30px;
+            background-color: var(--bg-deep);
+            border-bottom: 1px solid #2a2a2a;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+
+        .logo .highlight {
+            color: var(--btc-orange);
+        }
+        /* --------------------- */
+
+        .guide-container {
+            background-color: var(--bg-card);
+            max-width: 900px;
+            width: 100%;
+            padding: 50px;
+            margin: 50px 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: var(--text-primary);
+            font-size: 2.5rem;
+            margin-top: 0;
+            margin-bottom: 15px;
+            line-height: 1.2;
+        }
+
+        h2 {
+            color: var(--text-primary);
+            font-size: 1.8rem;
+            margin-top: 50px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            color: var(--btc-orange);
+            font-size: 1.4rem;
+            margin-top: 35px;
+            margin-bottom: 15px;
+        }
+        
+        h4 {
+            color: var(--text-primary);
+            font-size: 1.15rem;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        strong {
+            color: var(--text-primary);
+        }
+
+        ul, ol {
+            margin-bottom: 25px;
+            padding-left: 25px;
+            color: var(--text-secondary);
+        }
+
+        li {
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: var(--border-color);
+            margin: 50px 0;
+        }
+
+        .intro-text {
+            font-size: 1.25rem;
+            color: var(--text-primary);
+            font-weight: 300;
+        }
+
+        .golden-rule-box {
+            background-color: rgba(255, 68, 68, 0.05);
+            border: 2px solid var(--error-red);
+            padding: 30px;
+            margin: 40px 0;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .golden-rule-box h2 {
+            color: var(--error-red);
+            border: none;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .golden-rule-box p {
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            margin: 0;
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            .site-header {
+                padding: 15px 20px;
+            }
+            .guide-container {
+                margin: 20px 0;
+                padding: 30px 20px;
+                border: none;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            .golden-rule-box h2 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    
+    <header class="site-header">
+        <a href="index.html" class="logo">SafeKeep<span class="highlight">Bitcoin</span></a>
+    </header>
+
+    <div class="guide-container">
+        <h1>The Zero-to-Cypherpunk Guide</h1>
+        <p class="intro-text">True financial sovereignty isn't just about moving your Bitcoin off an exchange; it's about systematically eliminating every single point of trust in your setup. Cypherpunks don't trust—they verify.</p>
+        <p class="intro-text">Moving to self-custody shifts the burden of security entirely onto your shoulders. If you make a mistake, there is no customer service hotline to call. This guide is your definitive, uncompromising blueprint for establishing a verifiable, trustless baseline.</p>
+
+        <div class="golden-rule-box">
+            <h2>The Golden Rule</h2>
+            <p>You must NEVER enter your seed words into any digital device with an internet connection. Never type them on a keyboard, never photograph them with a smartphone, never save them in a cloud manager, and never speak them aloud near a smart speaker.</p>
+        </div>
+
+        <p>Why is the Golden Rule so absolute? Because the moment your 12 or 24 words touch an internet-connected operating system (Windows, macOS, iOS, or Android), they are compromised. </p>
+        <p>Modern computers are inherently "hot" environments. They are riddled with zero-day exploits, clipboard hijackers, invisible keyloggers, and cloud-syncing services that automatically upload your photos and text files to remote servers. If your seed phrase exists in digital text or image format anywhere other than the secure element of a dedicated hardware wallet, you should consider those funds stolen.</p>
+        <p>With the Golden Rule etched into your mind, you are ready to build.</p>
+
+        <hr>
+
+        <h2>Phase I: The Physical Foundation</h2>
+
+        <h3>Step 1: Procure Dedicated, Verifiable Hardware</h3>
+        <p>A hardware wallet is a single-purpose computer designed to do only two things: generate your private keys offline, and sign transactions offline. It acts as an impenetrable airlock between your wealth and the internet.</p>
+        
+        <h4>The Threat of Supply Chain Attacks</h4>
+        <p>A sophisticated attacker doesn't need to hack your computer if they can tamper with your hardware wallet before it reaches your mailbox. If you buy a device from Amazon, eBay, or a third-party reseller, you risk receiving a device with a compromised firmware chip designed to generate a predetermined seed phrase known to the attacker.</p>
+        <ul>
+            <li><strong>Direct Procurement:</strong> Only purchase hardware wallets directly from the manufacturer's official, verified web domain.</li>
+            <li><strong>The Air-Gapped Approach (Coldcard):</strong> For uncompromising security, devices like the Coldcard allow you to power the device using only a wall outlet or power bank. You move unsigned transactions from your computer to the Coldcard via a MicroSD card, sign them on the device, and move the MicroSD card back. The wallet never touches a data cable connected to a PC.</li>
+            <li><strong>The Tethered Approach (Trezor):</strong> Devices like Trezor offer a highly vetted, open-source architecture that connects directly via USB. While slightly less sterile than an air-gap, it maintains strict separation and is an excellent balance of security and usability.</li>
+        </ul>
+
+        <h3>Step 2: Generate Trustless Entropy</h3>
+        <p>When you set up a new wallet, the device uses an internal Random Number Generator (RNG) to create your seed phrase. But how do you know the silicon inside the device is truly generating random numbers, rather than a predictable sequence engineered by a malicious actor?</p>
+        <p>You don't. And cypherpunks don't rely on trust.</p>
+        <ul>
+            <li><strong>Bring Your Own Entropy (BYOE):</strong> The most secure way to create a wallet is to bypass the machine entirely. By rolling casino-grade physical dice 99 times (for a 24-word seed), you generate 256 bits of pure, verifiable mathematical randomness. Advanced hardware wallets allow you to input these dice rolls (1 through 6) directly into the device. The wallet simply hashes your physical reality into cryptographic words.</li>
+            <li><strong>Verify the Firmware:</strong> Before you even roll the dice, you must verify the software running the device. Download the official firmware, cross-reference the PGP signatures provided by the manufacturer, and ensure the cryptographic hash of the file on your computer perfectly matches the one published by the developers.</li>
+        </ul>
+
+        <hr>
+
+        <h2>Phase II: The Digital Architecture</h2>
+
+        <h3>Step 3: Establish Your Desktop Coordinator</h3>
+        <p>Your hardware wallet is a dumb safe. It holds the keys, but it needs a software brain to look at the blockchain, construct transactions, and manage your addresses. You must stop using web-browser-based wallets and default manufacturer software, which often leak your financial privacy (like your total balance and IP address) to third-party corporate servers.</p>
+        <ul>
+            <li><strong>Deploy Sparrow Wallet:</strong> Sparrow Wallet is the gold standard for desktop coordination. It is open-source, uncompromising on privacy, and gives you granular control over your data.</li>
+            <li><strong>Master UTXO Management (Coin Control):</strong> Bitcoin is not a single balance; it is a collection of discrete chunks of data called Unspent Transaction Outputs (UTXOs). If you buy Bitcoin ten times, you have ten separate UTXOs. Sparrow allows you to label and isolate these UTXOs. If you want to spend Bitcoin anonymously, you can ensure you don't accidentally combine a UTXO bought on a KYC exchange with a UTXO acquired privately, which would instantly link your identity to your anonymous stack.</li>
+        </ul>
+
+        <h3>Step 4: Run Your Own Node (The Ultimate Flex)</h3>
+        <p>Bitcoin is a peer-to-peer network. If you are not running your own node, you are not a peer; you are a client asking a master for permission to view the ledger. Trusting an Electrum public server to check your balance completely destroys your privacy.</p>
+        <ul>
+            <li><strong>Turnkey Solutions:</strong> Running a node no longer requires compiling code from scratch. Operating systems like <strong>Umbrel</strong> or <strong>MyNode</strong> allow you to turn a standard mini-PC or Raspberry Pi into a dedicated, plug-and-play Bitcoin node in an afternoon.</li>
+            <li><strong>Verify the Supply:</strong> Your node downloads the entire history of the blockchain and independently verifies every single transaction since 2009. It ensures that no one is printing more than 21 million Bitcoin.</li>
+            <li><strong>Connect the Pieces:</strong> Once your node is synced, you configure Sparrow Wallet to connect exclusively to your node's local IP address. Now, your hardware wallet signs the transactions, Sparrow coordinates them, and your node broadcasts them directly to the global network. You have achieved 100% financial sovereignty. Zero reliance on third parties.</li>
+        </ul>
+
+        <hr>
+
+        <h2>Phase III: Defense in Depth</h2>
+
+        <h3>Step 5: Plausible Deniability & Advanced Custody</h3>
+        <p>Securing your setup digitally is only half the battle. You must prepare for physical extraction attacks (the proverbial "$5 wrench attack"). If an adversary kicks down your door and demands your seed phrase, you need an escape hatch.</p>
+        <ul>
+            <li><strong>BIP39 Passphrases (The "25th Word"):</strong> A passphrase is a custom, user-generated password added to your seed phrase. It acts as a multiplier. If a thief steals your 24 words, they still have nothing without the exact passphrase.</li>
+            <li><strong>The Decoy Wallet:</strong> By leaving the passphrase blank, you create a "Standard Wallet." You should fund this wallet with a decoy amount of Bitcoin (e.g., $500). If under physical duress, you surrender your 24 words and the PIN to your device. The attacker finds the decoy funds, believes they have drained your stack, and leaves. Your real wealth remains invisible and mathematically inaccessible behind your memorized passphrase.</li>
+            <li><strong>Seed XOR:</strong> For advanced practitioners who want to eliminate single points of failure without the catastrophic risks of multisig setups, Seed XOR is a powerful tool. It allows you to split a single 24-word seed phrase into multiple independent 24-word seed phrases. No single part contains *any* information about the final key until they are combined using exclusive-OR (XOR) math. You can store Part A in a vault and Part B at home, knowing neither location holds the key on its own.</li>
+        </ul>
+
+        <h3>Step 6: The Physical Backup</h3>
+        <p>Paper is the enemy of longevity. It burns at 451°F, turns to mush in water, and fades over a decade.</p>
+        <ul>
+            <li><strong>Engrave in Steel:</strong> Your finalized 12 or 24-word seed phrase must be transferred to marine-grade stainless steel. You can use metal punch sets or engraving pens to record the words on steel plates that can survive house fires (up to 2,500°F) and flooding.</li>
+            <li><strong>Geographic Distribution:</strong> Do not store your hardware wallet and your steel backup in the same drawer. If a localized disaster destroys your home, your backup must be far enough away to survive.</li>
+        </ul>
+
+        <h3>Step 7: The Wipe and Restore Drill</h3>
+        <p>A backup is entirely worthless until you have successfully restored from it. Never send your life savings to a new setup without testing the plumbing first.</p>
+        <ol>
+            <li><strong>Generate and Fund:</strong> Generate your seed, verify it is securely written down, and send a small test amount (e.g., $10) to your new receiving address.</li>
+            <li><strong>Wait for Confirmation:</strong> Ensure the transaction is fully confirmed on the blockchain by checking it against your own node.</li>
+            <li><strong>Destroy the Evidence:</strong> Intentionally factory-reset and wipe your hardware wallet back to a blank slate.</li>
+            <li><strong>The Moment of Truth:</strong> Re-enter your physical seed words into the fresh device. If the $10 reappears in Sparrow Wallet, your sovereignty is verified. If it doesn't, you just saved yourself from a catastrophic loss.</li>
+        </ol>
+
+    </div>
+</body>
+</html>
