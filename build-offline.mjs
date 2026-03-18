@@ -20,7 +20,8 @@ const pages = [
     'passphrase.html',
     'recovery101.html',
     'threats.html',
-    'xor-vs-multisig.html'
+    'xor-vs-multisig.html',
+    'descriptor.html',
 ];
 
 async function buildOfflineSuite() {
