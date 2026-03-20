@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SafeKeepBitcoin | Secure Workspace</title>
+<title>SafeKeepBitcoin | Encrypted Workspace</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
 
 <style>
@@ -25,7 +25,6 @@
   nav { background: var(--card); border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;}
   .nav-brand { font-weight: 800; font-size: 1.15rem; color: var(--text); text-decoration: none; }
   .nav-brand span { color: var(--orange); }
-  .nav-back { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
 
   .container { max-width: 900px; margin: 0 auto; padding: 0 1rem 3rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.8); margin-bottom: 25px; }
@@ -52,12 +51,16 @@
   .editor-area ul, .editor-area ol { padding-left: 20px; margin-bottom: 10px; }
   .editor-area p { margin-bottom: 10px; }
 
-  .save-bar { display: flex; gap: 15px; align-items: flex-end; background: rgba(3,218,198,0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
-  .save-bar .control-group { flex: 1; }
+  .save-bar { display: flex; flex-direction: column; gap: 15px; background: rgba(3,218,198,0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
+  .save-controls-row { display: flex; flex-direction: column; gap: 15px; } /* Stacked vertically now */
+  .save-bar .control-group { width: 100%; }
 
   input[type="password"], input[type="text"], input[type="file"] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px 15px; font-size: 1rem; }
   input[type="file"] { padding: 10px; background: var(--card2); border: 1px dashed var(--orange); cursor: pointer; margin-bottom: 20px;}
   input:focus { outline: none; border-color: var(--teal); }
+
+  .checkbox-wrapper { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.9rem; color: var(--text); margin-bottom: 10px;}
+  .checkbox-wrapper input[type="checkbox"] { width: auto; transform: scale(1.2); cursor: pointer; }
 
   .btn { display: inline-block; padding: 15px 25px; font-size: 1rem; background: var(--teal); color: #111; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s; white-space: nowrap;}
   .btn:hover { background: #00ebd5; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(3,218,198,0.3); }
@@ -66,22 +69,25 @@
   .status.success { background: rgba(3,218,198,0.1); color: var(--teal); display: block; border: 1px solid var(--teal); }
   .status.error { background: rgba(207,102,121,0.1); color: var(--red); display: block; border: 1px solid var(--red); }
 
+  .tech-specs { font-size: 0.8rem; color: var(--muted); background: var(--card2); padding: 15px; border-radius: 8px; border: 1px dashed var(--border); margin-top: 30px;}
+  .tech-specs h4 { color: var(--text); margin-bottom: 8px; margin-top: 0;}
+  .tech-specs code { color: var(--teal); background: var(--bg); padding: 2px 5px; border-radius: 3px;}
+
 </style>
 </head>
 <body>
 
 <nav>
   <a href="index.html" class="nav-brand">SafeKeep<span>Bitcoin</span></a>
-  <span class="nav-back">Secure Workspace</span>
 </nav>
 
 <div class="container">
     <h1>Encrypted Workspace</h1>
-    <div class="subtitle">AES-256-GCM Rich-Text Editor for Sneakernet Transfers</div>
+    <div class="subtitle">Secure Rich-Text Editor for Sneakernet Transfers</div>
 
     <div class="card">
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('encrypt')">Editor & Save</div>
+            <div class="tab active" onclick="switchTab('encrypt')">Editor</div>
             <div class="tab" onclick="switchTab('decrypt')">Load File</div>
         </div>
 
@@ -106,29 +112,82 @@
             <div id="editor" class="editor-area" contenteditable="true" placeholder="Begin typing your secure notes, PSBT data, or recovery instructions here..."></div>
             
             <div class="save-bar">
-                <div class="control-group">
-                    <label>Encryption Password</label>
-                    <input type="text" id="encrypt-password" placeholder="Set a session password to enable saving">
+                <label class="checkbox-wrapper">
+                    <input type="checkbox" id="encrypt-checkbox" checked onchange="togglePasswordVisibility()">
+                    <strong>Encrypt file (.skb)</strong>
+                </label>
+                
+                <div class="save-controls-row">
+                    <div class="control-group">
+                        <label>Filename</label>
+                        <input type="text" id="filename-input">
+                    </div>
+                    <div class="control-group" id="password-container">
+                        <label>Encryption Password</label>
+                        <input type="text" id="encrypt-password" placeholder="Set a session password to lock this file">
+                    </div>
+                    <button class="btn" style="align-self: flex-start;" onclick="saveNote()">Save & Download</button>
                 </div>
-                <button class="btn" onclick="encryptNote()">Lock & Download .skb</button>
             </div>
             <div id="encrypt-status" class="status"></div>
         </div>
 
         <div id="tab-decrypt" class="tab-content">
-            <label style="color: var(--orange);">Load Encrypted Workspace (.skb file)</label>
-            <input type="file" id="decrypt-file" accept=".skb,.json,.txt">
+            <label style="color: var(--orange);">Load Workspace (.skb encrypted or .txt/.html plaintext)</label>
+            <input type="file" id="decrypt-file" accept=".skb,.json,.txt,.html,.htm">
             
-            <label>Decryption Password</label>
-            <input type="text" id="decrypt-password" placeholder="Enter the password used to lock this note">
+            <div id="decrypt-password-container" style="display: none; margin-bottom: 20px;">
+                <label>Decryption Password</label>
+                <input type="text" id="decrypt-password" placeholder="Enter the password used to lock this .skb file">
+            </div>
             
-            <button class="btn" style="background: var(--orange);" onclick="decryptNote()">Unlock & Load into Editor</button>
+            <button class="btn" style="background: var(--orange);" onclick="processLoadedFile()">Load into Editor</button>
             <div id="decrypt-status" class="status"></div>
         </div>
+    </div>
+
+    <div class="tech-specs">
+        <h4>🔓 Open Source Transparency: How encryption works</h4>
+        <p style="margin-bottom: 10px;">If you ever need to decrypt an <code>.skb</code> file manually or write your own decryption script in Python or Node.js, these are the exact cryptographic parameters used by this tool:</p>
+        <ul style="padding-left: 20px;">
+            <li><strong>Algorithm:</strong> AES-256-GCM via the native Web Crypto API.</li>
+            <li><strong>Key Derivation:</strong> PBKDF2 with a <code>SHA-256</code> hash, <code>100,000</code> iterations, and a 16-byte random salt.</li>
+            <li><strong>Initialization Vector (IV):</strong> 12-byte random IV.</li>
+            <li><strong>Output Format:</strong> A standard JSON file containing the Base64-encoded <code>salt</code>, <code>iv</code>, and <code>ciphertext</code>.</li>
+        </ul>
     </div>
 </div>
 
 <script>
+// --- Initialize ---
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('filename-input').value = generateDefaultFilename();
+    
+    // Auto-detect file type on selection to show/hide password box
+    document.getElementById('decrypt-file').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        if (file.name.endsWith('.skb') || file.name.endsWith('.json')) {
+            document.getElementById('decrypt-password-container').style.display = 'block';
+        } else {
+            document.getElementById('decrypt-password-container').style.display = 'none';
+            document.getElementById('decrypt-status').style.display = 'none';
+        }
+    });
+});
+
+function generateDefaultFilename() {
+    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g, "");
+    const timeStr = new Date().toTimeString().slice(0,5).replace(/:/g, "");
+    return `workspace-${dateStr}-${timeStr}`;
+}
+
+function togglePasswordVisibility() {
+    const isChecked = document.getElementById('encrypt-checkbox').checked;
+    document.getElementById('password-container').style.display = isChecked ? 'block' : 'none';
+}
+
 // --- UI Functions ---
 function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -143,7 +202,6 @@ function switchTab(tab) {
     }
 }
 
-// Rich Text formatting command execution
 function formatDoc(cmd, value = null) {
     document.execCommand(cmd, false, value);
     document.getElementById('editor').focus();
@@ -155,7 +213,7 @@ function clearEditor() {
     }
 }
 
-// --- Cryptography Helpers (Native Web Crypto API) ---
+// --- Cryptography Helpers ---
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -200,76 +258,84 @@ function base64ToBuffer(base64) {
 }
 
 // --- ENCRYPT & SAVE WORKFLOW ---
-async function encryptNote() {
-    // We now grab the HTML markup of the editor instead of plain text
+async function saveNote() {
     const text = document.getElementById('editor').innerHTML;
+    const isEncrypted = document.getElementById('encrypt-checkbox').checked;
     const password = document.getElementById('encrypt-password').value;
+    let filenameBase = document.getElementById('filename-input').value.trim();
     const statusBox = document.getElementById('encrypt-status');
+
+    if (!filenameBase) filenameBase = generateDefaultFilename();
 
     if (!text || text === "<br>") {
         statusBox.className = 'status error';
         statusBox.innerText = 'Error: The workspace is empty.';
         return;
     }
-    if (!password) {
-        statusBox.className = 'status error';
-        statusBox.innerText = 'Error: A password is required to save.';
-        return;
-    }
 
-    try {
-        const salt = crypto.getRandomValues(new Uint8Array(16));
-        const iv = crypto.getRandomValues(new Uint8Array(12));
+    if (isEncrypted) {
+        if (!password) {
+            statusBox.className = 'status error';
+            statusBox.innerText = 'Error: A password is required to encrypt and save.';
+            return;
+        }
 
-        const key = await getPasswordKey(password, salt);
-        const ciphertext = await crypto.subtle.encrypt(
-            { name: "AES-GCM", iv: iv },
-            key,
-            enc.encode(text)
-        );
+        try {
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const iv = crypto.getRandomValues(new Uint8Array(12));
 
-        const encryptedPackage = {
-            version: 1,
-            format: "html", // Added tag to denote it is rich text
-            salt: bufferToBase64(salt),
-            iv: bufferToBase64(iv),
-            ciphertext: bufferToBase64(ciphertext)
-        };
+            const key = await getPasswordKey(password, salt);
+            const ciphertext = await crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: iv },
+                key,
+                enc.encode(text)
+            );
 
-        const blob = new Blob([JSON.stringify(encryptedPackage)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        
-        const dateStr = new Date().toISOString().slice(0,10).replace(/-/g, "");
-        const timeStr = new Date().toTimeString().slice(0,5).replace(/:/g, "");
-        
-        a.href = url;
-        a.download = `workspace-${dateStr}-${timeStr}.skb`;
-        a.click();
-        URL.revokeObjectURL(url);
+            const encryptedPackage = {
+                version: 1,
+                format: "html",
+                salt: bufferToBase64(salt),
+                iv: bufferToBase64(iv),
+                ciphertext: bufferToBase64(ciphertext)
+            };
 
+            downloadFile(JSON.stringify(encryptedPackage, null, 2), `${filenameBase}.skb`, 'application/json');
+            
+            statusBox.className = 'status success';
+            statusBox.innerText = `Success! Encrypted workspace downloaded as ${filenameBase}.skb.`;
+        } catch (err) {
+            statusBox.className = 'status error';
+            statusBox.innerText = 'Encryption failed: ' + err.message;
+        }
+    } else {
+        // Save as clear text HTML
+        downloadFile(text, `${filenameBase}.html`, 'text/html');
         statusBox.className = 'status success';
-        statusBox.innerText = 'Success! Encrypted workspace downloaded. You may continue editing.';
-        
-        // Notice we are NOT clearing the editor or the password here.
-        // This allows the user to keep working and hit "Save" again later.
-
-    } catch (err) {
-        statusBox.className = 'status error';
-        statusBox.innerText = 'Encryption failed: ' + err.message;
+        statusBox.innerText = `Success! Unencrypted file downloaded as ${filenameBase}.html.`;
     }
 }
 
+function downloadFile(content, filename, type) {
+    const blob = new Blob([content], { type: type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 // --- LOAD & DECRYPT WORKFLOW ---
-async function decryptNote() {
+async function processLoadedFile() {
     const fileInput = document.getElementById('decrypt-file');
     const password = document.getElementById('decrypt-password').value;
     const statusBox = document.getElementById('decrypt-status');
     const editor = document.getElementById('editor');
+    const filenameInput = document.getElementById('filename-input');
 
-    if (!fileInput.files.length || !password) {
+    if (!fileInput.files.length) {
         statusBox.className = 'status error';
-        statusBox.innerText = 'Error: Please select a file and enter the password.';
+        statusBox.innerText = 'Error: Please select a file to load.';
         return;
     }
 
@@ -277,44 +343,69 @@ async function decryptNote() {
     const reader = new FileReader();
 
     reader.onload = async function(e) {
+        const content = e.target.result;
+        
+        // Strip extension to update the filename input box
+        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+
         try {
-            const data = JSON.parse(e.target.result);
+            // First, try parsing as JSON to see if it's an encrypted .skb
+            const data = JSON.parse(content);
             
-            if (!data.salt || !data.iv || !data.ciphertext) {
-                throw new Error("Invalid file format.");
+            if (data.salt && data.iv && data.ciphertext) {
+                // It is a valid .skb file
+                if (!password) {
+                    statusBox.className = 'status error';
+                    statusBox.innerText = 'Error: This file is encrypted. Please enter the decryption password.';
+                    return;
+                }
+
+                const salt = base64ToBuffer(data.salt);
+                const iv = base64ToBuffer(data.iv);
+                const ciphertext = base64ToBuffer(data.ciphertext);
+
+                const key = await getPasswordKey(password, salt);
+                const decryptedBuffer = await crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: iv },
+                    key,
+                    ciphertext
+                );
+
+                editor.innerHTML = dec.decode(decryptedBuffer);
+                
+                // Pre-fill fields for easy re-saving
+                document.getElementById('encrypt-checkbox').checked = true;
+                togglePasswordVisibility();
+                document.getElementById('encrypt-password').value = password;
+                
+            } else {
+                // It's JSON, but not our encrypted format. Just dump it in.
+                editor.innerHTML = content;
+                document.getElementById('encrypt-checkbox').checked = false;
+                togglePasswordVisibility();
             }
-
-            const salt = base64ToBuffer(data.salt);
-            const iv = base64ToBuffer(data.iv);
-            const ciphertext = base64ToBuffer(data.ciphertext);
-
-            const key = await getPasswordKey(password, salt);
-            
-            const decryptedBuffer = await crypto.subtle.decrypt(
-                { name: "AES-GCM", iv: iv },
-                key,
-                ciphertext
-            );
-
-            // 1. Inject the decrypted HTML directly into the Editor
-            editor.innerHTML = dec.decode(decryptedBuffer);
-            
-            // 2. Pre-fill the "Save" password so they can easily save updates
-            document.getElementById('encrypt-password').value = password;
-            document.getElementById('decrypt-password').value = ''; // clear from load screen
-            
-            // 3. Clear file input
-            fileInput.value = '';
-            statusBox.style.display = 'none';
-
-            // 4. Automatically switch the user back to the Editor tab to start working
-            switchTab('encrypt');
-            editor.focus();
-
         } catch (err) {
-            statusBox.className = 'status error';
-            statusBox.innerText = 'Decryption failed. Incorrect password or corrupted file.';
+            // Parsing JSON failed, which means it's a standard plaintext or HTML file!
+            if (err.name === 'SyntaxError') {
+                editor.innerHTML = content;
+                document.getElementById('encrypt-checkbox').checked = false;
+                togglePasswordVisibility();
+            } else {
+                // Cryptography error (wrong password)
+                statusBox.className = 'status error';
+                statusBox.innerText = 'Decryption failed. Incorrect password or corrupted file.';
+                return;
+            }
         }
+
+        // Success Cleanup
+        filenameInput.value = nameWithoutExt;
+        document.getElementById('decrypt-password').value = '';
+        fileInput.value = '';
+        statusBox.style.display = 'none';
+
+        switchTab('encrypt');
+        editor.focus();
     };
 
     reader.readAsText(file);
