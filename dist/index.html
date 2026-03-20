@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
     <title>SafeKeepBitcoin | Self-Custody & OpSec Hub</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
     
@@ -25,7 +24,7 @@
             --primary: #f7931a;      /* Bitcoin Orange */
             --primary-hover: #ffaa33;
             --danger: #cf6679;
-            --success: #03dac6;      /* Cypherpunk Teal */
+            --success: #03dac6;      /* Cypherpunk Teal / "Blue" */
             --input-bg: #2c2c2c;
             --border-color: #333333;
         }
@@ -93,9 +92,18 @@
             border-radius: 12px; padding: 25px;
             transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
             position: relative; display: flex; flex-direction: column;
+            box-sizing: border-box;
         }
         .card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-color: #444; }
-        .card.featured:hover { border-color: var(--primary); box-shadow: 0 10px 30px rgba(247, 147, 26, 0.15); }
+        
+        /* Premium Treatment for the Transaction Signer (Standard Geometry) */
+        .card.card-special {
+            box-shadow: 0 0 15px rgba(3, 218, 198, 0.1);
+        }
+        .card.card-special:hover {
+            box-shadow: 0 10px 30px rgba(3, 218, 198, 0.25);
+            border-color: rgba(3, 218, 198, 0.3);
+        }
         
         .card h3 { margin: 0 0 15px 0; font-size: 1.4rem; color: #fff; }
         .card p { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 25px; flex-grow: 1; }
@@ -117,6 +125,16 @@
             letter-spacing: 1px; text-align: center; text-decoration: none; box-sizing: border-box;
         }
         .btn:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(247, 147, 26, 0.3); }
+        
+        /* The special "Blue" (Teal) button for the jewel tool */
+        .btn-blue {
+            background: var(--success);
+        }
+        .btn-blue:hover {
+            background: #20e9d6;
+            box-shadow: 0 4px 12px rgba(3, 218, 198, 0.3);
+        }
+
         .btn-disabled { background: var(--input-bg); color: #666; cursor: not-allowed; border: 1px dashed #444; }
         .btn-disabled:hover { background: var(--input-bg); transform: none; box-shadow: none; }
 
@@ -151,17 +169,17 @@
             <div class="card">
                 <h3>Bitcoin Threat Models</h3>
                 <p>Security starts by defining the adversary. Are you protecting against a burglar, a house fire, an exchange collapse, or your own memory failure?</p>
-                <a href="threats.html" class="btn">Read Guide</a>
+                <a href="guide-threats/index.html" class="btn">Read Guide</a>
             </div>
             <div class="card">
                 <h3>The Zero-to-Cypherpunk Guide</h3>
                 <p>A definitive, step-by-step checklist for moving off exchanges, verifying hardware wallet firmware, and establishing a secure baseline.</p>
-                <a href="cypherpunk.html" class="btn">Read Guide</a>
+                <a href="guide-cypherpunk/index.html" class="btn">Read Guide</a>
             </div>
             <div class="card">
                 <h3>Recovery Drills 101</h3>
                 <p>A backup isn't a backup until you've successfully restored it. Learn how to safely wipe your device, recover the seed, and verify your addresses.</p>
-                <a href="recovery101.html" class="btn">View Playbook</a>
+                <a href="guide-recovery/index.html" class="btn">View Playbook</a>
             </div>
         </div>
 
@@ -172,42 +190,49 @@
             <div class="card">
                 <h3>Dice-to-Seed Generator</h3>
                 <p>Generate a verifiable, high-entropy seed phrase by rolling physical casino dice. Calculates the SHA-256 checksum entirely locally.</p>
-                <a href="dice-to-seed.html" class="btn" target="_blank">Launch Offline App</a>
+                <a href="dice/index.html" class="btn" target="_blank">Launch Offline App</a>
             </div>
+            
             <div class="card">
                 <h3>Passphrase Generator</h3>
                 <p>Generate secure, high-entropy passphrases (the "25th word") using the EFF diceware wordlist for hidden wallet creation.</p>
-                <a href="passphrase.html" class="btn" target="_blank">Launch Offline App</a>
+                <a href="passphrase/index.html" class="btn" target="_blank">Launch Offline App</a>
             </div>
-            <div class="card featured">
-                <h3>Seed XOR Calculator</h3>
-                <p>Split a BIP-39 seed phrase into 2–4 distinct shares using XOR logic for secure offline backup.</p>
-                <a href="app.html" class="btn" target="_blank">Launch Offline App</a>
-            </div>
-            <div class="card featured">
-                <h3>Visual Architecture Builder</h3>
-                <p>Design your self-custody layout visually. Select Single-Sig, Multisig, or XOR, and generate a printable security diagram for your vault.</p>
-                <a href="architecture.html" class="btn" target="_blank">Launch Offline App</a>
-            </div>
-            <div class="card featured">
-                <h3>Offline Transaction Signer</h3>
-                <p>Sign partially signed Bitcoin transactions (PSBTs) entirely offline, enabling a secure air-gapped signing workflow.</p>
-                <a href="newsigner.html" class="btn" target="_blank">Launch Offline App</a>
-            </div>
-            <div class="card featured">
-                <h3>BIP-85 Derived Seed Generator</h3>
-                <p>Generate multiple child seed phrases from a single master seed using the BIP-85 standard. Perfect for managing multiple wallets with one backup.</p>
-                <a href="bip85folder/index.html" class="btn" target="_blank">Launch Offline App</a>
-            </div>
-            <div class="card featured">
+            
+            <div class="card">
                 <h3>Output Descriptor Generator</h3>
                 <p>Build watch-only wallet output descriptors (Native SegWit, Taproot, Multisig) from externally generated air-gapped seed entropy, with QR export for secure offline transfer.</p>
-                <a href="descriptor.html" class="btn" target="_blank">Launch Offline App</a>
+                <a href="descriptor/index.html" class="btn" target="_blank">Launch Offline App</a>
             </div>
-            <div class="card featured">
+            
+            <div class="card">
+                <h3>BIP-85 Derived Seed Generator</h3>
+                <p>Generate multiple child seed phrases from a single master seed using the BIP-85 standard. Perfect for managing multiple wallets with one backup.</p>
+                <a href="bip85/index.html" class="btn" target="_blank">Launch Offline App</a>
+            </div>
+            
+            <div class="card">
+                <h3>Visual Architecture Builder</h3>
+                <p>Design your self-custody layout visually. Select Single-Sig, Multisig, or XOR, and generate a printable security diagram for your vault.</p>
+                <a href="architecture/index.html" class="btn" target="_blank">Launch Offline App</a>
+            </div>
+            
+            <div class="card">
                 <h3>Encrypted Notes Tool</h3>
                 <p>Encrypt and decrypt text with AES-256-GCM, stored in a portable .skb file for secure, verifiable data transport.</p>
-                <a href="secure-notes.html" class="btn" target="_blank">Launch Offline App</a>
+                <a href="secure-note/index.html" class="btn" target="_blank">Launch Offline App</a>
+            </div>
+            
+            <div class="card">
+                <h3>Seed XOR Calculator</h3>
+                <p>Split a BIP-39 seed phrase into 2–4 distinct shares using XOR logic for secure offline backup.</p>
+                <a href="seedxor/index.html" class="btn" target="_blank">Launch Offline App</a>
+            </div>
+            
+            <div class="card card-special">
+                <h3>Offline Transaction Signer</h3>
+                <p>Sign partially signed Bitcoin transactions (PSBTs) entirely offline, enabling a secure air-gapped signing workflow.</p>
+                <a href="signer/index.html" class="btn btn-blue" target="_blank">Launch Offline App</a>
             </div>
         </div>
 
@@ -243,7 +268,7 @@
             <div class="card">
                 <h3>Seed XOR vs. Multisig</h3>
                 <p>A deep dive into the technical tradeoffs between splitting a seed at the base cryptographic layer (XOR) versus on-chain Multi-Signature setups.</p>
-                <a href="xor-vs-multisig.html" class="btn">Read Article</a>
+                <a href="guide-xor-vs-multisig/index.html" class="btn">Read Article</a>
             </div>
             
             <div class="card">

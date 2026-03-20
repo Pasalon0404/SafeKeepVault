@@ -11,18 +11,18 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
-        bip85: resolve(__dirname, 'bip85folder/index.html'),
-        signer: resolve(__dirname, 'safekeep-signer/index.html'),
-        app: resolve(__dirname, 'app.html'),
-        architecture: resolve(__dirname, 'architecture.html'),
-        cssprint: resolve(__dirname, 'cssprint.html'),
-        cypherpunk: resolve(__dirname, 'cypherpunk.html'),
-        diceToSeed: resolve(__dirname, 'dice-to-seed.html'),
-        newsigner: resolve(__dirname, 'newsigner.html'),
-        passphrase: resolve(__dirname, 'passphrase.html'),
-        recovery: resolve(__dirname, 'recovery101.html'),
-        threats: resolve(__dirname, 'threats.html'),
-        xor: resolve(__dirname, 'xor-vs-multisig.html')
+        architecture: resolve(__dirname, 'architecture/index.html'),
+        bip85: resolve(__dirname, 'bip85/index.html'),
+        descriptor: resolve(__dirname, 'descriptor/index.html'),
+        dice: resolve(__dirname, 'dice/index.html'),
+        guideCypherpunk: resolve(__dirname, 'guide-cypherpunk/index.html'),
+        guideRecovery: resolve(__dirname, 'guide-recovery/index.html'),
+        guideThreats: resolve(__dirname, 'guide-threats/index.html'),
+        guideXorVsMultisig: resolve(__dirname, 'guide-xor-vs-multisig/index.html'),
+        passphrase: resolve(__dirname, 'passphrase/index.html'),
+        secureNote: resolve(__dirname, 'secure-note/index.html'),
+        seedxor: resolve(__dirname, 'seedxor/index.html'),
+        signer: resolve(__dirname, 'signer/index.html')
       }
     }
   }

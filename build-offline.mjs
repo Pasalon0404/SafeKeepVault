@@ -6,23 +6,21 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// The exact list of every page in your suite
+// The exact list of every page in your newly organized suite
 const pages = [
     'index.html',
-    'bip85folder/index.html',
-    'safekeep-signer/index.html',
-    'app.html',
-    'architecture.html',
-    'cssprint.html',
-    'cypherpunk.html',
-    'dice-to-seed.html',
-    'newsigner.html',
-    'passphrase.html',
-    'recovery101.html',
-    'threats.html',
-    'xor-vs-multisig.html',
-    'descriptor.html',
-    'secure-notes.html',
+    'architecture/index.html',
+    'bip85/index.html',
+    'descriptor/index.html',
+    'dice/index.html',
+    'guide-cypherpunk/index.html',
+    'guide-recovery/index.html',
+    'guide-threats/index.html',
+    'guide-xor-vs-multisig/index.html',
+    'passphrase/index.html',
+    'secure-note/index.html',
+    'seedxor/index.html',
+    'signer/index.html'
 ];
 
 async function buildOfflineSuite() {
