@@ -6,7 +6,14 @@
 <title>SafeKeepBitcoin | Output Descriptor Generator</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
 
+<script>
+  if (localStorage.getItem('safekeepTheme') === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+</script>
+
 <style>
+  /* --- Dark Theme (Default) --- */
   :root {
     --bg: #0f0f0f;
     --card: #161616;
@@ -20,16 +27,32 @@
     --mono: 'Courier New', Courier, monospace;
     --input-bg: #2c2c2c;
   }
+
+  /* --- Light Theme Overrides --- */
+  [data-theme="light"] {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --card2: #f0f0f0;
+    --border: #cccccc;
+    --text: #121212;
+    --muted: #555555;
+    --teal: #018786;
+    --red: #b00020;
+    --input-bg: #e0e0e0;
+    --orange: #d87c14;
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6; transition: background-color 0.3s ease, color 0.3s ease; }
 
   /* NAV */
-  nav { background: var(--card); border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;}
+  nav { background: var(--card); border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; transition: background-color 0.3s ease, border-color 0.3s ease;}
   .nav-brand { font-weight: 800; font-size: 1.15rem; color: var(--text); text-decoration: none; }
   .nav-brand span { color: var(--orange); }
 
   .container { max-width: 850px; margin: 0 auto; padding: 0 1rem 3rem; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.8); margin-bottom: 25px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.8); margin-bottom: 25px; transition: background-color 0.3s ease, border-color 0.3s ease; }
+  [data-theme="light"] .card { box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
 
   h1 { text-align: center; color: var(--text); text-transform: uppercase; letter-spacing: 2px; font-size: 1.5rem; margin-bottom: 5px;}
   .subtitle { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
@@ -37,10 +60,10 @@
   .warning { background: rgba(207,102,121,0.08); border: 1px dashed var(--red); border-radius: 6px; padding: 12px; font-size: 0.85rem; color: var(--red); text-align: center; margin-bottom: 2rem; }
 
   /* Form Elements */
-  .controls { display: flex; gap: 15px; flex-wrap: wrap; background: var(--card2); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px; }
+  .controls { display: flex; gap: 15px; flex-wrap: wrap; background: var(--card2); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px; transition: background-color 0.3s ease, border-color 0.3s ease;}
   .control-group { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 5px; }
   .control-group label { font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase; letter-spacing: 1px;}
-  select, input { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 1rem; width: 100%; }
+  select, input { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 1rem; width: 100%; transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;}
   select:focus, input:focus { outline: none; border-color: var(--teal); }
 
   /* Grid Seed Inputs */
@@ -51,7 +74,7 @@
   .word-box {
       display: flex; align-items: center;
       background: var(--input-bg); border: 1px solid var(--border);
-      border-radius: 4px; padding: 6px 8px; transition: border-color 0.3s;
+      border-radius: 4px; padding: 6px 8px; transition: border-color 0.3s, background-color 0.3s ease;
   }
   .word-box:focus-within { border-color: var(--orange); }
   .word-box.invalid { border-color: var(--red); box-shadow: 0 0 5px rgba(207, 102, 121, 0.4); }
@@ -69,13 +92,14 @@
   .radio-group label { cursor: pointer; display: flex; align-items: center; gap: 5px; color: var(--text); text-transform: none; font-weight: normal; }
 
   .btn { display: block; width: 100%; padding: 15px; font-size: 1.1rem; background: var(--orange); color: #111; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s;}
-  .btn:hover { background: #ffaa33; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(247,147,26,0.3); }
+  .btn:hover { background: var(--orange); opacity: 0.8; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(247,147,26,0.3); }
 
   /* Output Area */
   .result-box { margin-top: 2rem; border: 1px solid var(--teal); border-radius: 8px; padding: 20px; background: rgba(3,218,198,0.03); }
   .result-box h3 { color: var(--teal); margin-bottom: 15px; border-bottom: 1px solid rgba(3,218,198,0.2); padding-bottom: 10px;}
   
-  .descriptor-output { background: #111; font-family: var(--mono); font-size: 1rem; color: var(--text); padding: 15px; border-radius: 6px; border: 1px solid var(--border); word-break: break-all; margin-bottom: 15px; min-height: 80px; overflow-x: auto; }
+  .descriptor-output { background: #111; font-family: var(--mono); font-size: 1rem; color: #fff; padding: 15px; border-radius: 6px; border: 1px solid var(--border); word-break: break-all; margin-bottom: 15px; min-height: 80px; overflow-x: auto; }
+  [data-theme="light"] .descriptor-output { background: #e0e0e0; color: #121212; }
   
   .action-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; justify-content: center; }
   .copy-btn { padding: 8px 16px; font-size: 0.85rem; background: transparent; color: var(--teal); border: 1px solid var(--teal); border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; text-transform: uppercase; }
@@ -115,6 +139,9 @@ Minimum version required to store current data is: `+c+`.
 
 <nav>
   <a href="../index.html" class="nav-brand">SafeKeep<span>Bitcoin</span></a>
+  <button onclick="toggleTheme()" id="theme-btn" style="background:transparent; border:none; color:var(--text); font-size:1.2rem; cursor:pointer;">
+    ☀️
+  </button>
 </nav>
 
 <datalist id="bip39-words"></datalist>
@@ -743,8 +770,32 @@ function exportToPlanner() {
 
 document.getElementById('btn-generate').addEventListener('click', generateDescriptor);
 document.getElementById('btn-copy').addEventListener('click', copyDescriptor);
-// UPDATED EVENT LISTENER
 document.getElementById('btn-download').addEventListener('click', downloadDescriptor);
+
+// --- THEME TOGGLE LOGIC ---
+function toggleTheme() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme');
+    const btn = document.getElementById('theme-btn');
+    
+    if (currentTheme === 'light') {
+        html.removeAttribute('data-theme'); // Reverts to default dark
+        localStorage.setItem('safekeepTheme', 'dark');
+        btn.innerText = '☀️'; // Show sun icon (to switch to light)
+    } else {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('safekeepTheme', 'light');
+        btn.innerText = '🌙'; // Show moon icon (to switch to dark)
+    }
+}
+
+// Ensure the button shows the correct icon on page load
+window.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('safekeepTheme') === 'light') {
+        document.getElementById('theme-btn').innerText = '🌙';
+    }
+});
+
 </script>
 </body>
 </html>
