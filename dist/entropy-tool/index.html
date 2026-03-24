@@ -2211,16 +2211,16 @@ Minimum version required to store current data is: `+c+`.
       </select>
     </div>
     <div class="control-group">
-      <label>Key Format</label>
+      <label>Extended Key Format</label>
       <select id="key-format" onchange="if(!document.getElementById('btn-generate').disabled) updateWallet()">
-        <option value="bip380" selected>Standard (BIP-380 xpub)</option>
-        <option value="slip132">Legacy (SLIP-132 zpub)</option>
+        <option value="slip132" selected>SLIP-132 (zpub, ypub, xpub)</option>
+        <option value="bip380">BIP-32 Standard (xpub only)</option>
       </select>
     </div>
     <div class="control-group">
-      <label>Verify Derivation Path</label>
+      <label>Address Type (Derivation)</label>
       <select id="derivation-path" onchange="if(!document.getElementById('btn-generate').disabled) updateWallet()">
-        <option value="84">Native SegWit (BIP84) - bc1q</option>
+        <option value="84" selected>Native SegWit (BIP84) - bc1q</option>
         <option value="86">Taproot (BIP86) - bc1p</option>
         <option value="49">Nested SegWit (BIP49) - 3...</option>
         <option value="44">Legacy (BIP44) - 1...</option>
@@ -2233,7 +2233,7 @@ Minimum version required to store current data is: `+c+`.
         <p style="font-size: 0.85rem; color: var(--text); margin-top: 0; margin-bottom: 10px; line-height: 1.5;">
             <strong>Hybrid Security (Recommended):</strong> For maximum security against loaded dice or boot-time entropy starvation, move your mouse wildly for 5 seconds to generate cryptographic noise, then click the button below. Finish the remaining rolls with physical dice.
         </p>
-        <button class="btn-secondary" id="btn-browser-entropy" onclick="generateBrowserEntropy()">🎲 Generate 50 Computer Rolls</button>
+        <button class="btn-secondary" id="btn-browser-entropy" onclick="generateBrowserEntropy()">Generate 50 Computer Rolls</button>
     </div>
 
     <textarea id="dice-input" placeholder="Start rolling dice and type the numbers here (1-6)..." oninput="updateDiceUI()"></textarea>
