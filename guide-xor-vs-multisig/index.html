@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
+    <title>Seed XOR vs. Multisig | SafeKeepBitcoin</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-DJBQMJ0NFT"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-DJBQMJ0NFT');
+    </script>
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --text-muted: #888888;
+            --primary: #f7931a;      /* Bitcoin Orange */
+            --primary-hover: #ffaa33;
+            --danger: #cf6679;
+            --success: #03dac6;      /* Cypherpunk Teal */
+            --input-bg: #2c2c2c;
+            --border-color: #333333;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            line-height: 1.8;
+            overflow-x: hidden;
+        }
+
+        /* --- Navigation --- */
+        nav {
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        nav a { color: var(--text-color); text-decoration: none; font-weight: bold; font-size: 1.2rem; }
+        nav a:hover { color: var(--primary); }
+        .nav-brand span { color: var(--primary); }
+        .back-link { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* --- Layout Containers --- */
+        .container {
+            max-width: 800px;
+            margin: 3rem auto;
+            padding: 0 20px;
+        }
+
+        /* --- Article Typography --- */
+        article header { margin-bottom: 3rem; text-align: center; }
+        h1 { font-size: 2.8rem; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; color: #fff; }
+        .subtitle { font-size: 1.2rem; color: var(--primary); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        
+        h2 { font-size: 1.8rem; color: var(--primary); border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; margin-top: 3rem; }
+        h3 { font-size: 1.3rem; color: #fff; margin-top: 2rem; }
+        
+        p { margin-bottom: 1.5rem; font-size: 1.1rem; }
+        ul, ol { margin-bottom: 1.5rem; font-size: 1.1rem; padding-left: 20px; }
+        li { margin-bottom: 10px; }
+
+        /* --- Highlight Boxes --- */
+        .callout {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid var(--primary);
+            padding: 20px;
+            margin: 2rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .callout strong { color: var(--primary); display: block; margin-bottom: 5px; font-size: 1.1rem;}
+
+        /* --- Comparison Table --- */
+        .table-wrapper { overflow-x: auto; margin: 2rem 0; }
+        table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        th { background: rgba(0,0,0,0.3); color: var(--primary); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        tr:last-child td { border-bottom: none; }
+        .pro { color: var(--success); }
+        .con { color: var(--danger); }
+
+        /* --- Conclusion / Action --- */
+        .conclusion { margin-top: 4rem; padding: 2rem; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); text-align: center; }
+        .btn {
+            display: inline-block; padding: 12px 24px; font-size: 1rem;
+            background: var(--primary); color: #121212; border: none;
+            border-radius: 6px; cursor: pointer; transition: all 0.3s;
+            font-weight: bold; text-transform: uppercase; letter-spacing: 1px; text-decoration: none; margin-top: 15px;
+        }
+        .btn:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(247, 147, 26, 0.3); }
+
+        footer { margin-top: 4rem; padding: 2rem 20px; border-top: 1px solid var(--border-color); text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="index.html" class="nav-brand">SafeKeep<span>Bitcoin</span></a>
+        <a href="index.html" class="back-link">← Back to Hub</a>
+    </nav>
+
+    <main class="container">
+        <article>
+            <header>
+                <div class="subtitle">Architecture Deep Dive</div>
+                <h1>Seed XOR vs. Multisig</h1>
+                <p style="color: var(--text-muted);">Understanding the tradeoffs between base-layer splitting and on-chain coordination.</p>
+            </header>
+
+            <p>As Bitcoiners progress in their self-custody journey, the desire to eliminate a "single point of failure" becomes paramount. Storing 12 or 24 words on a piece of metal in one location means a single house fire, a single burglary, or a single memory lapse can result in a total loss of funds.</p>
+            
+            <p>To solve this, the community generally turns to two distinct architectures: <strong>Seed XOR</strong> and <strong>Multisig</strong> (Multi-Signature). While both allow you to distribute trust and physical backups, they operate at completely different layers of the Bitcoin stack and come with unique tradeoffs.</p>
+
+            <h2>The Core Difference</h2>
+            
+            <div class="callout">
+                <strong>Seed XOR (The Cryptographic Layer)</strong>
+                You are mathematically splitting the <em>keys themselves</em>. The Bitcoin network has no idea you have done this. To the blockchain, your wallet looks exactly like a standard Single-Sig wallet.
+            </div>
+
+            <div class="callout">
+                <strong>Multisig (The Consensus Layer)</strong>
+                You are utilizing Bitcoin's built-in smart contracts. You create a vault that requires multiple separate keys (e.g., 2 out of 3) to authorize a transaction. The Bitcoin network enforces this rule on-chain.
+            </div>
+
+            <h2>Seed XOR: The "Invisible Split"</h2>
+            <p>Seed XOR takes a single master seed phrase and mathematically splits it into multiple distinct shares (usually 2, 3, or 4) using Exclusive OR logic. </p>
+            
+            <h3>How it works in practice:</h3>
+            <ul>
+                <li>You generate a standard 24-word seed on a hardware wallet (like a Coldcard).</li>
+                <li>You use the hardware wallet (or a trusted offline tool) to split that seed into Share A and Share B.</li>
+                <li>You store Share A in your home safe, and Share B in a bank vault.</li>
+                <li><strong>Crucial Rule:</strong> You must possess <em>all</em> shares to reconstruct the original seed. Having just Share A reveals zero cryptographic information about the master seed.</li>
+            </ul>
+
+            <p>Because Seed XOR is entirely offline math, it leaves no on-chain footprint. It is cheaper to spend from, easier to restore on any standard BIP39 wallet (once merged), and perfectly preserves your privacy.</p>
+
+            <h2>Multisig: The "Institutional Standard"</h2>
+            <p>Multisig (specifically a <em>quorum</em> setup like 2-of-3) involves generating three entirely separate seed phrases on three different hardware wallets. You then combine their "Extended Public Keys" (xPubs) in software like Sparrow Wallet to create a shared vault.</p>
+            
+            <h3>How it works in practice:</h3>
+            <ul>
+                <li>You generate Seed 1, Seed 2, and Seed 3.</li>
+                <li>To send Bitcoin, you must physically plug in and sign the transaction with at least two of the devices.</li>
+                <li>If your house burns down and destroys Seed 1, you can still recover your funds using Seed 2 and Seed 3.</li>
+            </ul>
+
+            <p>Multisig offers true redundancy. You can lose a key and still recover your funds. However, it requires significantly more technical coordination, you must securely back up the wallet configuration file (the xPubs), and spending from a Multisig wallet costs more in network fees because the transaction size is physically larger.</p>
+
+            <h2>The Tradeoff Comparison</h2>
+            
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>Seed XOR</th>
+                            <th>2-of-3 Multisig</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Redundancy</strong> (Can you lose a share?)</td>
+                            <td class="con">No. Lose one share, lose everything.</td>
+                            <td class="pro">Yes. You can lose one key and still recover.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Privacy</strong> (On-chain footprint)</td>
+                            <td class="pro">Excellent. Looks like a standard wallet.</td>
+                            <td class="con">Visible. Network knows it's a multi-signature script.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Transaction Fees</strong></td>
+                            <td class="pro">Standard (Cheap).</td>
+                            <td class="con">Higher (Larger data size).</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Complexity</strong></td>
+                            <td class="pro">Low. Just math. Easy to restore anywhere.</td>
+                            <td class="con">High. Must manage multiple devices and config files.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Hardware Required</strong></td>
+                            <td class="pro">1 Hardware Wallet.</td>
+                            <td class="con">2 to 3 Hardware Wallets (Ideally different brands).</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h2>Which Should You Choose?</h2>
+            <p>There is no "perfect" solution; it depends entirely on your specific threat model.</p>
+            
+            <p><strong>Choose Seed XOR if:</strong> You want a cost-effective, highly private way to ensure a burglar finding your home safe cannot steal your funds, and you are confident in your ability to securely store multiple shares without losing them.</p>
+            
+            <p><strong>Choose Multisig if:</strong> You are securing life-changing wealth, want protection against physical loss/destruction of a single location, and are comfortable managing complex wallet coordination files (xPubs).</p>
+
+            <div class="conclusion">
+                <h3>Ready to test Seed XOR?</h3>
+                <p style="color: var(--text-muted); margin-bottom: 20px;">Use our 100% client-side, offline-first calculator to see how the math works.</p>
+                <a href="app.html" class="btn">Launch Seed XOR Tool</a>
+            </div>
+
+        </article>
+    </main>
+
+    <footer>
+        <p>SafeKeepBitcoin tools are designed to be saved locally and run on strictly air-gapped machines.</p>
+    </footer>
+
+</body>
+</html>

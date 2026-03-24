@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
+    <title>Bitcoin Threat Models - Safe Keep Bitcoin</title>
+    <style>
+        :root {
+            --bg-deep: #121212;
+            --bg-card: #1e1e1e;
+            --text-primary: #f5f5f5;
+            --text-secondary: #a3a3a3;
+            --btc-orange: #f7931a;
+            --border-color: #333333;
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- Header Styles --- */
+        .site-header {
+            width: 100%;
+            padding: 20px 30px;
+            background-color: var(--bg-deep);
+            border-bottom: 1px solid #2a2a2a;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+
+        .logo .highlight {
+            color: var(--btc-orange);
+        }
+        /* --------------------- */
+
+        .guide-container {
+            background-color: var(--bg-card);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+            margin: 50px 20px; /* Gives space below the header */
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: var(--text-primary);
+            font-size: 2.2rem;
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 15px;
+        }
+
+        h3 {
+            color: var(--btc-orange);
+            font-size: 1.4rem;
+            margin-top: 35px;
+            margin-bottom: 15px;
+        }
+
+        p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            margin-bottom: 15px;
+        }
+
+        strong {
+            color: var(--text-primary);
+        }
+
+        ul {
+            margin-bottom: 25px;
+            padding-left: 20px;
+        }
+
+        li {
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            font-size: 1.05rem;
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: var(--border-color);
+            margin: 40px 0;
+        }
+
+        .intro-text {
+            font-size: 1.15rem;
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 600px) {
+            .site-header {
+                padding: 15px 20px;
+            }
+            .guide-container {
+                margin: 20px 0;
+                padding: 20px;
+                border: none;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    
+    <header class="site-header">
+        <a href="index.html" class="logo">SafeKeep<span class="highlight">Bitcoin</span></a>
+    </header>
+
+    <div class="guide-container">
+        <h1>Bitcoin Threat Models</h1>
+        <p class="intro-text">Perfect security is a myth. Every decision you make about storing your Bitcoin involves a trade-off between security, convenience, and complexity. If you try to build a fortress that protects against a nation-state actor, you might end up locking yourself out in the process.</p>
+        <p class="intro-text">Before you generate a seed phrase or buy hardware, you need to define your adversary. Who—or what—are you actually protecting your stack against? Here are the five primary threat models every self-custodian must consider.</p>
+
+        <hr>
+
+        <h3>1. The Systemic Threat (Exchange Collapse)</h3>
+        <p><strong>The Adversary:</strong> Insolvent platforms, fraudulent founders, and regulatory seizures.</p>
+        <p><strong>The Risk:</strong> "Not your keys, not your coins." If your Bitcoin sits on an exchange, you hold an IOU, not the asset.</p>
+        <p><strong>The Defense:</strong></p>
+        <ul>
+            <li><strong>Self-Custody:</strong> Moving funds off exchanges into wallets where you hold the private keys.</li>
+            <li><strong>Zero-Trust:</strong> Treating exchanges only as on/off ramps, never as long-term storage.</li>
+        </ul>
+
+        <h3>2. The Physical Threat (The Burglar & The Wrench)</h3>
+        <p><strong>The Adversary:</strong> Opportunistic thieves, roommates, or targeted attackers ($5 wrench attacks).</p>
+        <p><strong>The Risk:</strong> Someone gains physical access to your home and finds your seed phrase.</p>
+        <p><strong>The Defense:</strong></p>
+        <ul>
+            <li><strong>BIP39 Passphrases:</strong> Creating a "hidden" wallet behind a custom passphrase.</li>
+            <li><strong>Decoys:</strong> Leaving a small amount of funds on the primary PIN/seed as a decoy.</li>
+            <li><strong>Geographic Distribution:</strong> Storing backups in secure, secondary locations.</li>
+        </ul>
+
+        <h3>3. The Digital Adversary (Malware & Phishing)</h3>
+        <p><strong>The Adversary:</strong> Hackers, clipboard hijackers, keyloggers, and malicious firmware.</p>
+        <p><strong>The Risk:</strong> Your computer is compromised, or you are tricked into entering your seed phrase.</p>
+        <p><strong>The Defense:</strong></p>
+        <ul>
+            <li><strong>Hardware Wallets:</strong> Using dedicated signing devices (like a Coldcard or Trezor).</li>
+            <li><strong>Trusting the Screen:</strong> Always verifying the destination address on the device screen.</li>
+            <li><strong>Verifiable Software:</strong> Using robust software like Sparrow Wallet connected to your own node.</li>
+        </ul>
+
+        <h3>4. Environmental Hazards (Fire, Flood, & Time)</h3>
+        <p><strong>The Adversary:</strong> Mother Nature, house fires, water damage, and natural degradation.</p>
+        <p><strong>The Risk:</strong> Your paper backup burns, ink fades, or water destroys your records.</p>
+        <p><strong>The Defense:</strong></p>
+        <ul>
+            <li><strong>Steel Backups:</strong> Engraving your seed phrase into marine-grade stainless steel.</li>
+            <li><strong>Redundancy:</strong> Avoiding a single geographic point of failure for physical backups.</li>
+        </ul>
+
+        <h3>5. The "You" Adversary (Memory Failure & Complexity)</h3>
+        <p><strong>The Adversary:</strong> Your own brain, time, and over-engineering.</p>
+        <p><strong>The Risk:</strong> You create a setup so complex that you forget how to access it, or make a fatal error.</p>
+        <p><strong>The Defense:</strong></p>
+        <ul>
+            <li><strong>Simplicity:</strong> Choosing the simplest setup that addresses your threat models.</li>
+            <li><strong>No Brain Wallets:</strong> Never relying on memory for passphrases or PINs.</li>
+            <li><strong>Documentation:</strong> Leaving clear instructions for yourself or your heirs.</li>
+        </ul>
+    </div>
+</body>
+</html>
