@@ -280,6 +280,9 @@
         <div class="action-buttons" style="justify-content: center;">
             <button class="copy-btn" id="btn-copy">📋 Copy Descriptor</button>
             <button class="copy-btn" id="btn-download">💾 Download Descriptor (.txt)</button>
+            
+            <button class="copy-btn" id="btn-export-note" style="border-color: var(--teal); color: var(--teal);" onclick="exportDescriptorToNote()">🔐 Export to Note</button>
+            
             <button class="copy-btn" id="btn-print" onclick="window.print()">🖨️ Print Backup</button>
             <button class="copy-btn" id="btn-planner" style="border-color: var(--orange); color: var(--orange);" onclick="exportToPlanner()">🏗️ Export to Architecture Planner</button>
         </div>
@@ -1000,7 +1003,103 @@ function exportToNote(seedIndex) {
         window.open('../secure-note/index.html', '_blank');
     });
 }
+window.exportDescriptorToNote = function() {
+    const rawDesc = document.getElementById('descriptor-text').innerText;
+    if (!rawDesc || rawDesc === "Awaiting input..." || rawDesc.includes("Error") || rawDesc === "") {
+        return alert("Please generate a valid descriptor first.");
+    }
 
+    const walletTypeSel = document.getElementById('wallet-type');
+    const scriptTypeSel = document.getElementById('script-type');
+    const walletType = walletTypeSel.options[walletTypeSel.selectedIndex].text;
+    const scriptType = scriptTypeSel.options[scriptTypeSel.selectedIndex].text;
+    const isMulti = walletTypeSel.value === 'multi';
+    const mReq = isMulti ? document.getElementById('m-required').value : 1;
+    const nTotal = isMulti ? document.getElementById('n-total').value : 1;
+    const mOfN = isMulti ? `${mReq} of ${nTotal}` : `1 of 1`;
+
+    let referencesHtml = "<ul style='padding-left: 20px;'>";
+    let referencesPayload = [];
+
+    // Loop through however many seeds are on the screen to grab the identifiers
+    for(let i = 0; i < nTotal; i++) {
+        const inputs = document.querySelectorAll(`.seed-grid-${i} .word-input`);
+        let lastWord = "Unknown";
+        if (inputs.length > 0 && inputs[inputs.length - 1].value.trim() !== "") {
+            lastWord = inputs[inputs.length - 1].value.trim();
+        }
+        
+        const passElem = document.getElementById(`passphrase-${i}`);
+        const pass = passElem ? passElem.value.trim() : "";
+        
+        referencesHtml += `
+            <li style='margin-bottom: 12px;'>
+                <strong>Seed ${i+1} Last Word:</strong> <span style="font-family: monospace; text-transform: uppercase; color: var(--orange); padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; margin-left: 5px;">${lastWord}</span><br>
+                <div style="margin-top: 5px;"><strong>Passphrase:</strong> ${pass ? '<span style="color: var(--teal); font-family: monospace;">' + pass + '</span>' : '<span style="color: var(--muted);">None</span>'}</div>
+            </li>`;
+        
+        referencesPayload.push({ index: i + 1, lastWord: lastWord, passphrase: pass });
+    }
+    referencesHtml += "</ul>";
+
+    // Build the final Encrypted Note Layout
+    const noteHtml = `
+        <h2>Output Descriptor Backup</h2>
+        
+        <h3>Wallet Configuration</h3>
+        <ul>
+            <li><strong>Architecture:</strong> ${walletType}</li>
+            <li><strong>Script Type:</strong> ${scriptType}</li>
+            <li><strong>Quorum:</strong> ${mOfN}</li>
+        </ul>
+
+        <h3>Backup References</h3>
+        ${referencesHtml}
+
+        <h3>Raw Output Descriptor</h3>
+        <p style="font-family: monospace; background: var(--input-bg); padding: 15px; border-radius: 5px; color: var(--teal); word-break: break-all; font-size: 0.9em; border: 1px solid var(--border);">
+            ${rawDesc}
+        </p>
+        <p style="color: var(--muted); font-size: 0.85em;"><em>Note: While a descriptor only contains public keys (watch-only), it reveals your entire transaction history and balance if exposed. Keep it secure.</em></p>
+    `;
+
+    // Construct the invisible machine payload
+    const payload = {
+        safekeep_version: "1.0",
+        type: "descriptor_export",
+        descriptor: rawDesc,
+        walletType: walletTypeSel.value,
+        scriptType: scriptTypeSel.value,
+        m: parseInt(mReq),
+        n: parseInt(nTotal),
+        references: referencesPayload
+    };
+
+    const b64Payload = btoa(JSON.stringify(payload));
+    const payloadHtml = `
+        <div class="skb-hidden-payload">
+            <hr style="margin-top: 30px; border: 0; border-top: 1px dashed var(--border);">
+            <p style="font-family: monospace; font-size: 0.75em; color: var(--text-muted); word-break: break-all;">
+                <strong>⚙️ AUTO-FILL PAYLOAD:</strong><br>
+                [SKB_PAYLOAD:${b64Payload}]
+            </p>
+        </div>
+    `;
+
+    const combinedData = noteHtml + payloadHtml;
+
+    // Send it to the workspace
+    sessionStorage.setItem('safeKeepDraftNote', combinedData);
+    localStorage.setItem('safeKeepDraftNote', combinedData);
+    
+    const plainText = combinedData.replace(/<[^>]+>/g, '\n').replace(/\n\s*\n/g, '\n');
+    navigator.clipboard.writeText(plainText).then(() => {
+        alert("Vault Descriptor prepared!\n\nOpening Encrypted Note Tool...");
+        window.open('../secure-note/index.html', '_blank');
+    }).catch(err => {
+        window.open('../secure-note/index.html', '_blank');
+    });
+};
 function exportToPlanner() {
     const rawDesc = document.getElementById('descriptor-text').innerText;
     if (!rawDesc || rawDesc === "Awaiting input..." || rawDesc.includes("Error") || rawDesc === "") {
