@@ -2828,6 +2828,10 @@ const WORDLIST = ["abandon","ability","able","about","above","absent","absorb","
                         <div class="action-buttons">
                             <button class="copy-btn" onclick="copyResult('split', ${i})">📋 Copy Share ${i+1}</button>
                             <button class="copy-btn" style="border-color: var(--success); color: var(--success);" onclick="exportToNote('split', ${i})">🔐 Export to Note</button>
+                            <button class="copy-btn" style="border-color: var(--text-color); color: var(--text-color);" onclick="showSplitQr(${i})">📱 Show QR Code</button>
+                        </div>
+                        <div id="split-qr-container-${i}" style="display: none; margin-top: 20px; text-align: center; background: #fff; padding: 15px; border-radius: 8px; width: max-content; margin-left: auto; margin-right: auto; border: 3px solid var(--border-color);">
+                            <canvas id="split-qr-canvas-${i}"></canvas>
                         </div>
                     </div>
                 `);
@@ -2835,6 +2839,39 @@ const WORDLIST = ["abandon","ability","able","about","above","absent","absorb","
 
             document.getElementById('split-result').style.display = 'block';
         } catch (e) { showError('split-error', e.message); }
+    };
+
+    window.showSplitQr = function(index) {
+        const qrContainer = document.getElementById(`split-qr-container-${index}`);
+        const canvas = document.getElementById(`split-qr-canvas-${index}`);
+        
+        // Toggle visibility if already open
+        if (qrContainer.style.display === 'block') {
+            qrContainer.style.display = 'none';
+            return;
+        }
+
+        const seedToExport = window.generatedShares[index];
+        if (!seedToExport) return;
+        
+        // Safety check for the library
+        if (!window.QRCode) {
+            alert("QR Code library missing. Ensure 'window.QRCode = QRCode;' is in your seedxor.js file.");
+            return;
+        }
+
+        window.QRCode.toCanvas(canvas, seedToExport, {
+            width: 250,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+        }, function (error) {
+            if (error) {
+                console.error(error);
+                alert("Failed to generate QR code.");
+            } else {
+                qrContainer.style.display = 'block';
+            }
+        });
     };
 
     window.handleMerge = async function() {
