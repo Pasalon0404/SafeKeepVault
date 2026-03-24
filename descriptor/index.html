@@ -3115,14 +3115,16 @@ function exportToNote(seedIndex) {
         path: derivationPath
     };
     
-    const b64Payload = btoa(JSON.stringify(payload));
-    const payloadHtml = `
-        <hr style="margin-top: 30px; border: 0; border-top: 1px solid var(--border);">
-        <p style="font-family: var(--mono); font-size: 0.75em; color: var(--muted); word-break: break-all;">
-            <strong>⚙️ AUTO-FILL PAYLOAD (DO NOT EDIT):</strong><br>
-            [SKB_PAYLOAD:${b64Payload}]
-        </p>
-    `;
+   const b64Payload = btoa(JSON.stringify(payload));
+            const payloadHtml = `
+                <div class="skb-hidden-payload">
+                    <hr style="margin-top: 30px; border: 0; border-top: 1px solid var(--border-color);">
+                    <p style="font-family: monospace; font-size: 0.75em; color: var(--text-muted); word-break: break-all;">
+                        <strong>⚙️ AUTO-FILL PAYLOAD:</strong><br>
+                        [SKB_PAYLOAD:${b64Payload}]
+                    </p>
+                </div>
+            `;
 
     const combinedData = noteHtml + payloadHtml;
 

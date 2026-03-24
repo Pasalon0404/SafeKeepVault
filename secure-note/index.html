@@ -68,7 +68,22 @@
   .editor-area:focus { outline: none; border-color: var(--teal); box-shadow: inset 0 0 10px rgba(3, 218, 198, 0.05); }
   .editor-area ul, .editor-area ol { padding-left: 20px; margin-bottom: 10px; }
   .editor-area p { margin-bottom: 10px; }
-  .editor-area pre { white-space: pre-wrap; word-wrap: break-word; word-break: break-all; }
+  .editor-area pre { 
+      white-space: pre-wrap; 
+      word-wrap: break-word; 
+      word-break: break-word; 
+      background: var(--card2); /* Neutral background that respects light/dark mode */
+      color: var(--text); 
+      padding: 15px; 
+      border-radius: 8px; 
+      border: 1px solid var(--border);
+      font-family: monospace;
+      font-size: 1.1rem;
+      margin-bottom: 15px;
+  }
+  
+  /* Class to completely hide the machine payload from the human eye */
+  .skb-hidden-payload { display: none !important; }
 
   .save-bar { display: flex; flex-direction: column; gap: 15px; background: rgba(3,218,198,0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
   .save-controls-row { display: flex; flex-direction: column; gap: 15px; } /* Stacked vertically now */
@@ -168,7 +183,7 @@
     </div>
 
     <div class="tech-specs">
-        <h4>🔓 Open Source Transparency: How encryption works</h4>
+        <h4>Open Source Transparency: How encryption works</h4>
         <p style="margin-bottom: 10px;">If you ever need to decrypt an <code>.skb</code> file manually or write your own decryption script in Python or Node.js, these are the exact cryptographic parameters used by this tool:</p>
         <ul style="padding-left: 20px;">
             <li><strong>Algorithm:</strong> AES-256-GCM via the native Web Crypto API.</li>

@@ -2742,13 +2742,15 @@ window.exportChildToNote = function() {
     };
 
     const b64Payload = btoa(JSON.stringify(payload));
-    const payloadHtml = `
-        <hr style="margin-top: 30px; border: 0; border-top: 1px solid var(--border);">
-        <p style="font-family: var(--mono); font-size: 0.75em; color: var(--muted); word-break: break-all;">
-            <strong>⚙️ AUTO-FILL PAYLOAD (DO NOT EDIT):</strong><br>
-            [SKB_PAYLOAD:${b64Payload}]
-        </p>
-    `;
+            const payloadHtml = `
+                <div class="skb-hidden-payload">
+                    <hr style="margin-top: 30px; border: 0; border-top: 1px solid var(--border-color);">
+                    <p style="font-family: monospace; font-size: 0.75em; color: var(--text-muted); word-break: break-all;">
+                        <strong>⚙️ AUTO-FILL PAYLOAD:</strong><br>
+                        [SKB_PAYLOAD:${b64Payload}]
+                    </p>
+                </div>
+            `;
 
     const combinedData = noteHtml + payloadHtml;
 
@@ -2757,7 +2759,7 @@ window.exportChildToNote = function() {
     
     const plainText = combinedData.replace(/<[^>]+>/g, '\n').replace(/\n\s*\n/g, '\n');
     navigator.clipboard.writeText(plainText).then(() => {
-        alert("Child seed data prepared!\\n\\nOpening Encrypted Note Tool...");
+        alert("Data prepared!\n\nOpening Encrypted Note Tool...");
         window.open('../secure-note/index.html', '_blank');
     }).catch(err => {
         window.open('../secure-note/index.html', '_blank');

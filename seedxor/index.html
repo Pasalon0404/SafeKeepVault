@@ -2949,13 +2949,15 @@ const WORDLIST = ["abandon","ability","able","about","above","absent","absorb","
                 path: ""
             };
 
-            const b64Payload = btoa(JSON.stringify(payload));
+const b64Payload = btoa(JSON.stringify(payload));
             const payloadHtml = `
-                <hr style="margin-top: 30px; border: 0; border-top: 1px solid var(--border-color);">
-                <p style="font-family: monospace; font-size: 0.75em; color: var(--text-muted); word-break: break-all;">
-                    <strong>⚙️ AUTO-FILL PAYLOAD:</strong><br>
-                    [SKB_PAYLOAD:${b64Payload}]
-                </p>
+                <div class="skb-hidden-payload">
+                    <hr style="margin-top: 30px; border: 0; border-top: 1px solid var(--border-color);">
+                    <p style="font-family: monospace; font-size: 0.75em; color: var(--text-muted); word-break: break-all;">
+                        <strong>⚙️ AUTO-FILL PAYLOAD:</strong><br>
+                        [SKB_PAYLOAD:${b64Payload}]
+                    </p>
+                </div>
             `;
 
             const combinedData = noteHtml + payloadHtml;
