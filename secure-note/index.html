@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Encrypted Workspace</title>
 <script>
-  // Check local storage immediately. If 'light', apply the tag to the HTML root.
   if (localStorage.getItem('safekeepTheme') === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
   }
@@ -13,30 +12,9 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
 
 <style>
-  /* Your existing Dark Theme (Default) */
-  :root {
-    --bg: #0f0f0f;
-    --card: #161616;
-    --card2: #1c1c1c;
-    --border: #2a2a2a;
-    --text: #e0e0e0;
-    --muted: #888;
-    --orange: #f7931a;
-    --teal: #03dac6;
-    --red: #cf6679;
-  }
-
-  /* The Light Theme Overrides */
-  [data-theme="light"] {
-    --bg: #f5f5f7;
-    --card: #ffffff;
-    --card2: #f0f0f0;
-    --border: #cccccc;
-    --text: #121212;
-    --muted: #555555;
-    --teal: #018786; /* Slightly darker teal for better readability on white */
-    --red: #b00020;  /* Slightly darker red */
-  }
+  :root { --bg: #0f0f0f; --card: #161616; --card2: #1c1c1c; --border: #2a2a2a; --text: #e0e0e0; --muted: #888; --orange: #f7931a; --teal: #03dac6; --red: #cf6679; }
+  [data-theme="light"] { --bg: #f5f5f7; --card: #ffffff; --card2: #f0f0f0; --border: #cccccc; --text: #121212; --muted: #555555; --teal: #018786; --red: #b00020; }
+  
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6; }
 
@@ -53,13 +31,11 @@
   .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
   .tab { padding: 10px 20px; cursor: pointer; color: var(--muted); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid transparent; transition: all 0.3s; }
   .tab.active { color: var(--teal); border-bottom: 2px solid var(--teal); }
-
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
   label { font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px; }
   
-  /* Rich Text Editor Styles */
   .editor-toolbar { display: flex; gap: 5px; background: var(--card2); padding: 10px; border: 1px solid var(--border); border-bottom: none; border-radius: 8px 8px 0 0; flex-wrap: wrap; }
   .editor-toolbar button { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: serif; transition: all 0.2s;}
   .editor-toolbar button:hover { background: var(--teal); color: #000; border-color: var(--teal); }
@@ -68,36 +44,31 @@
   .editor-area:focus { outline: none; border-color: var(--teal); box-shadow: inset 0 0 10px rgba(3, 218, 198, 0.05); }
   .editor-area ul, .editor-area ol { padding-left: 20px; margin-bottom: 10px; }
   .editor-area p { margin-bottom: 10px; }
-  .editor-area pre { 
-      white-space: pre-wrap; 
-      word-wrap: break-word; 
-      word-break: break-word; 
-      background: var(--card2); /* Neutral background that respects light/dark mode */
-      color: var(--text); 
-      padding: 15px; 
-      border-radius: 8px; 
-      border: 1px solid var(--border);
-      font-family: monospace;
-      font-size: 1.1rem;
-      margin-bottom: 15px;
-  }
+  .editor-area pre { white-space: pre-wrap; word-wrap: break-word; word-break: break-word; background: var(--card2); color: var(--text); padding: 15px; border-radius: 8px; border: 1px solid var(--border); font-family: monospace; font-size: 1.1rem; margin-bottom: 15px; }
   
-  /* Class to completely hide the machine payload from the human eye */
   .skb-hidden-payload { display: none !important; }
 
   .save-bar { display: flex; flex-direction: column; gap: 15px; background: rgba(3,218,198,0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
-  .save-controls-row { display: flex; flex-direction: column; gap: 15px; } /* Stacked vertically now */
+  .save-controls-row { display: flex; flex-direction: column; gap: 15px; }
   .save-bar .control-group { width: 100%; }
 
   input[type="password"], input[type="text"], input[type="file"] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px 15px; font-size: 1rem; }
   input[type="file"] { padding: 10px; background: var(--card2); border: 1px dashed var(--orange); cursor: pointer; margin-bottom: 20px;}
   input:focus { outline: none; border-color: var(--teal); }
 
+  /* SVG Password Wrapper Styles */
+  .password-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+  .password-wrapper input { padding-right: 45px; width: 100%; }
+  .toggle-pwd-btn { position: absolute; right: 8px; background: transparent; border: none; cursor: pointer; padding: 5px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+  .toggle-pwd-btn svg { width: 20px; height: 20px; color: var(--muted); transition: color 0.2s; }
+  .toggle-pwd-btn:hover svg { color: var(--text); }
+
   .checkbox-wrapper { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.9rem; color: var(--text); margin-bottom: 10px;}
   .checkbox-wrapper input[type="checkbox"] { width: auto; transform: scale(1.2); cursor: pointer; }
 
   .btn { display: inline-block; padding: 15px 25px; font-size: 1rem; background: var(--teal); color: #111; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s; white-space: nowrap;}
   .btn:hover { background: #00ebd5; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(3,218,198,0.3); }
+  .btn-danger { background: var(--red); color: white; }
 
   .status { margin-top: 15px; padding: 10px; border-radius: 6px; font-size: 0.9rem; text-align: center; display: none; font-weight: bold; }
   .status.success { background: rgba(3,218,198,0.1); color: var(--teal); display: block; border: 1px solid var(--teal); }
@@ -107,15 +78,16 @@
   .tech-specs h4 { color: var(--text); margin-bottom: 8px; margin-top: 0;}
   .tech-specs code { color: var(--teal); background: var(--bg); padding: 2px 5px; border-radius: 3px;}
 
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-content { background: var(--card); padding: 30px; border-radius: 8px; border: 1px solid var(--border); max-width: 450px; width: 90%; color: var(--text); line-height: 1.6; text-align: center; }
+  #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 8px; overflow: hidden; border: 2px solid var(--border); background: #000; }
 </style>
 </head>
 <body>
 
 <nav>
   <a href="../index.html" class="nav-brand">SafeKeep<span>Bitcoin</span></a>
-  <button onclick="toggleTheme()" id="theme-btn" style="background:transparent; border:none; color:var(--text); font-size:1.2rem; cursor:pointer;">
-    ☀️
-  </button>
+  <button onclick="toggleTheme()" id="theme-btn" style="background:transparent; border:none; color:var(--text); font-size:1.2rem; cursor:pointer;">☀️</button>
 </nav>
 <div class="container">
     <h1>Encrypted Workspace</h1>
@@ -158,9 +130,18 @@
                         <label>Filename</label>
                         <input type="text" id="filename-input">
                     </div>
+                    
                     <div class="control-group" id="password-container">
                         <label>Encryption Password</label>
-                        <input type="text" id="encrypt-password" placeholder="Set a password to encrypt this file. The password is not stored—if it is lost, the file cannot be recovered.">
+                        <div style="display: flex; gap: 10px;">
+                            <div class="password-wrapper">
+                                <input type="password" id="encrypt-password" placeholder="Set a strong password to lock this file...">
+                                <button type="button" class="toggle-pwd-btn" onclick="togglePasswordView('encrypt-password', this)" title="Show/Hide Password">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                </button>
+                            </div>
+                            <button type="button" class="btn" style="width: auto; padding: 0 15px;" onclick="openScanner('encrypt-password')">📷 Scan</button>
+                        </div>
                     </div>
                     <button class="btn" style="align-self: flex-start;" onclick="saveNote()">Save & Download</button>
                 </div>
@@ -174,7 +155,15 @@
             
             <div id="decrypt-password-container" style="display: none; margin-bottom: 20px;">
                 <label>Decryption Password</label>
-                <input type="text" id="decrypt-password" placeholder="Enter the password used to lock this .skb file">
+                <div style="display: flex; gap: 10px;">
+                    <div class="password-wrapper">
+                        <input type="password" id="decrypt-password" placeholder="Enter the password used to lock this file...">
+                        <button type="button" class="toggle-pwd-btn" onclick="togglePasswordView('decrypt-password', this)" title="Show/Hide Password">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        </button>
+                    </div>
+                    <button type="button" class="btn" style="width: auto; padding: 0 15px;" onclick="openScanner('decrypt-password')">📷 Scan</button>
+                </div>
             </div>
             
             <button class="btn" style="background: var(--orange);" onclick="processLoadedFile()">Load into Editor</button>
@@ -194,302 +183,15 @@
     </div>
 </div>
 
-<script>
-// --- Initialize ---
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('filename-input').value = generateDefaultFilename();
-    
-    // Auto-detect file type on selection to show/hide password box
-    document.getElementById('decrypt-file').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        if (file.name.endsWith('.skb') || file.name.endsWith('.json')) {
-            document.getElementById('decrypt-password-container').style.display = 'block';
-        } else {
-            document.getElementById('decrypt-password-container').style.display = 'none';
-            document.getElementById('decrypt-status').style.display = 'none';
-        }
-    });
+<div id="scannerModal" class="modal-overlay">
+    <div class="modal-content">
+        <h2 style="color: var(--teal); margin-top: 0; text-transform: uppercase; letter-spacing: 1px;">Optical Import</h2>
+        <p style="font-size: 0.9em; color: var(--muted); margin-bottom: 15px;">Hold the password QR code up to your camera to securely inject it into the workspace.</p>
+        <div id="reader"></div>
+        <button type="button" class="btn btn-danger" onclick="closeScanner()" style="margin-top: 20px; width: 100%;">Cancel Scan</button>
+    </div>
+</div>
 
-    // --- NEW: Auto-Import Draft Note from other tools ---
-    const draftNote = sessionStorage.getItem('safeKeepDraftNote') || localStorage.getItem('safeKeepDraftNote');
-    if (draftNote) {
-        document.getElementById('editor').innerHTML = draftNote;
-        
-        // Clear the storage so it doesn't auto-paste next time
-        sessionStorage.removeItem('safeKeepDraftNote');
-        localStorage.removeItem('safeKeepDraftNote');
-        
-        // Show a friendly success message
-        const statusBox = document.getElementById('encrypt-status');
-        statusBox.className = 'status success';
-        statusBox.innerText = '✅ Wallet data successfully imported!';
-        setTimeout(() => { 
-            statusBox.style.display = 'none'; 
-            statusBox.innerText = '';
-        }, 5000);
-    }
-    // ---------------------------------------------------
-});
-
-function generateDefaultFilename() {
-    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g, "");
-    const timeStr = new Date().toTimeString().slice(0,5).replace(/:/g, "");
-    return `workspace-${dateStr}-${timeStr}`;
-}
-
-function togglePasswordVisibility() {
-    const isChecked = document.getElementById('encrypt-checkbox').checked;
-    document.getElementById('password-container').style.display = isChecked ? 'block' : 'none';
-}
-
-// --- UI Functions ---
-function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    
-    if (tab === 'encrypt') {
-        document.querySelectorAll('.tab')[0].classList.add('active');
-        document.getElementById('tab-encrypt').classList.add('active');
-    } else {
-        document.querySelectorAll('.tab')[1].classList.add('active');
-        document.getElementById('tab-decrypt').classList.add('active');
-    }
-}
-
-function formatDoc(cmd, value = null) {
-    document.execCommand(cmd, false, value);
-    document.getElementById('editor').focus();
-}
-
-function clearEditor() {
-    if(confirm("Are you sure you want to clear the entire editor? This cannot be undone unless you have a saved backup.")) {
-        document.getElementById('editor').innerHTML = "";
-    }
-}
-
-// --- Cryptography Helpers ---
-const enc = new TextEncoder();
-const dec = new TextDecoder();
-
-async function getPasswordKey(password, salt) {
-    const keyMaterial = await crypto.subtle.importKey(
-        "raw",
-        enc.encode(password),
-        { name: "PBKDF2" },
-        false,
-        ["deriveKey"]
-    );
-    return await crypto.subtle.deriveKey(
-        {
-            name: "PBKDF2",
-            salt: salt,
-            iterations: 100000,
-            hash: "SHA-256"
-        },
-        keyMaterial,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["encrypt", "decrypt"]
-    );
-}
-
-function bufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-}
-
-function base64ToBuffer(base64) {
-    const binary = window.atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes.buffer;
-}
-
-// --- ENCRYPT & SAVE WORKFLOW ---
-async function saveNote() {
-    const text = document.getElementById('editor').innerHTML;
-    const isEncrypted = document.getElementById('encrypt-checkbox').checked;
-    const password = document.getElementById('encrypt-password').value;
-    let filenameBase = document.getElementById('filename-input').value.trim();
-    const statusBox = document.getElementById('encrypt-status');
-
-    if (!filenameBase) filenameBase = generateDefaultFilename();
-
-    if (!text || text === "<br>") {
-        statusBox.className = 'status error';
-        statusBox.innerText = 'Error: The workspace is empty.';
-        return;
-    }
-
-    if (isEncrypted) {
-        if (!password) {
-            statusBox.className = 'status error';
-            statusBox.innerText = 'Error: A password is required to encrypt and save.';
-            return;
-        }
-
-        try {
-            const salt = crypto.getRandomValues(new Uint8Array(16));
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-
-            const key = await getPasswordKey(password, salt);
-            const ciphertext = await crypto.subtle.encrypt(
-                { name: "AES-GCM", iv: iv },
-                key,
-                enc.encode(text)
-            );
-
-            const encryptedPackage = {
-                version: 1,
-                format: "html",
-                salt: bufferToBase64(salt),
-                iv: bufferToBase64(iv),
-                ciphertext: bufferToBase64(ciphertext)
-            };
-
-            downloadFile(JSON.stringify(encryptedPackage, null, 2), `${filenameBase}.skb`, 'application/json');
-            
-            statusBox.className = 'status success';
-            statusBox.innerText = `Success! Encrypted workspace downloaded as ${filenameBase}.skb.`;
-        } catch (err) {
-            statusBox.className = 'status error';
-            statusBox.innerText = 'Encryption failed: ' + err.message;
-        }
-    } else {
-        // Save as clear text HTML
-        downloadFile(text, `${filenameBase}.html`, 'text/html');
-        statusBox.className = 'status success';
-        statusBox.innerText = `Success! Unencrypted file downloaded as ${filenameBase}.html.`;
-    }
-}
-
-function downloadFile(content, filename, type) {
-    const blob = new Blob([content], { type: type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-// --- LOAD & DECRYPT WORKFLOW ---
-async function processLoadedFile() {
-    const fileInput = document.getElementById('decrypt-file');
-    const password = document.getElementById('decrypt-password').value;
-    const statusBox = document.getElementById('decrypt-status');
-    const editor = document.getElementById('editor');
-    const filenameInput = document.getElementById('filename-input');
-
-    if (!fileInput.files.length) {
-        statusBox.className = 'status error';
-        statusBox.innerText = 'Error: Please select a file to load.';
-        return;
-    }
-
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-
-    reader.onload = async function(e) {
-        const content = e.target.result;
-        
-        // Strip extension to update the filename input box
-        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-
-        try {
-            // First, try parsing as JSON to see if it's an encrypted .skb
-            const data = JSON.parse(content);
-            
-            if (data.salt && data.iv && data.ciphertext) {
-                // It is a valid .skb file
-                if (!password) {
-                    statusBox.className = 'status error';
-                    statusBox.innerText = 'Error: This file is encrypted. Please enter the decryption password.';
-                    return;
-                }
-
-                const salt = base64ToBuffer(data.salt);
-                const iv = base64ToBuffer(data.iv);
-                const ciphertext = base64ToBuffer(data.ciphertext);
-
-                const key = await getPasswordKey(password, salt);
-                const decryptedBuffer = await crypto.subtle.decrypt(
-                    { name: "AES-GCM", iv: iv },
-                    key,
-                    ciphertext
-                );
-
-                editor.innerHTML = dec.decode(decryptedBuffer);
-                
-                // Pre-fill fields for easy re-saving
-                document.getElementById('encrypt-checkbox').checked = true;
-                togglePasswordVisibility();
-                document.getElementById('encrypt-password').value = password;
-                
-            } else {
-                // It's JSON, but not our encrypted format. Just dump it in.
-                editor.innerHTML = content;
-                document.getElementById('encrypt-checkbox').checked = false;
-                togglePasswordVisibility();
-            }
-        } catch (err) {
-            // Parsing JSON failed, which means it's a standard plaintext or HTML file!
-            if (err.name === 'SyntaxError') {
-                editor.innerHTML = content;
-                document.getElementById('encrypt-checkbox').checked = false;
-                togglePasswordVisibility();
-            } else {
-                // Cryptography error (wrong password)
-                statusBox.className = 'status error';
-                statusBox.innerText = 'Decryption failed. Incorrect password or corrupted file.';
-                return;
-            }
-        }
-
-        // Success Cleanup
-        filenameInput.value = nameWithoutExt;
-        document.getElementById('decrypt-password').value = '';
-        fileInput.value = '';
-        statusBox.style.display = 'none';
-
-        switchTab('encrypt');
-        editor.focus();
-    };
-
-    reader.readAsText(file);
-}
-function toggleTheme() {
-    const html = document.documentElement;
-    const currentTheme = html.getAttribute('data-theme');
-    const btn = document.getElementById('theme-btn');
-    
-    if (currentTheme === 'light') {
-        html.removeAttribute('data-theme'); // Reverts to default dark
-        localStorage.setItem('safekeepTheme', 'dark');
-        btn.innerText = '☀️'; // Show sun icon (to switch to light)
-    } else {
-        html.setAttribute('data-theme', 'light');
-        localStorage.setItem('safekeepTheme', 'light');
-        btn.innerText = '🌙'; // Show moon icon (to switch to dark)
-    }
-}
-
-// Ensure the button shows the correct icon on page load
-window.addEventListener('DOMContentLoaded', () => {
-    if (localStorage.getItem('safekeepTheme') === 'light') {
-        document.getElementById('theme-btn').innerText = '🌙';
-    }
-});
-
-// ⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️
-</script>
+<script type="module" src="./secure-note.js"></script>
 </body>
 </html>

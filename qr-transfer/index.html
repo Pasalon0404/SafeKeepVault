@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Optical Data Transfer</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
+
 <script>
   if (localStorage.getItem('safekeepTheme') === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
@@ -25,7 +27,6 @@
   h1 { text-align: center; color: var(--text); text-transform: uppercase; letter-spacing: 2px; font-size: 1.5rem; margin-bottom: 5px;}
   .subtitle { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
 
-  /* --- Tabs --- */
   .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 25px; }
   .tab { padding: 10px 20px; cursor: pointer; color: var(--muted); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid transparent; transition: all 0.3s; }
   .tab.active { color: var(--teal); border-bottom: 2px solid var(--teal); }
@@ -33,35 +34,45 @@
   .tab-content.active { display: block; }
 
   label { font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px; }
+  
   input[type="file"] { padding: 15px; background: var(--card2); border: 1px dashed var(--orange); cursor: pointer; width: 100%; margin-bottom: 15px; border-radius: 8px; color: var(--text);}
   input[type="number"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 1rem; width: 100px; margin-left: 10px;}
+  input[type="text"], input[type="password"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 15px; border-radius: 8px; font-size: 1rem; width: 100%; transition: border-color 0.3s ease; font-family: var(--mono); }
+  input[type="text"]:focus, input[type="password"]:focus { outline: none; border-color: var(--teal); }
+
+  .password-wrapper { position: relative; width: 100%; display: flex; align-items: center; margin-bottom: 15px;}
+  .password-wrapper input { padding-right: 45px; width: 100%; }
+  .toggle-pwd-btn { position: absolute; right: 8px; background: transparent; border: none; cursor: pointer; padding: 5px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+  .toggle-pwd-btn svg { width: 20px; height: 20px; color: var(--muted); transition: color 0.2s; }
+  .toggle-pwd-btn:hover svg { color: var(--text); }
   
   .settings-row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; background: var(--card2); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
   .setting-item { display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 200px; }
+
+  .radio-group { display: flex; gap: 15px; margin-bottom: 25px; padding: 10px; background: var(--card2); border-radius: 8px; border: 1px solid var(--border); }
+  .radio-group label { margin-bottom: 0; cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--text); }
 
   .btn { display: inline-block; width: 100%; padding: 15px; font-size: 1.1rem; background: var(--teal); color: #111; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s; margin-bottom: 10px; }
   .btn:hover { opacity: 0.8; transform: translateY(-2px); }
   .btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
   .btn-danger { background: var(--red); color: white; }
 
-  .status-box { background: rgba(3,218,198,0.1); border: 1px solid var(--teal); color: var(--teal); padding: 15px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 20px; display: none; }
-  .progress-bar-container { width: 100%; background: var(--input-bg); border-radius: 8px; overflow: hidden; height: 10px; margin-bottom: 20px; border: 1px solid var(--border); }
-  .progress-bar { height: 100%; background: var(--orange); width: 0%; transition: width 0.1s linear; }
+  .status-box, .status-metrics { background: var(--card2); border: 1px solid var(--border); padding: 15px; border-radius: 8px; font-family: var(--mono); font-size: 0.9rem; margin-bottom: 20px; }
+  .status-metrics { display: flex; justify-content: space-between; }
+  .status-box.active { border-color: var(--teal); color: var(--teal); background: rgba(3,218,198,0.05); }
 
-  /* Transmitter Canvas Fix included */
+  .progress-bar-container { width: 100%; background: var(--input-bg); border-radius: 8px; overflow: hidden; height: 10px; margin-bottom: 20px; border: 1px solid var(--border); }
+  .progress-bar { height: 100%; background: var(--teal); width: 0%; transition: width 0.1s linear; }
+
   .qr-display { text-align: center; margin-top: 20px; display: none; }
   .qr-display canvas { border: 10px solid white; border-radius: 8px; max-width: 100%; height: auto !important; aspect-ratio: 1 / 1; }
   .qr-info { font-family: var(--mono); color: var(--muted); font-size: 0.85rem; margin-top: 15px; }
 
-  /* Receiver Camera Box */
   .camera-box { border: 2px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 20px; display: none; background: #000; text-align: center; }
   #reader { width: 100%; max-width: 450px; margin: 0 auto; border-radius: 4px; overflow: hidden; }
-  .status-metrics { display: flex; justify-content: space-between; background: var(--card2); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px; font-family: var(--mono); font-size: 0.9rem; }
 
-  /* Modal */
   .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
   .modal-content { background: var(--card); padding: 30px; border-radius: 8px; border: 1px solid var(--border); max-width: 450px; width: 90%; color: var(--text); line-height: 1.6; text-align: center; }
-  input[type="text"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 1rem; width: 100%; transition: border-color 0.3s ease; margin: 15px 0; font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -73,7 +84,7 @@
 
 <div class="container">
     <h1>Optical Data Transfer</h1>
-    <div class="subtitle">Bridge the air-gap via universal animated QR codes</div>
+    <div class="subtitle">Transfer data between air-gapped devices with QR codes.</div>
 
     <div class="card">
         <div class="tabs">
@@ -82,26 +93,44 @@
         </div>
 
         <div id="tab-transmit" class="tab-content active">
-            <label>Select File to Transmit</label>
-            <input type="file" id="fileInput" accept="*/*">
-            <div id="fileInfo" class="status-box"></div>
+            
+            <div class="radio-group">
+                <label><input type="radio" name="transmitMode" value="file" checked> File Mode (Animated Loop)</label>
+                <label><input type="radio" name="transmitMode" value="text"> Text/Password Mode (Static)</label>
+            </div>
 
-            <label>Transmission Settings</label>
-            <div class="settings-row">
-                <div class="setting-item">
-                    <span style="font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase;">Density (Bytes)</span>
-                    <input type="number" id="chunkSize" value="250" min="50" max="800">
-                </div>
-                <div class="setting-item">
-                    <span style="font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase;">Speed (FPS)</span>
-                    <input type="number" id="fps" value="4" min="1" max="10">
+            <div id="file-mode-section">
+                <label>Select File to Transmit</label>
+                <input type="file" id="fileInput" accept="*/*">
+                <div id="fileInfo" class="status-box" style="display: none;"></div>
+
+                <label>Transmission Settings</label>
+                <div class="settings-row">
+                    <div class="setting-item">
+                        <span style="font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase;">Density (Bytes)</span>
+                        <input type="number" id="chunkSize" value="250" min="50" max="800">
+                    </div>
+                    <div class="setting-item">
+                        <span style="font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase;">Speed (FPS)</span>
+                        <input type="number" id="fps" value="4" min="1" max="10">
+                    </div>
                 </div>
             </div>
 
-            <button type="button" class="btn" id="startTransmitBtn" disabled>▶️ Start Transmission Loop</button>
+            <div id="text-mode-section" style="display: none;">
+                <label>Enter Text or Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="textInput" placeholder="Paste your text here...">
+                    <button type="button" class="toggle-pwd-btn" onclick="togglePasswordView('textInput', this)" title="Show/Hide Text">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    </button>
+                </div>
+            </div>
+
+            <button type="button" class="btn" id="startTransmitBtn" disabled>Start Transmission Loop</button>
             <button type="button" class="btn btn-danger" id="stopTransmitBtn" style="display: none;">⏹️ Stop Transmission</button>
             
-            <div class="progress-bar-container">
+            <div class="progress-bar-container" id="transmitProgressContainer">
                 <div class="progress-bar" id="transmitProgressBar"></div>
             </div>
 
@@ -113,23 +142,40 @@
 
         <div id="tab-receive" class="tab-content">
             <p style="margin-bottom: 20px; color: var(--muted); text-align: center;">
-                Point your camera at a SafeKeep Transmitter to optically import a payload.
+                Point your camera at a QR code.
             </p>
 
-            <button type="button" class="btn" id="startReceiveBtn">📸 Open Camera & Scan</button>
+            <button type="button" class="btn" id="startReceiveBtn">Open Camera & Scan</button>
             
             <div id="cameraBox" class="camera-box">
                 <div id="reader"></div>
                 <button type="button" class="btn btn-danger" id="stopReceiveBtn" style="margin-top:15px;">Cancel Scan</button>
             </div>
 
-            <div class="status-metrics">
-                <div><strong>Chunks:</strong> <span id="receiveChunkCount">0 / 0</span></div>
-                <div><strong>File:</strong> <span id="incomingFileName">Awaiting data...</span></div>
+            <div id="animatedReceiveUI">
+                <div class="status-metrics">
+                    <div><strong>Chunks:</strong> <span id="receiveChunkCount">0 / 0</span></div>
+                    <div><strong>File:</strong> <span id="incomingFileName" style="color: var(--teal);">Awaiting data...</span></div>
+                </div>
+
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="receiveProgressBar"></div>
+                </div>
             </div>
 
-            <div class="progress-bar-container">
-                <div class="progress-bar" id="receiveProgressBar" style="background: var(--teal);"></div>
+            <div id="staticResultContainer" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+                <label style="color: var(--teal);">Static Data Received</label>
+                <div class="password-wrapper">
+                    <input type="password" id="receivedTextInput" readonly>
+                    <button type="button" class="toggle-pwd-btn" onclick="togglePasswordView('receivedTextInput', this)" title="Show/Hide Text">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    </button>
+                </div>
+                
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn" id="copyStaticBtn" style="flex: 2; margin-bottom: 0;">📋 Copy to Clipboard</button>
+                    <button type="button" class="btn btn-danger" id="resetReceiveBtn" style="flex: 1; margin-bottom: 0; background: var(--card2); border: 1px solid var(--border); color: var(--text);">Scan Again</button>
+                </div>
             </div>
         </div>
     </div>
@@ -137,16 +183,18 @@
 
 <div id="downloadModal" class="modal-overlay">
     <div class="modal-content">
-        <h2 style="color: var(--teal); margin-top: 0;">🎉 Transfer Complete!</h2>
+        <h2 style="color: var(--teal); margin-top: 0; text-transform: uppercase; letter-spacing: 1px;">Transfer Complete</h2>
         <p style="font-size: 0.9em; color: var(--muted); margin-bottom: 15px;">Your file has been fully reassembled. Review the name and save it locally.</p>
         
-        <div style="background: var(--card2); border: 1px solid var(--border); padding: 15px; border-radius: 6px; text-align: left; font-size: 0.9em;">
-            <strong>Original File:</strong> <span id="modalFileDetails" style="color: var(--orange);"></span>
+        <div style="background: var(--card2); border: 1px solid var(--border); padding: 15px; border-radius: 6px; text-align: left; font-size: 0.9em; margin-bottom: 15px;">
+            <strong style="color: var(--muted); text-transform: uppercase; font-size: 0.8em;">Original File:</strong><br>
+            <span id="modalFileDetails" style="color: var(--teal); font-family: var(--mono); font-size: 1.1em;"></span>
         </div>
 
-        <input type="text" id="filenameInput" placeholder="Save as...">
+        <label style="text-align: left;">Save As:</label>
+        <input type="text" id="filenameInput" placeholder="filename.extension">
         
-        <button type="button" class="btn" id="btn-download">💾 Save File</button>
+        <button type="button" class="btn" id="btn-download" style="margin-top: 10px;">💾 Save File</button>
         <button type="button" class="btn" style="background: transparent; border: 1px solid var(--border); color: var(--text);" id="btn-close-modal">Cancel</button>
     </div>
 </div>
