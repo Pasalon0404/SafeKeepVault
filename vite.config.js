@@ -25,8 +25,8 @@ export default defineConfig({
         seedxor: resolve(__dirname, 'seedxor/index.html'),
         seedqr: resolve(__dirname, 'seedqr/index.html'),
         signer: resolve(__dirname, 'signer/index.html'),
-        transmit: resolve(__dirname, 'transmit-tool/index.html'),
-        receive: resolve(__dirname, 'receive-tool/index.html')
+        qrtransfer: resolve(__dirname, 'qr-transfer/index.html')
+
 
       }
     }

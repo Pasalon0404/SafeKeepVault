@@ -23,8 +23,7 @@ const pages = [
     'seedxor/index.html',
     'seedqr/index.html',
     'signer/index.html',
-    'transmit-tool/index.html',
-    'receive-tool/index.html'
+    'qr-transfer/index.html'
 ];
 
 async function buildOfflineSuite() {

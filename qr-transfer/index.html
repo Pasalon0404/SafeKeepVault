@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Optical Data Transfer</title>
+<script>
+  if (localStorage.getItem('safekeepTheme') === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+</script>
+<style>
+  :root { --bg: #0f0f0f; --card: #161616; --card2: #1c1c1c; --border: #2a2a2a; --orange: #f7931a; --teal: #03dac6; --red: #cf6679; --muted: #888; --text: #e0e0e0; --mono: 'Courier New', Courier, monospace; --input-bg: #2c2c2c; }
+  [data-theme="light"] { --bg: #f5f5f7; --card: #ffffff; --card2: #f0f0f0; --border: #cccccc; --text: #121212; --muted: #555555; --teal: #018786; --red: #b00020; --input-bg: #e0e0e0; --orange: #d87c14; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6; transition: all 0.3s ease; }
+  nav { background: var(--card); border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+  .nav-brand { font-weight: 800; font-size: 1.15rem; color: var(--text); text-decoration: none; }
+  .nav-brand span { color: var(--orange); }
+
+  .container { max-width: 850px; margin: 0 auto; padding: 0 1rem 3rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 25px; }
+  
+  h1 { text-align: center; color: var(--text); text-transform: uppercase; letter-spacing: 2px; font-size: 1.5rem; margin-bottom: 5px;}
+  .subtitle { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+  /* --- Tabs --- */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 25px; }
+  .tab { padding: 10px 20px; cursor: pointer; color: var(--muted); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid transparent; transition: all 0.3s; }
+  .tab.active { color: var(--teal); border-bottom: 2px solid var(--teal); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  label { font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px; }
+  input[type="file"] { padding: 15px; background: var(--card2); border: 1px dashed var(--orange); cursor: pointer; width: 100%; margin-bottom: 15px; border-radius: 8px; color: var(--text);}
+  input[type="number"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 1rem; width: 100px; margin-left: 10px;}
+  
+  .settings-row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; background: var(--card2); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
+  .setting-item { display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 200px; }
+
+  .btn { display: inline-block; width: 100%; padding: 15px; font-size: 1.1rem; background: var(--teal); color: #111; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s; margin-bottom: 10px; }
+  .btn:hover { opacity: 0.8; transform: translateY(-2px); }
+  .btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
+  .btn-danger { background: var(--red); color: white; }
+
+  .status-box { background: rgba(3,218,198,0.1); border: 1px solid var(--teal); color: var(--teal); padding: 15px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 20px; display: none; }
+  .progress-bar-container { width: 100%; background: var(--input-bg); border-radius: 8px; overflow: hidden; height: 10px; margin-bottom: 20px; border: 1px solid var(--border); }
+  .progress-bar { height: 100%; background: var(--orange); width: 0%; transition: width 0.1s linear; }
+
+  /* Transmitter Canvas Fix included */
+  .qr-display { text-align: center; margin-top: 20px; display: none; }
+  .qr-display canvas { border: 10px solid white; border-radius: 8px; max-width: 100%; height: auto !important; aspect-ratio: 1 / 1; }
+  .qr-info { font-family: var(--mono); color: var(--muted); font-size: 0.85rem; margin-top: 15px; }
+
+  /* Receiver Camera Box */
+  .camera-box { border: 2px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 20px; display: none; background: #000; text-align: center; }
+  #reader { width: 100%; max-width: 450px; margin: 0 auto; border-radius: 4px; overflow: hidden; }
+  .status-metrics { display: flex; justify-content: space-between; background: var(--card2); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px; font-family: var(--mono); font-size: 0.9rem; }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-content { background: var(--card); padding: 30px; border-radius: 8px; border: 1px solid var(--border); max-width: 450px; width: 90%; color: var(--text); line-height: 1.6; text-align: center; }
+  input[type="text"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 1rem; width: 100%; transition: border-color 0.3s ease; margin: 15px 0; font-family: var(--mono); }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="../index.html" class="nav-brand">SafeKeep<span>Bitcoin</span></a>
+  <button type="button" id="theme-btn" style="background:transparent; border:none; color:var(--text); font-size:1.2rem; cursor:pointer;">☀️</button>
+</nav>
+
+<div class="container">
+    <h1>Optical Data Transfer</h1>
+    <div class="subtitle">Bridge the air-gap via universal animated QR codes</div>
+
+    <div class="card">
+        <div class="tabs">
+            <div class="tab active" data-target="tab-transmit">1. Transmit Data</div>
+            <div class="tab" data-target="tab-receive">2. Receive Data</div>
+        </div>
+
+        <div id="tab-transmit" class="tab-content active">
+            <label>Select File to Transmit</label>
+            <input type="file" id="fileInput" accept="*/*">
+            <div id="fileInfo" class="status-box"></div>
+
+            <label>Transmission Settings</label>
+            <div class="settings-row">
+                <div class="setting-item">
+                    <span style="font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase;">Density (Bytes)</span>
+                    <input type="number" id="chunkSize" value="250" min="50" max="800">
+                </div>
+                <div class="setting-item">
+                    <span style="font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase;">Speed (FPS)</span>
+                    <input type="number" id="fps" value="4" min="1" max="10">
+                </div>
+            </div>
+
+            <button type="button" class="btn" id="startTransmitBtn" disabled>▶️ Start Transmission Loop</button>
+            <button type="button" class="btn btn-danger" id="stopTransmitBtn" style="display: none;">⏹️ Stop Transmission</button>
+            
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="transmitProgressBar"></div>
+            </div>
+
+            <div class="qr-display" id="qrDisplayContainer">
+                <canvas id="qrCanvas"></canvas>
+                <div class="qr-info" id="qrInfo"></div>
+            </div>
+        </div>
+
+        <div id="tab-receive" class="tab-content">
+            <p style="margin-bottom: 20px; color: var(--muted); text-align: center;">
+                Point your camera at a SafeKeep Transmitter to optically import a payload.
+            </p>
+
+            <button type="button" class="btn" id="startReceiveBtn">📸 Open Camera & Scan</button>
+            
+            <div id="cameraBox" class="camera-box">
+                <div id="reader"></div>
+                <button type="button" class="btn btn-danger" id="stopReceiveBtn" style="margin-top:15px;">Cancel Scan</button>
+            </div>
+
+            <div class="status-metrics">
+                <div><strong>Chunks:</strong> <span id="receiveChunkCount">0 / 0</span></div>
+                <div><strong>File:</strong> <span id="incomingFileName">Awaiting data...</span></div>
+            </div>
+
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="receiveProgressBar" style="background: var(--teal);"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="downloadModal" class="modal-overlay">
+    <div class="modal-content">
+        <h2 style="color: var(--teal); margin-top: 0;">🎉 Transfer Complete!</h2>
+        <p style="font-size: 0.9em; color: var(--muted); margin-bottom: 15px;">Your file has been fully reassembled. Review the name and save it locally.</p>
+        
+        <div style="background: var(--card2); border: 1px solid var(--border); padding: 15px; border-radius: 6px; text-align: left; font-size: 0.9em;">
+            <strong>Original File:</strong> <span id="modalFileDetails" style="color: var(--orange);"></span>
+        </div>
+
+        <input type="text" id="filenameInput" placeholder="Save as...">
+        
+        <button type="button" class="btn" id="btn-download">💾 Save File</button>
+        <button type="button" class="btn" style="background: transparent; border: 1px solid var(--border); color: var(--text);" id="btn-close-modal">Cancel</button>
+    </div>
+</div>
+
+<script type="module" src="./transfer.js"></script>
+</body>
+</html>
