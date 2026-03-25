@@ -43,7 +43,13 @@
   .progress-bar { height: 100%; background: var(--orange); width: 0%; transition: width 0.1s linear; }
 
   .qr-display { text-align: center; margin-top: 20px; display: none; }
-  .qr-display canvas { border: 10px solid white; border-radius: 8px; max-width: 100%; height: auto; }
+  .qr-display canvas { 
+    border: 10px solid white; 
+    border-radius: 8px; 
+    max-width: 100%; 
+    height: auto !important; 
+    aspect-ratio: 1 / 1; 
+}
   .qr-info { font-family: var(--mono); color: var(--muted); font-size: 0.85rem; margin-top: 15px; }
 </style>
 </head>
