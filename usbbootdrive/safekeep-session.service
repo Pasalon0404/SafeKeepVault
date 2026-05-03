@@ -1,0 +1,130 @@
+[Unit]
+Description=SafeKeep Kiosk Session — startx → openbox → safekeep-boot → chromium
+Documentation=man:startx(1) file:///usr/local/bin/safekeep-boot
+# ---------------------------------------------------------------------------
+# Why this unit exists
+# ---------------------------------------------------------------------------
+# SafeKeep's hardening sweep in safekeep-harden.sh masks every getty unit
+# (getty@tty1..6, autovt@, serial-getty@) and sets logind NAutoVTs=0. That
+# intentionally kills every legacy path for logging into a console — BadUSB
+# keyboards can't drop to a shell, Ctrl+Alt+F2 renders blank.
+#
+# The pre-hardening UI launch relied on the chain:
+#     getty@tty1 autologin → /root/.profile → exec startx
+# Masking getty@tty1 severs that chain — the kiosk UI never starts, and
+# the system sits at a reached-but-unpopulated graphical.target.
+#
+# This unit replaces that chain with a dedicated, non-login X session bound
+# to VT7 and pulled in directly by graphical.target. No getty involved.
+#
+# Ordering
+# --------
+#   After=     multi-user.target   (wait for core userspace)
+#   Before=    graphical.target    (we ARE the graphical session — target
+#                                    is not considered 'active' until we start)
+#   WantedBy=  graphical.target    (graphical.target pulls us in)
+#
+# This is the same ordering pattern used by gdm3 / lightdm / sddm.
+# ---------------------------------------------------------------------------
+After=multi-user.target systemd-user-sessions.service
+Before=graphical.target
+
+# Refuse to coexist with a real display manager (belt-and-braces — SafeKeep
+# ships no DM, but this blocks accidental activation if one gets apt-install'd).
+Conflicts=display-manager.service
+
+# Cap the crash-restart storm. Two retries in 120s, then give up and leave
+# tty7 frozen on the last Xorg/openbox crash for operator diagnosis. Without
+# this cap, a broken boot.html would loop Chromium forever.
+StartLimitIntervalSec=120s
+StartLimitBurst=2
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# ---------------------------------------------------------------------------
+# Environment — systemd sets almost nothing for root services. X, GTK, and
+# openbox pull these from the invoking shell environment; without them they
+# either refuse to start or fall back to broken defaults (openbox's PyXDG
+# menu builder in particular raises AttributeError on missing XDG_*_DIRS).
+# ---------------------------------------------------------------------------
+Environment=HOME=/root
+Environment=USER=root
+Environment=LOGNAME=root
+Environment=SHELL=/bin/bash
+Environment=XDG_VTNR=7
+Environment=XDG_SESSION_TYPE=x11
+Environment=XDG_SESSION_CLASS=user
+Environment=XDG_RUNTIME_DIR=/run/user/0
+Environment=XDG_CONFIG_DIRS=/etc/xdg
+Environment=XDG_DATA_DIRS=/usr/local/share:/usr/share
+
+# ---------------------------------------------------------------------------
+# Pre-start: manufacture XDG_RUNTIME_DIR.
+# systemd-logind normally creates /run/user/$UID on login. Logind is muted
+# by the SafeKeep hardening (NAutoVTs=0, KillUserProcesses=yes), so we
+# create the dir ourselves with the exact perms gtk/dbus expect (0700,
+# owned by the session user — root in our case).
+# ---------------------------------------------------------------------------
+ExecStartPre=/bin/mkdir -p /run/user/0
+ExecStartPre=/bin/chmod 0700 /run/user/0
+ExecStartPre=/bin/chown 0:0 /run/user/0
+
+# ---------------------------------------------------------------------------
+# Main launch. startx reads /root/.xinitrc, which execs:
+#     dbus-launch --exit-with-session openbox-session
+# openbox then runs /etc/xdg/openbox/autostart, which backgrounds:
+#     SAFEKEEP_SCALE_FACTOR=${SCALE_FACTOR} safekeep-boot >> /tmp/safekeep-boot.log 2>&1 &
+# safekeep-boot.sh then orchestrates: swap-off → integrity attestation →
+# vault unlock → chromium --kiosk.
+#
+# X-server flags:
+#   :0              DISPLAY :0 (only display on this kiosk)
+#   vt7             bind X to /dev/tty7 (matches TTYPath= below)
+#   -keeptty        if X crashes, do NOT take down the unit's stdin TTY —
+#                   essential for systemd Restart= to actually work
+#   -nolisten tcp   defence-in-depth: no network X even though the kiosk
+#                   is air-gapped
+# ---------------------------------------------------------------------------
+ExecStart=/usr/bin/startx -- :0 vt7 -keeptty -nolisten tcp
+
+# ---------------------------------------------------------------------------
+# TTY plumbing — bind the unit to /dev/tty7 so X can grab it at the VT
+# level, and so Xwrapper.config's `allowed_users=console` check is satisfied
+# (stdin is a VT, which is what Xwrapper treats as "on console").
+# ---------------------------------------------------------------------------
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+
+# ---------------------------------------------------------------------------
+# Restart / teardown
+# ---------------------------------------------------------------------------
+# Restart ONLY on failure. safekeep-boot.sh exits 0 after triggering
+# poweroff/reboot from the dashboard power modal — that's intentional and
+# must not trigger a restart.
+Restart=on-failure
+RestartSec=3s
+
+# KillMode=mixed sends SIGTERM to the main startx (clean tree shutdown),
+# then SIGKILL to surviving descendants after TimeoutStopSec. Same pattern
+# gdm3 / lightdm use to kill session trees on logout.
+#
+# TimeoutStopSec=1s — SafeKeep OS is RAM-only. There is no persistent state
+# for Chromium / Xorg / openbox to flush on shutdown; the kernel's power-off
+# path already handles the ephemeral memory wipe guarantees (swapoff'd, no
+# hibernate image). A long graceful-teardown window just adds ~10s of user-
+# facing hang before the hardware actually cuts. 1s means SIGTERM → SIGKILL
+# almost immediately, which is exactly what we want.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=1s
+
+[Install]
+WantedBy=graphical.target

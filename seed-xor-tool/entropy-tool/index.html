@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
+<title>Entropy Generator — SafeKeepBitcoin</title>
+
+<script>
+  if (localStorage.getItem('safekeepTheme') === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+</script>
+
+<link rel="stylesheet" href="../shared/design-system.css">
+<script type="module" src="./entropy-tool.js"></script>
+
+<style>
+  /* Tool-specific overrides only — everything else comes from design-system.css */
+
+  /* Generator panel (passphrase) */
+  #generator-panel {
+    display: none;
+    background: var(--skb-bg-tertiary);
+    border: 1px dashed var(--skb-primary);
+    padding: 1.25rem;
+    border-radius: var(--skb-radius-md);
+    margin-top: 12px;
+    margin-bottom: 12px;
+    width: 100%;
+  }
+
+  /* Animated dice display */
+  .dice-animation-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin: 10px 0;
+    font-family: var(--skb-mono);
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+  .dice-animation-display .dice-char {
+    width: 1.2em;
+    text-align: center;
+    color: var(--skb-text-dim);
+    transition: color 0.15s;
+  }
+  .dice-animation-display .dice-char.settled {
+    color: var(--skb-primary);
+    font-weight: 600;
+  }
+  .dice-animation-display .dice-char.active {
+    color: var(--skb-secondary);
+    font-weight: 700;
+    font-size: 1em;
+  }
+
+  /* Print Styles */
+  @media print {
+    /* Hide interactive elements and full seed words */
+    .dice-area, #btn-generate, .skb-hint, #generator-panel,
+    #passphrase-container, .skb-passphrase-section,
+    #seed-output, #seed-selector-inline,
+    .skb-seed-selector, .skb-result-actions,
+    .skb-qr-container:not(#qr-xpub-print), .skb-header, .skb-breadcrumb,
+    .skb-page-subtitle,
+    button[onclick="window.print()"],
+    .skb-print-btn { display: none !important; }
+    #result > .skb-result-header { display: none !important; }
+    #qr-xpub-print { display: block !important; }
+    /* Show verification data cleanly */
+    #xpub-container { display: flex !important; background: transparent !important; border: none !important; padding: 0 !important; }
+    #xpub-output-val { color: black !important; font-size: 0.85rem !important; word-break: break-all; }
+    .skb-result { border: none !important; background: transparent; padding: 0; display: block !important; }
+    .skb-table { font-size: 0.85rem !important; }
+    .skb-table td { color: black !important; word-break: break-all; }
+    /* Show print-only elements (last word, passphrase) */
+    .skb-print-only { display: block !important; font-size: 1.1rem; margin: 0.75rem 0; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; }
+    .skb-page-title { font-size: 1.3rem !important; color: black !important; }
+    body { color: black !important; }
+    .skb-card-title { color: black !important; }
+    .skb-data-label { color: #333 !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="skb-header">
+  <a href="../index.html" class="skb-brand">SafeKeep<span>Bitcoin</span></a>
+  <div class="skb-header-actions">
+    <button class="skb-theme-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="skb-container">
+
+  <h1 class="skb-page-title">Entropy Generator</h1>
+  <p class="skb-page-subtitle">Generate a verifiable BIP-39 seed phrase using physical dice entropy</p>
+
+  <!-- Quick load link for users with existing seeds -->
+  <div style="text-align: center; margin-bottom: 0.75rem;">
+    <span style="font-size: 0.85rem; color: var(--skb-text-dim);">Already have a seed?</span>
+    <a href="#" onclick="loadExistingSeed(); return false;" style="font-size: 0.85rem; color: var(--skb-primary); margin-left: 6px; text-decoration: none; font-weight: 600;">Load from file</a>
+  </div>
+
+  <!-- Configuration -->
+  <div class="skb-card">
+    <div class="skb-card-title">Configuration</div>
+
+    <div class="skb-controls">
+      <div class="skb-control-group">
+        <label class="skb-label">Seed Length</label>
+        <select class="skb-select" id="word-count" onchange="updateDiceUI()">
+          <option value="12" selected>12 Words (128-bit / 50 Rolls)</option>
+          <option value="24">24 Words (256-bit / 99 Rolls)</option>
+        </select>
+      </div>
+      <div class="skb-control-group">
+        <label class="skb-label">Extended Key Format</label>
+        <select class="skb-select" id="key-format" onchange="if(!document.getElementById('btn-generate').disabled) updateWallet()">
+          <option value="slip132" selected>SLIP-132 (zpub, ypub, xpub)</option>
+          <option value="bip380">BIP-32 Standard (xpub only)</option>
+        </select>
+      </div>
+      <div class="skb-control-group">
+        <label class="skb-label">Address Type (Derivation)</label>
+        <select class="skb-select" id="derivation-path" onchange="if(!document.getElementById('btn-generate').disabled) updateWallet()">
+          <option value="84" selected>Native SegWit (BIP84) - bc1q</option>
+          <option value="86">Taproot (BIP86) - bc1p</option>
+          <option value="49">Nested SegWit (BIP49) - 3...</option>
+          <option value="44">Legacy (BIP44) - 1...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="skb-card-title">Dice Entropy</div>
+
+    <div class="dice-area">
+      <div class="skb-hint">
+        <span class="skb-hint-text">
+          <strong>Hybrid entropy:</strong> Move your mouse to generate cryptographic noise, then finish with physical dice.
+        </span>
+        <button class="skb-btn-sm" id="btn-browser-entropy" onclick="generateBrowserEntropy()">Generate 50 Computer Rolls</button>
+      </div>
+
+      <!-- Animated dice display (hidden until animation starts) -->
+      <div id="dice-animation" class="dice-animation-display" style="display: none;"></div>
+
+      <textarea class="skb-textarea" id="dice-input" placeholder="Start rolling dice and type each result (1–6)..." oninput="updateDiceUI()"></textarea>
+
+      <div style="font-size: 0.82rem; color: var(--skb-text-muted); margin-top: 10px; display: flex; justify-content: space-between;">
+        <span>Entropy: <span id="dice-entropy-bits" style="color: var(--skb-text); font-weight: 600;">0 bits</span></span>
+        <span id="dice-strength-label" style="font-weight: 600;">Waiting for rolls...</span>
+      </div>
+
+      <div class="skb-progress-row" style="margin-top: 6px;">
+        <span id="roll-count-label" style="min-width: 80px;">0 / 50</span>
+        <div class="skb-progress-track">
+          <div class="skb-progress-fill" id="progress-fill"></div>
+        </div>
+        <span id="roll-count" style="color: var(--skb-primary); min-width: 50px; text-align: right;">Rolls</span>
+      </div>
+    </div>
+
+    <button class="skb-btn-primary" id="btn-generate" onclick="processDiceAndGenerate()" disabled>Generate Seed Phrase</button>
+  </div>
+
+  <!-- Result Area (hidden until seed is generated) -->
+  <div id="result" class="skb-result" style="display: none;">
+
+    <!-- Seed Selector (moved here, inside generated seed phrase section) -->
+    <div id="seed-selector-inline"></div>
+
+    <!-- Seed Output -->
+    <div class="skb-result-header">
+      <div class="skb-result-title">Generated Seed Phrase</div>
+      <div class="skb-result-actions">
+        <button class="skb-btn-sm" onclick="copySeedText(this)">Copy Seed Phrase</button>
+        <button class="skb-btn-sm" id="seed-qr-btn" onclick="toggleSeedQR(this)">Show Seed Phrase QR</button>
+      </div>
+    </div>
+
+    <div id="seed-output"></div>
+
+    <div id="qr-seed" class="skb-qr-container">
+      <div class="qr-code-box"></div>
+    </div>
+
+    <!-- Passphrase Section -->
+    <div id="passphrase-container" class="skb-passphrase-section" style="margin-top: 1.25rem;">
+      <div class="skb-passphrase-label" id="passphrase-label">Optional Passphrase (BIP-39 25th Word)</div>
+      <div class="skb-passphrase-row">
+        <input type="text" class="skb-passphrase-input" id="passphrase-input" placeholder="Type passphrase to preview hidden wallet..." oninput="updateWallet()" autocomplete="off">
+        <button class="skb-btn-sm" onclick="toggleGenerator()">Generator</button>
+        <button class="skb-btn-sm" onclick="clearPassphrase()">Clear</button>
+      </div>
+      <div style="font-size: 0.78rem; color: var(--skb-text-dim); margin-top: 4px;">Wallets below update instantly as you type.</div>
+
+      <div id="generator-panel">
+        <div style="font-size: 0.82rem; font-weight: 700; color: var(--skb-primary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.04em;">Secure Passphrase Generator</div>
+        <div class="skb-controls" style="background: transparent; border: none; padding: 0; margin-bottom: 10px;">
+          <div class="skb-control-group">
+            <label class="skb-label">Length</label>
+            <select class="skb-select" id="gen-word-count" onchange="runPassphraseGenerator()">
+              <option value="4">4 Words</option>
+              <option value="6" selected>6 Words</option>
+              <option value="8">8 Words</option>
+            </select>
+          </div>
+          <div class="skb-control-group" style="justify-content: center; gap: 10px;">
+            <label class="skb-checkbox-group"><input type="checkbox" id="add-numbers" onchange="runPassphraseGenerator()"> Add a Number</label>
+            <label class="skb-checkbox-group"><input type="checkbox" id="add-symbols" onchange="runPassphraseGenerator()"> Add a Symbol</label>
+          </div>
+        </div>
+
+        <div style="font-size: 0.82rem; color: var(--skb-text-muted); display: flex; justify-content: space-between; align-items: center;">
+          <span>Entropy: <span id="entropy-bits" style="color: var(--skb-text); font-weight: 600;">0 bits</span></span>
+          <span id="strength-label" style="color: var(--skb-primary); font-weight: 600;">Waiting</span>
+        </div>
+        <div class="skb-strength-bar"><div class="skb-strength-fill" id="strength-fill"></div></div>
+
+        <button class="skb-btn-secondary" style="margin-top: 12px; width: 100%; border-color: var(--skb-primary); color: var(--skb-primary);" onclick="runPassphraseGenerator()">Generate New Passphrase</button>
+      </div>
+
+      <div class="skb-result-actions" style="margin-top: 12px;">
+        <button class="skb-btn-sm" onclick="copyPassphrase(this)">Copy Passphrase</button>
+        <button class="skb-btn-sm" id="passphrase-qr-btn" onclick="togglePassphraseQR(this)">Show Passphrase QR</button>
+        <button class="skb-btn-sm" onclick="savePassphraseToFile()">Save Passphrase</button>
+        <button class="skb-btn-sm" onclick="loadPassphraseFromFile()">Load Passphrase</button>
+      </div>
+
+      <div id="qr-passphrase" class="skb-qr-container">
+        <div class="qr-code-box"></div>
+      </div>
+
+      <div class="skb-alert skb-alert--error" style="margin-top: 10px; font-size: 0.82rem;">
+        A passphrase creates a completely separate wallet. If you lose it, those funds are unrecoverable.
+      </div>
+    </div>
+
+    <!-- Wallet Verification Data -->
+    <div style="margin-top: 1.5rem;">
+      <div class="skb-card-title">Wallet Verification Data</div>
+
+      <div id="xpub-container">
+        <div class="skb-data-label">Master Public Key (xpub)</div>
+        <div class="skb-data-row">
+          <div class="skb-data-value" id="xpub-output-val" style="color: var(--skb-primary);">Calculating...</div>
+          <div style="display: flex; gap: 6px;">
+            <button class="skb-btn-sm" onclick="copyXpub(this)">Copy xpub</button>
+            <button class="skb-btn-sm" id="xpub-qr-btn" onclick="toggleXpubQR(this)" disabled>Show xpub QR</button>
+          </div>
+        </div>
+        <div id="qr-xpub" class="skb-qr-container" tabindex="0">
+          <div class="qr-code-box"></div>
+        </div>
+        <!-- Print-only xpub QR (always rendered when xpub is available) -->
+        <div id="qr-xpub-print" class="skb-print-only" style="display: none; text-align: center; margin-top: 8px;">
+          <div class="qr-code-box-print"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Print verification placeholders (hidden on screen, shown on print) -->
+    <div id="print-last-word" class="skb-print-only"></div>
+    <div id="print-passphrase" class="skb-print-only"></div>
+
+    <!-- Address Table -->
+    <div style="margin-top: 1.5rem;">
+      <div class="skb-card-title">Address Verification</div>
+      <table class="skb-table">
+        <thead>
+          <tr><th style="width: 60px;">Index</th><th>Receiving Address</th></tr>
+        </thead>
+        <tbody id="address-table-body"></tbody>
+      </table>
+    </div>
+
+    <button class="skb-btn-sm skb-print-btn" style="margin-top: 1rem; width: 100%;" onclick="printVerification()">Print Verification Backup</button>
+  </div>
+
+  <div class="skb-breadcrumb">
+    <a href="../index.html">&larr; SafeKeepBitcoin Home</a>
+  </div>
+
+</div>
+
+<script>
+// =========================================================
+// BIP-39 WORDLIST
+// =========================================================
+const WORDLIST = ["abandon","ability","able","about","above","absent","absorb","abstract","absurd","abuse","access","accident","account","accuse","achieve","acid","acoustic","acquire","across","act","action","actor","actress","actual","adapt","add","addict","address","adjust","admit","adult","advance","advice","aerobic","affair","afford","afraid","again","age","agent","agree","ahead","aim","air","airport","aisle","alarm","album","alcohol","alert","alien","all","alley","allow","almost","alone","alpha","already","also","alter","always","amateur","amazing","among","amount","amused","analyst","anchor","ancient","anger","angle","angry","animal","ankle","announce","annual","another","answer","antenna","antique","anxiety","any","apart","apology","appear","apple","approve","april","arch","arctic","area","arena","argue","arm","armed","armor","army","around","arrange","arrest","arrive","arrow","art","artefact","artist","artwork","ask","aspect","assault","asset","assist","assume","asthma","athlete","atom","attack","attend","attitude","attract","auction","audit","august","aunt","author","auto","autumn","average","avocado","avoid","awake","aware","away","awesome","awful","awkward","axis","baby","bachelor","bacon","badge","bag","balance","balcony","ball","bamboo","banana","banner","bar","barely","bargain","barrel","base","basic","basket","battle","beach","bean","beauty","because","become","beef","before","begin","behave","behind","believe","below","belt","bench","benefit","best","betray","better","between","beyond","bicycle","bid","bike","bind","biology","bird","birth","bitter","black","blade","blame","blanket","blast","bleak","bless","blind","blood","blossom","blouse","blue","blur","blush","board","boat","body","boil","bomb","bone","bonus","book","boost","border","boring","borrow","boss","bottom","bounce","box","boy","bracket","brain","brand","brass","brave","bread","breeze","brick","bridge","brief","bright","bring","brisk","broccoli","broken","bronze","broom","brother","brown","brush","bubble","buddy","budget","buffalo","build","bulb","bulk","bullet","bundle","bunker","burden","burger","burst","bus","business","busy","butter","buyer","buzz","cabbage","cabin","cable","cactus","cage","cake","call","calm","camera","camp","can","canal","cancel","candy","cannon","canoe","canvas","canyon","capable","capital","captain","car","carbon","card","cargo","carpet","carry","cart","case","cash","casino","castle","casual","cat","catalog","catch","category","cattle","caught","cause","caution","cave","ceiling","celery","cement","census","century","cereal","certain","chair","chalk","champion","change","chaos","chapter","charge","chase","chat","cheap","check","cheese","chef","cherry","chest","chicken","chief","child","chimney","choice","choose","chronic","chuckle","chunk","churn","cigar","cinnamon","circle","citizen","city","civil","claim","clap","clarify","claw","clay","clean","clerk","clever","click","client","cliff","climb","clinic","clip","clock","clog","close","cloth","cloud","clown","club","clump","cluster","clutch","coach","coast","coconut","code","coffee","coil","coin","collect","color","column","combine","come","comfort","comic","common","company","concert","conduct","confirm","congress","connect","consider","control","convince","cook","cool","copper","copy","coral","core","corn","correct","cost","cotton","couch","country","couple","course","cousin","cover","coyote","crack","cradle","craft","cram","crane","crash","crater","crawl","crazy","cream","credit","creek","crew","cricket","crime","crisp","critic","crop","cross","crouch","crowd","crucial","cruel","cruise","crumble","crunch","crush","cry","crystal","cube","culture","cup","cupboard","curious","current","curtain","curve","cushion","custom","cute","cycle","dad","damage","damp","dance","danger","daring","dash","daughter","dawn","day","deal","debate","debris","decade","december","decide","decline","decorate","decrease","deer","defense","define","defy","degree","delay","deliver","demand","demise","denial","dentist","deny","depart","depend","deposit","depth","deputy","derive","describe","desert","design","desk","despair","destroy","detail","detect","develop","device","devote","diagram","dial","diamond","diary","dice","diesel","diet","differ","digital","dignity","dilemma","dinner","dinosaur","direct","dirt","disagree","discover","disease","dish","dismiss","disorder","display","distance","divert","divide","divorce","dizzy","doctor","document","dog","doll","dolphin","domain","donate","donkey","donor","door","dose","double","dove","draft","dragon","drama","drastic","draw","dream","dress","drift","drill","drink","drip","drive","drop","drum","dry","duck","dumb","dune","during","dust","dutch","duty","dwarf","dynamic","eager","eagle","early","earn","earth","easily","east","easy","echo","ecology","economy","edge","edit","educate","effort","egg","eight","either","elbow","elder","electric","elegant","element","elephant","elevator","elite","else","embark","embody","embrace","emerge","emotion","employ","empower","empty","enable","enact","end","endless","endorse","enemy","energy","enforce","engage","engine","enhance","enjoy","enlist","enough","enrich","enroll","ensure","enter","entire","entry","envelope","episode","equal","equip","era","erase","erode","erosion","error","erupt","escape","essay","essence","estate","eternal","ethics","evidence","evil","evoke","evolve","exact","example","excess","exchange","excite","exclude","excuse","execute","exercise","exhaust","exhibit","exile","exist","exit","exotic","expand","expect","expire","explain","expose","express","extend","extra","eye","eyebrow","fabric","face","faculty","fade","faint","faith","fall","false","fame","family","famous","fan","fancy","fantasy","farm","fashion","fat","fatal","father","fatigue","fault","favorite","feature","february","federal","fee","feed","feel","female","fence","festival","fetch","fever","few","fiber","fiction","field","figure","file","film","filter","final","find","fine","finger","finish","fire","firm","first","fiscal","fish","fit","fitness","fix","flag","flame","flash","flat","flavor","flee","flight","flip","float","flock","floor","flower","fluid","flush","fly","foam","focus","fog","foil","fold","follow","food","foot","force","forest","forget","fork","fortune","forum","forward","fossil","foster","found","fox","fragile","frame","frequent","fresh","friend","fringe","frog","front","frost","frown","frozen","fruit","fuel","fun","funny","furnace","fury","future","gadget","gain","galaxy","gallery","game","gap","garage","garbage","garden","garlic","garment","gas","gasp","gate","gather","gauge","gaze","general","genius","genre","gentle","genuine","gesture","ghost","giant","gift","giggle","ginger","giraffe","girl","give","glad","glance","glare","glass","glide","glimpse","globe","gloom","glory","glove","glow","glue","goat","goddess","gold","good","goose","gorilla","gospel","gossip","govern","gown","grab","grace","grain","grant","grape","grass","gravity","great","green","grid","grief","grit","grocery","group","grow","grunt","guard","guess","guide","guilt","guitar","gun","gym","habit","hair","half","hammer","hamster","hand","happy","harbor","hard","harsh","harvest","hat","have","hawk","hazard","head","health","heart","heavy","hedgehog","height","hello","helmet","help","hen","hero","hidden","high","hill","hint","hip","hire","history","hobby","hockey","hold","hole","holiday","hollow","home","honey","hood","hope","horn","horror","horse","hospital","host","hotel","hour","hover","hub","huge","human","humble","humor","hundred","hungry","hunt","hurdle","hurry","hurt","husband","hybrid","ice","icon","idea","identify","idle","ignore","ill","illegal","illness","image","imitate","immense","immune","impact","impose","improve","impulse","inch","include","income","increase","index","indicate","indoor","industry","infant","inflict","inform","inhale","inherit","initial","inject","injury","inmate","inner","innocent","input","inquiry","insane","insect","inside","inspire","install","intact","interest","into","invest","invite","involve","iron","island","isolate","issue","item","ivory","jacket","jaguar","jar","jazz","jealous","jeans","jelly","jewel","job","join","joke","journey","joy","judge","juice","jump","jungle","junior","junk","just","kangaroo","keen","keep","ketchup","key","kick","kid","kidney","kind","kingdom","kiss","kit","kitchen","kite","kitten","kiwi","knee","knife","knock","know","lab","label","labor","ladder","lady","lake","lamp","language","laptop","large","later","latin","laugh","laundry","lava","law","lawn","lawsuit","layer","lazy","leader","leaf","learn","leave","lecture","left","leg","legal","legend","leisure","lemon","lend","length","lens","leopard","lesson","letter","level","liar","liberty","library","license","life","lift","light","like","limb","limit","link","lion","liquid","list","little","live","lizard","load","loan","lobster","local","lock","logic","lonely","long","loop","lottery","loud","lounge","love","loyal","lucky","luggage","lumber","lunar","lunch","luxury","lyrics","machine","mad","magic","magnet","maid","mail","main","major","make","mammal","man","manage","mandate","mango","mansion","manual","maple","marble","march","margin","marine","market","marriage","mask","mass","master","match","material","math","matrix","matter","maximum","maze","meadow","mean","measure","meat","mechanic","medal","media","melody","melt","member","memory","mention","menu","mercy","merge","merit","merry","mesh","message","metal","method","middle","midnight","milk","million","mimic","mind","minimum","minor","minute","miracle","mirror","misery","miss","mistake","mix","mixed","mixture","mobile","model","modify","mom","moment","monitor","monkey","monster","month","moon","moral","more","morning","mosquito","mother","motion","motor","mountain","mouse","move","movie","much","muffin","mule","multiply","muscle","museum","mushroom","music","must","mutual","myself","mystery","myth","naive","name","napkin","narrow","nasty","nation","nature","near","neck","need","negative","neglect","neither","nephew","nerve","nest","net","network","neutral","never","news","next","nice","night","noble","noise","nominee","noodle","normal","north","nose","notable","note","nothing","notice","novel","now","nuclear","number","nurse","nut","oak","obey","object","oblige","obscure","observe","obtain","obvious","occur","ocean","october","odor","off","offer","office","often","oil","okay","old","olive","olympic","omit","once","one","onion","online","only","open","opera","opinion","oppose","option","orange","orbit","orchard","order","ordinary","organ","orient","original","orphan","ostrich","other","outdoor","outer","output","outside","oval","oven","over","own","owner","oxygen","oyster","ozone","pact","paddle","page","pair","palace","palm","panda","panel","panic","panther","paper","parade","parent","park","parrot","party","pass","patch","path","patient","patrol","pattern","pause","pave","payment","peace","peanut","pear","peasant","pelican","pen","penalty","pencil","people","pepper","perfect","permit","person","pet","phone","photo","phrase","physical","piano","picnic","picture","piece","pig","pigeon","pill","pilot","pink","pioneer","pipe","pistol","pitch","pizza","place","planet","plastic","plate","play","please","pledge","pluck","plug","plunge","poem","poet","point","polar","pole","police","pond","pony","pool","popular","portion","position","possible","post","potato","pottery","poverty","powder","power","practice","praise","predict","prefer","prepare","present","pretty","prevent","price","pride","primary","print","priority","prison","private","prize","problem","process","produce","profit","program","project","promote","proof","property","prosper","protect","proud","provide","public","pudding","pull","pulp","pulse","pumpkin","punch","pupil","puppy","purchase","purity","purpose","purse","push","put","puzzle","pyramid","quality","quantum","quarter","question","quick","quit","quiz","quote","rabbit","raccoon","race","rack","radar","radio","rail","rain","raise","rally","ramp","ranch","random","range","rapid","rare","rate","rather","raven","raw","razor","ready","real","reason","rebel","rebuild","recall","receive","recipe","record","recycle","reduce","reflect","reform","refuse","region","regret","regular","reject","relax","release","relief","rely","remain","remember","remind","remove","render","renew","rent","reopen","repair","repeat","replace","report","require","rescue","resemble","resist","resource","response","result","retire","retreat","return","reunion","reveal","review","reward","rhythm","rib","ribbon","rice","rich","ride","ridge","rifle","right","rigid","ring","riot","ripple","risk","ritual","rival","river","road","roast","robot","robust","rocket","romance","roof","rookie","room","rose","rotate","rough","round","route","royal","rubber","rude","rug","rule","run","runway","rural","sad","saddle","sadness","safe","sail","salad","salmon","salon","salt","salute","same","sample","sand","satisfy","satoshi","sauce","sausage","save","say","scale","scan","scare","scatter","scene","scheme","school","science","scissors","scorpion","scout","scrap","screen","script","scrub","sea","search","season","seat","second","secret","section","security","seed","seek","segment","select","sell","seminar","senior","sense","sentence","series","service","session","settle","setup","seven","shadow","shaft","shallow","share","shed","shell","sheriff","shield","shift","shine","ship","shiver","shock","shoe","shoot","shop","short","shoulder","shove","shrimp","shrug","shuffle","shy","sibling","sick","side","siege","sight","sign","silent","silk","silly","silver","similar","simple","since","sing","siren","sister","situate","six","size","skate","sketch","ski","skill","skin","skirt","skull","slab","slam","sleep","slender","slice","slide","slight","slim","slogan","slot","slow","slush","small","smart","smile","smoke","smooth","snack","snake","snap","sniff","snow","soap","soccer","social","sock","soda","soft","solar","soldier","solid","solution","solve","someone","song","soon","sorry","sort","soul","sound","soup","source","south","space","spare","spatial","spawn","speak","special","speed","spell","spend","sphere","spice","spider","spike","spin","spirit","split","spoil","sponsor","spoon","sport","spot","spray","spread","spring","spy","square","squeeze","squirrel","stable","stadium","staff","stage","stairs","stamp","stand","start","state","stay","steak","steel","stem","step","stereo","stick","still","sting","stock","stomach","stone","stool","story","stove","strategy","street","strike","strong","struggle","student","stuff","stumble","style","subject","submit","subway","success","such","sudden","suffer","sugar","suggest","suit","summer","sun","sunny","sunset","super","supply","supreme","sure","surface","surge","surprise","surround","survey","suspect","sustain","swallow","swamp","swap","swarm","swear","sweet","swift","swim","swing","switch","sword","symbol","symptom","syrup","system","table","tackle","tag","tail","talent","talk","tank","tape","target","task","taste","tattoo","taxi","teach","team","tell","ten","tenant","tennis","tent","term","test","text","thank","that","theme","then","theory","there","they","thing","this","thought","three","thrive","throw","thumb","thunder","ticket","tide","tiger","tilt","timber","time","tiny","tip","tired","tissue","title","toast","tobacco","today","toddler","toe","together","toilet","token","tomato","tomorrow","tone","tongue","tonight","tool","tooth","top","topic","topple","torch","tornado","tortoise","toss","total","tourist","toward","tower","town","toy","track","trade","traffic","tragic","train","transfer","trap","trash","travel","tray","treat","tree","trend","trial","tribe","trick","trigger","trim","trip","trophy","trouble","truck","true","truly","trumpet","trust","truth","try","tube","tuition","tumble","tuna","tunnel","turkey","turn","turtle","twelve","twenty","twice","twin","twist","two","type","typical","ugly","umbrella","unable","unaware","uncle","uncover","under","undo","unfair","unfold","unhappy","uniform","unique","unit","universe","unknown","unlock","until","unusual","unveil","update","upgrade","uphold","upon","upper","upset","urban","urge","usage","use","used","useful","useless","usual","utility","vacant","vacuum","vague","valid","valley","valve","van","vanish","vapor","various","vast","vault","vehicle","velvet","vendor","venture","venue","verb","verify","version","very","vessel","veteran","viable","vibrant","vicious","victory","video","view","village","vintage","violin","virtual","virus","visa","visit","visual","vital","vivid","vocal","voice","void","volcano","volume","vote","voyage","wage","wagon","wait","walk","wall","walnut","want","warfare","warm","warrior","wash","wasp","waste","water","wave","way","wealth","weapon","wear","weasel","weather","web","wedding","weekend","weird","welcome","west","wet","whale","what","wheat","wheel","when","where","whip","whisper","wide","width","wife","wild","will","win","window","wine","wing","wink","winner","winter","wire","wisdom","wise","wish","witness","wolf","woman","wonder","wood","wool","word","work","world","worry","worth","wrap","wreck","wrestle","wrist","write","wrong","yard","year","yellow","you","young","youth","zebra","zero","zone","zoo"];
+
+// Passphrase constants
+const NUMBERS = "0123456789";
+const SYMBOLS = "!@#$%^&*";
+
+let currentMnemonic = "";
+let seedSelector = null;
+
+// --- SEED SELECTOR INTEGRATION ---
+window.addEventListener('DOMContentLoaded', () => {
+  // Initialize seed selector (now inside the result section)
+  if (window.SeedSelector) {
+    seedSelector = new window.SeedSelector({
+      container: document.getElementById('seed-selector-inline'),
+      showSaveButton: true,
+      getPassphrase: () => document.getElementById('passphrase-input').value || '',
+      getConfig: () => ({
+        keyFormat: document.getElementById('key-format').value,
+        addressType: document.getElementById('derivation-path').value
+      }),
+      onSeedLoaded: (seed) => {
+        currentMnemonic = seed.mnemonic;
+        renderSeedOutput(currentMnemonic);
+        document.getElementById('result').style.display = 'block';
+
+        // Restore passphrase if one was saved with this seed
+        if (seed.passphrase) {
+          document.getElementById('passphrase-input').value = seed.passphrase;
+        } else {
+          document.getElementById('passphrase-input').value = '';
+        }
+
+        // Restore configuration settings from saved file
+        if (seed.keyFormat) {
+          const keyFmtSelect = document.getElementById('key-format');
+          for (let i = 0; i < keyFmtSelect.options.length; i++) {
+            if (keyFmtSelect.options[i].value === seed.keyFormat) {
+              keyFmtSelect.selectedIndex = i;
+              break;
+            }
+          }
+        }
+        if (seed.addressType) {
+          const addrSelect = document.getElementById('derivation-path');
+          for (let i = 0; i < addrSelect.options.length; i++) {
+            if (addrSelect.options[i].value === seed.addressType) {
+              addrSelect.selectedIndex = i;
+              break;
+            }
+          }
+        }
+        if (seed.wordCount) {
+          const wcSelect = document.getElementById('word-count');
+          wcSelect.value = String(seed.wordCount);
+          updateDiceUI();
+        }
+
+        updatePassphraseLabel();
+        updateWallet();
+
+        // Write to session so other tools pick it up
+        if (window.SeedSession) {
+          window.SeedSession.set(seed);
+          if (seed.passphrase) window.SeedSession.setPassphrase(seed.passphrase);
+        }
+      },
+      onSeedCleared: () => {
+        currentMnemonic = "";
+        document.getElementById('passphrase-input').value = '';
+        document.getElementById('result').style.display = 'none';
+
+        // Clear from session
+        if (window.SeedSession) {
+          window.SeedSession.clear();
+          window.SeedSession.clearPassphrase();
+        }
+      }
+    });
+  }
+
+  // Theme button
+  if (localStorage.getItem('safekeepTheme') === 'light') {
+    document.getElementById('theme-btn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
+
+  // --- SESSION WIRING: auto-load seed from session or vault ---
+  if (window.SeedSession) {
+    window.SeedSession.init().then(sessionSeed => {
+      if (sessionSeed && sessionSeed.mnemonic && seedSelector) {
+        // A seed was found in sessionStorage (or vault fallback).
+        // Load it into the UI via the seed selector.
+        seedSelector.setActiveSeed(sessionSeed.mnemonic, sessionSeed.fingerprint, {
+          wordCount: sessionSeed.wordCount,
+          label: sessionSeed.label || '',
+          passphrase: sessionSeed.passphrase || '',
+          keyFormat: sessionSeed.keyFormat || 'slip132',
+          addressType: sessionSeed.addressType || '84'
+        });
+      }
+    });
+  }
+});
+
+window.saveCurrentSeed = async function() {
+  if (seedSelector && currentMnemonic) {
+    await seedSelector.saveCurrent();
+  }
+};
+
+// --- RENDER HELPERS ---
+function renderSeedOutput(mnemonic) {
+  const wordsArray = mnemonic.split(' ');
+  let gridHtml = '<div class="skb-word-grid">';
+  wordsArray.forEach((word, idx) => {
+    gridHtml += `
+      <div class="skb-word-pill">
+        <span class="skb-word-num">${idx + 1}.</span>
+        <span class="skb-word-text">${word}</span>
+      </div>
+    `;
+  });
+  gridHtml += '</div>';
+  document.getElementById('seed-output').innerHTML = gridHtml;
+}
+
+// --- DICE & ENTROPY LOGIC ---
+function toBinStr(num, length) { return num.toString(2).padStart(length, '0'); }
+
+async function getEntropyAndMnemonic(diceStr, wordCount) {
+  const buffer = new TextEncoder().encode(diceStr);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = new Uint8Array(hashBuffer);
+
+  const entropy = wordCount === '12' ? hashArray.slice(0, 16) : hashArray.slice(0, 32);
+
+  const checksumLen = entropy.length === 16 ? 4 : 8;
+  const chkHash = new Uint8Array(await crypto.subtle.digest('SHA-256', entropy));
+
+  let hashBits = '';
+  for (const b of chkHash) hashBits += toBinStr(b, 8);
+  const checksumBits = hashBits.slice(0, checksumLen);
+
+  let entropyBits = '';
+  for (const b of entropy) entropyBits += toBinStr(b, 8);
+
+  const totalBits = entropyBits + checksumBits;
+  const words = [];
+  for (let i = 0; i < totalBits.length; i += 11) {
+    words.push(WORDLIST[parseInt(totalBits.slice(i, i + 11), 2)]);
+  }
+
+  return words.join(' ');
+}
+
+// --- ANIMATED DICE ROLL ---
+window.generateBrowserEntropy = function() {
+  const inputField = document.getElementById('dice-input');
+  const btn = document.getElementById('btn-browser-entropy');
+  const animContainer = document.getElementById('dice-animation');
+
+  // Generate the actual rolls first
+  let finalRolls = "";
+  const temp = new Uint8Array(1);
+  while (finalRolls.length < 50) {
+    window.crypto.getRandomValues(temp);
+    let r = temp[0];
+    if (r < 252) { finalRolls += (r % 6 + 1).toString(); }
+  }
+
+  // Disable the button during animation
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+
+  // Build animation display with 50 character slots
+  animContainer.style.display = 'flex';
+  animContainer.innerHTML = '';
+  for (let i = 0; i < 50; i++) {
+    const span = document.createElement('span');
+    span.className = 'dice-char';
+    span.textContent = '-';
+    animContainer.appendChild(span);
+  }
+
+  const chars = animContainer.querySelectorAll('.dice-char');
+  const totalDuration = 2000; // 2 seconds total
+  const perChar = totalDuration / 50; // ~40ms each
+
+  let settled = 0;
+
+  function animateChar(index) {
+    if (index >= 50) {
+      // Animation complete — append to input field
+      inputField.value += finalRolls;
+      updateDiceUI();
+
+      // Clean up animation display after a brief pause
+      setTimeout(() => {
+        animContainer.style.display = 'none';
+      }, 600);
+
+      btn.disabled = false;
+      btn.textContent = '50 Rolls Added';
+      btn.style.color = '#fff';
+      btn.style.background = 'var(--skb-secondary)';
+      btn.style.borderColor = 'var(--skb-secondary)';
+
+      setTimeout(() => {
+        btn.textContent = 'Generate 50 Computer Rolls';
+        btn.style.color = '';
+        btn.style.background = '';
+        btn.style.borderColor = '';
+      }, 2000);
+
+      inputField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      inputField.focus();
+      return;
+    }
+
+    // Flicker this character through random values
+    const flickerCount = 4;
+    const flickerInterval = perChar / (flickerCount + 1);
+    let flickers = 0;
+
+    chars[index].classList.add('active');
+
+    const flickerTimer = setInterval(() => {
+      if (flickers < flickerCount) {
+        chars[index].textContent = String(Math.floor(Math.random() * 6) + 1);
+        flickers++;
+      } else {
+        clearInterval(flickerTimer);
+        // Settle on the final value
+        chars[index].textContent = finalRolls[index];
+        chars[index].classList.remove('active');
+        chars[index].classList.add('settled');
+        settled++;
+
+        // Update entropy display in real time
+        updateDiceAnimationStats(settled);
+
+        // Next character
+        animateChar(index + 1);
+      }
+    }, flickerInterval);
+  }
+
+  // Start the cascade
+  animateChar(0);
+};
+
+function updateDiceAnimationStats(rollCount) {
+  const wordCount = document.getElementById('word-count').value;
+  const targetRolls = wordCount === '12' ? 50 : 99;
+  const currentInput = document.getElementById('dice-input').value.length;
+  const totalRolls = currentInput + rollCount;
+  const entropyBits = Math.round(totalRolls * 2.58496);
+  const targetEntropy = wordCount === '12' ? 128 : 256;
+
+  document.getElementById('roll-count-label').innerText = `${totalRolls} / ${targetRolls}`;
+  document.getElementById('dice-entropy-bits').innerText = `${entropyBits} bits`;
+
+  let percent = (entropyBits / targetEntropy) * 100;
+  if (percent > 100) percent = 100;
+
+  const fill = document.getElementById('progress-fill');
+  const label = document.getElementById('dice-strength-label');
+  fill.style.width = `${percent}%`;
+
+  if (entropyBits === 0) {
+    label.textContent = "Waiting for rolls...";
+    label.style.color = 'var(--skb-text-muted)';
+  } else if (entropyBits < 50) {
+    label.textContent = "Weak";
+    label.style.color = 'var(--skb-danger)';
+  } else if (entropyBits < 90) {
+    label.textContent = "Good";
+    label.style.color = 'var(--skb-primary)';
+  } else if (entropyBits < 128) {
+    label.textContent = "Strong";
+    label.style.color = 'var(--skb-secondary)';
+  } else if (entropyBits < 256) {
+    label.textContent = "Excellent";
+    label.style.color = 'var(--skb-secondary)';
+  } else {
+    label.textContent = "Maximum";
+    label.style.color = 'var(--skb-secondary)';
+  }
+}
+
+function updateDiceUI() {
+  const input = document.getElementById('dice-input');
+  input.value = input.value.replace(/[^1-6]/g, '');
+
+  const wordCount = document.getElementById('word-count').value;
+  const targetRolls = wordCount === '12' ? 50 : 99;
+  const currentRolls = input.value.length;
+
+  const entropyBits = Math.round(currentRolls * 2.58496);
+  const targetEntropy = wordCount === '12' ? 128 : 256;
+
+  document.getElementById('roll-count-label').innerText = `${currentRolls} / ${targetRolls}`;
+  document.getElementById('dice-entropy-bits').innerText = `${entropyBits} bits`;
+
+  let percent = (entropyBits / targetEntropy) * 100;
+  if (percent > 100) percent = 100;
+
+  const fill = document.getElementById('progress-fill');
+  const label = document.getElementById('dice-strength-label');
+  fill.style.width = `${percent}%`;
+
+  if (entropyBits === 0) {
+    label.textContent = "Waiting for rolls...";
+    label.style.color = 'var(--skb-text-muted)';
+  } else if (entropyBits < 50) {
+    label.textContent = "Weak";
+    label.style.color = 'var(--skb-danger)';
+  } else if (entropyBits < 90) {
+    label.textContent = "Good";
+    label.style.color = 'var(--skb-primary)';
+  } else if (entropyBits < 128) {
+    label.textContent = "Strong";
+    label.style.color = 'var(--skb-secondary)';
+  } else if (entropyBits < 256) {
+    label.textContent = "Excellent";
+    label.style.color = 'var(--skb-secondary)';
+  } else {
+    label.textContent = "Maximum";
+    label.style.color = 'var(--skb-secondary)';
+  }
+
+  const btn = document.getElementById('btn-generate');
+  if (currentRolls >= targetRolls) {
+    btn.disabled = false;
+  } else {
+    btn.disabled = true;
+  }
+
+  updatePassphraseLabel();
+}
+
+// --- DYNAMIC PASSPHRASE LABEL ---
+function updatePassphraseLabel() {
+  const wordCount = document.getElementById('word-count').value;
+  const extraWord = wordCount === '12' ? '13th' : '25th';
+  const label = document.getElementById('passphrase-label');
+  if (label) {
+    label.textContent = `Optional Passphrase (BIP-39 ${extraWord} Word)`;
+  }
+}
+
+// --- PASSPHRASE GENERATOR LOGIC ---
+function toggleGenerator() {
+  const panel = document.getElementById('generator-panel');
+  if (panel.style.display === "block") {
+    panel.style.display = "none";
+  } else {
+    panel.style.display = "block";
+    runPassphraseGenerator();
+  }
+}
+
+function getCryptoRandomInt(max) {
+  const arr = new Uint32Array(1);
+  window.crypto.getRandomValues(arr);
+  return arr[0] % max;
+}
+
+function runPassphraseGenerator() {
+  const wordCount = parseInt(document.getElementById('gen-word-count').value);
+  const addNum = document.getElementById('add-numbers').checked;
+  const addSym = document.getElementById('add-symbols').checked;
+
+  let words = [];
+  for (let i = 0; i < wordCount; i++) {
+    words.push(WORDLIST[getCryptoRandomInt(WORDLIST.length)]);
+  }
+
+  if (addNum) {
+    const randIndex = getCryptoRandomInt(words.length);
+    words[randIndex] += NUMBERS[getCryptoRandomInt(NUMBERS.length)];
+  }
+  if (addSym) {
+    const randIndex = getCryptoRandomInt(words.length);
+    words[randIndex] += SYMBOLS[getCryptoRandomInt(SYMBOLS.length)];
+  }
+
+  const passphrase = words.join(' ');
+  document.getElementById('passphrase-input').value = passphrase;
+  calculateEntropy(wordCount, addNum, addSym);
+
+  if (currentMnemonic) updateWallet();
+}
+
+function calculateEntropy(wordCount, addNum, addSym) {
+  let entropy = wordCount * 11;
+  if (addNum) entropy += Math.log2(10);
+  if (addSym) entropy += Math.log2(8);
+
+  entropy = Math.round(entropy);
+  document.getElementById('entropy-bits').textContent = `${entropy} bits`;
+
+  const fill = document.getElementById('strength-fill');
+  const label = document.getElementById('strength-label');
+
+  let percent = (entropy / 94) * 100;
+  if (percent > 100) percent = 100;
+  fill.style.width = `${percent}%`;
+
+  if (entropy < 50) { fill.style.background = 'var(--skb-danger)'; label.textContent = "Weak"; label.style.color = 'var(--skb-danger)'; }
+  else if (entropy < 70) { fill.style.background = 'var(--skb-primary)'; label.textContent = "Good"; label.style.color = 'var(--skb-primary)'; }
+  else { fill.style.background = 'var(--skb-secondary)'; label.textContent = "Strong"; label.style.color = 'var(--skb-secondary)'; }
+}
+
+// --- PASSPHRASE: CLEAR / SAVE / LOAD ---
+window.clearPassphrase = function() {
+  document.getElementById('passphrase-input').value = '';
+  if (currentMnemonic) updateWallet();
+};
+
+window.savePassphraseToFile = async function() {
+  const passphrase = document.getElementById('passphrase-input').value;
+  if (!passphrase) {
+    alert('No passphrase to save.');
+    return;
+  }
+  if (!window.SeedManager) return;
+
+  try {
+    await window.SeedManager.savePassphrase(passphrase, { label: '' });
+  } catch (e) {
+    console.error('Save passphrase failed:', e);
+    alert('Save failed: ' + e.message);
+  }
+};
+
+window.loadPassphraseFromFile = async function() {
+  if (!window.SeedManager) return;
+
+  try {
+    const result = await window.SeedManager.loadPassphrase();
+    if (result) {
+      document.getElementById('passphrase-input').value = result.passphrase;
+      if (currentMnemonic) updateWallet();
+    }
+  } catch (e) {
+    console.error('Load passphrase failed:', e);
+    alert('Load failed: ' + e.message);
+  }
+};
+
+// --- LOAD EXISTING SEED (top-of-page shortcut) ---
+window.loadExistingSeed = async function() {
+  if (!window.SeedManager) return;
+  try {
+    const result = await window.SeedManager.loadSeed();
+    if (result && seedSelector) {
+      await seedSelector.setActiveSeed(result.mnemonic, result.fingerprint, {
+        wordCount: result.wordCount,
+        label: result.label || '',
+        passphrase: result.passphrase || '',
+        keyFormat: result.keyFormat || 'slip132',
+        addressType: result.addressType || '84'
+      });
+    }
+  } catch (e) {
+    console.error('Failed to load seed:', e);
+    alert('Could not load seed: ' + e.message);
+  }
+};
+
+// --- MASTER CONTROLLERS ---
+async function processDiceAndGenerate() {
+  const diceStr = document.getElementById('dice-input').value;
+  const wordCount = document.getElementById('word-count').value;
+
+  currentMnemonic = await getEntropyAndMnemonic(diceStr, wordCount);
+  renderSeedOutput(currentMnemonic);
+
+  document.getElementById('result').style.display = 'block';
+
+  const wordsArray = currentMnemonic.split(' ');
+  const lastWord = wordsArray[wordsArray.length - 1];
+  document.getElementById('print-last-word').innerHTML = `<strong>Seed Verification (Last Word):</strong> <span style="font-family: var(--skb-mono); font-size: 1.5em; text-transform: uppercase;">${lastWord}</span>`;
+
+  // Update seed selector with new seed (but don't save yet).
+  // silent=true prevents onSeedLoaded from firing (we already rendered above).
+  if (seedSelector) {
+    await seedSelector.setActiveSeed(currentMnemonic, null, {}, { silent: true });
+  }
+
+  // Write to session so other tools pick it up
+  if (window.SeedSession && window.SeedManager) {
+    const fp = await window.SeedManager.computeFingerprint(currentMnemonic);
+    window.SeedSession.set({
+      mnemonic: currentMnemonic,
+      fingerprint: fp,
+      wordCount: currentMnemonic.split(' ').length,
+      keyFormat: document.getElementById('key-format').value,
+      addressType: document.getElementById('derivation-path').value
+    });
+  }
+
+  await updateWallet();
+}
+
+async function updateWallet() {
+  if (!currentMnemonic) return;
+
+  clearQRs();
+  const tbody = document.getElementById('address-table-body');
+  tbody.innerHTML = '';
+  document.getElementById('xpub-output-val').innerText = "Calculating...";
+  document.getElementById('xpub-qr-btn').disabled = true;
+
+  try {
+    if (!window.BtcMath) throw new Error("BtcMath not loaded.");
+
+    const { bip39, HDKey, btc } = window.BtcMath;
+    const passphrase = document.getElementById('passphrase-input').value;
+    const seedBytes = await bip39.mnemonicToSeed(currentMnemonic, passphrase);
+
+    const pathType = document.getElementById('derivation-path').value;
+    const keyFormat = document.getElementById('key-format').value;
+
+    const slip132 = {
+      '84': { private: 0x04b2430c, public: 0x04b24746 },
+      '49': { private: 0x049d7878, public: 0x049d7cb2 },
+      '44': { private: 0x0488ade4, public: 0x0488b21e },
+      '86': { private: 0x0488ade4, public: 0x0488b21e }
+    };
+
+    const standardBip380 = { private: 0x0488ade4, public: 0x0488b21e };
+    const versionBytes = keyFormat === 'slip132' ? slip132[pathType] : standardBip380;
+
+    const hdkey = HDKey.fromMasterSeed(seedBytes, versionBytes);
+    const basePath = `m/${pathType}'/0'/0'`;
+    const accountNode = hdkey.derive(basePath);
+
+    const xpubValue = accountNode.publicExtendedKey;
+    document.getElementById('xpub-output-val').innerText = xpubValue;
+    document.getElementById('xpub-output-val').style.color = "var(--skb-primary)";
+    document.getElementById('xpub-qr-btn').disabled = false;
+
+    // Generate print-only xpub QR
+    const printQrBox = document.querySelector('#qr-xpub-print .qr-code-box-print');
+    if (printQrBox && window.QRCode) {
+      printQrBox.innerHTML = '';
+      try {
+        window.QRCode.toCanvas(document.createElement('canvas'), xpubValue, { width: 200, margin: 2, color: { dark: "#000000ff", light: "#ffffffff" } }, function(err, canvas) {
+          if (!err) printQrBox.appendChild(canvas);
+        });
+      } catch (e) { /* silent */ }
+    }
+
+    // Sync passphrase to session
+    if (window.SeedSession) {
+      window.SeedSession.setPassphrase(passphrase);
+    }
+
+    // Update print-passphrase (visible only when printing)
+    const printPP = document.getElementById('print-passphrase');
+    if (printPP) {
+      if (passphrase) {
+        printPP.innerHTML = `<strong>Passphrase:</strong> <span style="font-family: var(--skb-mono); font-size: 1.1em;">${passphrase}</span>`;
+      } else {
+        printPP.innerHTML = '';
+      }
+    }
+
+    for (let i = 0; i < 5; i++) {
+      const childNode = hdkey.derive(`${basePath}/0/${i}`);
+      let address = "";
+      if (pathType === '84') { address = btc.p2wpkh(childNode.publicKey).address; }
+      else if (pathType === '86') { address = btc.p2tr(childNode.publicKey.slice(1, 33)).address; }
+      else if (pathType === '49') { address = btc.p2sh(btc.p2wpkh(childNode.publicKey)).address; }
+      else if (pathType === '44') { address = btc.p2pkh(childNode.publicKey).address; }
+      tbody.innerHTML += `<tr><td>${i}</td><td>${address}</td></tr>`;
+    }
+  } catch (err) {
+    console.error(err);
+    document.getElementById('xpub-output-val').innerText = "Derivation Error";
+    document.getElementById('xpub-output-val').style.color = "var(--skb-danger)";
+  }
+}
+
+// --- PRINT WITH CUSTOM FILENAME ---
+window.printVerification = function() {
+  // Set the document title to the desired filename before printing
+  const origTitle = document.title;
+  let printName = '';
+
+  if (seedSelector) {
+    const seed = seedSelector.getActiveSeed();
+    if (seed) {
+      const fp = seed.fingerprint || '';
+      const label = seed.label || '';
+      if (label && fp) {
+        printName = `${fp} - ${label} - Verification`;
+      } else if (fp) {
+        printName = `${fp} - Verification`;
+      }
+    }
+  }
+
+  if (printName) {
+    document.title = printName;
+  }
+
+  window.print();
+
+  // Restore original title after print dialog
+  setTimeout(() => { document.title = origTitle; }, 500);
+};
+
+// --- UTILITIES (Copy, QR) ---
+function triggerCopyAlert(btn) {
+  const orig = btn.textContent;
+  btn.textContent = 'Copied';
+  setTimeout(() => btn.textContent = orig, 1800);
+}
+
+window.copySeedText = function(btn) {
+  if (!currentMnemonic) return;
+  navigator.clipboard.writeText(currentMnemonic).then(() => triggerCopyAlert(btn)).catch(() => alert('Copy failed.'));
+};
+
+window.copyPassphrase = function(btn) {
+  const text = document.getElementById('passphrase-input').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => triggerCopyAlert(btn)).catch(() => alert('Copy failed.'));
+};
+
+window.copyXpub = function(btn) {
+  const text = document.getElementById('xpub-output-val').innerText;
+  if (!text || text === "Calculating...") return;
+  navigator.clipboard.writeText(text).then(() => triggerCopyAlert(btn)).catch(() => alert('Copy failed.'));
+};
+
+function clearQRs() {
+  document.querySelectorAll('.skb-qr-container').forEach(c => {
+    c.style.display = 'none';
+    const box = c.querySelector('.qr-code-box');
+    if (box) box.innerHTML = '';
+  });
+  document.getElementById('seed-qr-btn').textContent = 'Show Seed Phrase QR';
+  document.getElementById('passphrase-qr-btn').textContent = 'Show Passphrase QR';
+  document.getElementById('xpub-qr-btn').textContent = 'Show xpub QR';
+}
+
+function internalToggleQR(containerId, textToEncode, btn, btnShowLabel, btnHideLabel) {
+  if (!window.QRCode) return alert("QR library not loaded.");
+  const container = document.getElementById(containerId);
+  const qrBox = container.querySelector('.qr-code-box');
+
+  if (container.style.display === 'block') {
+    container.style.display = 'none';
+    btn.textContent = btnShowLabel;
+  } else {
+    if (qrBox.innerHTML === '') {
+      try {
+        window.QRCode.toCanvas(document.createElement('canvas'), textToEncode, { width: 250, margin: 2, color: { dark: "#000000ff", light: "#ffffffff" } }, function(err, canvas) {
+          if (err) throw err;
+          qrBox.appendChild(canvas);
+        });
+      } catch (err) { console.error("QR Error:", err); }
+    }
+    container.style.display = 'block';
+    btn.textContent = btnHideLabel;
+  }
+}
+
+window.toggleSeedQR = function(btn) {
+  if (!currentMnemonic) return;
+  internalToggleQR('qr-seed', currentMnemonic, btn, 'Show Seed Phrase QR', 'Hide Seed Phrase QR');
+};
+
+window.togglePassphraseQR = function(btn) {
+  const pass = document.getElementById('passphrase-input').value;
+  if (!pass) return alert("No passphrase to display.");
+  internalToggleQR('qr-passphrase', pass, btn, 'Show Passphrase QR', 'Hide Passphrase QR');
+};
+
+window.toggleXpubQR = function(btn) {
+  const xpub = document.getElementById('xpub-output-val').innerText;
+  if (!xpub || xpub === "Calculating...") return;
+  internalToggleQR('qr-xpub', xpub, btn, 'Show xpub QR', 'Hide xpub QR');
+};
+
+// --- THEME TOGGLE ---
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.getElementById('theme-btn');
+  if (html.getAttribute('data-theme') === 'light') {
+    html.removeAttribute('data-theme');
+    localStorage.setItem('safekeepTheme', 'dark');
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+  } else {
+    html.setAttribute('data-theme', 'light');
+    localStorage.setItem('safekeepTheme', 'light');
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
+}
+</script>
+</body>
+</html>

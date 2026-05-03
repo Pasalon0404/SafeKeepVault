@@ -1,0 +1,32 @@
+# 99-hide-drives.rules — Hide SafeKeep internal partitions from the desktop
+# file manager (PCManFM / udisks2). Only the TRANSFER airlock partition
+# should be visible to the user.
+#
+# UDISKS_IGNORE="1" tells udisks2 not to automount or display the device.
+# These rules are baked into the OS image by build.sh → /etc/udev/rules.d/
+
+# ── Hide the raw data partition (ext4 container for the LUKS vault file) ──
+# Match by filesystem label "safekeep-data"
+ENV{ID_FS_LABEL}=="safekeep-data", ENV{UDISKS_IGNORE}="1"
+
+# ── Hide the LUKS container itself ──
+# When cryptsetup opens the vault, udev sees the underlying partition as LUKS
+ENV{ID_FS_TYPE}=="crypto_LUKS", ENV{UDISKS_IGNORE}="1"
+
+# ── Hide the unlocked device-mapper volume (/dev/mapper/vault) ──
+# This is the decrypted block device that gets mounted to /media/.safekeep-vault
+KERNEL=="dm-*", ENV{DM_NAME}=="vault", ENV{UDISKS_IGNORE}="1"
+
+# ── Hide the OS partition (squashfs + kernel + grub) ──
+ENV{ID_FS_LABEL}=="safekeep-os", ENV{UDISKS_IGNORE}="1"
+
+# ── Hide the EFI System Partition ──
+ENV{ID_FS_LABEL}=="SK-EFI", ENV{UDISKS_IGNORE}="1"
+
+# ── Hide the BIOS Boot partition ──
+# BIOS Boot has no filesystem, but catch it by GPT type UUID just in case
+ENV{ID_PART_ENTRY_TYPE}=="21686148-6449-6e6f-744e-656564454649", ENV{UDISKS_IGNORE}="1"
+
+# ── TRANSFER partition is NOT listed here — it stays visible ──
+# The exFAT "TRANSFER" partition is the only user-facing drive.
+# It is explicitly mounted by safekeep-boot.sh to /media/transfer.

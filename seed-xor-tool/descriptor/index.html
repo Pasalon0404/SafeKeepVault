@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Output Descriptor — SafeKeepBitcoin</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
+
+<script>
+  if (localStorage.getItem('safekeepTheme') === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+</script>
+
+<link rel="stylesheet" href="../shared/design-system.css">
+<script type="module" src="./descriptor.js"></script>
+
+<style>
+  /* Tool-specific overrides only — everything else comes from design-system.css */
+
+  /* Autocomplete dropdown for seed input */
+  .skb-autocomplete-list {
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    background: var(--skb-bg-secondary);
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-sm);
+    max-height: 150px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    box-shadow: var(--skb-shadow);
+  }
+  .skb-autocomplete-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-family: var(--skb-mono);
+    font-size: 0.82rem;
+    color: var(--skb-text);
+    border-bottom: 1px solid var(--skb-border);
+    transition: background var(--skb-transition);
+  }
+  .skb-autocomplete-item:last-child { border-bottom: none; }
+  .skb-autocomplete-item:hover,
+  .skb-autocomplete-item.active-suggestion {
+    background: var(--skb-secondary);
+    color: #000;
+    font-weight: bold;
+  }
+
+  /* Scanner container */
+  .skb-scanner-box {
+    display: none;
+    margin-top: 12px;
+    padding: 12px;
+    background: #000;
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-md);
+    text-align: center;
+  }
+  .skb-scanner-box.visible { display: block; }
+  .skb-scanner-box > div {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+    border-radius: var(--skb-radius-md);
+    overflow: hidden;
+  }
+
+  /* Cosigner block styling */
+  .cosigner-block {
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-md);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    background: var(--skb-bg-tertiary);
+    transition: background var(--skb-transition), border var(--skb-transition);
+  }
+  .cosigner-block:last-child { margin-bottom: 0; }
+
+  .cosigner-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  .cosigner-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--skb-text-muted);
+  }
+  .cosigner-fingerprint {
+    font-family: var(--skb-mono);
+    font-size: 0.78rem;
+    color: var(--skb-secondary);
+    font-weight: 600;
+  }
+
+  /* Input mode tabs within cosigner */
+  .input-mode-tabs {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-sm);
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .input-mode-tab {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--skb-bg-input);
+    border: none;
+    color: var(--skb-text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all var(--skb-transition);
+    border-right: 1px solid var(--skb-border);
+  }
+  .input-mode-tab:last-child { border-right: none; }
+  .input-mode-tab.active {
+    background: var(--skb-secondary-muted);
+    color: var(--skb-secondary);
+  }
+  .input-mode-tab:hover:not(.active) { color: var(--skb-text); }
+
+  /* xpub input area */
+  .xpub-input-area {
+    display: none;
+  }
+  .xpub-input-area.active { display: block; }
+  .seed-input-area { display: block; }
+  .seed-input-area.hidden { display: none; }
+
+  /* Descriptor output area */
+  .descriptor-output-box {
+    background: var(--skb-bg-input);
+    font-family: var(--skb-mono);
+    font-size: 0.88rem;
+    color: var(--skb-text);
+    padding: 14px;
+    border-radius: var(--skb-radius-sm);
+    border: 1px solid var(--skb-border);
+    word-break: break-all;
+    min-height: 60px;
+    line-height: 1.6;
+  }
+
+  /* Hidden class */
+  .hidden { display: none !important; }
+
+  /* Print styles */
+  @media print {
+    #config-card, #entropy-card,
+    .skb-header, .skb-breadcrumb, .skb-page-subtitle,
+    .skb-scanner-box, .cosigner-header .skb-result-actions,
+    .input-mode-tabs, .skb-passphrase-section .skb-result-actions,
+    button, .skb-btn-primary, .skb-btn-sm, .skb-btn-secondary { display: none !important; }
+
+    #print-descriptor-qr { display: block !important; }
+    .skb-print-only { display: block !important; font-size: 1rem; margin: 0.75rem 0; }
+    .skb-result { border: none !important; background: transparent; padding: 0; display: block !important; }
+    .skb-card { box-shadow: none; border: 1px solid #ccc; }
+    .skb-page-title { font-size: 1.3rem !important; color: black !important; }
+    body { color: black !important; background: white !important; }
+    .skb-card-title { color: black !important; }
+    .descriptor-output-box { background: #f5f5f5 !important; color: black !important; border-color: #ccc !important; }
+    .skb-table th { color: black !important; background: #eee !important; }
+    .skb-table td { color: black !important; }
+    .skb-qr-container { border: none !important; }
+
+    #print-backup-ref { page-break-inside: avoid; break-inside: avoid; }
+    #print-descriptor-qr { page-break-inside: avoid; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="skb-header">
+  <a href="../index.html" class="skb-brand">SafeKeep<span>Bitcoin</span></a>
+  <div class="skb-header-actions">
+    <button class="skb-theme-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="skb-container">
+  <h1 class="skb-page-title">Output Descriptor</h1>
+  <div class="skb-page-subtitle">Build watch-only wallet descriptors from air-gapped entropy</div>
+
+  <!-- Card 1: Wallet Configuration -->
+  <div class="skb-card" id="config-card">
+    <div class="skb-card-title">Wallet Configuration</div>
+
+    <div class="skb-controls">
+      <div class="skb-control-group">
+        <label class="skb-label">Wallet Architecture</label>
+        <select class="skb-select" id="wallet-type" onchange="updateUIState()">
+          <option value="single">Single Signature</option>
+          <option value="multi">Multi-Signature</option>
+        </select>
+      </div>
+      <div class="skb-control-group">
+        <label class="skb-label">Script Type</label>
+        <select class="skb-select" id="script-type" onchange="updateUIState()">
+          <option value="84">Native SegWit (BIP84 / bc1q)</option>
+          <option value="86">Taproot (BIP86 / bc1p)</option>
+          <option value="49">Nested SegWit (BIP49 / 3...)</option>
+          <option value="44">Legacy (BIP44 / 1...)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Multisig quorum config (hidden unless multi selected) -->
+    <div id="multisig-config" class="skb-controls hidden" style="border: 1px solid rgba(3,218,198,0.2); background: var(--skb-secondary-muted); padding: 12px; border-radius: var(--skb-radius-sm);">
+      <div class="skb-control-group">
+        <label class="skb-label" style="color: var(--skb-secondary);">Signatures Required (m)</label>
+        <select class="skb-select" id="m-required">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+      <div class="skb-control-group">
+        <label class="skb-label" style="color: var(--skb-secondary);">Total Cosigners (n)</label>
+        <select class="skb-select" id="n-total" onchange="updateUIState()">
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="skb-data-row" style="margin-top: 0;">
+      <div>
+        <div class="skb-data-label">Derivation Path</div>
+        <div class="skb-data-value" id="derivation-path" style="color: var(--skb-secondary);">m/84'/0'/0'</div>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--skb-text-dim);">Auto-calculated · Mainnet</div>
+    </div>
+  </div>
+
+  <!-- Card 2: Entropy Input -->
+  <div class="skb-card" id="entropy-card">
+    <div class="skb-card-title">Entropy Input</div>
+
+    <div class="skb-controls" style="margin-bottom: 12px;">
+      <div class="skb-control-group">
+        <label class="skb-label">Seed Phrase Length</label>
+        <div style="display: flex; gap: 16px; margin-top: 6px;">
+          <label class="skb-checkbox-group"><input type="radio" name="seedLength" value="12" checked onchange="updateUIState()"> 12 Words</label>
+          <label class="skb-checkbox-group"><input type="radio" name="seedLength" value="24" onchange="updateUIState()"> 24 Words</label>
+        </div>
+      </div>
+    </div>
+
+    <div id="seed-inputs-container"></div>
+
+    <button class="skb-btn-primary" id="btn-generate">Generate Descriptor</button>
+  </div>
+
+  <!-- Card 3: Result (hidden until generated) -->
+  <div id="result-box" style="display: none;">
+    <div class="skb-card">
+      <div class="skb-result">
+        <div class="skb-result-header">
+          <div class="skb-result-title">Output Descriptor</div>
+          <div class="skb-result-actions">
+            <button class="skb-btn-sm" id="btn-copy" onclick="copyDescriptor()">Copy</button>
+            <button class="skb-btn-sm" id="btn-save" onclick="saveDescriptorToFile()">Save</button>
+            <button class="skb-btn-sm" id="btn-show-qr" onclick="toggleDescriptorQR()">Show QR</button>
+            <button class="skb-btn-sm" onclick="printDescriptor()">Print</button>
+          </div>
+        </div>
+
+        <!-- QR Code (hidden by default, toggleable) -->
+        <div id="descriptor-qr-container" class="skb-qr-container">
+          <canvas id="descriptor-qr-canvas"></canvas>
+        </div>
+
+        <!-- Print-only QR (pre-rendered for print) -->
+        <div id="print-descriptor-qr" class="skb-print-only" style="display: none; text-align: center; margin: 12px 0;">
+          <canvas id="print-qr-canvas"></canvas>
+        </div>
+
+        <!-- Print-only backup reference -->
+        <div id="print-backup-ref" class="skb-print-only" style="display: none;"></div>
+
+        <div style="margin-bottom: 12px;">
+          <div class="skb-data-label" style="margin-bottom: 6px;">Raw Output Descriptor</div>
+          <div class="descriptor-output-box" id="descriptor-text"></div>
+        </div>
+
+        <div>
+          <div class="skb-data-label" style="margin-bottom: 6px;">Address Verification (first 5 receive)</div>
+          <table class="skb-table" id="address-table">
+            <thead><tr><th>Path</th><th>Address</th></tr></thead>
+            <tbody id="address-output"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="skb-breadcrumb">
+    <a href="../index.html">&larr; SafeKeepBitcoin Home</a>
+  </div>
+</div>
+
+<script>
+// =========================================================
+// BIP-39 WORDLIST
+// =========================================================
+const WORDLIST = ["abandon","ability","able","about","above","absent","absorb","abstract","absurd","abuse","access","accident","account","accuse","achieve","acid","acoustic","acquire","across","act","action","actor","actress","actual","adapt","add","addict","address","adjust","admit","adult","advance","advice","aerobic","affair","afford","afraid","again","age","agent","agree","ahead","aim","air","airport","aisle","alarm","album","alcohol","alert","alien","all","alley","allow","almost","alone","alpha","already","also","alter","always","amateur","amazing","among","amount","amused","analyst","anchor","ancient","anger","angle","angry","animal","ankle","announce","annual","another","answer","antenna","antique","anxiety","any","apart","apology","appear","apple","approve","april","arch","arctic","area","arena","argue","arm","armed","armor","army","around","arrange","arrest","arrive","arrow","art","artefact","artist","artwork","ask","aspect","assault","asset","assist","assume","asthma","athlete","atom","attack","attend","attitude","attract","auction","audit","august","aunt","author","auto","autumn","average","avocado","avoid","awake","aware","away","awesome","awful","awkward","axis","baby","bachelor","bacon","badge","bag","balance","balcony","ball","bamboo","banana","banner","bar","barely","bargain","barrel","base","basic","basket","battle","beach","bean","beauty","because","become","beef","before","begin","behave","behind","believe","below","belt","bench","benefit","best","betray","better","between","beyond","bicycle","bid","bike","bind","biology","bird","birth","bitter","black","blade","blame","blanket","blast","bleak","bless","blind","blood","blossom","blouse","blue","blur","blush","board","boat","body","boil","bomb","bone","bonus","book","boost","border","boring","borrow","boss","bottom","bounce","box","boy","bracket","brain","brand","brass","brave","bread","breeze","brick","bridge","brief","bright","bring","brisk","broccoli","broken","bronze","broom","brother","brown","brush","bubble","buddy","budget","buffalo","build","bulb","bulk","bullet","bundle","bunker","burden","burger","burst","bus","business","busy","butter","buyer","buzz","cabbage","cabin","cable","cactus","cage","cake","call","calm","camera","camp","can","canal","cancel","candy","cannon","canoe","canvas","canyon","capable","capital","captain","car","carbon","card","cargo","carpet","carry","cart","case","cash","casino","castle","casual","cat","catalog","catch","category","cattle","caught","cause","caution","cave","ceiling","celery","cement","census","century","cereal","certain","chair","chalk","champion","change","chaos","chapter","charge","chase","chat","cheap","check","cheese","chef","cherry","chest","chicken","chief","child","chimney","choice","choose","chronic","chuckle","chunk","churn","cigar","cinnamon","circle","citizen","city","civil","claim","clap","clarify","claw","clay","clean","clerk","clever","click","client","cliff","climb","clinic","clip","clock","clog","close","cloth","cloud","clown","club","clump","cluster","clutch","coach","coast","coconut","code","coffee","coil","coin","collect","color","column","combine","come","comfort","comic","common","company","concert","conduct","confirm","congress","connect","consider","control","convince","cook","cool","copper","copy","coral","core","corn","correct","cost","cotton","couch","country","couple","course","cousin","cover","coyote","crack","cradle","craft","cram","crane","crash","crater","crawl","crazy","cream","credit","creek","crew","cricket","crime","crisp","critic","crop","cross","crouch","crowd","crucial","cruel","cruise","crumble","crunch","crush","cry","crystal","cube","culture","cup","cupboard","curious","current","curtain","curve","cushion","custom","cute","cycle","dad","damage","damp","dance","danger","daring","dash","daughter","dawn","day","deal","debate","debris","decade","december","decide","decline","decorate","decrease","deer","defense","define","defy","degree","delay","deliver","demand","demise","denial","dentist","deny","depart","depend","deposit","depth","deputy","derive","describe","desert","design","desk","despair","destroy","detail","detect","develop","device","devote","diagram","dial","diamond","diary","dice","diesel","diet","differ","digital","dignity","dilemma","dinner","dinosaur","direct","dirt","disagree","discover","disease","dish","dismiss","disorder","display","distance","divert","divide","divorce","dizzy","doctor","document","dog","doll","dolphin","domain","donate","donkey","donor","door","dose","double","dove","draft","dragon","drama","drastic","draw","dream","dress","drift","drill","drink","drip","drive","drop","drum","dry","duck","dumb","dune","during","dust","dutch","duty","dwarf","dynamic","eager","eagle","early","earn","earth","easily","east","easy","echo","ecology","economy","edge","edit","educate","effort","egg","eight","either","elbow","elder","electric","elegant","element","elephant","elevator","elite","else","embark","embody","embrace","emerge","emotion","employ","empower","empty","enable","enact","end","endless","endorse","enemy","energy","enforce","engage","engine","enhance","enjoy","enlist","enough","enrich","enroll","ensure","enter","entire","entry","envelope","episode","equal","equip","era","erase","erode","erosion","error","erupt","escape","essay","essence","estate","eternal","ethics","evidence","evil","evoke","evolve","exact","example","excess","exchange","excite","exclude","excuse","execute","exercise","exhaust","exhibit","exile","exist","exit","exotic","expand","expect","expire","explain","expose","express","extend","extra","eye","eyebrow","fabric","face","faculty","fade","faint","faith","fall","false","fame","family","famous","fan","fancy","fantasy","farm","fashion","fat","fatal","father","fatigue","fault","favorite","feature","february","federal","fee","feed","feel","female","fence","festival","fetch","fever","few","fiber","fiction","field","figure","file","film","filter","final","find","fine","finger","finish","fire","firm","first","fiscal","fish","fit","fitness","fix","flag","flame","flash","flat","flavor","flee","flight","flip","float","flock","floor","flower","fluid","flush","fly","foam","focus","fog","foil","fold","follow","food","foot","force","forest","forget","fork","fortune","forum","forward","fossil","foster","found","fox","fragile","frame","frequent","fresh","friend","fringe","frog","front","frost","frown","frozen","fruit","fuel","fun","funny","furnace","fury","future","gadget","gain","galaxy","gallery","game","gap","garage","garbage","garden","garlic","garment","gas","gasp","gate","gather","gauge","gaze","general","genius","genre","gentle","genuine","gesture","ghost","giant","gift","giggle","ginger","giraffe","girl","give","glad","glance","glare","glass","glide","glimpse","globe","gloom","glory","glove","glow","glue","goat","goddess","gold","good","goose","gorilla","gospel","gossip","govern","gown","grab","grace","grain","grant","grape","grass","gravity","great","green","grid","grief","grit","grocery","group","grow","grunt","guard","guess","guide","guilt","guitar","gun","gym","habit","hair","half","hammer","hamster","hand","happy","harbor","hard","harsh","harvest","hat","have","hawk","hazard","head","health","heart","heavy","hedgehog","height","hello","helmet","help","hen","hero","hidden","high","hill","hint","hip","hire","history","hobby","hockey","hold","hole","holiday","hollow","home","honey","hood","hope","horn","horror","horse","hospital","host","hotel","hour","hover","hub","huge","human","humble","humor","hundred","hungry","hunt","hurdle","hurry","hurt","husband","hybrid","ice","icon","idea","identify","idle","ignore","ill","illegal","illness","image","imitate","immense","immune","impact","impose","improve","impulse","inch","include","income","increase","index","indicate","indoor","industry","infant","inflict","inform","inhale","inherit","initial","inject","injury","inmate","inner","innocent","input","inquiry","insane","insect","inside","inspire","install","intact","interest","into","invest","invite","involve","iron","island","isolate","issue","item","ivory","jacket","jaguar","jar","jazz","jealous","jeans","jelly","jewel","job","join","joke","journey","joy","judge","juice","jump","jungle","junior","junk","just","kangaroo","keen","keep","ketchup","key","kick","kid","kidney","kind","kingdom","kiss","kit","kitchen","kite","kitten","kiwi","knee","knife","knock","know","lab","label","labor","ladder","lady","lake","lamp","language","laptop","large","later","latin","laugh","laundry","lava","law","lawn","lawsuit","layer","lazy","leader","leaf","learn","leave","lecture","left","leg","legal","legend","leisure","lemon","lend","length","lens","leopard","lesson","letter","level","liar","liberty","library","license","life","lift","light","like","limb","limit","link","lion","liquid","list","little","live","lizard","load","loan","lobster","local","lock","logic","lonely","long","loop","lottery","loud","lounge","love","loyal","lucky","luggage","lumber","lunar","lunch","luxury","lyrics","machine","mad","magic","magnet","maid","mail","main","major","make","mammal","man","manage","mandate","mango","mansion","manual","maple","marble","march","margin","marine","market","marriage","mask","mass","master","match","material","math","matrix","matter","maximum","maze","meadow","mean","measure","meat","mechanic","medal","media","melody","melt","member","memory","mention","menu","mercy","merge","merit","merry","mesh","message","metal","method","middle","midnight","milk","million","mimic","mind","minimum","minor","minute","miracle","mirror","misery","miss","mistake","mix","mixed","mixture","mobile","model","modify","mom","moment","monitor","monkey","monster","month","moon","moral","more","morning","mosquito","mother","motion","motor","mountain","mouse","move","movie","much","muffin","mule","multiply","muscle","museum","mushroom","music","must","mutual","myself","mystery","myth","naive","name","napkin","narrow","nasty","nation","nature","near","neck","need","negative","neglect","neither","nephew","nerve","nest","net","network","neutral","never","news","next","nice","night","noble","noise","nominee","noodle","normal","north","nose","notable","note","nothing","notice","novel","now","nuclear","number","nurse","nut","oak","obey","object","oblige","obscure","observe","obtain","obvious","occur","ocean","october","odor","off","offer","office","often","oil","okay","old","olive","olympic","omit","once","one","onion","online","only","open","opera","opinion","oppose","option","orange","orbit","orchard","order","ordinary","organ","orient","original","orphan","ostrich","other","outdoor","outer","output","outside","oval","oven","over","own","owner","oxygen","oyster","ozone","pact","paddle","page","pair","palace","palm","panda","panel","panic","panther","paper","parade","parent","park","parrot","party","pass","patch","path","patient","patrol","pattern","pause","pave","payment","peace","peanut","pear","peasant","pelican","pen","penalty","pencil","people","pepper","perfect","permit","person","pet","phone","photo","phrase","physical","piano","picnic","picture","piece","pig","pigeon","pill","pilot","pink","pioneer","pipe","pistol","pitch","pizza","place","planet","plastic","plate","play","please","pledge","pluck","plug","plunge","poem","poet","point","polar","pole","police","pond","pony","pool","popular","portion","position","possible","post","potato","pottery","poverty","powder","power","practice","praise","predict","prefer","prepare","present","pretty","prevent","price","pride","primary","print","priority","prison","private","prize","problem","process","produce","profit","program","project","promote","proof","property","prosper","protect","proud","provide","public","pudding","pull","pulp","pulse","pumpkin","punch","pupil","puppy","purchase","purity","purpose","purse","push","put","puzzle","pyramid","quality","quantum","quarter","question","quick","quit","quiz","quote","rabbit","raccoon","race","rack","radar","radio","rail","rain","raise","rally","ramp","ranch","random","range","rapid","rare","rate","rather","raven","raw","razor","ready","real","reason","rebel","rebuild","recall","receive","recipe","record","recycle","reduce","reflect","reform","refuse","region","regret","regular","reject","relax","release","relief","rely","remain","remember","remind","remove","render","renew","rent","reopen","repair","repeat","replace","report","require","rescue","resemble","resist","resource","response","result","retire","retreat","return","reunion","reveal","review","reward","rhythm","rib","ribbon","rice","rich","ride","ridge","rifle","right","rigid","ring","riot","ripple","risk","ritual","rival","river","road","roast","robot","robust","rocket","romance","roof","rookie","room","rose","rotate","rough","round","route","royal","rubber","rude","rug","rule","run","runway","rural","sad","saddle","sadness","safe","sail","salad","salmon","salon","salt","salute","same","sample","sand","satisfy","satoshi","sauce","sausage","save","say","scale","scan","scare","scatter","scene","scheme","school","science","scissors","scorpion","scout","scrap","screen","script","scrub","sea","search","season","seat","second","secret","section","security","seed","seek","segment","select","sell","seminar","senior","sense","sentence","series","service","session","settle","setup","seven","shadow","shaft","shallow","share","shed","shell","sheriff","shield","shift","shine","ship","shiver","shock","shoe","shoot","shop","short","shoulder","shove","shrimp","shrug","shuffle","shy","sibling","sick","side","siege","sight","sign","silent","silk","silly","silver","similar","simple","since","sing","siren","sister","situate","six","size","skate","sketch","ski","skill","skin","skirt","skull","slab","slam","sleep","slender","slice","slide","slight","slim","slogan","slot","slow","slush","small","smart","smile","smoke","smooth","snack","snake","snap","sniff","snow","soap","soccer","social","sock","soda","soft","solar","soldier","solid","solution","solve","someone","song","soon","sorry","sort","soul","sound","soup","source","south","space","spare","spatial","spawn","speak","special","speed","spell","spend","sphere","spice","spider","spike","spin","spirit","split","spoil","sponsor","spoon","sport","spot","spray","spread","spring","spy","square","squeeze","squirrel","stable","stadium","staff","stage","stairs","stamp","stand","start","state","stay","steak","steel","stem","step","stereo","stick","still","sting","stock","stomach","stone","stool","story","stove","strategy","street","strike","strong","struggle","student","stuff","stumble","style","subject","submit","subway","success","such","sudden","suffer","sugar","suggest","suit","summer","sun","sunny","sunset","super","supply","supreme","sure","surface","surge","surprise","surround","survey","suspect","sustain","swallow","swamp","swap","swarm","swear","sweet","swift","swim","swing","switch","sword","symbol","symptom","syrup","system","table","tackle","tag","tail","talent","talk","tank","tape","target","task","taste","tattoo","taxi","teach","team","tell","ten","tenant","tennis","tent","term","test","text","thank","that","theme","then","theory","there","they","thing","this","thought","three","thrive","throw","thumb","thunder","ticket","tide","tiger","tilt","timber","time","tiny","tip","tired","tissue","title","toast","tobacco","today","toddler","toe","together","toilet","token","tomato","tomorrow","tone","tongue","tonight","tool","tooth","top","topic","topple","torch","tornado","tortoise","toss","total","tourist","toward","tower","town","toy","track","trade","traffic","tragic","train","transfer","trap","trash","travel","tray","treat","tree","trend","trial","tribe","trick","trigger","trim","trip","trophy","trouble","truck","true","truly","trumpet","trust","truth","try","tube","tuition","tumble","tuna","tunnel","turkey","turn","turtle","twelve","twenty","twice","twin","twist","two","type","typical","ugly","umbrella","unable","unaware","uncle","uncover","under","undo","unfair","unfold","unhappy","uniform","unique","unit","universe","unknown","unlock","until","unusual","unveil","update","upgrade","uphold","upon","upper","upset","urban","urge","usage","use","used","useful","useless","usual","utility","vacant","vacuum","vague","valid","valley","valve","van","vanish","vapor","various","vast","vault","vehicle","velvet","vendor","venture","venue","verb","verify","version","very","vessel","veteran","viable","vibrant","vicious","victory","video","view","village","vintage","violin","virtual","virus","visa","visit","visual","vital","vivid","vocal","voice","void","volcano","volume","vote","voyage","wage","wagon","wait","walk","wall","walnut","want","warfare","warm","warrior","wash","wasp","waste","water","wave","way","wealth","weapon","wear","weasel","weather","web","wedding","weekend","weird","welcome","west","wet","whale","what","wheat","wheel","when","where","whip","whisper","wide","width","wife","wild","will","win","window","wine","wing","wink","winner","winter","wire","wisdom","wise","wish","witness","wolf","woman","wonder","wood","wool","word","work","world","worry","worth","wrap","wreck","wrestle","wrist","write","wrong","yard","year","yellow","you","young","youth","zebra","zero","zone","zoo"];
+
+
+// =========================================================
+// 1. AUTOCOMPLETE & VALIDATION
+// =========================================================
+function closeAllLists(elmnt) {
+    document.querySelectorAll('.skb-autocomplete-list').forEach(list => {
+        if (elmnt !== list) list.remove();
+    });
+}
+document.addEventListener("click", e => closeAllLists(e.target));
+
+window.validateWord = function(input) {
+    const val = input.value.trim().toLowerCase();
+    const wordBox = input.closest('.skb-word-box');
+    if (val === '') { wordBox.classList.remove('invalid'); return false; }
+    if (!WORDLIST.includes(val)) { wordBox.classList.add('invalid'); return false; }
+    wordBox.classList.remove('invalid'); return true;
+};
+
+function attachAutocompleteEvents() {
+    const allInputs = document.querySelectorAll('.word-input');
+    // Clone to remove old listeners
+    allInputs.forEach(input => {
+        const clone = input.cloneNode(true);
+        input.parentNode.replaceChild(clone, input);
+    });
+
+    const inputs = document.querySelectorAll('.word-input');
+    inputs.forEach((input, index) => {
+        input.addEventListener('input', function() {
+            let val = this.value.toLowerCase();
+            closeAllLists();
+            window.validateWord(this);
+            if (!val) return;
+
+            let list = document.createElement("DIV");
+            list.setAttribute("class", "skb-autocomplete-list");
+            list.style.display = "block";
+            this.parentNode.appendChild(list);
+
+            let matches = 0;
+            for (let i = 0; i < WORDLIST.length; i++) {
+                if (WORDLIST[i].substr(0, val.length) === val) {
+                    let item = document.createElement("DIV");
+                    item.setAttribute("class", "skb-autocomplete-item");
+                    item.innerHTML = "<strong>" + WORDLIST[i].substr(0, val.length) + "</strong>" + WORDLIST[i].substr(val.length) + "<input type='hidden' value='" + WORDLIST[i] + "'>";
+                    item.addEventListener("click", function(e) {
+                        input.value = this.getElementsByTagName("input")[0].value;
+                        window.validateWord(input);
+                        closeAllLists();
+                        // Focus next input within same seed grid
+                        const nextInput = inputs[index + 1];
+                        if (nextInput && nextInput.closest('.skb-seed-grid') === input.closest('.skb-seed-grid')) {
+                            nextInput.focus();
+                        }
+                    });
+                    list.appendChild(item);
+                    matches++;
+                }
+            }
+            if (matches > 0) list.firstChild.classList.add('active-suggestion');
+        });
+
+        input.addEventListener('keydown', function(e) {
+            let list = this.parentNode.querySelector('.skb-autocomplete-list');
+            if (list && list.style.display === 'block' && e.key === 'Tab') {
+                e.preventDefault();
+                const firstItem = list.firstChild;
+                if (firstItem) {
+                    this.value = firstItem.getElementsByTagName("input")[0].value;
+                    window.validateWord(this);
+                    closeAllLists();
+                    const nextInput = inputs[index + 1];
+                    if (nextInput && nextInput.closest('.skb-seed-grid') === input.closest('.skb-seed-grid')) {
+                        nextInput.focus();
+                    }
+                }
+            }
+        });
+
+        input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            const words = pasteData.trim().split(/[\s\n]+/);
+
+            const gridEl = this.closest('.skb-seed-grid');
+            const blockIndex = parseInt(gridEl.dataset.blockIndex);
+
+            // Auto-adjust 12/24 if needed
+            const global12 = document.querySelector('input[name="seedLength"][value="12"]');
+            const global24 = document.querySelector('input[name="seedLength"][value="24"]');
+
+            if (words.length === 24 && global12.checked) {
+                global24.checked = true;
+                updateUIState();
+                setTimeout(() => fillPastedWords(words, blockIndex, 0), 10);
+                return;
+            } else if (words.length === 12 && global24.checked) {
+                global12.checked = true;
+                updateUIState();
+                setTimeout(() => fillPastedWords(words, blockIndex, 0), 10);
+                return;
+            }
+
+            const blockInputs = gridEl.querySelectorAll('.word-input');
+            let localIndex = Array.from(blockInputs).indexOf(this);
+            fillPastedWords(words, blockIndex, localIndex);
+        });
+    });
+}
+
+function fillPastedWords(words, blockIndex, startIndex) {
+    const grid = document.querySelector(`.skb-seed-grid[data-block-index="${blockIndex}"]`);
+    if (!grid) return;
+    const inputs = grid.querySelectorAll('.word-input');
+    words.forEach((word, i) => {
+        if (startIndex + i < inputs.length) {
+            const targetInput = inputs[startIndex + i];
+            targetInput.value = word.toLowerCase();
+            window.validateWord(targetInput);
+        }
+    });
+    const nextIndex = Math.min(startIndex + words.length, inputs.length - 1);
+    if (inputs[nextIndex]) inputs[nextIndex].focus();
+    closeAllLists();
+}
+
+
+// =========================================================
+// 2. QR SCANNER (per-cosigner)
+// =========================================================
+let activeHtml5QrCode = null;
+let activeScannerIndex = null;
+
+window.toggleScanner = function(index) {
+    const container = document.getElementById(`scanner-${index}`);
+
+    if (activeScannerIndex === index && activeHtml5QrCode) {
+        activeHtml5QrCode.stop().then(() => {
+            activeHtml5QrCode.clear();
+            activeHtml5QrCode = null;
+            container.classList.remove('visible');
+            activeScannerIndex = null;
+        }).catch(console.error);
+        return;
+    }
+
+    if (activeHtml5QrCode) {
+        activeHtml5QrCode.stop().then(() => {
+            activeHtml5QrCode.clear();
+            const prevContainer = document.getElementById(`scanner-${activeScannerIndex}`);
+            if (prevContainer) prevContainer.classList.remove('visible');
+            startScannerForBlock(index, container);
+        }).catch(console.error);
+    } else {
+        startScannerForBlock(index, container);
+    }
+};
+
+function startScannerForBlock(index, container) {
+    if (!window.Html5Qrcode) {
+        alert("Scanner library not loaded.");
+        return;
+    }
+
+    container.classList.add('visible');
+    activeScannerIndex = index;
+    activeHtml5QrCode = new window.Html5Qrcode(`reader-${index}`);
+
+    activeHtml5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+            window.toggleScanner(index);
+
+            // Check if this is an xpub/xpub-like key
+            if (decodedText.match(/^[xyzXYZtuvTUV]pub[0-9A-Za-z]+$/)) {
+                // Fill xpub field
+                const xpubInput = document.getElementById(`xpub-${index}`);
+                if (xpubInput) {
+                    xpubInput.value = decodedText;
+                    // Switch to xpub mode
+                    switchInputMode(index, 'xpub');
+                }
+                return;
+            }
+
+            // Otherwise treat as seed words
+            const words = decodedText.trim().split(/[\s\n]+/);
+            const global12 = document.querySelector('input[name="seedLength"][value="12"]');
+            const global24 = document.querySelector('input[name="seedLength"][value="24"]');
+
+            if (words.length === 24 && global12.checked) {
+                global24.checked = true;
+                updateUIState();
+                setTimeout(() => fillPastedWords(words, index, 0), 50);
+            } else if (words.length === 12 && global24.checked) {
+                global12.checked = true;
+                updateUIState();
+                setTimeout(() => fillPastedWords(words, index, 0), 50);
+            } else {
+                fillPastedWords(words, index, 0);
+            }
+        },
+        (error) => { /* ignore frame errors */ }
+    ).catch(err => {
+        alert(`Camera access failed: ${err.message}`);
+        container.classList.remove('visible');
+        activeScannerIndex = null;
+    });
+}
+
+
+// =========================================================
+// 3. LOAD FROM FILE / SESSION (per-cosigner)
+// =========================================================
+window.loadSeedFromFile = async function(index) {
+    if (!window.SeedManager) {
+        alert("SeedManager not available.");
+        return;
+    }
+    try {
+        const result = await window.SeedManager.loadSeed();
+        if (!result) return;
+
+        const words = result.mnemonic.trim().split(/\s+/);
+
+        // Auto-adjust seed length
+        const global12 = document.querySelector('input[name="seedLength"][value="12"]');
+        const global24 = document.querySelector('input[name="seedLength"][value="24"]');
+        if (words.length === 24 && global12.checked) {
+            global24.checked = true;
+            updateUIState();
+            setTimeout(() => {
+                fillPastedWords(words, index, 0);
+                if (result.passphrase) {
+                    const ppInput = document.getElementById(`passphrase-${index}`);
+                    if (ppInput) ppInput.value = result.passphrase;
+                }
+                updateCosignerFingerprint(index);
+            }, 10);
+        } else if (words.length === 12 && global24.checked) {
+            global12.checked = true;
+            updateUIState();
+            setTimeout(() => {
+                fillPastedWords(words, index, 0);
+                if (result.passphrase) {
+                    const ppInput = document.getElementById(`passphrase-${index}`);
+                    if (ppInput) ppInput.value = result.passphrase;
+                }
+                updateCosignerFingerprint(index);
+            }, 10);
+        } else {
+            fillPastedWords(words, index, 0);
+            if (result.passphrase) {
+                const ppInput = document.getElementById(`passphrase-${index}`);
+                if (ppInput) ppInput.value = result.passphrase;
+            }
+            updateCosignerFingerprint(index);
+        }
+    } catch (e) {
+        alert(`Could not load seed: ${e.message}`);
+    }
+};
+
+window.loadPassphraseFromFile = async function(index) {
+    if (!window.SeedManager) return;
+    try {
+        const result = await window.SeedManager.loadPassphrase();
+        if (result) {
+            const ppInput = document.getElementById(`passphrase-${index}`);
+            if (ppInput) ppInput.value = result.passphrase;
+        }
+    } catch (e) {
+        alert(`Could not load passphrase: ${e.message}`);
+    }
+};
+
+
+// =========================================================
+// 4. INPUT MODE SWITCHING (seed words vs xpub)
+// =========================================================
+window.switchInputMode = function(index, mode) {
+    const seedArea = document.getElementById(`seed-area-${index}`);
+    const xpubArea = document.getElementById(`xpub-area-${index}`);
+    const seedTab = document.getElementById(`tab-seed-${index}`);
+    const xpubTab = document.getElementById(`tab-xpub-${index}`);
+
+    if (mode === 'xpub') {
+        seedArea.classList.add('hidden');
+        xpubArea.classList.add('active');
+        seedTab.classList.remove('active');
+        xpubTab.classList.add('active');
+    } else {
+        seedArea.classList.remove('hidden');
+        xpubArea.classList.remove('active');
+        seedTab.classList.add('active');
+        xpubTab.classList.remove('active');
+    }
+};
+
+
+// =========================================================
+// 5. COSIGNER FINGERPRINT PREVIEW
+// =========================================================
+async function updateCosignerFingerprint(index) {
+    const grid = document.querySelector(`.skb-seed-grid[data-block-index="${index}"]`);
+    if (!grid) return;
+    const wordInputs = grid.querySelectorAll('.word-input');
+    const words = Array.from(wordInputs).map(inp => inp.value.trim().toLowerCase());
+    if (words.some(w => w === '' || !WORDLIST.includes(w))) return;
+
+    try {
+        const fp = await window.SeedManager.computeFingerprint(words.join(' '));
+        const fpEl = document.getElementById(`cosigner-fp-${index}`);
+        if (fpEl) fpEl.textContent = fp;
+    } catch (e) { /* silent */ }
+}
+
+
+// =========================================================
+// 6. CORE UI STATE
+// =========================================================
+function updateUIState() {
+    const walletType = document.getElementById('wallet-type').value;
+    const scriptType = document.getElementById('script-type').value;
+    const multisigConfig = document.getElementById('multisig-config');
+    const seedContainer = document.getElementById('seed-inputs-container');
+    const seedLength = parseInt(document.querySelector('input[name="seedLength"]:checked').value);
+
+    const isMulti = walletType === 'multi';
+
+    // Taproot not available for multisig (no wallet support yet)
+    const scriptSelect = document.getElementById('script-type');
+    const taprootOption = scriptSelect.querySelector('option[value="86"]');
+    if (isMulti) {
+        taprootOption.disabled = true;
+        if (scriptType === '86') {
+            scriptSelect.value = '84';
+        }
+    } else {
+        taprootOption.disabled = false;
+    }
+
+    const activeScriptType = scriptSelect.value;
+
+    // Derivation path
+    const coinType = "0'";
+    let derivationPath = "";
+    if (isMulti) {
+        let scriptIndicator = "2'"; // native segwit
+        if (activeScriptType === '49') scriptIndicator = "1'";
+        else if (activeScriptType === '44') scriptIndicator = "0'";
+        derivationPath = `m/48'/${coinType}/0'/${scriptIndicator}`;
+    } else {
+        derivationPath = `m/${activeScriptType}'/${coinType}/0'`;
+    }
+    document.getElementById('derivation-path').textContent = derivationPath;
+
+    // Show/hide multisig config
+    if (isMulti) {
+        multisigConfig.classList.remove('hidden');
+    } else {
+        multisigConfig.classList.add('hidden');
+    }
+
+    const nTotal = isMulti ? parseInt(document.getElementById('n-total').value) : 1;
+
+    // Build cosigner blocks
+    let html = '';
+    for (let i = 0; i < nTotal; i++) {
+        const label = isMulti ? `Cosigner ${i + 1}` : `Seed Phrase`;
+
+        let gridHtml = `<div class="skb-seed-grid" data-block-index="${i}">`;
+        for (let w = 0; w < seedLength; w++) {
+            gridHtml += `
+                <div class="skb-word-box">
+                    <span class="word-num">${w + 1}.</span>
+                    <input type="text" class="word-input" autocomplete="off">
+                </div>`;
+        }
+        gridHtml += `</div>`;
+
+        html += `
+            <div class="cosigner-block">
+                <div class="cosigner-header">
+                    <span class="cosigner-label">${label}</span>
+                    <span class="cosigner-fingerprint" id="cosigner-fp-${i}"></span>
+                </div>
+
+                <!-- Input mode tabs -->
+                <div class="input-mode-tabs">
+                    <button class="input-mode-tab active" id="tab-seed-${i}" onclick="switchInputMode(${i}, 'seed')">Seed Words</button>
+                    <button class="input-mode-tab" id="tab-xpub-${i}" onclick="switchInputMode(${i}, 'xpub')">xpub Key</button>
+                </div>
+
+                <!-- Seed words input -->
+                <div id="seed-area-${i}" class="seed-input-area">
+                    <div class="skb-result-actions" style="margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                        <button class="skb-btn-sm" onclick="loadSeedFromFile(${i})">Load from File</button>
+                        <button class="skb-btn-sm" onclick="toggleScanner(${i})">Scan QR</button>
+                    </div>
+
+                    ${gridHtml}
+
+                    <!-- Passphrase -->
+                    <div class="skb-passphrase-section" style="margin-top: 8px;">
+                        <div class="skb-passphrase-label">${isMulti ? `Cosigner ${i + 1} Passphrase` : 'Optional Passphrase (BIP-39)'}</div>
+                        <div class="skb-passphrase-row">
+                            <input type="text" class="skb-passphrase-input" id="passphrase-${i}" placeholder="Leave blank if none" autocomplete="off">
+                        </div>
+                        <div class="skb-result-actions" style="margin-top: 8px;">
+                            <button class="skb-btn-sm" onclick="loadPassphraseFromFile(${i})">Load Passphrase</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- xpub input (alternative) -->
+                <div id="xpub-area-${i}" class="xpub-input-area">
+                    <div class="skb-result-actions" style="margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                        <button class="skb-btn-sm" onclick="toggleScanner(${i})">Scan xpub QR</button>
+                    </div>
+                    <div style="margin-bottom: 6px;">
+                        <label class="skb-label">Extended Public Key</label>
+                    </div>
+                    <input type="text" class="skb-input" id="xpub-${i}" placeholder="xpub6... or zpub1... or Zpub1..." style="font-family: var(--skb-mono); font-size: 0.82rem;" autocomplete="off">
+                    <div style="margin-top: 6px;">
+                        <label class="skb-label">Master Fingerprint (optional, 8 hex chars)</label>
+                    </div>
+                    <input type="text" class="skb-input" id="xpub-fp-${i}" placeholder="e.g. 3F8A21D7 (optional)" maxlength="8" style="font-family: var(--skb-mono); width: 160px;" autocomplete="off">
+                    <div style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 6px;">
+                        Use this mode if you already have an xpub from a hardware wallet or Sparrow. Fingerprint is optional — leave blank if unknown.
+                    </div>
+                </div>
+
+                <!-- Per-cosigner scanner -->
+                <div id="scanner-${i}" class="skb-scanner-box">
+                    <div id="reader-${i}"></div>
+                    <div style="margin-top: 8px; font-weight: 600; font-size: 0.85rem; color: var(--skb-info);">Awaiting QR Code...</div>
+                    <button class="skb-btn-sm" style="margin-top: 10px; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="toggleScanner(${i})">Cancel Scan</button>
+                </div>
+            </div>`;
+    }
+    seedContainer.innerHTML = html;
+
+    attachAutocompleteEvents();
+
+    // Clamp m <= n
+    if (isMulti) {
+        const mSelect = document.getElementById('m-required');
+        const mVal = parseInt(mSelect.value);
+        if (mVal > nTotal) mSelect.value = nTotal;
+        Array.from(mSelect.options).forEach(opt => {
+            opt.disabled = parseInt(opt.value) > nTotal;
+        });
+    }
+
+    // Hide results when config changes
+    document.getElementById('result-box').style.display = 'none';
+}
+
+
+// =========================================================
+// 7. DESCRIPTOR CHECKSUM (BIP-380)
+// =========================================================
+function descriptorChecksum(desc) {
+    const INPUT_CHARSET = "0123456789()[],'/*abcdefgh@:$%{}IJKLMNOPQRSTUVWXYZ&+-.;<=>?!^_|~ijklmnopqrstuvwxyzABCDEFGH`#\"\\ ";
+    const CHECKSUM_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    const GENERATOR = [0xf5dee51989n, 0xa9fdca3312n, 0x1bab10e32dn, 0x3706b1677an, 0x644d626ffdn];
+
+    function polymod(c, val) {
+        let c0 = c >> 35n;
+        c = ((c & 0x7ffffffffn) << 5n) ^ BigInt(val);
+        if (c0 & 1n) c ^= GENERATOR[0];
+        if (c0 & 2n) c ^= GENERATOR[1];
+        if (c0 & 4n) c ^= GENERATOR[2];
+        if (c0 & 8n) c ^= GENERATOR[3];
+        if (c0 & 16n) c ^= GENERATOR[4];
+        return c;
+    }
+
+    let c = 1n;
+    let cls = 0;
+    let clscount = 0;
+    for (let ch of desc) {
+        let pos = INPUT_CHARSET.indexOf(ch);
+        if (pos === -1) return "";
+        c = polymod(c, pos & 31);
+        cls = cls * 3 + (pos >> 5);
+        clscount++;
+        if (clscount === 3) {
+            c = polymod(c, cls);
+            cls = 0;
+            clscount = 0;
+        }
+    }
+    if (clscount > 0) c = polymod(c, cls);
+    for (let j = 0; j < 8; j++) c = polymod(c, 0);
+    c ^= 1n;
+
+    let ret = "";
+    for (let j = 0; j < 8; j++) {
+        ret += CHECKSUM_CHARSET[Number((c >> (5n * BigInt(7 - j))) & 31n)];
+    }
+    return ret;
+}
+
+
+// =========================================================
+// 8. SLIP-132 VERSION BYTES
+// =========================================================
+const SLIP132 = {
+    mainnet: {
+        '84': { public: 0x04b24746 },
+        '86': { public: 0x0488b21e },
+        '49': { public: 0x049d7cb2 },
+        '44': { public: 0x0488b21e },
+        '48_2': { public: 0x02aa7ed3 },
+        '48_1': { public: 0x0295b43f }
+    }
+};
+
+
+// =========================================================
+// 9. GENERATE DESCRIPTOR
+// =========================================================
+let currentWalletData = null;
+
+async function generateDescriptor() {
+    const btn = document.getElementById('btn-generate');
+    const resultBox = document.getElementById('result-box');
+    const outputText = document.getElementById('descriptor-text');
+    const addressOutput = document.getElementById('address-output');
+
+    if (!window.BtcMath || !window.QRCode) {
+        resultBox.style.display = 'block';
+        outputText.innerHTML = '<span style="color:var(--skb-danger)">Error: Cryptography library not loaded.</span>';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Processing...";
+    resultBox.style.display = 'block';
+
+    try {
+        const { bip39, HDKey, btc } = window.BtcMath;
+
+        const walletType = document.getElementById('wallet-type').value;
+        const scriptType = document.getElementById('script-type').value;
+        const isMulti = walletType === 'multi';
+        const mReq = isMulti ? parseInt(document.getElementById('m-required').value) : 1;
+        const derivationPath = document.getElementById('derivation-path').textContent;
+        const networkObj = btc.NETWORK;
+
+        const networkBytes = SLIP132['mainnet']['44'];
+        const nTotal = isMulti ? parseInt(document.getElementById('n-total').value) : 1;
+        const keyOrigins = [];
+        const keystores = [];
+        const accountNodes = [];
+        const cosignerMeta = []; // For print backup reference
+
+        for (let i = 0; i < nTotal; i++) {
+            // Check if using xpub mode
+            const xpubArea = document.getElementById(`xpub-area-${i}`);
+            const isXpubMode = xpubArea && xpubArea.classList.contains('active');
+
+            if (isXpubMode) {
+                // xpub mode — directly use the provided extended key
+                const xpubVal = document.getElementById(`xpub-${i}`).value.trim();
+                const fpRaw = document.getElementById(`xpub-fp-${i}`).value.trim().toUpperCase();
+
+                if (!xpubVal) throw new Error(`Cosigner ${i + 1}: please enter an xpub key.`);
+
+                // Fingerprint is optional — default to 00000000 if blank
+                let fpVal = '00000000';
+                if (fpRaw) {
+                    if (!/^[0-9A-F]{8}$/.test(fpRaw)) throw new Error(`Cosigner ${i + 1}: fingerprint must be 8 hex characters (or leave blank).`);
+                    fpVal = fpRaw;
+                }
+
+                const cleanPath = derivationPath.replace('m/', '');
+                keyOrigins.push(`[${fpVal.toLowerCase()}/${cleanPath}]${xpubVal}`);
+
+                // Decode xpub for address derivation
+                const accountNode = HDKey.fromExtendedKey(xpubVal);
+                accountNodes.push(accountNode);
+
+                keystores.push({
+                    type: "readonly",
+                    source: "xpub",
+                    derivation: derivationPath,
+                    masterFingerprint: fpVal,
+                    xpub: xpubVal
+                });
+
+                cosignerMeta.push({ index: i + 1, fingerprint: fpRaw ? fpVal : 'Unknown', lastWord: '(xpub)', passphrase: '' });
+
+            } else {
+                // Seed words mode
+                const grid = document.querySelector(`.skb-seed-grid[data-block-index="${i}"]`);
+                const wordInputs = grid.querySelectorAll('.word-input');
+                const words = [];
+                wordInputs.forEach(inp => words.push(inp.value.trim().toLowerCase()));
+
+                if (words.some(w => w === '')) throw new Error(`Seed phrase ${i + 1} is incomplete.`);
+
+                const passphrase = document.getElementById(`passphrase-${i}`).value.trim();
+                const lastWord = words[words.length - 1];
+
+                const seedMnemonic = words.join(' ');
+                const seedBytes = await bip39.mnemonicToSeed(seedMnemonic, passphrase);
+
+                const rootNode = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+                const fingerprint = rootNode.fingerprint.toString(16).padStart(8, '0');
+
+                const accountNode = rootNode.derive(derivationPath);
+                accountNode.versions = networkBytes;
+                const extPubKey = accountNode.publicExtendedKey;
+
+                accountNodes.push(accountNode);
+
+                const cleanPath = derivationPath.replace('m/', '');
+                keyOrigins.push(`[${fingerprint}/${cleanPath}]${extPubKey}`);
+
+                keystores.push({
+                    type: "readonly",
+                    source: "bip39",
+                    derivation: derivationPath,
+                    masterFingerprint: fingerprint.toUpperCase(),
+                    xpub: extPubKey
+                });
+
+                cosignerMeta.push({
+                    index: i + 1,
+                    fingerprint: fingerprint.toUpperCase(),
+                    lastWord: lastWord,
+                    passphrase: passphrase
+                });
+            }
+        }
+
+        // Build descriptor body
+        let descriptorBody = "";
+        let jsonScriptType = "";
+
+        if (isMulti) {
+            const keysStr = keyOrigins.map(k => `${k}/<0;1>/*`).join(',');
+            descriptorBody = `sortedmulti(${mReq},${keysStr})`;
+
+            if (scriptType === '84') {
+                descriptorBody = `wsh(${descriptorBody})`;
+                jsonScriptType = "p2wsh";
+            } else if (scriptType === '49') {
+                descriptorBody = `sh(wsh(${descriptorBody}))`;
+                jsonScriptType = "p2sh-p2wsh";
+            } else if (scriptType === '44') {
+                // Legacy multisig
+                descriptorBody = `sh(${descriptorBody})`;
+                jsonScriptType = "p2sh";
+            }
+        } else {
+            const keyStr = `${keyOrigins[0]}/<0;1>/*`;
+            if (scriptType === '84') {
+                descriptorBody = `wpkh(${keyStr})`;
+                jsonScriptType = "p2wpkh";
+            } else if (scriptType === '86') {
+                descriptorBody = `tr(${keyStr})`;
+                jsonScriptType = "p2tr";
+            } else if (scriptType === '49') {
+                descriptorBody = `sh(wpkh(${keyStr}))`;
+                jsonScriptType = "p2sh-p2wpkh";
+            } else if (scriptType === '44') {
+                descriptorBody = `pkh(${keyStr})`;
+                jsonScriptType = "p2pkh";
+            }
+        }
+
+        const checksum = descriptorChecksum(descriptorBody);
+        const finalDescriptor = `${descriptorBody}#${checksum}`;
+
+        outputText.textContent = finalDescriptor;
+
+        // Store wallet data for save
+        currentWalletData = {
+            name: isMulti ? `SafeKeep ${mReq}-of-${nTotal}` : 'SafeKeep Single',
+            descriptor: finalDescriptor,
+            policyType: isMulti ? 'multi' : 'single',
+            scriptType: jsonScriptType,
+            quorum: isMulti ? { m: mReq, n: nTotal } : { m: 1, n: 1 },
+            derivationPath: derivationPath,
+            keystores: keystores,
+            network: 'mainnet',
+            cosignerMeta: cosignerMeta
+        };
+
+        // Render QR for print (always, so it's ready)
+        const printCanvas = document.getElementById('print-qr-canvas');
+        window.QRCode.toCanvas(printCanvas, finalDescriptor, {
+            width: 400,
+            errorCorrectionLevel: 'L',
+            color: { dark: '#000000', light: '#ffffff' }
+        });
+
+        // Build print backup reference
+        const printRef = document.getElementById('print-backup-ref');
+        let refHtml = '<div style="margin: 16px 0; padding: 12px; border: 1px solid #ccc; border-radius: 6px;">';
+        refHtml += `<div style="font-weight: 700; margin-bottom: 8px; text-transform: uppercase; font-size: 0.85rem;">Backup Reference</div>`;
+        if (isMulti) {
+            refHtml += `<div style="margin-bottom: 8px;"><strong>Quorum:</strong> ${mReq} of ${nTotal}</div>`;
+        }
+        cosignerMeta.forEach(cm => {
+            refHtml += `<div style="margin-bottom: 6px; padding-left: 10px; border-left: 2px solid #999;">`;
+            refHtml += `<strong>${isMulti ? 'Cosigner ' + cm.index : 'Seed'}:</strong> `;
+            refHtml += `Fingerprint <span style="font-family: monospace;">${cm.fingerprint}</span>`;
+            refHtml += ` — Last word: <span style="font-family: monospace; text-transform: uppercase;">${cm.lastWord}</span>`;
+            if (cm.passphrase) {
+                refHtml += `<br><strong>Passphrase:</strong> <span style="font-family: monospace;">${cm.passphrase}</span>`;
+            }
+            refHtml += `</div>`;
+        });
+        refHtml += '</div>';
+        printRef.innerHTML = refHtml;
+
+        // Generate addresses
+        let addressHTML = "";
+        for (let i = 0; i < 5; i++) {
+            try {
+                let address = "";
+                let childPubkeys = [];
+
+                for (let j = 0; j < accountNodes.length; j++) {
+                    const childNode = accountNodes[j].deriveChild(0).deriveChild(i);
+                    childPubkeys.push(childNode.publicKey);
+                }
+
+                if (isMulti) {
+                    childPubkeys.sort((a, b) => {
+                        for (let k = 0; k < Math.min(a.length, b.length); k++) {
+                            if (a[k] !== b[k]) return a[k] - b[k];
+                        }
+                        return a.length - b.length;
+                    });
+
+                    if (scriptType === '84') {
+                        const ms = btc.p2ms(mReq, childPubkeys);
+                        address = btc.p2wsh(ms, networkObj).address;
+                    } else if (scriptType === '49') {
+                        const ms = btc.p2ms(mReq, childPubkeys);
+                        const wsh = btc.p2wsh(ms);
+                        address = btc.p2sh(wsh, networkObj).address;
+                    } else if (scriptType === '44') {
+                        const ms = btc.p2ms(mReq, childPubkeys);
+                        address = btc.p2sh(ms, networkObj).address;
+                    }
+                } else {
+                    const pubkey = childPubkeys[0];
+                    if (scriptType === '84') {
+                        address = btc.p2wpkh(pubkey, networkObj).address;
+                    } else if (scriptType === '86') {
+                        const xOnlyPub = pubkey.slice(1, 33);
+                        address = btc.p2tr(xOnlyPub, undefined, networkObj).address;
+                    } else if (scriptType === '49') {
+                        const inner = btc.p2wpkh(pubkey);
+                        address = btc.p2sh(inner, networkObj).address;
+                    } else if (scriptType === '44') {
+                        address = btc.p2pkh(pubkey, networkObj).address;
+                    }
+                }
+
+                addressHTML += `<tr><td style="color: var(--skb-text-muted);">m/0/${i}</td><td>${address}</td></tr>`;
+            } catch (addrErr) {
+                console.error(addrErr);
+                addressHTML += `<tr><td style="color: var(--skb-text-muted);">m/0/${i}</td><td style="color: var(--skb-danger);">Preview unavailable</td></tr>`;
+            }
+        }
+        addressOutput.innerHTML = addressHTML;
+
+        // Set active session
+        if (window.SeedSession && !isMulti && cosignerMeta[0] && cosignerMeta[0].lastWord !== '(xpub)') {
+            // For single-sig from seed words, update session
+            const grid = document.querySelector('.skb-seed-grid[data-block-index="0"]');
+            const wordInputs = grid.querySelectorAll('.word-input');
+            const words = Array.from(wordInputs).map(inp => inp.value.trim().toLowerCase());
+            window.SeedSession.set({
+                mnemonic: words.join(' '),
+                fingerprint: cosignerMeta[0].fingerprint,
+                passphrase: document.getElementById('passphrase-0').value.trim(),
+                wordCount: words.length,
+                keyFormat: 'slip132',
+                addressType: scriptType
+            });
+        }
+
+    } catch (err) {
+        outputText.innerHTML = `<span style="color: var(--skb-danger);">Error: ${err.message}</span>`;
+        addressOutput.innerHTML = `<tr><td colspan="2" style="color: var(--skb-danger);">Fix errors above to see addresses.</td></tr>`;
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Generate Descriptor";
+    }
+}
+
+
+// =========================================================
+// 10. COPY / SAVE / QR / PRINT
+// =========================================================
+window.copyDescriptor = function() {
+    const text = document.getElementById('descriptor-text').textContent;
+    if (!text || text.includes("Error")) return;
+
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('btn-copy');
+        const orig = btn.innerText;
+        btn.innerText = 'Copied!';
+        setTimeout(() => btn.innerText = orig, 1800);
+    });
+};
+
+window.toggleDescriptorQR = function() {
+    const container = document.getElementById('descriptor-qr-container');
+    const btn = document.getElementById('btn-show-qr');
+    const text = document.getElementById('descriptor-text').textContent;
+    if (!text || text.includes("Error")) return;
+
+    if (container.classList.contains('visible')) {
+        container.classList.remove('visible');
+        btn.textContent = 'Show QR';
+    } else {
+        // Render QR
+        const canvas = document.getElementById('descriptor-qr-canvas');
+        window.QRCode.toCanvas(canvas, text, {
+            width: 500,
+            errorCorrectionLevel: 'L',
+            color: { dark: '#000000', light: '#ffffff' }
+        });
+        container.classList.add('visible');
+        btn.textContent = 'Hide QR';
+    }
+};
+
+window.saveDescriptorToFile = async function() {
+    if (!currentWalletData) {
+        alert("Please generate a descriptor first.");
+        return;
+    }
+
+    // Build standard Bitcoin Core / Sparrow output descriptor text file
+    // The BIP389 combined descriptor uses <0;1>/* (what we generate)
+    // Bitcoin Core needs separate receive (/0/*) and change (/1/*) descriptors
+
+    // Strip existing checksum to get the body
+    const combinedBody = currentWalletData.descriptor.replace(/#[a-z0-9]+$/, '');
+
+    // Convert to h-notation (Bitcoin Core standard) before computing checksums
+    function toH(s) { return s.replace(/'/g, 'h'); }
+
+    const combinedH = toH(combinedBody);
+    const combinedDesc = `${combinedH}#${descriptorChecksum(combinedH)}`;
+
+    // Receive: replace <0;1>/* with 0/*
+    const receiveH = combinedH.replace(/<0;1>\/\*/g, '0/*');
+    const receiveDesc = `${receiveH}#${descriptorChecksum(receiveH)}`;
+
+    // Change: replace <0;1>/* with 1/*
+    const changeH = combinedH.replace(/<0;1>\/\*/g, '1/*');
+    const changeDesc = `${changeH}#${descriptorChecksum(changeH)}`;
+
+    const fileLines = [
+        `# Receive and change descriptor (BIP389):`,
+        combinedDesc,
+        ``,
+        ``,
+        `# Receive descriptor (Bitcoin Core):`,
+        receiveDesc,
+        ``,
+        `# Change descriptor (Bitcoin Core):`,
+        changeDesc,
+        ``
+    ];
+    const fileContent = fileLines.join('\n');
+    const suggestedName = `${currentWalletData.name.replace(/\s+/g, '-')}_Descriptor.txt`;
+
+    if (window.showSaveFilePicker) {
+        try {
+            const pickerOpts = {
+                suggestedName: suggestedName,
+                types: [{ description: 'Output Descriptor', accept: { 'text/plain': ['.txt'] } }]
+            };
+            const fileHandle = await window.showSaveFilePicker(pickerOpts);
+            const writable = await fileHandle.createWritable();
+            await writable.write(fileContent);
+            await writable.close();
+        } catch (e) {
+            if (e.name === 'AbortError') return;
+            throw e;
+        }
+    } else {
+        // Fallback blob download
+        const blob = new Blob([fileContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = suggestedName;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+};
+
+window.printDescriptor = function() {
+    if (!currentWalletData) return;
+    document.title = `${currentWalletData.name} — Output Descriptor`;
+    window.print();
+    document.title = 'Output Descriptor — SafeKeepBitcoin';
+};
+
+
+// =========================================================
+// 11. THEME TOGGLE
+// =========================================================
+window.toggleTheme = function() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme');
+    const btn = document.getElementById('theme-btn');
+
+    if (currentTheme === 'light') {
+        html.removeAttribute('data-theme');
+        localStorage.setItem('safekeepTheme', 'dark');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+    } else {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('safekeepTheme', 'light');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+};
+
+
+// =========================================================
+// 12. INIT
+// =========================================================
+document.addEventListener('DOMContentLoaded', async () => {
+    // Theme icon
+    if (localStorage.getItem('safekeepTheme') === 'light') {
+        document.getElementById('theme-btn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+
+    // Build initial UI
+    updateUIState();
+
+    // Wire generate button
+    document.getElementById('btn-generate').addEventListener('click', generateDescriptor);
+
+    // Try to auto-load session seed into first cosigner
+    if (window.SeedSession) {
+        const sessionSeed = await window.SeedSession.init();
+        if (sessionSeed && sessionSeed.mnemonic) {
+            const words = sessionSeed.mnemonic.trim().split(/\s+/);
+
+            // Auto-adjust seed length
+            const global12 = document.querySelector('input[name="seedLength"][value="12"]');
+            const global24 = document.querySelector('input[name="seedLength"][value="24"]');
+            if (words.length === 24 && global12.checked) {
+                global24.checked = true;
+                updateUIState();
+            } else if (words.length === 12 && global24.checked) {
+                global12.checked = true;
+                updateUIState();
+            }
+
+            // Fill first cosigner with session seed
+            setTimeout(() => {
+                fillPastedWords(words, 0, 0);
+                if (sessionSeed.passphrase) {
+                    const ppInput = document.getElementById('passphrase-0');
+                    if (ppInput) ppInput.value = sessionSeed.passphrase;
+                }
+                updateCosignerFingerprint(0);
+            }, 50);
+        }
+    }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seed XOR Splitter — SafeKeepBitcoin</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
+
+<script>
+  if (localStorage.getItem('safekeepTheme') === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+</script>
+
+<link rel="stylesheet" href="../shared/design-system.css">
+<script type="module" src="./seedxor.js"></script>
+
+<style>
+  /* Tool-specific overrides only */
+
+  /* Autocomplete */
+  .skb-autocomplete-list {
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    background: var(--skb-bg-secondary);
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-sm);
+    max-height: 150px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    box-shadow: var(--skb-shadow);
+  }
+  .skb-autocomplete-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-family: var(--skb-mono);
+    font-size: 0.82rem;
+    color: var(--skb-text);
+    border-bottom: 1px solid var(--skb-border);
+    transition: background var(--skb-transition);
+  }
+  .skb-autocomplete-item:last-child { border-bottom: none; }
+  .skb-autocomplete-item:hover,
+  .skb-autocomplete-item.active-suggestion {
+    background: var(--skb-secondary);
+    color: #000;
+    font-weight: bold;
+  }
+
+  /* Scanner */
+  .skb-scanner-box {
+    display: none;
+    margin-top: 12px;
+    padding: 12px;
+    background: #000;
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-md);
+    text-align: center;
+  }
+  .skb-scanner-box.visible { display: block; }
+  .skb-scanner-box > div {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+    border-radius: var(--skb-radius-md);
+    overflow: hidden;
+  }
+
+  /* Share blocks in split output */
+  .share-block {
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-md);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    background: var(--skb-bg-tertiary);
+  }
+  .share-block:last-child { margin-bottom: 0; }
+
+  /* Print styles */
+  @media print {
+    .skb-header, .skb-breadcrumb, .skb-scanner-box,
+    #config-card, #split-input-card, #merge-card,
+    button, .skb-btn-primary, .skb-btn-sm, .skb-btn-secondary { display: none !important; }
+    .skb-print-only { display: block !important; }
+    body { background: white !important; color: black !important; }
+    .skb-card { box-shadow: none; border: 1px solid #ccc; }
+    .skb-word-text { color: #333 !important; }
+    .skb-word-num { color: #666 !important; }
+    .skb-word-pill { border-color: #ccc !important; background: #f9f9f9 !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="skb-header">
+  <a href="../index.html" class="skb-brand">SafeKeep<span>Bitcoin</span></a>
+  <div class="skb-header-actions">
+    <button class="skb-theme-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="skb-container">
+  <h1 class="skb-page-title">Seed XOR Splitter</h1>
+  <div class="skb-page-subtitle">Split a seed into XOR shares or merge shares to recover the original</div>
+
+  <!-- Tabs -->
+  <div class="skb-tabs">
+    <button class="skb-tab active" data-tab="split" onclick="switchTab('split')">Split Seed</button>
+    <button class="skb-tab" data-tab="merge" onclick="switchTab('merge')">Merge Shares</button>
+  </div>
+
+  <!-- Config Card -->
+  <div class="skb-card" id="config-card">
+    <div class="skb-card-title">Configuration</div>
+    <div class="skb-controls">
+      <div class="skb-control-group">
+        <label class="skb-label">Seed Length</label>
+        <div style="display: flex; gap: 16px; margin-top: 6px;">
+          <label class="skb-checkbox-group"><input type="radio" name="seedLength" value="12" checked onchange="updateUI()"> 12 Words</label>
+          <label class="skb-checkbox-group"><input type="radio" name="seedLength" value="24" onchange="updateUI()"> 24 Words</label>
+        </div>
+      </div>
+      <div class="skb-control-group">
+        <label class="skb-label">Number of Shares</label>
+        <div style="display: flex; gap: 16px; margin-top: 6px;">
+          <label class="skb-checkbox-group"><input type="radio" name="numShares" value="2" checked onchange="updateUI()"> 2</label>
+          <label class="skb-checkbox-group"><input type="radio" name="numShares" value="3" onchange="updateUI()"> 3</label>
+          <label class="skb-checkbox-group"><input type="radio" name="numShares" value="4" onchange="updateUI()"> 4</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPLIT TAB -->
+  <div id="split-tab" class="skb-tab-content active">
+
+    <!-- Split Input Card -->
+    <div class="skb-card" id="split-input-card">
+      <div class="skb-card-title">Original Seed to Split</div>
+
+      <div class="skb-result-actions" style="margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <button class="skb-btn-sm" onclick="loadSeedFromFile('split')">Load from File</button>
+        <button class="skb-btn-sm" onclick="toggleScanner('split')">Scan QR</button>
+      </div>
+      <div id="session-seed-status" style="font-size: 0.78rem; color: var(--skb-text-dim); margin-top: -4px; margin-bottom: 8px;"></div>
+
+      <!-- Scanner -->
+      <div id="scanner-split" class="skb-scanner-box">
+        <div id="reader-split"></div>
+        <div style="margin-top: 8px; font-weight: 600; font-size: 0.85rem; color: var(--skb-info);">Awaiting Seed Phrase QR Code...</div>
+        <button class="skb-btn-sm" style="margin-top: 10px; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="toggleScanner('split')">Cancel Scan</button>
+      </div>
+
+      <div id="grid-split" class="skb-seed-grid"></div>
+
+      <button class="skb-btn-primary" onclick="handleSplit()">Generate XOR Shares</button>
+      <div id="split-error" class="skb-alert skb-alert--error" style="display: none; margin-top: 12px;"></div>
+    </div>
+
+    <!-- Split Result (hidden until generated) -->
+    <div id="split-result" style="display: none;">
+      <div class="skb-card">
+        <div class="skb-result">
+          <div class="skb-result-header">
+            <div class="skb-result-title">XOR Shares Generated</div>
+          </div>
+          <div class="skb-alert skb-alert--warning" style="margin-bottom: 16px; font-size: 0.85rem;">
+            Store ALL shares in separate secure locations. You need every share to reconstruct the original seed.
+          </div>
+          <div id="split-shares-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MERGE TAB -->
+  <div id="merge-tab" class="skb-tab-content">
+
+    <div class="skb-card" id="merge-card">
+      <div class="skb-card-title">Merge Shares</div>
+      <div id="merge-inputs-container"></div>
+
+      <button class="skb-btn-primary" onclick="handleMerge()">XOR Merge Shares</button>
+      <div id="merge-error" class="skb-alert skb-alert--error" style="display: none; margin-top: 12px;"></div>
+    </div>
+
+    <!-- Merge Result (hidden until merged) -->
+    <div id="merge-result" style="display: none;">
+      <div class="skb-card">
+        <div class="skb-result">
+          <div class="skb-result-header">
+            <div class="skb-result-title">Original Seed Recovered</div>
+            <div class="skb-result-actions">
+              <button class="skb-btn-sm" onclick="copyResult('merged')">Copy</button>
+              <button class="skb-btn-sm" onclick="saveResult('merged')">Save</button>
+              <button class="skb-btn-sm" id="merge-qr-btn" onclick="toggleMergeQR()">Show QR</button>
+            </div>
+          </div>
+
+          <div id="merge-output-grid"></div>
+
+          <div id="merge-qr-container" class="skb-qr-container">
+            <canvas id="merge-qr-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="skb-breadcrumb">
+    <a href="../index.html">&larr; SafeKeepBitcoin Home</a>
+  </div>
+</div>
+
+<script>
+// =========================================================
+// BIP-39 WORDLIST
+// =========================================================
+const WORDLIST = ["abandon","ability","able","about","above","absent","absorb","abstract","absurd","abuse","access","accident","account","accuse","achieve","acid","acoustic","acquire","across","act","action","actor","actress","actual","adapt","add","addict","address","adjust","admit","adult","advance","advice","aerobic","affair","afford","afraid","again","age","agent","agree","ahead","aim","air","airport","aisle","alarm","album","alcohol","alert","alien","all","alley","allow","almost","alone","alpha","already","also","alter","always","amateur","amazing","among","amount","amused","analyst","anchor","ancient","anger","angle","angry","animal","ankle","announce","annual","another","answer","antenna","antique","anxiety","any","apart","apology","appear","apple","approve","april","arch","arctic","area","arena","argue","arm","armed","armor","army","around","arrange","arrest","arrive","arrow","art","artefact","artist","artwork","ask","aspect","assault","asset","assist","assume","asthma","athlete","atom","attack","attend","attitude","attract","auction","audit","august","aunt","author","auto","autumn","average","avocado","avoid","awake","aware","away","awesome","awful","awkward","axis","baby","bachelor","bacon","badge","bag","balance","balcony","ball","bamboo","banana","banner","bar","barely","bargain","barrel","base","basic","basket","battle","beach","bean","beauty","because","become","beef","before","begin","behave","behind","believe","below","belt","bench","benefit","best","betray","better","between","beyond","bicycle","bid","bike","bind","biology","bird","birth","bitter","black","blade","blame","blanket","blast","bleak","bless","blind","blood","blossom","blouse","blue","blur","blush","board","boat","body","boil","bomb","bone","bonus","book","boost","border","boring","borrow","boss","bottom","bounce","box","boy","bracket","brain","brand","brass","brave","bread","breeze","brick","bridge","brief","bright","bring","brisk","broccoli","broken","bronze","broom","brother","brown","brush","bubble","buddy","budget","buffalo","build","bulb","bulk","bullet","bundle","bunker","burden","burger","burst","bus","business","busy","butter","buyer","buzz","cabbage","cabin","cable","cactus","cage","cake","call","calm","camera","camp","can","canal","cancel","candy","cannon","canoe","canvas","canyon","capable","capital","captain","car","carbon","card","cargo","carpet","carry","cart","case","cash","casino","castle","casual","cat","catalog","catch","category","cattle","caught","cause","caution","cave","ceiling","celery","cement","census","century","cereal","certain","chair","chalk","champion","change","chaos","chapter","charge","chase","chat","cheap","check","cheese","chef","cherry","chest","chicken","chief","child","chimney","choice","choose","chronic","chuckle","chunk","churn","cigar","cinnamon","circle","citizen","city","civil","claim","clap","clarify","claw","clay","clean","clerk","clever","click","client","cliff","climb","clinic","clip","clock","clog","close","cloth","cloud","clown","club","clump","cluster","clutch","coach","coast","coconut","code","coffee","coil","coin","collect","color","column","combine","come","comfort","comic","common","company","concert","conduct","confirm","congress","connect","consider","control","convince","cook","cool","copper","copy","coral","core","corn","correct","cost","cotton","couch","country","couple","course","cousin","cover","coyote","crack","cradle","craft","cram","crane","crash","crater","crawl","crazy","cream","credit","creek","crew","cricket","crime","crisp","critic","crop","cross","crouch","crowd","crucial","cruel","cruise","crumble","crunch","crush","cry","crystal","cube","culture","cup","cupboard","curious","current","curtain","curve","cushion","custom","cute","cycle","dad","damage","damp","dance","danger","daring","dash","daughter","dawn","day","deal","debate","debris","decade","december","decide","decline","decorate","decrease","deer","defense","define","defy","degree","delay","deliver","demand","demise","denial","dentist","deny","depart","depend","deposit","depth","deputy","derive","describe","desert","design","desk","despair","destroy","detail","detect","develop","device","devote","diagram","dial","diamond","diary","dice","diesel","diet","differ","digital","dignity","dilemma","dinner","dinosaur","direct","dirt","disagree","discover","disease","dish","dismiss","disorder","display","distance","divert","divide","divorce","dizzy","doctor","document","dog","doll","dolphin","domain","donate","donkey","donor","door","dose","double","dove","draft","dragon","drama","drastic","draw","dream","dress","drift","drill","drink","drip","drive","drop","drum","dry","duck","dumb","dune","during","dust","dutch","duty","dwarf","dynamic","eager","eagle","early","earn","earth","easily","east","easy","echo","ecology","economy","edge","edit","educate","effort","egg","eight","either","elbow","elder","electric","elegant","element","elephant","elevator","elite","else","embark","embody","embrace","emerge","emotion","employ","empower","empty","enable","enact","end","endless","endorse","enemy","energy","enforce","engage","engine","enhance","enjoy","enlist","enough","enrich","enroll","ensure","enter","entire","entry","envelope","episode","equal","equip","era","erase","erode","erosion","error","erupt","escape","essay","essence","estate","eternal","ethics","evidence","evil","evoke","evolve","exact","example","excess","exchange","excite","exclude","excuse","execute","exercise","exhaust","exhibit","exile","exist","exit","exotic","expand","expect","expire","explain","expose","express","extend","extra","eye","eyebrow","fabric","face","faculty","fade","faint","faith","fall","false","fame","family","famous","fan","fancy","fantasy","farm","fashion","fat","fatal","father","fatigue","fault","favorite","feature","february","federal","fee","feed","feel","female","fence","festival","fetch","fever","few","fiber","fiction","field","figure","file","film","filter","final","find","fine","finger","finish","fire","firm","first","fiscal","fish","fit","fitness","fix","flag","flame","flash","flat","flavor","flee","flight","flip","float","flock","floor","flower","fluid","flush","fly","foam","focus","fog","foil","fold","follow","food","foot","force","forest","forget","fork","fortune","forum","forward","fossil","foster","found","fox","fragile","frame","frequent","fresh","friend","fringe","frog","front","frost","frown","frozen","fruit","fuel","fun","funny","furnace","fury","future","gadget","gain","galaxy","gallery","game","gap","garage","garbage","garden","garlic","garment","gas","gasp","gate","gather","gauge","gaze","general","genius","genre","gentle","genuine","gesture","ghost","giant","gift","giggle","ginger","giraffe","girl","give","glad","glance","glare","glass","glide","glimpse","globe","gloom","glory","glove","glow","glue","goat","goddess","gold","good","goose","gorilla","gospel","gossip","govern","gown","grab","grace","grain","grant","grape","grass","gravity","great","green","grid","grief","grit","grocery","group","grow","grunt","guard","guess","guide","guilt","guitar","gun","gym","habit","hair","half","hammer","hamster","hand","happy","harbor","hard","harsh","harvest","hat","have","hawk","hazard","head","health","heart","heavy","hedgehog","height","hello","helmet","help","hen","hero","hidden","high","hill","hint","hip","hire","history","hobby","hockey","hold","hole","holiday","hollow","home","honey","hood","hope","horn","horror","horse","hospital","host","hotel","hour","hover","hub","huge","human","humble","humor","hundred","hungry","hunt","hurdle","hurry","hurt","husband","hybrid","ice","icon","idea","identify","idle","ignore","ill","illegal","illness","image","imitate","immense","immune","impact","impose","improve","impulse","inch","include","income","increase","index","indicate","indoor","industry","infant","inflict","inform","inhale","inherit","initial","inject","injury","inmate","inner","innocent","input","inquiry","insane","insect","inside","inspire","install","intact","interest","into","invest","invite","involve","iron","island","isolate","issue","item","ivory","jacket","jaguar","jar","jazz","jealous","jeans","jelly","jewel","job","join","joke","journey","joy","judge","juice","jump","jungle","junior","junk","just","kangaroo","keen","keep","ketchup","key","kick","kid","kidney","kind","kingdom","kiss","kit","kitchen","kite","kitten","kiwi","knee","knife","knock","know","lab","label","labor","ladder","lady","lake","lamp","language","laptop","large","later","latin","laugh","laundry","lava","law","lawn","lawsuit","layer","lazy","leader","leaf","learn","leave","lecture","left","leg","legal","legend","leisure","lemon","lend","length","lens","leopard","lesson","letter","level","liar","liberty","library","license","life","lift","light","like","limb","limit","link","lion","liquid","list","little","live","lizard","load","loan","lobster","local","lock","logic","lonely","long","loop","lottery","loud","lounge","love","loyal","lucky","luggage","lumber","lunar","lunch","luxury","lyrics","machine","mad","magic","magnet","maid","mail","main","major","make","mammal","man","manage","mandate","mango","mansion","manual","maple","marble","march","margin","marine","market","marriage","mask","mass","master","match","material","math","matrix","matter","maximum","maze","meadow","mean","measure","meat","mechanic","medal","media","melody","melt","member","memory","mention","menu","mercy","merge","merit","merry","mesh","message","metal","method","middle","midnight","milk","million","mimic","mind","minimum","minor","minute","miracle","mirror","misery","miss","mistake","mix","mixed","mixture","mobile","model","modify","mom","moment","monitor","monkey","monster","month","moon","moral","more","morning","mosquito","mother","motion","motor","mountain","mouse","move","movie","much","muffin","mule","multiply","muscle","museum","mushroom","music","must","mutual","myself","mystery","myth","naive","name","napkin","narrow","nasty","nation","nature","near","neck","need","negative","neglect","neither","nephew","nerve","nest","net","network","neutral","never","news","next","nice","night","noble","noise","nominee","noodle","normal","north","nose","notable","note","nothing","notice","novel","now","nuclear","number","nurse","nut","oak","obey","object","oblige","obscure","observe","obtain","obvious","occur","ocean","october","odor","off","offer","office","often","oil","okay","old","olive","olympic","omit","once","one","onion","online","only","open","opera","opinion","oppose","option","orange","orbit","orchard","order","ordinary","organ","orient","original","orphan","ostrich","other","outdoor","outer","output","outside","oval","oven","over","own","owner","oxygen","oyster","ozone","pact","paddle","page","pair","palace","palm","panda","panel","panic","panther","paper","parade","parent","park","parrot","party","pass","patch","path","patient","patrol","pattern","pause","pave","payment","peace","peanut","pear","peasant","pelican","pen","penalty","pencil","people","pepper","perfect","permit","person","pet","phone","photo","phrase","physical","piano","picnic","picture","piece","pig","pigeon","pill","pilot","pink","pioneer","pipe","pistol","pitch","pizza","place","planet","plastic","plate","play","please","pledge","pluck","plug","plunge","poem","poet","point","polar","pole","police","pond","pony","pool","popular","portion","position","possible","post","potato","pottery","poverty","powder","power","practice","praise","predict","prefer","prepare","present","pretty","prevent","price","pride","primary","print","priority","prison","private","prize","problem","process","produce","profit","program","project","promote","proof","property","prosper","protect","proud","provide","public","pudding","pull","pulp","pulse","pumpkin","punch","pupil","puppy","purchase","purity","purpose","purse","push","put","puzzle","pyramid","quality","quantum","quarter","question","quick","quit","quiz","quote","rabbit","raccoon","race","rack","radar","radio","rail","rain","raise","rally","ramp","ranch","random","range","rapid","rare","rate","rather","raven","raw","razor","ready","real","reason","rebel","rebuild","recall","receive","recipe","record","recycle","reduce","reflect","reform","refuse","region","regret","regular","reject","relax","release","relief","rely","remain","remember","remind","remove","render","renew","rent","reopen","repair","repeat","replace","report","require","rescue","resemble","resist","resource","response","result","retire","retreat","return","reunion","reveal","review","reward","rhythm","rib","ribbon","rice","rich","ride","ridge","rifle","right","rigid","ring","riot","ripple","risk","ritual","rival","river","road","roast","robot","robust","rocket","romance","roof","rookie","room","rose","rotate","rough","round","route","royal","rubber","rude","rug","rule","run","runway","rural","sad","saddle","sadness","safe","sail","salad","salmon","salon","salt","salute","same","sample","sand","satisfy","satoshi","sauce","sausage","save","say","scale","scan","scare","scatter","scene","scheme","school","science","scissors","scorpion","scout","scrap","screen","script","scrub","sea","search","season","seat","second","secret","section","security","seed","seek","segment","select","sell","seminar","senior","sense","sentence","series","service","session","settle","setup","seven","shadow","shaft","shallow","share","shed","shell","sheriff","shield","shift","shine","ship","shiver","shock","shoe","shoot","shop","short","shoulder","shove","shrimp","shrug","shuffle","shy","sibling","sick","side","siege","sight","sign","silent","silk","silly","silver","similar","simple","since","sing","siren","sister","situate","six","size","skate","sketch","ski","skill","skin","skirt","skull","slab","slam","sleep","slender","slice","slide","slight","slim","slogan","slot","slow","slush","small","smart","smile","smoke","smooth","snack","snake","snap","sniff","snow","soap","soccer","social","sock","soda","soft","solar","soldier","solid","solution","solve","someone","song","soon","sorry","sort","soul","sound","soup","source","south","space","spare","spatial","spawn","speak","special","speed","spell","spend","sphere","spice","spider","spike","spin","spirit","split","spoil","sponsor","spoon","sport","spot","spray","spread","spring","spy","square","squeeze","squirrel","stable","stadium","staff","stage","stairs","stamp","stand","start","state","stay","steak","steel","stem","step","stereo","stick","still","sting","stock","stomach","stone","stool","story","stove","strategy","street","strike","strong","struggle","student","stuff","stumble","style","subject","submit","subway","success","such","sudden","suffer","sugar","suggest","suit","summer","sun","sunny","sunset","super","supply","supreme","sure","surface","surge","surprise","surround","survey","suspect","sustain","swallow","swamp","swap","swarm","swear","sweet","swift","swim","swing","switch","sword","symbol","symptom","syrup","system","table","tackle","tag","tail","talent","talk","tank","tape","target","task","taste","tattoo","taxi","teach","team","tell","ten","tenant","tennis","tent","term","test","text","thank","that","theme","then","theory","there","they","thing","this","thought","three","thrive","throw","thumb","thunder","ticket","tide","tiger","tilt","timber","time","tiny","tip","tired","tissue","title","toast","tobacco","today","toddler","toe","together","toilet","token","tomato","tomorrow","tone","tongue","tonight","tool","tooth","top","topic","topple","torch","tornado","tortoise","toss","total","tourist","toward","tower","town","toy","track","trade","traffic","tragic","train","transfer","trap","trash","travel","tray","treat","tree","trend","trial","tribe","trick","trigger","trim","trip","trophy","trouble","truck","true","truly","trumpet","trust","truth","try","tube","tuition","tumble","tuna","tunnel","turkey","turn","turtle","twelve","twenty","twice","twin","twist","two","type","typical","ugly","umbrella","unable","unaware","uncle","uncover","under","undo","unfair","unfold","unhappy","uniform","unique","unit","universe","unknown","unlock","until","unusual","unveil","update","upgrade","uphold","upon","upper","upset","urban","urge","usage","use","used","useful","useless","usual","utility","vacant","vacuum","vague","valid","valley","valve","van","vanish","vapor","various","vast","vault","vehicle","velvet","vendor","venture","venue","verb","verify","version","very","vessel","veteran","viable","vibrant","vicious","victory","video","view","village","vintage","violin","virtual","virus","visa","visit","visual","vital","vivid","vocal","voice","void","volcano","volume","vote","voyage","wage","wagon","wait","walk","wall","walnut","want","warfare","warm","warrior","wash","wasp","waste","water","wave","way","wealth","weapon","wear","weasel","weather","web","wedding","weekend","weird","welcome","west","wet","whale","what","wheat","wheel","when","where","whip","whisper","wide","width","wife","wild","will","win","window","wine","wing","wink","winner","winter","wire","wisdom","wise","wish","witness","wolf","woman","wonder","wood","wool","word","work","world","worry","worth","wrap","wreck","wrestle","wrist","write","wrong","yard","year","yellow","you","young","youth","zebra","zero","zone","zoo"];
+
+
+// =========================================================
+// 1. AUTOCOMPLETE & VALIDATION
+// =========================================================
+window.generatedShares = [];
+window.mergedSeedOutput = "";
+
+function closeAllLists(elmnt) {
+    document.querySelectorAll('.skb-autocomplete-list').forEach(list => {
+        if (elmnt !== list) list.remove();
+    });
+}
+document.addEventListener("click", e => closeAllLists(e.target));
+
+window.validateWord = function(input) {
+    const val = input.value.trim().toLowerCase();
+    const wordBox = input.closest('.skb-word-box');
+    if (val === '') { wordBox.classList.remove('invalid'); return false; }
+    if (!WORDLIST.includes(val)) { wordBox.classList.add('invalid'); return false; }
+    wordBox.classList.remove('invalid'); return true;
+};
+
+function buildGrid(containerId, length) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    for (let i = 1; i <= length; i++) {
+        container.innerHTML += `
+            <div class="skb-word-box">
+                <span class="word-num">${i}.</span>
+                <input type="text" class="word-input" autocomplete="off">
+            </div>`;
+    }
+}
+
+function attachAutocompleteEvents() {
+    // Clone to remove old listeners
+    const allInputs = document.querySelectorAll('.word-input');
+    allInputs.forEach(input => {
+        const clone = input.cloneNode(true);
+        input.parentNode.replaceChild(clone, input);
+    });
+
+    const inputs = document.querySelectorAll('.word-input');
+    inputs.forEach((input, index) => {
+        input.addEventListener('input', function() {
+            let val = this.value.toLowerCase();
+            closeAllLists();
+            window.validateWord(this);
+            if (!val) return;
+
+            let list = document.createElement("DIV");
+            list.className = "skb-autocomplete-list";
+            list.style.display = "block";
+            this.parentNode.appendChild(list);
+
+            let matches = 0;
+            for (let i = 0; i < WORDLIST.length; i++) {
+                if (WORDLIST[i].substr(0, val.length) === val) {
+                    let item = document.createElement("DIV");
+                    item.className = "skb-autocomplete-item";
+                    item.innerHTML = "<strong>" + WORDLIST[i].substr(0, val.length) + "</strong>" + WORDLIST[i].substr(val.length) + "<input type='hidden' value='" + WORDLIST[i] + "'>";
+                    item.addEventListener("click", function() {
+                        input.value = this.getElementsByTagName("input")[0].value;
+                        window.validateWord(input);
+                        closeAllLists();
+                        const grid = input.closest('.skb-seed-grid');
+                        const gridInputs = Array.from(grid.querySelectorAll('.word-input'));
+                        const localIndex = gridInputs.indexOf(input);
+                        if (localIndex < gridInputs.length - 1) gridInputs[localIndex + 1].focus();
+                    });
+                    list.appendChild(item);
+                    matches++;
+                }
+            }
+            if (matches > 0) list.firstChild.classList.add('active-suggestion');
+        });
+
+        input.addEventListener('keydown', function(e) {
+            let list = this.parentNode.querySelector('.skb-autocomplete-list');
+            if (list && list.style.display === 'block' && e.key === 'Tab') {
+                e.preventDefault();
+                const firstItem = list.firstChild;
+                if (firstItem) {
+                    this.value = firstItem.getElementsByTagName("input")[0].value;
+                    window.validateWord(this);
+                    closeAllLists();
+                    const grid = input.closest('.skb-seed-grid');
+                    const gridInputs = Array.from(grid.querySelectorAll('.word-input'));
+                    const localIndex = gridInputs.indexOf(input);
+                    if (localIndex < gridInputs.length - 1) gridInputs[localIndex + 1].focus();
+                }
+            }
+        });
+
+        input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            const words = pasteData.trim().split(/[\s\n]+/);
+            const gridId = input.closest('.skb-seed-grid').id;
+
+            const global12 = document.querySelector('input[name="seedLength"][value="12"]');
+            const global24 = document.querySelector('input[name="seedLength"][value="24"]');
+
+            if (words.length === 24 && global12.checked) {
+                global24.checked = true;
+                updateUI();
+                setTimeout(() => fillPastedWords(words, gridId, 0), 10);
+                return;
+            } else if (words.length === 12 && global24.checked) {
+                global12.checked = true;
+                updateUI();
+                setTimeout(() => fillPastedWords(words, gridId, 0), 10);
+                return;
+            }
+
+            const gridInputs = Array.from(document.getElementById(gridId).querySelectorAll('.word-input'));
+            const localIndex = gridInputs.indexOf(this);
+            fillPastedWords(words, gridId, localIndex);
+        });
+    });
+}
+
+function fillPastedWords(words, targetGridId, startIndex) {
+    const inputs = document.querySelectorAll(`#${targetGridId} .word-input`);
+    words.forEach((word, i) => {
+        if (startIndex + i < inputs.length) {
+            const targetInput = inputs[startIndex + i];
+            targetInput.value = word.toLowerCase();
+            window.validateWord(targetInput);
+        }
+    });
+    const nextIndex = Math.min(startIndex + words.length, inputs.length - 1);
+    if (inputs[nextIndex]) inputs[nextIndex].focus();
+    closeAllLists();
+}
+
+
+// =========================================================
+// 2. QR SCANNER
+// =========================================================
+let activeScannerId = null;
+let activeQrCode = null;
+
+window.toggleScanner = function(targetId) {
+    const container = document.getElementById(`scanner-${targetId}`);
+
+    if (activeScannerId === targetId && activeQrCode) {
+        activeQrCode.stop().then(() => {
+            activeQrCode.clear(); activeQrCode = null;
+            container.classList.remove('visible'); activeScannerId = null;
+        }).catch(console.error);
+        return;
+    }
+
+    if (activeQrCode) {
+        activeQrCode.stop().then(() => {
+            activeQrCode.clear();
+            const prev = document.getElementById(`scanner-${activeScannerId}`);
+            if (prev) prev.classList.remove('visible');
+            startScanner(targetId, container);
+        }).catch(console.error);
+    } else {
+        startScanner(targetId, container);
+    }
+};
+
+function startScanner(targetId, container) {
+    if (!window.Html5Qrcode) { alert("Scanner library not loaded."); return; }
+    container.classList.add('visible');
+    activeScannerId = targetId;
+    activeQrCode = new window.Html5Qrcode(`reader-${targetId}`);
+
+    activeQrCode.start(
+        { facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+            window.toggleScanner(targetId);
+            const words = decodedText.trim().split(/[\s\n]+/);
+            const gridId = targetId === 'split' ? 'grid-split' : `grid-merge-${targetId}`;
+
+            const global12 = document.querySelector('input[name="seedLength"][value="12"]');
+            const global24 = document.querySelector('input[name="seedLength"][value="24"]');
+            if (words.length === 24 && global12.checked) {
+                global24.checked = true; updateUI();
+                setTimeout(() => fillPastedWords(words, gridId, 0), 50);
+            } else if (words.length === 12 && global24.checked) {
+                global12.checked = true; updateUI();
+                setTimeout(() => fillPastedWords(words, gridId, 0), 50);
+            } else {
+                fillPastedWords(words, gridId, 0);
+            }
+        },
+        () => {}
+    ).catch(err => {
+        alert(`Camera access failed: ${err.message}`);
+        container.classList.remove('visible'); activeScannerId = null;
+    });
+}
+
+
+// =========================================================
+// 3. LOAD FROM FILE
+// =========================================================
+window.loadSeedFromFile = async function(targetId) {
+    if (!window.SeedManager) { alert("SeedManager not available."); return; }
+    try {
+        const result = await window.SeedManager.loadSeed();
+        if (!result) return;
+        const words = result.mnemonic.trim().split(/\s+/);
+        const gridId = targetId === 'split' ? 'grid-split' : `grid-merge-${targetId}`;
+
+        const global12 = document.querySelector('input[name="seedLength"][value="12"]');
+        const global24 = document.querySelector('input[name="seedLength"][value="24"]');
+        if (words.length === 24 && global12.checked) {
+            global24.checked = true; updateUI();
+            setTimeout(() => fillPastedWords(words, gridId, 0), 10);
+        } else if (words.length === 12 && global24.checked) {
+            global12.checked = true; updateUI();
+            setTimeout(() => fillPastedWords(words, gridId, 0), 10);
+        } else {
+            fillPastedWords(words, gridId, 0);
+        }
+    } catch (e) { alert(`Could not load seed: ${e.message}`); }
+};
+
+
+// =========================================================
+// 4. UI STATE
+// =========================================================
+window.updateUI = function() {
+    const length = parseInt(document.querySelector('input[name="seedLength"]:checked').value);
+    const shares = parseInt(document.querySelector('input[name="numShares"]:checked').value);
+
+    // Preserve existing words before rebuilding grids
+    function getGridWords(containerId) {
+        const el = document.getElementById(containerId);
+        if (!el) return [];
+        return Array.from(el.querySelectorAll('.word-input')).map(inp => inp.value.trim());
+    }
+
+    // Split input — preserve words
+    const splitWords = getGridWords('grid-split');
+    buildGrid('grid-split', length);
+    if (splitWords.length > 0) {
+        const inputs = document.querySelectorAll('#grid-split .word-input');
+        splitWords.forEach((w, i) => { if (i < inputs.length && w) inputs[i].value = w; });
+    }
+
+    // Merge input grids — preserve words for existing shares, rebuild structure
+    const mergeWordsMap = {};
+    for (let i = 1; i <= 4; i++) {
+        mergeWordsMap[i] = getGridWords(`grid-merge-${i}`);
+    }
+
+    const mergeContainer = document.getElementById('merge-inputs-container');
+    mergeContainer.innerHTML = '';
+    for (let i = 1; i <= shares; i++) {
+        const block = document.createElement('div');
+        block.className = 'share-block';
+        block.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span class="skb-label" style="font-size: 0.85rem;">Share ${i}</span>
+                <div class="skb-result-actions" style="gap: 8px;">
+                    <button class="skb-btn-sm" onclick="loadSeedFromFile('${i}')">Load from File</button>
+                    <button class="skb-btn-sm" onclick="toggleScanner('${i}')">Scan QR</button>
+                </div>
+            </div>
+            <div id="scanner-${i}" class="skb-scanner-box">
+                <div id="reader-${i}"></div>
+                <div style="margin-top: 8px; font-weight: 600; font-size: 0.85rem; color: var(--skb-info);">Awaiting QR Code...</div>
+                <button class="skb-btn-sm" style="margin-top: 10px; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="toggleScanner('${i}')">Cancel</button>
+            </div>
+            <div id="grid-merge-${i}" class="skb-seed-grid"></div>
+        `;
+        mergeContainer.appendChild(block);
+        buildGrid(`grid-merge-${i}`, length);
+
+        // Restore saved words
+        const saved = mergeWordsMap[i] || [];
+        if (saved.length > 0) {
+            const inputs = document.querySelectorAll(`#grid-merge-${i} .word-input`);
+            saved.forEach((w, idx) => { if (idx < inputs.length && w) inputs[idx].value = w; });
+        }
+    }
+
+    attachAutocompleteEvents();
+    document.querySelectorAll('.skb-alert').forEach(el => el.style.display = 'none');
+    // Don't hide results — only clear them when a new split/merge is run
+};
+
+function getSeedFromGrid(containerId) {
+    const container = document.getElementById(containerId);
+    const inputs = container.querySelectorAll('.word-input');
+    const words = [];
+    for (let i = 0; i < inputs.length; i++) {
+        const val = inputs[i].value.trim().toLowerCase();
+        if (!val) throw new Error(`Word #${i + 1} is missing.`);
+        if (!WORDLIST.includes(val)) throw new Error(`Word #${i + 1} ("${val}") is not a valid BIP-39 word.`);
+        words.push(val);
+    }
+    return words.join(' ');
+}
+
+window.switchTab = function(tab) {
+    document.querySelectorAll('.skb-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.skb-tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById(tab + '-tab').classList.add('active');
+};
+
+function showError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = 'Error: ' + msg;
+    el.style.display = 'flex';
+}
+
+
+// =========================================================
+// 5. SPLIT
+// =========================================================
+window.handleSplit = async function() {
+    document.getElementById('split-error').style.display = 'none';
+    try {
+        if (!window.BtcMath) throw new Error("Crypto modules not loaded.");
+        const { bip39, wordlist } = window.BtcMath;
+
+        const seedOriginal = getSeedFromGrid('grid-split');
+        const origBytes = bip39.mnemonicToEntropy(seedOriginal, wordlist);
+
+        const sharesCount = parseInt(document.querySelector('input[name="numShares"]:checked').value);
+
+        let entropies = [];
+        let rollingXor = new Uint8Array(origBytes);
+
+        for (let i = 0; i < sharesCount - 1; i++) {
+            const randBytes = new Uint8Array(origBytes.length);
+            window.crypto.getRandomValues(randBytes);
+            entropies.push(randBytes);
+            for (let j = 0; j < origBytes.length; j++) {
+                rollingXor[j] ^= randBytes[j];
+            }
+        }
+        entropies.push(rollingXor);
+
+        const container = document.getElementById('split-shares-container');
+        container.innerHTML = '';
+        window.generatedShares = [];
+
+        for (let i = 0; i < sharesCount; i++) {
+            const shareMnemonic = bip39.entropyToMnemonic(entropies[i], wordlist);
+            window.generatedShares.push(shareMnemonic);
+
+            const wordsArray = shareMnemonic.split(' ');
+            let gridHtml = '<div class="skb-word-grid">';
+            wordsArray.forEach((word, idx) => {
+                gridHtml += `
+                    <div class="skb-word-pill">
+                        <span class="skb-word-num">${idx + 1}.</span>
+                        <span class="skb-word-text">${word}</span>
+                    </div>`;
+            });
+            gridHtml += '</div>';
+
+            container.insertAdjacentHTML('beforeend', `
+                <div class="share-block">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                        <span class="skb-label" style="font-size: 0.85rem;">Share ${i + 1}</span>
+                        <div class="skb-result-actions" style="gap: 6px;">
+                            <button class="skb-btn-sm" onclick="copyResult('split', ${i})">Copy</button>
+                            <button class="skb-btn-sm" onclick="saveShareToFile(${i})">Save</button>
+                            <button class="skb-btn-sm" id="share-qr-btn-${i}" onclick="toggleShareQR(${i})">Show QR</button>
+                        </div>
+                    </div>
+                    ${gridHtml}
+                    <div id="share-qr-container-${i}" class="skb-qr-container">
+                        <canvas id="share-qr-canvas-${i}"></canvas>
+                    </div>
+                </div>
+            `);
+        }
+
+        document.getElementById('split-result').style.display = 'block';
+    } catch (e) { showError('split-error', e.message); }
+};
+
+
+// =========================================================
+// 6. SHARE QR / VERIFY QR
+// =========================================================
+window.toggleShareQR = function(index) {
+    const container = document.getElementById(`share-qr-container-${index}`);
+    const btn = document.getElementById(`share-qr-btn-${index}`);
+    if (!window.generatedShares[index] || !window.QRCode) return;
+
+    if (container.classList.contains('visible')) {
+        container.classList.remove('visible');
+        btn.textContent = 'Show QR';
+    } else {
+        const canvas = document.getElementById(`share-qr-canvas-${index}`);
+        window.QRCode.toCanvas(canvas, window.generatedShares[index], {
+            width: 300, margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+        });
+        container.classList.add('visible');
+        btn.textContent = 'Hide QR';
+    }
+};
+
+// =========================================================
+// 7. MERGE
+// =========================================================
+window.handleMerge = async function() {
+    document.getElementById('merge-error').style.display = 'none';
+    try {
+        if (!window.BtcMath) throw new Error("Crypto modules not loaded.");
+        const { bip39, wordlist } = window.BtcMath;
+
+        const sharesCount = parseInt(document.querySelector('input[name="numShares"]:checked').value);
+        let combinedBytes = null;
+
+        for (let i = 1; i <= sharesCount; i++) {
+            const seedWords = getSeedFromGrid(`grid-merge-${i}`);
+            const entropyBytes = bip39.mnemonicToEntropy(seedWords, wordlist);
+            if (!combinedBytes) {
+                combinedBytes = new Uint8Array(entropyBytes);
+            } else {
+                for (let j = 0; j < combinedBytes.length; j++) {
+                    combinedBytes[j] ^= entropyBytes[j];
+                }
+            }
+        }
+
+        const mergedMnemonic = bip39.entropyToMnemonic(combinedBytes, wordlist);
+        window.mergedSeedOutput = mergedMnemonic;
+
+        const wordsArray = mergedMnemonic.split(' ');
+        let gridHtml = '<div class="skb-word-grid">';
+        wordsArray.forEach((word, idx) => {
+            gridHtml += `
+                <div class="skb-word-pill">
+                    <span class="skb-word-num">${idx + 1}.</span>
+                    <span class="skb-word-text">${word}</span>
+                </div>`;
+        });
+        gridHtml += '</div>';
+
+        document.getElementById('merge-qr-container').classList.remove('visible');
+        document.getElementById('merge-output-grid').innerHTML = gridHtml;
+        document.getElementById('merge-result').style.display = 'block';
+
+    } catch (e) { showError('merge-error', e.message); }
+};
+
+
+// =========================================================
+// 8. COPY / SAVE / QR
+// =========================================================
+window.copyResult = function(type, index = 0) {
+    let text = type === 'merged' ? window.mergedSeedOutput : window.generatedShares[index];
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        // Brief feedback — find the button that was clicked
+        const btn = event.target;
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = orig, 1500);
+    });
+};
+
+window.saveShareToFile = async function(index) {
+    const mnemonic = window.generatedShares[index];
+    if (!mnemonic || !window.SeedManager) return;
+    await window.SeedManager.saveSeed(mnemonic, {
+        label: `XOR Share ${index + 1}`,
+        source: 'seed-xor'
+    });
+};
+
+window.saveResult = async function(type) {
+    if (type === 'merged' && window.mergedSeedOutput && window.SeedManager) {
+        await window.SeedManager.saveSeed(window.mergedSeedOutput, {
+            label: 'XOR Merged Seed',
+            source: 'seed-xor'
+        });
+    }
+};
+
+window.toggleMergeQR = function() {
+    const container = document.getElementById('merge-qr-container');
+    const btn = document.getElementById('merge-qr-btn');
+    if (!window.mergedSeedOutput || !window.QRCode) return;
+
+    if (container.classList.contains('visible')) {
+        container.classList.remove('visible');
+        btn.textContent = 'Show QR';
+    } else {
+        const canvas = document.getElementById('merge-qr-canvas');
+        window.QRCode.toCanvas(canvas, window.mergedSeedOutput, {
+            width: 300, margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+        });
+        container.classList.add('visible');
+        btn.textContent = 'Hide QR';
+    }
+};
+
+
+// =========================================================
+// 9. THEME TOGGLE
+// =========================================================
+window.toggleTheme = function() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme');
+    const btn = document.getElementById('theme-btn');
+
+    if (currentTheme === 'light') {
+        html.removeAttribute('data-theme');
+        localStorage.setItem('safekeepTheme', 'dark');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+    } else {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('safekeepTheme', 'light');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+};
+
+
+// =========================================================
+// 10. INIT
+// =========================================================
+document.addEventListener('DOMContentLoaded', async () => {
+    // Theme icon
+    if (localStorage.getItem('safekeepTheme') === 'light') {
+        document.getElementById('theme-btn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+
+    // Build initial UI
+    window.switchTab('split');
+    window.updateUI();
+
+    // Auto-load session seed into split input
+    if (window.SeedSession) {
+        const sessionSeed = await window.SeedSession.init();
+        if (sessionSeed && sessionSeed.mnemonic) {
+            const words = sessionSeed.mnemonic.trim().split(/\s+/);
+            const global12 = document.querySelector('input[name="seedLength"][value="12"]');
+            const global24 = document.querySelector('input[name="seedLength"][value="24"]');
+            if (words.length === 24 && global12.checked) {
+                global24.checked = true; updateUI();
+            } else if (words.length === 12 && global24.checked) {
+                global12.checked = true; updateUI();
+            }
+            setTimeout(() => {
+                fillPastedWords(words, 'grid-split', 0);
+                const statusEl = document.getElementById('session-seed-status');
+                if (statusEl) statusEl.textContent = `Loaded from session (${words.length} words)`;
+            }, 50);
+        }
+    }
+});
+</script>
+</body>
+</html>

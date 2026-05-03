@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PSBT Signer — SafeKeepBitcoin</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6s21.6-9.6,21.6-21.6v-48.8h20.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
+
+<script>
+  if (localStorage.getItem('safekeepTheme') === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+</script>
+
+<link rel="stylesheet" href="../shared/design-system.css">
+<script type="module" src="./signer.js"></script>
+
+<style>
+  /* Tool-specific overrides only */
+
+  /* Autocomplete */
+  .skb-autocomplete-list {
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    background: var(--skb-bg-secondary);
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-sm);
+    max-height: 150px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    box-shadow: var(--skb-shadow);
+  }
+  .skb-autocomplete-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-family: var(--skb-mono);
+    font-size: 0.82rem;
+    color: var(--skb-text);
+    border-bottom: 1px solid var(--skb-border);
+    transition: background var(--skb-transition);
+  }
+  .skb-autocomplete-item:last-child { border-bottom: none; }
+  .skb-autocomplete-item:hover,
+  .skb-autocomplete-item.active-suggestion {
+    background: var(--skb-secondary);
+    color: #000;
+    font-weight: bold;
+  }
+
+  /* Scanner */
+  .skb-scanner-box {
+    display: none;
+    margin-top: 12px;
+    padding: 12px;
+    background: #000;
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-md);
+    text-align: center;
+  }
+  .skb-scanner-box.visible { display: block; }
+  .skb-scanner-box > div[id^="reader"],
+  .skb-scanner-box > div[id^="psbt-reader"],
+  .skb-scanner-box > div[id^="seed-reader"] {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+    border-radius: var(--skb-radius-md);
+    overflow: hidden;
+  }
+
+  /* Quorum tracker slots */
+  .quorum-tracker {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .quorum-slot {
+    flex: 1;
+    min-width: 140px;
+    padding: 12px 14px;
+    border-radius: var(--skb-radius-md);
+    border: 1.5px solid var(--skb-border);
+    background: var(--skb-bg-tertiary);
+    text-align: center;
+    transition: all var(--skb-transition);
+  }
+  .quorum-slot.signed {
+    border-color: rgba(3, 218, 198, 0.4);
+    background: var(--skb-secondary-muted);
+  }
+  .quorum-slot.waiting {
+    border-color: var(--skb-border);
+    background: var(--skb-bg-tertiary);
+  }
+  .quorum-slot-icon {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+  .quorum-slot-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--skb-text-muted);
+    margin-bottom: 2px;
+  }
+  .quorum-slot-status {
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .quorum-slot.signed .quorum-slot-status { color: var(--skb-secondary); }
+  .quorum-slot.waiting .quorum-slot-status { color: var(--skb-text-dim); }
+
+  /* Collapsible accordion */
+  .accordion-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 0;
+    user-select: none;
+  }
+  .accordion-header .accordion-arrow {
+    transition: transform 0.2s ease;
+    color: var(--skb-text-muted);
+  }
+  .accordion-header.open .accordion-arrow {
+    transform: rotate(180deg);
+  }
+  .accordion-body {
+    display: none;
+    margin-top: 1rem;
+  }
+  .accordion-body.open { display: block; }
+
+  /* Advanced section */
+  .advanced-toggle {
+    font-size: 0.78rem;
+    color: var(--skb-text-dim);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 12px;
+    user-select: none;
+    transition: color var(--skb-transition);
+  }
+  .advanced-toggle:hover { color: var(--skb-text-muted); }
+  .advanced-content {
+    display: none;
+    margin-top: 10px;
+    padding: 12px 14px;
+    background: var(--skb-bg-tertiary);
+    border: 1px solid var(--skb-border);
+    border-radius: var(--skb-radius-sm);
+  }
+  .advanced-content.open { display: block; }
+
+  /* Handoff card */
+  .handoff-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 1rem;
+  }
+  .handoff-actions a,
+  .handoff-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: var(--skb-radius-sm);
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all var(--skb-transition);
+  }
+  .handoff-download {
+    background: var(--skb-secondary);
+    color: #111;
+    border: none;
+  }
+  .handoff-download:hover { opacity: 0.85; }
+  .handoff-download.partial {
+    background: var(--skb-info);
+    color: #fff;
+  }
+  .handoff-hex {
+    background: var(--skb-primary);
+    color: #111;
+    border: none;
+  }
+  .handoff-qr-toggle {
+    background: transparent;
+    border: 1px solid var(--skb-border);
+    color: var(--skb-text);
+  }
+  .handoff-qr-toggle:hover { border-color: var(--skb-text-muted); }
+
+  /* Spinner */
+  .skb-spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2.5px solid rgba(128, 128, 128, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--skb-primary);
+    animation: skb-spin 0.8s ease-in-out infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes skb-spin { to { transform: rotate(360deg); } }
+
+  /* Print styles */
+  @media print {
+    .skb-header, .skb-steps, .skb-scanner-box,
+    button, .skb-btn-primary, .skb-btn-sm, .skb-btn-secondary,
+    .handoff-actions, #seed-accordion, #load-card { display: none !important; }
+    .skb-print-only { display: block !important; }
+    body { background: white !important; color: black !important; }
+    .skb-card { box-shadow: none; border: 1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="skb-header">
+  <a href="../index.html" class="skb-brand">SafeKeep<span>Bitcoin</span></a>
+  <div class="skb-header-actions">
+    <button class="skb-theme-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="skb-container">
+  <h1 class="skb-page-title">PSBT Signer</h1>
+  <div class="skb-page-subtitle">Review, sign, and finalize Bitcoin transactions offline</div>
+
+  <!-- Step Indicator -->
+  <div class="skb-steps" id="step-indicator">
+    <div class="skb-step active" id="step-load"><span class="skb-step-num">1</span>Load</div>
+    <div class="skb-step" id="step-review"><span class="skb-step-num">2</span>Review</div>
+    <div class="skb-step" id="step-sign"><span class="skb-step-num">3</span>Sign</div>
+    <div class="skb-step" id="step-done"><span class="skb-step-num">4</span>Done</div>
+  </div>
+
+  <!-- Status -->
+  <div id="status" class="skb-alert" style="display: none;" aria-live="polite"></div>
+
+  <!-- ============================================
+       1. LOAD PSBT
+       ============================================ -->
+  <div class="skb-card" id="load-card">
+    <div class="skb-card-title">Load Unsigned PSBT</div>
+
+    <!-- Upload zone (shows when no PSBT loaded) -->
+    <div id="upload-zone">
+      <label class="skb-upload-zone" id="upload-zone-label">
+        <input type="file" id="psbtInput" accept=".psbt" style="display: none;" />
+        <div class="skb-upload-text">
+          <strong>Click to upload</strong> a .psbt file<br>
+          <span style="font-size: 0.82rem;">or drag and drop</span>
+        </div>
+      </label>
+      <div style="text-align: center; margin-top: 10px;">
+        <button class="skb-btn-sm" onclick="window.togglePsbtScanner()" style="border-color: var(--skb-info); color: var(--skb-info);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Scan PSBT QR
+        </button>
+      </div>
+    </div>
+
+    <!-- File loaded indicator (shows after PSBT loaded) -->
+    <div id="file-loaded-indicator" style="display: none;">
+      <div class="skb-file-loaded">
+        <div>
+          <div class="skb-file-loaded-name" id="loaded-file-name">transaction.psbt</div>
+          <div class="skb-file-loaded-meta" id="loaded-file-meta">PSBT loaded</div>
+        </div>
+        <button class="skb-btn-sm" onclick="loadNewPsbt()" style="border-color: var(--skb-primary); color: var(--skb-primary);">Load Different</button>
+      </div>
+    </div>
+
+    <!-- PSBT Scanner -->
+    <div id="psbt-scanner-container" class="skb-scanner-box">
+      <div id="psbt-reader"></div>
+      <div style="margin-top: 8px; font-weight: 600; font-size: 0.85rem; color: var(--skb-info);" id="psbt-scan-progress">Awaiting QR Code...</div>
+      <button class="skb-btn-sm" style="margin-top: 10px; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="window.togglePsbtScanner()">Cancel Scan</button>
+    </div>
+  </div>
+
+  <!-- ============================================
+       2. QUORUM DASHBOARD
+       ============================================ -->
+  <div class="skb-card" id="quorum-card" style="display: none;">
+    <div class="skb-card-title">Signature Status</div>
+    <div id="quorum-tracker" class="quorum-tracker"></div>
+    <div id="quorum-status" style="text-align: center; font-size: 0.88rem; font-weight: 600; color: var(--skb-text-muted);"></div>
+  </div>
+
+  <!-- ============================================
+       3. TRANSACTION REVIEW
+       ============================================ -->
+  <div class="skb-card" id="review-card" style="display: none;">
+    <div class="skb-card-title">Transaction Review</div>
+    <div id="txDetails"></div>
+  </div>
+
+  <!-- ============================================
+       4. ADD SIGNATURE (Collapsible)
+       ============================================ -->
+  <div class="skb-card" id="seed-accordion" style="display: none;">
+    <div class="accordion-header" id="accordion-trigger" onclick="toggleAccordion()">
+      <div class="skb-card-title" style="margin-bottom: 0;" id="accordion-title">Add Signature</div>
+      <svg class="accordion-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+
+    <div class="accordion-body" id="accordion-body">
+
+      <!-- Session seed status -->
+      <div id="session-seed-status" style="font-size: 0.78rem; color: var(--skb-text-dim); margin-bottom: 8px;"></div>
+
+      <!-- Seed input actions -->
+      <div class="skb-result-actions" style="margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <button class="skb-btn-sm" onclick="loadSeedFromFile()">Load from File</button>
+        <button class="skb-btn-sm" onclick="window.toggleSeedScanner()">Scan QR</button>
+      </div>
+
+      <!-- Seed scanner -->
+      <div id="seed-scanner-container" class="skb-scanner-box">
+        <div id="seed-reader"></div>
+        <div style="margin-top: 8px; font-weight: 600; font-size: 0.85rem; color: var(--skb-info);">Awaiting Seed Phrase QR Code...</div>
+        <button class="skb-btn-sm" style="margin-top: 10px; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="window.toggleSeedScanner()">Cancel</button>
+      </div>
+
+      <!-- Seed length toggle -->
+      <div class="skb-controls" style="margin-bottom: 8px;">
+        <div class="skb-control-group">
+          <label class="skb-label">Seed Length</label>
+          <div style="display: flex; gap: 16px; margin-top: 6px;">
+            <label class="skb-checkbox-group"><input type="radio" name="seedLength" value="12" checked onchange="window.updateSeedGrid()"> 12 Words</label>
+            <label class="skb-checkbox-group"><input type="radio" name="seedLength" value="24" onchange="window.updateSeedGrid()"> 24 Words</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seed grid -->
+      <div id="seed-grid-container" class="skb-seed-grid"></div>
+
+      <!-- Passphrase -->
+      <div class="skb-passphrase-section">
+        <div class="skb-passphrase-label">Optional BIP39 Passphrase</div>
+        <div class="skb-passphrase-row">
+          <input type="password" class="skb-passphrase-input" id="passphrase" placeholder="Leave blank if none" autocomplete="off" />
+          <button class="skb-btn-sm" onclick="loadPassphraseFromFile()">Load Passphrase</button>
+        </div>
+      </div>
+
+      <!-- Advanced options -->
+      <div class="advanced-toggle" onclick="toggleAdvanced()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Advanced Options
+      </div>
+      <div class="advanced-content" id="advanced-content">
+        <div style="margin-bottom: 10px;">
+          <label class="skb-label">Fee Rate Override (sat/vB)</label>
+          <input type="number" class="skb-input" id="feeRate" min="1" step="0.1" placeholder="Leave empty to use PSBT fee" style="margin-top: 6px;" />
+        </div>
+        <label class="skb-checkbox-group">
+          <input type="checkbox" id="includeRawHex" />
+          Also generate raw transaction hex (for manual broadcasting)
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================
+       5. ACTION BUTTON
+       ============================================ -->
+  <div id="action-section" style="display: none; margin-bottom: 1.25rem;">
+    <button id="signBtn" class="skb-btn-primary">Add Signature</button>
+    <div class="skb-btn-row" style="margin-top: 8px;">
+      <button class="skb-btn-sm" style="flex: 1;" id="resetBtn" onclick="resetAll()">Clear All</button>
+      <button class="skb-btn-sm" style="flex: 1;" onclick="document.getElementById('helpModal').classList.add('visible')">Help</button>
+    </div>
+  </div>
+
+  <!-- ============================================
+       6. POST-SIGNING HANDOFF
+       ============================================ -->
+  <div id="handoff-section" style="display: none;"></div>
+
+  <!-- QR Display (for signed output) -->
+  <div id="qrDisplay" style="display: none;"></div>
+
+</div><!-- /skb-container -->
+
+<!-- Help Modal -->
+<div id="helpModal" class="skb-modal-overlay">
+  <div class="skb-modal">
+    <div class="skb-modal-title">PSBT Signing Guide</div>
+    <div style="font-size: 0.88rem; line-height: 1.7; color: var(--skb-text-muted);">
+      <p style="margin-bottom: 12px;"><strong style="color: var(--skb-text);">1. Load PSBT</strong> — Upload the unsigned .psbt file from your coordinator wallet (Sparrow, Electrum, etc.) or scan the QR code. Animated UR-encoded QR codes are supported.</p>
+      <p style="margin-bottom: 12px;"><strong style="color: var(--skb-text);">2. Review</strong> — Verify the destination addresses and amounts match what you expect. Change outputs are highlighted in teal.</p>
+      <p style="margin-bottom: 12px;"><strong style="color: var(--skb-text);">3. Sign</strong> — Enter your seed phrase (or load from file / scan QR). Add your passphrase if you use one. Click "Add Signature" to sign.</p>
+      <p style="margin-bottom: 12px;"><strong style="color: var(--skb-text);">4. Export</strong> — Download the signed PSBT or display it as a QR code to transfer to your coordinator or next signer.</p>
+      <div class="skb-alert skb-alert--warning" style="margin-top: 16px;">
+        <div>This tool signs transactions locally in your browser. No data leaves this device. Clear all data after signing.</div>
+      </div>
+    </div>
+    <button class="skb-btn-primary" style="margin-top: 1rem;" onclick="document.getElementById('helpModal').classList.remove('visible')">Close</button>
+  </div>
+</div>
+
+<script>
+// =========================================================
+// WORDLIST
+// =========================================================
+const WORDLIST = ["abandon","ability","able","about","above","absent","absorb","abstract","absurd","abuse","access","accident","account","accuse","achieve","acid","acoustic","acquire","across","act","action","actor","actress","actual","adapt","add","addict","address","adjust","admit","adult","advance","advice","aerobic","affair","afford","afraid","again","age","agent","agree","ahead","aim","air","airport","aisle","alarm","album","alcohol","alert","alien","all","alley","allow","almost","alone","alpha","already","also","alter","always","amateur","amazing","among","amount","amused","analyst","anchor","ancient","anger","angle","angry","animal","ankle","announce","annual","another","answer","antenna","antique","anxiety","any","apart","apology","appear","apple","approve","april","arch","arctic","area","arena","argue","arm","armed","armor","army","around","arrange","arrest","arrive","arrow","art","artefact","artist","artwork","ask","aspect","assault","asset","assist","assume","asthma","athlete","atom","attack","attend","attitude","attract","auction","audit","august","aunt","author","auto","autumn","average","avocado","avoid","awake","aware","away","awesome","awful","awkward","axis","baby","bachelor","bacon","badge","bag","balance","balcony","ball","bamboo","banana","banner","bar","barely","bargain","barrel","base","basic","basket","battle","beach","bean","beauty","because","become","beef","before","begin","behave","behind","believe","below","belt","bench","benefit","best","betray","better","between","beyond","bicycle","bid","bike","bind","biology","bird","birth","bitter","black","blade","blame","blanket","blast","bleak","bless","blind","blood","blossom","blouse","blue","blur","blush","board","boat","body","boil","bomb","bone","bonus","book","boost","border","boring","borrow","boss","bottom","bounce","box","boy","bracket","brain","brand","brass","brave","bread","breeze","brick","bridge","brief","bright","bring","brisk","broccoli","broken","bronze","broom","brother","brown","brush","bubble","buddy","budget","buffalo","build","bulb","bulk","bullet","bundle","bunker","burden","burger","burst","bus","business","busy","butter","buyer","buzz","cabbage","cabin","cable","cactus","cage","cake","call","calm","camera","camp","can","canal","cancel","candy","cannon","canoe","canvas","canyon","capable","capital","captain","car","carbon","card","cargo","carpet","carry","cart","case","cash","casino","castle","casual","cat","catalog","catch","category","cattle","caught","cause","caution","cave","ceiling","celery","cement","census","century","cereal","certain","chair","chalk","champion","change","chaos","chapter","charge","chase","chat","cheap","check","cheese","chef","cherry","chest","chicken","chief","child","chimney","choice","choose","chronic","chuckle","chunk","churn","cigar","cinnamon","circle","citizen","city","civil","claim","clap","clarify","claw","clay","clean","clerk","clever","click","client","cliff","climb","clinic","clip","clock","clog","close","cloth","cloud","clown","club","clump","cluster","clutch","coach","coast","coconut","code","coffee","coil","coin","collect","color","column","combine","come","comfort","comic","common","company","concert","conduct","confirm","congress","connect","consider","control","convince","cook","cool","copper","copy","coral","core","corn","correct","cost","cotton","couch","country","couple","course","cousin","cover","coyote","crack","cradle","craft","cram","crane","crash","crater","crawl","crazy","cream","credit","creek","crew","cricket","crime","crisp","critic","crop","cross","crouch","crowd","crucial","cruel","cruise","crumble","crunch","crush","cry","crystal","cube","culture","cup","cupboard","curious","current","curtain","curve","cushion","custom","cute","cycle","dad","damage","damp","dance","danger","daring","dash","daughter","dawn","day","deal","debate","debris","decade","december","decide","decline","decorate","decrease","deer","defense","define","defy","degree","delay","deliver","demand","demise","denial","dentist","deny","depart","depend","deposit","depth","deputy","derive","describe","desert","design","desk","despair","destroy","detail","detect","develop","device","devote","diagram","dial","diamond","diary","dice","diesel","diet","differ","digital","dignity","dilemma","dinner","dinosaur","direct","dirt","disagree","discover","disease","dish","dismiss","disorder","display","distance","divert","divide","divorce","dizzy","doctor","document","dog","doll","dolphin","domain","donate","donkey","donor","door","dose","double","dove","draft","dragon","drama","drastic","draw","dream","dress","drift","drill","drink","drip","drive","drop","drum","dry","duck","dumb","dune","during","dust","dutch","duty","dwarf","dynamic","eager","eagle","early","earn","earth","easily","east","easy","echo","ecology","economy","edge","edit","educate","effort","egg","eight","either","elbow","elder","electric","elegant","element","elephant","elevator","elite","else","embark","embody","embrace","emerge","emotion","employ","empower","empty","enable","enact","end","endless","endorse","enemy","energy","enforce","engage","engine","enhance","enjoy","enlist","enough","enrich","enroll","ensure","enter","entire","entry","envelope","episode","equal","equip","era","erase","erode","erosion","error","erupt","escape","essay","essence","estate","eternal","ethics","evidence","evil","evoke","evolve","exact","example","excess","exchange","excite","exclude","excuse","execute","exercise","exhaust","exhibit","exile","exist","exit","exotic","expand","expect","expire","explain","expose","express","extend","extra","eye","eyebrow","fabric","face","faculty","fade","faint","faith","fall","false","fame","family","famous","fan","fancy","fantasy","farm","fashion","fat","fatal","father","fatigue","fault","favorite","feature","february","federal","fee","feed","feel","female","fence","festival","fetch","fever","few","fiber","fiction","field","figure","file","film","filter","final","find","fine","finger","finish","fire","firm","first","fiscal","fish","fit","fitness","fix","flag","flame","flash","flat","flavor","flee","flight","flip","float","flock","floor","flower","fluid","flush","fly","foam","focus","fog","foil","fold","follow","food","foot","force","forest","forget","fork","fortune","forum","forward","fossil","foster","found","fox","fragile","frame","frequent","fresh","friend","fringe","frog","front","frost","frown","frozen","fruit","fuel","fun","funny","furnace","fury","future","gadget","gain","galaxy","gallery","game","gap","garage","garbage","garden","garlic","garment","gas","gasp","gate","gather","gauge","gaze","general","genius","genre","gentle","genuine","gesture","ghost","giant","gift","giggle","ginger","giraffe","girl","give","glad","glance","glare","glass","glide","glimpse","globe","gloom","glory","glove","glow","glue","goat","goddess","gold","good","goose","gorilla","gospel","gossip","govern","gown","grab","grace","grain","grant","grape","grass","gravity","great","green","grid","grief","grit","grocery","group","grow","grunt","guard","guess","guide","guilt","guitar","gun","gym","habit","hair","half","hammer","hamster","hand","happy","harbor","hard","harsh","harvest","hat","have","hawk","hazard","head","health","heart","heavy","hedgehog","height","hello","helmet","help","hen","hero","hidden","high","hill","hint","hip","hire","history","hobby","hockey","hold","hole","holiday","hollow","home","honey","hood","hope","horn","horror","horse","hospital","host","hotel","hour","hover","hub","huge","human","humble","humor","hundred","hungry","hunt","hurdle","hurry","hurt","husband","hybrid","ice","icon","idea","identify","idle","ignore","ill","illegal","illness","image","imitate","immense","immune","impact","impose","improve","impulse","inch","include","income","increase","index","indicate","indoor","industry","infant","inflict","inform","inhale","inherit","initial","inject","injury","inmate","inner","innocent","input","inquiry","insane","insect","inside","inspire","install","intact","interest","into","invest","invite","involve","iron","island","isolate","issue","item","ivory","jacket","jaguar","jar","jazz","jealous","jeans","jelly","jewel","job","join","joke","journey","joy","judge","juice","jump","jungle","junior","junk","just","kangaroo","keen","keep","ketchup","key","kick","kid","kidney","kind","kingdom","kiss","kit","kitchen","kite","kitten","kiwi","knee","knife","knock","know","lab","label","labor","ladder","lady","lake","lamp","language","laptop","large","later","latin","laugh","laundry","lava","law","lawn","lawsuit","layer","lazy","leader","leaf","learn","leave","lecture","left","leg","legal","legend","leisure","lemon","lend","length","lens","leopard","lesson","letter","level","liar","liberty","library","license","life","lift","light","like","limb","limit","link","lion","liquid","list","little","live","lizard","load","loan","lobster","local","lock","logic","lonely","long","loop","lottery","loud","lounge","love","loyal","lucky","luggage","lumber","lunar","lunch","luxury","lyrics","machine","mad","magic","magnet","maid","mail","main","major","make","mammal","man","manage","mandate","mango","mansion","manual","maple","marble","march","margin","marine","market","marriage","mask","mass","master","match","material","math","matrix","matter","maximum","maze","meadow","mean","measure","meat","mechanic","medal","media","melody","melt","member","memory","mention","menu","mercy","merge","merit","merry","mesh","message","metal","method","middle","midnight","milk","million","mimic","mind","minimum","minor","minute","miracle","mirror","misery","miss","mistake","mix","mixed","mixture","mobile","model","modify","mom","moment","monitor","monkey","monster","month","moon","moral","more","morning","mosquito","mother","motion","motor","mountain","mouse","move","movie","much","muffin","mule","multiply","muscle","museum","mushroom","music","must","mutual","myself","mystery","myth","naive","name","napkin","narrow","nasty","nation","nature","near","neck","need","negative","neglect","neither","nephew","nerve","nest","net","network","neutral","never","news","next","nice","night","noble","noise","nominee","noodle","normal","north","nose","notable","note","nothing","notice","novel","now","nuclear","number","nurse","nut","oak","obey","object","oblige","obscure","observe","obtain","obvious","occur","ocean","october","odor","off","offer","office","often","oil","okay","old","olive","olympic","omit","once","one","onion","online","only","open","opera","opinion","oppose","option","orange","orbit","orchard","order","ordinary","organ","orient","original","orphan","ostrich","other","outdoor","outer","output","outside","oval","oven","over","own","owner","oxygen","oyster","ozone","pact","paddle","page","pair","palace","palm","panda","panel","panic","panther","paper","parade","parent","park","parrot","party","pass","patch","path","patient","patrol","pattern","pause","pave","payment","peace","peanut","pear","peasant","pelican","pen","penalty","pencil","people","pepper","perfect","permit","person","pet","phone","photo","phrase","physical","piano","picnic","picture","piece","pig","pigeon","pill","pilot","pink","pioneer","pipe","pistol","pitch","pizza","place","planet","plastic","plate","play","please","pledge","pluck","plug","plunge","poem","poet","point","polar","pole","police","pond","pony","pool","popular","portion","position","possible","post","potato","pottery","poverty","powder","power","practice","praise","predict","prefer","prepare","present","pretty","prevent","price","pride","primary","print","priority","prison","private","prize","problem","process","produce","profit","program","project","promote","proof","property","prosper","protect","proud","provide","public","pudding","pull","pulp","pulse","pumpkin","punch","pupil","puppy","purchase","purity","purpose","purse","push","put","puzzle","pyramid","quality","quantum","quarter","question","quick","quit","quiz","quote","rabbit","raccoon","race","rack","radar","radio","rail","rain","raise","rally","ramp","ranch","random","range","rapid","rare","rate","rather","raven","raw","razor","ready","real","reason","rebel","rebuild","recall","receive","recipe","record","recycle","reduce","reflect","reform","refuse","region","regret","regular","reject","relax","release","relief","rely","remain","remember","remind","remove","render","renew","rent","reopen","repair","repeat","replace","report","require","rescue","resemble","resist","resource","response","result","retire","retreat","return","reunion","reveal","review","reward","rhythm","rib","ribbon","rice","rich","ride","ridge","rifle","right","rigid","ring","riot","ripple","risk","ritual","rival","river","road","roast","robot","robust","rocket","romance","roof","rookie","room","rose","rotate","rough","round","route","royal","rubber","rude","rug","rule","run","runway","rural","sad","saddle","sadness","safe","sail","salad","salmon","salon","salt","salute","same","sample","sand","satisfy","satoshi","sauce","sausage","save","say","scale","scan","scare","scatter","scene","scheme","school","science","scissors","scorpion","scout","scrap","screen","script","scrub","sea","search","season","seat","second","secret","section","security","seed","seek","segment","select","sell","seminar","senior","sense","sentence","series","service","session","settle","setup","seven","shadow","shaft","shallow","share","shed","shell","sheriff","shield","shift","shine","ship","shiver","shock","shoe","shoot","shop","short","shoulder","shove","shrimp","shrug","shuffle","shy","sibling","sick","side","siege","sight","sign","silent","silk","silly","silver","similar","simple","since","sing","siren","sister","situate","six","size","skate","sketch","ski","skill","skin","skirt","skull","slab","slam","sleep","slender","slice","slide","slight","slim","slogan","slot","slow","slush","small","smart","smile","smoke","smooth","snack","snake","snap","sniff","snow","soap","soccer","social","sock","soda","soft","solar","soldier","solid","solution","solve","someone","song","soon","sorry","sort","soul","sound","soup","source","south","space","spare","spatial","spawn","speak","special","speed","spell","spend","sphere","spice","spider","spike","spin","spirit","split","spoil","sponsor","spoon","sport","spot","spray","spread","spring","spy","square","squeeze","squirrel","stable","stadium","staff","stage","stairs","stamp","stand","start","state","stay","steak","steel","stem","step","stereo","stick","still","sting","stock","stomach","stone","stool","story","stove","strategy","street","strike","strong","struggle","student","stuff","stumble","style","subject","submit","subway","success","such","sudden","suffer","sugar","suggest","suit","summer","sun","sunny","sunset","super","supply","supreme","sure","surface","surge","surprise","surround","survey","suspect","sustain","swallow","swamp","swap","swarm","swear","sweet","swift","swim","swing","switch","sword","symbol","symptom","syrup","system","table","tackle","tag","tail","talent","talk","tank","tape","target","task","taste","tattoo","taxi","teach","team","tell","ten","tenant","tennis","tent","term","test","text","thank","that","theme","then","theory","there","they","thing","this","thought","three","thrive","throw","thumb","thunder","ticket","tide","tiger","tilt","timber","time","tiny","tip","tired","tissue","title","toast","tobacco","today","toddler","toe","together","toilet","token","tomato","tomorrow","tone","tongue","tonight","tool","tooth","top","topic","topple","torch","tornado","tortoise","toss","total","tourist","toward","tower","town","toy","track","trade","traffic","tragic","train","transfer","trap","trash","travel","tray","treat","tree","trend","trial","tribe","trick","trigger","trim","trip","trophy","trouble","truck","true","truly","trumpet","trust","truth","try","tube","tuition","tumble","tuna","tunnel","turkey","turn","turtle","twelve","twenty","twice","twin","twist","two","type","typical","ugly","umbrella","unable","unaware","uncle","uncover","under","undo","unfair","unfold","unhappy","uniform","unique","unit","universe","unknown","unlock","until","unusual","unveil","update","upgrade","uphold","upon","upper","upset","urban","urge","usage","use","used","useful","useless","usual","utility","vacant","vacuum","vague","valid","valley","valve","van","vanish","vapor","various","vast","vault","vehicle","velvet","vendor","venture","venue","verb","verify","version","very","vessel","veteran","viable","vibrant","vicious","victory","video","view","village","vintage","violin","virtual","virus","visa","visit","visual","vital","vivid","vocal","voice","void","volcano","volume","vote","voyage","wage","wagon","wait","walk","wall","walnut","want","warfare","warm","warrior","wash","wasp","waste","water","wave","way","wealth","weapon","wear","weasel","weather","web","wedding","weekend","weird","welcome","west","wet","whale","what","wheat","wheel","when","where","whip","whisper","wide","width","wife","wild","will","win","window","wine","wing","wink","winner","winter","wire","wisdom","wise","wish","witness","wolf","woman","wonder","wood","wool","word","work","world","worry","worth","wrap","wreck","wrestle","wrist","write","wrong","yard","year","yellow","you","young","youth","zebra","zero","zone","zoo"];
+
+
+// =========================================================
+// GLOBALS
+// =========================================================
+let btc, mnemonicToSeedSync, HDKey, QRCode;
+let Html5Qrcode, URDecoder;
+let librariesLoaded = false;
+
+window.loadedPsbtFilename = 'transaction.psbt';
+let loadedPsbtBytes = null;
+let transactionIsFinalized = false;
+let parsedSecurityModel = null;
+
+// Scanner globals
+let psbtQrCode = null;
+let seedQrCode = null;
+let activeUrDecoder = null;
+let psbtScanProcessing = false;  // Guard against duplicate callbacks
+
+
+// =========================================================
+// LIBRARY LOADER
+// =========================================================
+function loadLibraries() {
+    if (librariesLoaded) return;
+    if (window.BtcMath && window.QRCode) {
+        btc = window.BtcMath.btc;
+        mnemonicToSeedSync = window.BtcMath.bip39.mnemonicToSeedSync;
+        HDKey = window.BtcMath.HDKey;
+        QRCode = window.QRCode;
+        Html5Qrcode = window.Html5Qrcode;
+        URDecoder = window.URDecoder;
+        librariesLoaded = true;
+    } else {
+        showStatus('Failed to load cryptography modules. Check Vite build.', 'error');
+    }
+}
+
+const NETWORK = {
+    bech32: 'bc',
+    pubKeyHash: 0x00,
+    scriptHash: 0x05,
+    bip32: { public: 0x0488b21e, private: 0x0488ade4 }
+};
+
+
+// =========================================================
+// STATUS
+// =========================================================
+function showStatus(message, type = '') {
+    const el = document.getElementById('status');
+    if (!message) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    el.className = `skb-alert skb-alert--${type || 'info'}`;
+    el.innerHTML = message;
+    if (type === 'error') el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+window.showStatus = showStatus;
+
+
+// =========================================================
+// STEP INDICATOR
+// =========================================================
+function setStep(stepNum) {
+    const steps = ['step-load', 'step-review', 'step-sign', 'step-done'];
+    steps.forEach((id, idx) => {
+        const el = document.getElementById(id);
+        el.className = 'skb-step';
+        if (idx < stepNum - 1) el.classList.add('completed');
+        else if (idx === stepNum - 1) el.classList.add('active');
+    });
+}
+
+
+// =========================================================
+// PSBT SCANNER
+// =========================================================
+window.togglePsbtScanner = function() {
+    const container = document.getElementById('psbt-scanner-container');
+    if (container.classList.contains('visible')) {
+        if (psbtQrCode) {
+            psbtQrCode.stop().then(() => { psbtQrCode.clear(); psbtQrCode = null; }).catch(console.error);
+        }
+        container.classList.remove('visible');
+        activeUrDecoder = null;
+    } else {
+        loadLibraries();
+        if (!Html5Qrcode) return showStatus('QR Scanner library not loaded.', 'error');
+
+        psbtScanProcessing = false;  // Reset guard for new scan session
+        container.classList.add('visible');
+        document.getElementById('psbt-scan-progress').innerText = 'Awaiting QR Code...';
+
+        if (URDecoder) activeUrDecoder = new URDecoder();
+
+        psbtQrCode = new Html5Qrcode("psbt-reader");
+        psbtQrCode.start(
+            { facingMode: "environment" },
+            { fps: 15, qrbox: { width: 300, height: 300 } },
+            window.onPsbtScanSuccess,
+            () => {}
+        ).catch(err => {
+            showStatus(`Camera access failed: ${err.message}`, 'error');
+            container.classList.remove('visible');
+        });
+    }
+};
+
+window.onPsbtScanSuccess = async function(decodedText) {
+    // Guard: if we're already processing a completed scan, ignore further callbacks
+    // (camera can fire extra frames before async stop() completes)
+    if (psbtScanProcessing) return;
+
+    try {
+        if (decodedText.toLowerCase().startsWith('ur:')) {
+            if (!activeUrDecoder) return; // Scanner closing, ignore stale callbacks
+
+            activeUrDecoder.receivePart(decodedText);
+            const progress = Math.round(activeUrDecoder.estimatedPercentComplete() * 100);
+            document.getElementById('psbt-scan-progress').innerText = `Scanning Animated QR... ${progress}%`;
+
+            if (activeUrDecoder.isComplete()) {
+                if (activeUrDecoder.isSuccess()) {
+                    psbtScanProcessing = true;
+                    const ur = activeUrDecoder.resultUR();
+                    const decodedBytes = ur.decodeCBOR();
+                    window.togglePsbtScanner();
+                    window.loadedPsbtFilename = 'scanned-ur-transaction.psbt';
+                    document.getElementById('loaded-file-name').textContent = 'Animated QR Scanned';
+                    parseAndDisplayPSBTBuffer(new Uint8Array(decodedBytes));
+                } else {
+                    throw new Error('UR decoding failed. Please try again.');
+                }
+            }
+        } else {
+            psbtScanProcessing = true;
+            window.togglePsbtScanner();
+            window.loadedPsbtFilename = 'scanned-static-transaction.psbt';
+            document.getElementById('loaded-file-name').textContent = 'Static QR Scanned';
+
+            let bytes;
+            let data = decodedText.trim();
+
+            // Strip common URI prefixes (e.g. "bitcoin:psbt=..." or "psbt:")
+            if (data.toLowerCase().startsWith('psbt:')) {
+                data = data.substring(5);
+            }
+            // Strip whitespace/newlines that some encoders add
+            data = data.replace(/\s+/g, '');
+
+            if (data.startsWith('B$')) {
+                // BBQr (Better Bitcoin QR) format
+                // Header: B$(2) + encoding(1) + filetype(1) + total_parts(2) + part_num(2) = 8 chars
+                if (data.length < 8) throw new Error('BBQr header too short');
+                const encoding = data[2]; // 'H'=hex, 'Z'=zlib+base32, '2'=base32
+                const fileType = data[3]; // 'P'=PSBT, 'T'=TXN, etc.
+                const payload = data.substring(8);
+                if (fileType !== 'P') throw new Error(`BBQr file type '${fileType}' is not a PSBT`);
+                if (encoding === 'Z') {
+                    // Base32 decode, then zlib decompress
+                    const compressed = decodeBase32(payload);
+                    bytes = await zlibDecompress(compressed);
+                } else if (encoding === 'H') {
+                    bytes = new Uint8Array(payload.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+                } else if (encoding === '2') {
+                    bytes = decodeBase32(payload);
+                } else {
+                    throw new Error(`Unknown BBQr encoding: '${encoding}'`);
+                }
+            } else if (/^[0-9a-fA-F]+$/.test(data)) {
+                // Raw hex
+                bytes = new Uint8Array(data.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            } else if (/^[0-9A-Z$*+\-./:]+$/.test(data)) {
+                // Base43 — used by Electrum for static QR codes
+                const raw = decodeBase43(data);
+                // Try zlib decompression in case data is compressed
+                bytes = await zlibDecompress(raw);
+            } else {
+                // Base64 — handle standard and URL-safe variants
+                let b64 = data.replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4 !== 0) b64 += '=';
+                bytes = new Uint8Array(atob(b64).split('').map(c => c.charCodeAt(0)));
+            }
+            parseAndDisplayPSBTBuffer(bytes);
+        }
+    } catch (err) {
+        console.error('PSBT scan error:', err);
+        console.log('Raw QR content (first 200 chars):', decodedText.substring(0, 200));
+        psbtScanProcessing = false;
+        // Show error via status bar — include raw content preview for debugging
+        const preview = decodedText.substring(0, 80);
+        showStatus(`QR scan error: ${err.message}<br><br><span style="font-family: var(--skb-mono); font-size: 0.78rem; color: var(--skb-text-dim); word-break: break-all;">Raw content: ${preview}${decodedText.length > 80 ? '...' : ''} (${decodedText.length} chars)</span>`, 'error');
+        // Reset UR decoder for retry
+        if (activeUrDecoder) activeUrDecoder = new URDecoder();
+        // Close scanner so user can see the error
+        if (document.getElementById('psbt-scanner-container').classList.contains('visible')) {
+            window.togglePsbtScanner();
+        }
+    }
+};
+
+
+// =========================================================
+// SEED SCANNER
+// =========================================================
+window.toggleSeedScanner = function() {
+    const container = document.getElementById('seed-scanner-container');
+    if (container.classList.contains('visible')) {
+        if (seedQrCode) {
+            seedQrCode.stop().then(() => { seedQrCode.clear(); seedQrCode = null; }).catch(console.error);
+        }
+        container.classList.remove('visible');
+    } else {
+        loadLibraries();
+        if (!Html5Qrcode) return showStatus('QR Scanner library not loaded.', 'error');
+        container.classList.add('visible');
+        seedQrCode = new Html5Qrcode("seed-reader");
+        seedQrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            (decodedText) => {
+                window.toggleSeedScanner();
+                const words = decodedText.trim().split(/[\s\n]+/);
+                if (words.length === 24 && document.querySelector('input[name="seedLength"][value="12"]').checked) {
+                    document.querySelector('input[name="seedLength"][value="24"]').checked = true;
+                    window.updateSeedGrid();
+                } else if (words.length === 12 && document.querySelector('input[name="seedLength"][value="24"]').checked) {
+                    document.querySelector('input[name="seedLength"][value="12"]').checked = true;
+                    window.updateSeedGrid();
+                }
+                setTimeout(() => fillPastedWords(words, 0), 50);
+                showStatus('Seed words scanned successfully!', 'success');
+                setTimeout(() => showStatus(''), 3000);
+            },
+            () => {}
+        ).catch(err => {
+            showStatus(`Camera access failed: ${err.message}`, 'error');
+            container.classList.remove('visible');
+        });
+    }
+};
+
+
+// =========================================================
+// LOAD FROM FILE (SeedManager)
+// =========================================================
+window.loadSeedFromFile = async function() {
+    if (!window.SeedManager) { alert("SeedManager not available."); return; }
+    try {
+        const result = await window.SeedManager.loadSeed();
+        if (!result) return;
+        const words = result.mnemonic.trim().split(/\s+/);
+
+        if (words.length === 24 && document.querySelector('input[name="seedLength"][value="12"]').checked) {
+            document.querySelector('input[name="seedLength"][value="24"]').checked = true;
+            window.updateSeedGrid();
+        } else if (words.length === 12 && document.querySelector('input[name="seedLength"][value="24"]').checked) {
+            document.querySelector('input[name="seedLength"][value="12"]').checked = true;
+            window.updateSeedGrid();
+        }
+        setTimeout(() => {
+            fillPastedWords(words, 0);
+            if (result.passphrase) {
+                document.getElementById('passphrase').value = result.passphrase;
+            }
+        }, 10);
+    } catch (e) { alert(`Could not load seed: ${e.message}`); }
+};
+
+window.loadPassphraseFromFile = async function() {
+    if (!window.SeedManager) { alert("SeedManager not available."); return; }
+    try {
+        const result = await window.SeedManager.loadPassphrase();
+        if (result && result.passphrase) {
+            document.getElementById('passphrase').value = result.passphrase;
+        }
+    } catch (e) { alert(`Could not load passphrase: ${e.message}`); }
+};
+
+
+// =========================================================
+// SEED GRID & AUTOCOMPLETE
+// =========================================================
+function closeAllLists(elmnt) {
+    document.querySelectorAll('.skb-autocomplete-list').forEach(list => {
+        if (elmnt !== list) list.remove();
+    });
+}
+document.addEventListener("click", e => closeAllLists(e.target));
+
+window.validateWord = function(input) {
+    const val = input.value.trim().toLowerCase();
+    const box = input.closest('.skb-word-box');
+    if (!val) { box.classList.remove('invalid'); return false; }
+    if (!WORDLIST.includes(val)) { box.classList.add('invalid'); return false; }
+    box.classList.remove('invalid');
+    return true;
+};
+
+window.updateSeedGrid = function() {
+    const length = parseInt(document.querySelector('input[name="seedLength"]:checked').value);
+    const container = document.getElementById('seed-grid-container');
+    container.innerHTML = '';
+    for (let i = 1; i <= length; i++) {
+        container.innerHTML += `
+            <div class="skb-word-box">
+                <span class="word-num">${i}.</span>
+                <input type="text" class="word-input" autocomplete="off">
+            </div>`;
+    }
+    attachAutocompleteEvents();
+};
+
+function attachAutocompleteEvents() {
+    const inputs = document.querySelectorAll('#seed-grid-container .word-input');
+    inputs.forEach((input, index) => {
+        input.addEventListener('input', function() {
+            let val = this.value.toLowerCase();
+            closeAllLists();
+            window.validateWord(this);
+            if (!val) return;
+
+            let list = document.createElement("DIV");
+            list.className = "skb-autocomplete-list";
+            list.style.display = "block";
+            this.parentNode.appendChild(list);
+
+            let matches = 0;
+            for (let i = 0; i < WORDLIST.length; i++) {
+                if (WORDLIST[i].substr(0, val.length) === val) {
+                    let item = document.createElement("DIV");
+                    item.className = "skb-autocomplete-item";
+                    item.innerHTML = "<strong>" + WORDLIST[i].substr(0, val.length) + "</strong>" + WORDLIST[i].substr(val.length);
+                    item.innerHTML += "<input type='hidden' value='" + WORDLIST[i] + "'>";
+                    item.addEventListener("click", function() {
+                        input.value = this.getElementsByTagName("input")[0].value;
+                        window.validateWord(input);
+                        closeAllLists();
+                        if (index < inputs.length - 1) inputs[index + 1].focus();
+                    });
+                    list.appendChild(item);
+                    matches++;
+                }
+            }
+            if (matches > 0) list.firstChild.classList.add('active-suggestion');
+        });
+
+        input.addEventListener('keydown', function(e) {
+            let list = this.parentNode.querySelector('.skb-autocomplete-list');
+            if (list && list.style.display === 'block' && e.key === 'Tab') {
+                e.preventDefault();
+                const firstItem = list.firstChild;
+                if (firstItem) {
+                    this.value = firstItem.getElementsByTagName("input")[0].value;
+                    window.validateWord(this);
+                    closeAllLists();
+                    if (index < inputs.length - 1) inputs[index + 1].focus();
+                }
+            }
+        });
+
+        input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            const words = pasteData.trim().split(/[\s\n]+/);
+            if (words.length === 24 && document.querySelector('input[name="seedLength"][value="12"]').checked) {
+                document.querySelector('input[name="seedLength"][value="24"]').checked = true;
+                window.updateSeedGrid();
+                setTimeout(() => fillPastedWords(words, 0), 10);
+                return;
+            }
+            fillPastedWords(words, index);
+        });
+    });
+}
+
+function fillPastedWords(words, startIndex) {
+    const inputs = document.querySelectorAll('#seed-grid-container .word-input');
+    words.forEach((word, i) => {
+        if (startIndex + i < inputs.length) {
+            const inp = inputs[startIndex + i];
+            inp.value = word.toLowerCase();
+            window.validateWord(inp);
+        }
+    });
+    const nextIndex = Math.min(startIndex + words.length, inputs.length - 1);
+    if (inputs[nextIndex]) inputs[nextIndex].focus();
+    closeAllLists();
+}
+
+function getSeedFromGrid() {
+    const inputs = document.querySelectorAll('#seed-grid-container .word-input');
+    const words = [];
+    for (let i = 0; i < inputs.length; i++) {
+        const val = inputs[i].value.trim().toLowerCase();
+        if (!val) throw new Error(`Word #${i + 1} is missing.`);
+        if (!WORDLIST.includes(val)) throw new Error(`Word #${i + 1} ("${val}") is not a valid BIP39 word.`);
+        words.push(val);
+    }
+    return words.join(' ');
+}
+
+
+// =========================================================
+// HELPERS
+// =========================================================
+function formatPath(path) {
+    if (!path) return null;
+    if (typeof path === 'string') {
+        if (path.startsWith('m/')) return path;
+        if (path.startsWith('/')) return 'm' + path;
+        return 'm/' + path;
+    }
+    if (Array.isArray(path) || ArrayBuffer.isView(path) || typeof path.length === 'number') {
+        let str = 'm';
+        for (let j = 0; j < path.length; j++) {
+            const n = Number(path[j]) >>> 0;
+            const isHardened = n >= 0x80000000;
+            str += '/' + (isHardened ? `${n - 0x80000000}'` : `${n}`);
+        }
+        return str;
+    }
+    return null;
+}
+
+function formatAmount(satoshis) {
+    const numSats = Number(satoshis);
+    return { sats: numSats.toLocaleString(), btc: (numSats / 100000000).toFixed(8) };
+}
+
+function bytesToHex(bytes) { return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''); }
+function bytesToBase64(bytes) {
+    let binary = '';
+    for (let i = 0; i < (bytes.byteLength || bytes.length); i++) binary += String.fromCharCode(bytes[i]);
+    return window.btoa(binary);
+}
+
+// Base43 decoder — used by Sparrow and Electrum for static PSBT QR codes.
+// Base43 maps to QR alphanumeric mode for maximum density.
+// Charset: 0-9 A-Z $ * + - . / :
+function decodeBase43(input) {
+    const CHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$*+-./:';
+    // Decode as big-endian arbitrary-precision integer, then convert to bytes
+    let n = 0n;
+    for (let i = 0; i < input.length; i++) {
+        const idx = CHARSET.indexOf(input[i]);
+        if (idx === -1) throw new Error(`Invalid Base43 character: '${input[i]}'`);
+        n = n * 43n + BigInt(idx);
+    }
+    if (n === 0n) return new Uint8Array([0]);
+    const result = [];
+    while (n > 0n) {
+        result.push(Number(n % 256n));
+        n = n / 256n;
+    }
+    result.reverse();
+    return new Uint8Array(result);
+}
+
+// Base32 decoder (RFC 4648) — used by BBQr format. Handles missing padding.
+function decodeBase32(input) {
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = '';
+    for (const c of input) {
+        if (c === '=') break; // stop at padding
+        const val = ALPHABET.indexOf(c);
+        if (val === -1) throw new Error(`Invalid Base32 character: '${c}'`);
+        bits += val.toString(2).padStart(5, '0');
+    }
+    const byteLen = Math.floor(bits.length / 8);
+    const result = new Uint8Array(byteLen);
+    for (let i = 0; i < byteLen; i++) {
+        result[i] = parseInt(bits.substring(i * 8, i * 8 + 8), 2);
+    }
+    return result;
+}
+
+// Zlib decompression using the browser's built-in DecompressionStream API.
+// BBQr uses zlib compression (wbits=10). Also handles Electrum Base43+zlib.
+// Tries 'deflate' (zlib-wrapped) first, then 'deflate-raw' as fallback.
+async function zlibDecompress(compressedBytes) {
+    for (const fmt of ['deflate', 'deflate-raw']) {
+        try {
+            const ds = new DecompressionStream(fmt);
+            const writer = ds.writable.getWriter();
+            const reader = ds.readable.getReader();
+            writer.write(compressedBytes);
+            writer.close();
+            const chunks = [];
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+            }
+            const totalLen = chunks.reduce((sum, c) => sum + c.length, 0);
+            const result = new Uint8Array(totalLen);
+            let offset = 0;
+            for (const chunk of chunks) {
+                result.set(chunk, offset);
+                offset += chunk.length;
+            }
+            // Verify it starts with PSBT magic "psbt\xff"
+            if (result.length >= 5 && result[0] === 0x70 && result[1] === 0x73 &&
+                result[2] === 0x62 && result[3] === 0x74 && result[4] === 0xFF) {
+                return result;
+            }
+            // Decompressed but not PSBT — try next format
+        } catch (e) {
+            // Decompression failed with this format — try next
+        }
+    }
+    // If neither format produced valid PSBT, return raw bytes and let parser give its own error
+    return compressedBytes;
+}
+
+function zeroFillArray(arr) { if (arr && arr.fill) arr.fill(0); }
+
+function clearSensitiveData() {
+    document.querySelectorAll('.word-input').forEach(inp => inp.value = '');
+    document.getElementById('passphrase').value = '';
+    if (loadedPsbtBytes) { zeroFillArray(loadedPsbtBytes); loadedPsbtBytes = null; }
+}
+
+
+// =========================================================
+// PSBT PARSING
+// =========================================================
+function parseOutputScript(script) {
+    try {
+        const decoded = btc.OutScript.decode(script);
+        try {
+            const address = btc.Address(NETWORK).encode(decoded);
+            return { address, type: getScriptType(decoded), scriptHex: bytesToHex(script) };
+        } catch (e) {
+            return { address: null, type: getScriptType(decoded), scriptHex: bytesToHex(script) };
+        }
+    } catch (e) {
+        return { address: null, type: 'Unknown', scriptHex: bytesToHex(script) };
+    }
+}
+
+function getScriptType(decoded) {
+    const types = { p2pkh: 'P2PKH', p2sh: 'P2SH', p2wpkh: 'P2WPKH (Native SegWit)', p2wsh: 'P2WSH (Multisig SegWit)', taproot: 'Taproot' };
+    return types[decoded.type] || 'Custom Script';
+}
+
+function parseSecurityModel(tx) {
+    try {
+        const firstInput = tx.inputs[0];
+        let totalKeys = 1, requiredSigs = 1, walletType = 'Single-Signature';
+
+        if (firstInput.bip32Derivation) totalKeys = firstInput.bip32Derivation.length;
+        else if (firstInput.tapBip32Derivation) totalKeys = firstInput.tapBip32Derivation.length;
+
+        if (totalKeys > 1) {
+            requiredSigs = "?";
+            const script = firstInput.witnessScript || firstInput.redeemScript;
+            if (script && script[script.length - 1] === 174) {
+                const possibleM = script[0] - 80;
+                if (possibleM > 0 && possibleM <= totalKeys) requiredSigs = possibleM;
+            }
+            walletType = `${requiredSigs}-of-${totalKeys} Multisig`;
+        }
+
+        // Count existing partial signatures
+        let existingSigs = 0;
+        let signerFingerprints = [];
+        let signedFingerprints = new Set();
+
+        tx.inputs.forEach(inp => {
+            // Collect all signer fingerprints from first input
+            if (inp.bip32Derivation) {
+                const deriv = inp.bip32Derivation instanceof Map
+                    ? Array.from(inp.bip32Derivation.values())
+                    : Array.isArray(inp.bip32Derivation)
+                        ? inp.bip32Derivation
+                        : Object.values(inp.bip32Derivation);
+
+                deriv.forEach(d => {
+                    if (d.fingerprint !== undefined) {
+                        const fp = typeof d.fingerprint === 'number'
+                            ? d.fingerprint.toString(16).toUpperCase().padStart(8, '0')
+                            : bytesToHex(new Uint8Array(typeof d.fingerprint === 'object' && d.fingerprint.buffer ? d.fingerprint : [d.fingerprint])).toUpperCase();
+                        if (fp.length >= 8 && !signerFingerprints.includes(fp.slice(0, 8))) {
+                            signerFingerprints.push(fp.slice(0, 8));
+                        }
+                    }
+                });
+            }
+
+            // Count existing sigs
+            if (inp.partialSig) {
+                const sigs = inp.partialSig instanceof Map
+                    ? Array.from(inp.partialSig.keys())
+                    : Array.isArray(inp.partialSig)
+                        ? inp.partialSig.map(s => s.pubKey || s[0])
+                        : Object.keys(inp.partialSig);
+                if (sigs.length > existingSigs) existingSigs = sigs.length;
+            }
+        });
+
+        // Deduplicate: only take first input's fingerprints
+        if (signerFingerprints.length === 0 && totalKeys > 1) {
+            for (let i = 0; i < totalKeys; i++) signerFingerprints.push(null);
+        }
+
+        return { walletType, totalKeys, requiredSigs, existingSigs, signerFingerprints };
+    } catch (err) {
+        return { walletType: 'Unknown', totalKeys: 1, requiredSigs: 1, existingSigs: 0, signerFingerprints: [] };
+    }
+}
+
+function parseOutputs(tx) {
+    const outputs = [];
+    let totalOut = 0;
+    if (tx.outputs) {
+        tx.outputs.forEach((out, index) => {
+            const amt = Number(out.amount);
+            totalOut += amt;
+            const { sats, btc: btcAmt } = formatAmount(amt);
+            const scriptInfo = parseOutputScript(out.script);
+            const isChange = !!(out.bip32Derivation || out.tapBip32Derivation);
+            outputs.push({ index, amount: out.amount, sats, btc: btcAmt, address: scriptInfo.address, scriptType: scriptInfo.type, scriptHex: scriptInfo.scriptHex, isChange });
+        });
+    }
+    return { outputs, totalOut };
+}
+
+function parseInputs(tx) {
+    let totalIn = 0, canCalculateFee = true;
+    if (tx.inputs) {
+        tx.inputs.forEach(input => {
+            if (input.witnessUtxo) totalIn += Number(input.witnessUtxo.amount);
+            else canCalculateFee = false;
+        });
+    } else { canCalculateFee = false; }
+    return { totalIn, canCalculateFee };
+}
+
+
+// =========================================================
+// DISPLAY: QUORUM DASHBOARD
+// =========================================================
+function buildQuorumDashboard(model) {
+    parsedSecurityModel = model;
+    const card = document.getElementById('quorum-card');
+    const tracker = document.getElementById('quorum-tracker');
+    const statusEl = document.getElementById('quorum-status');
+
+    if (model.totalKeys <= 1) {
+        // Single-sig: simple status
+        tracker.innerHTML = `
+            <div class="quorum-slot waiting" style="flex: none; width: 100%;">
+                <div class="quorum-slot-label">Single Signature</div>
+                <div class="quorum-slot-status">${model.existingSigs > 0 ? 'Signed' : 'Awaiting your signature'}</div>
+            </div>`;
+        statusEl.textContent = model.existingSigs > 0 ? 'Transaction is signed.' : 'Enter your seed to sign this transaction.';
+    } else {
+        // Multisig: show per-signer slots
+        let html = '';
+        for (let i = 0; i < model.totalKeys; i++) {
+            const isSigned = i < model.existingSigs;
+            const fp = model.signerFingerprints[i];
+            const label = fp ? fp.slice(0, 8) : `Signer ${i + 1}`;
+            html += `
+                <div class="quorum-slot ${isSigned ? 'signed' : 'waiting'}">
+                    <div class="quorum-slot-icon">${isSigned ? '&#10003;' : '&#9711;'}</div>
+                    <div class="quorum-slot-label">${label}</div>
+                    <div class="quorum-slot-status">${isSigned ? 'Signed' : 'Waiting'}</div>
+                </div>`;
+        }
+        tracker.innerHTML = html;
+
+        const remaining = (typeof model.requiredSigs === 'number' ? model.requiredSigs : model.totalKeys) - model.existingSigs;
+        if (remaining <= 0) {
+            statusEl.innerHTML = `<span style="color: var(--skb-secondary);">Quorum reached — ready to finalize!</span>`;
+        } else {
+            statusEl.textContent = `${model.existingSigs} of ${model.requiredSigs} required signatures collected. ${remaining} more needed.`;
+        }
+    }
+
+    card.style.display = 'block';
+}
+
+
+// =========================================================
+// DISPLAY: TRANSACTION DETAILS
+// =========================================================
+function buildTransactionDisplay(model, outputsInfo, inputsInfo) {
+    let html = '';
+
+    // Security model badge
+    html += `<div class="skb-alert skb-alert--info" style="margin-bottom: 14px;">
+        <div><strong>${model.walletType}</strong>${model.totalKeys > 1 ? ' — Enter ONE seed phrase to add your signature.' : ''}</div>
+    </div>`;
+
+    // Outputs
+    outputsInfo.outputs.forEach(output => {
+        const badgeClass = output.isChange ? 'skb-tx-badge--change' : 'skb-tx-badge--send';
+        const badgeText = output.isChange ? 'CHANGE' : 'SENDING TO';
+        html += `
+            <div class="skb-tx-detail" style="margin-bottom: 10px;">
+                <div class="skb-tx-detail-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="skb-tx-badge ${badgeClass}">${badgeText}</span>
+                    <span style="font-family: var(--skb-mono); font-weight: 700; color: var(--skb-primary);">${output.sats} sats <span style="color: var(--skb-text-dim); font-weight: 400;">(${output.btc} BTC)</span></span>
+                </div>
+                <div class="skb-tx-detail-body">
+                    <div class="skb-data-label">Address</div>
+                    <div class="skb-data-value" style="margin-top: 4px;">${output.address || 'No standard address'}</div>
+                </div>
+            </div>`;
+    });
+
+    // Fee
+    if (inputsInfo.canCalculateFee) {
+        const fee = inputsInfo.totalIn - outputsInfo.totalOut;
+        const { sats: feeSats, btc: feeBtc } = formatAmount(fee);
+        let feeRate = 'Unknown';
+        try {
+            const tx = btc.Transaction.fromPSBT(loadedPsbtBytes, { network: NETWORK });
+            feeRate = (Number(fee) / (tx.vsize || tx.weight / 4)).toFixed(2) + ' sat/vB';
+        } catch (e) {}
+        html += `
+            <div class="skb-tx-fee">
+                <span class="skb-tx-fee-label">Fee: ${feeSats} sats (${feeBtc} BTC)</span>
+                <span class="skb-tx-fee-value">${feeRate}</span>
+            </div>`;
+    } else {
+        html += `<div class="skb-alert skb-alert--warning" style="margin-top: 10px;"><div>Cannot calculate exact fee — legacy inputs detected.</div></div>`;
+    }
+
+    document.getElementById('txDetails').innerHTML = html;
+}
+
+
+// =========================================================
+// MAIN: PARSE & DISPLAY PSBT
+// =========================================================
+async function parseAndDisplayPSBTBuffer(uint8Array) {
+    loadLibraries();
+    if (!librariesLoaded) return;
+
+    try {
+        showStatus('<span class="skb-spinner"></span> Parsing PSBT...', '');
+        loadedPsbtBytes = uint8Array;
+        const tx = btc.Transaction.fromPSBT(loadedPsbtBytes, { network: NETWORK });
+
+        const model = parseSecurityModel(tx);
+        const outputsInfo = parseOutputs(tx);
+        const inputsInfo = parseInputs(tx);
+
+        // Update UI to show loaded file
+        document.getElementById('upload-zone').style.display = 'none';
+        document.getElementById('file-loaded-indicator').style.display = 'block';
+        document.getElementById('loaded-file-name').textContent = window.loadedPsbtFilename;
+        document.getElementById('loaded-file-meta').textContent = `${model.walletType} — ${outputsInfo.outputs.length} output(s)`;
+
+        // Build displays
+        buildQuorumDashboard(model);
+        buildTransactionDisplay(model, outputsInfo, inputsInfo);
+
+        // Show sections
+        document.getElementById('review-card').style.display = 'block';
+        document.getElementById('seed-accordion').style.display = 'block';
+        document.getElementById('action-section').style.display = 'block';
+
+        // Update action button text based on quorum
+        updateActionButton(model);
+
+        setStep(2);
+        psbtScanProcessing = false;  // Reset for potential re-scan
+        showStatus('PSBT loaded successfully!', 'success');
+        setTimeout(() => showStatus(''), 3000);
+    } catch (error) {
+        console.error("PSBT Parsing Error:", error);
+        psbtScanProcessing = false;
+        showStatus(`Error decoding PSBT: ${error.message || 'Check console for details.'}`, 'error');
+    }
+}
+
+function updateActionButton(model) {
+    const btn = document.getElementById('signBtn');
+    const remaining = (typeof model.requiredSigs === 'number' ? model.requiredSigs : model.totalKeys) - model.existingSigs;
+    if (remaining <= 0) {
+        btn.textContent = 'Finalize Transaction';
+    } else {
+        btn.textContent = 'Add Signature';
+    }
+}
+
+
+// =========================================================
+// UI CONTROLS
+// =========================================================
+window.toggleAccordion = function() {
+    const header = document.getElementById('accordion-trigger');
+    const body = document.getElementById('accordion-body');
+    header.classList.toggle('open');
+    body.classList.toggle('open');
+};
+
+window.toggleAdvanced = function() {
+    document.getElementById('advanced-content').classList.toggle('open');
+};
+
+window.loadNewPsbt = function() {
+    // Reset to show upload zone again
+    document.getElementById('upload-zone').style.display = 'block';
+    document.getElementById('file-loaded-indicator').style.display = 'none';
+    document.getElementById('quorum-card').style.display = 'none';
+    document.getElementById('review-card').style.display = 'none';
+    document.getElementById('seed-accordion').style.display = 'none';
+    document.getElementById('action-section').style.display = 'none';
+    document.getElementById('handoff-section').style.display = 'none';
+    document.getElementById('qrDisplay').style.display = 'none';
+    loadedPsbtBytes = null;
+    psbtScanProcessing = false;
+    setStep(1);
+    showStatus('');
+};
+
+
+// =========================================================
+// SIGNING
+// =========================================================
+async function signTransaction() {
+    loadLibraries();
+    if (!librariesLoaded) return;
+
+    let seedText;
+    try { seedText = getSeedFromGrid(); } catch (e) { return showStatus(e.message, 'error'); }
+
+    const passphraseText = document.getElementById('passphrase').value;
+    const includeRawHex = document.getElementById('includeRawHex').checked;
+
+    if (!loadedPsbtBytes || !seedText) return showStatus('Please provide PSBT and complete seed phrase.', 'error');
+
+    const signBtn = document.getElementById('signBtn');
+    signBtn.disabled = true;
+    showStatus('<span class="skb-spinner"></span> Signing transaction...', '');
+    setStep(3);
+
+    try {
+        const tx = btc.Transaction.fromPSBT(loadedPsbtBytes, { network: NETWORK });
+        let seed;
+        try { seed = mnemonicToSeedSync(seedText, passphraseText); }
+        catch (e) { throw new Error("Invalid seed phrase (Checksum failed)."); }
+
+        const masterKey = HDKey.fromMasterSeed(seed, NETWORK.bip32);
+
+        const getSigCount = (t) => {
+            let count = 0;
+            t.inputs.forEach(inp => {
+                if (inp.partialSig) count += (inp.partialSig instanceof Map) ? inp.partialSig.size : (Array.isArray(inp.partialSig) ? inp.partialSig.length : Object.keys(inp.partialSig).length);
+                if (inp.tapKeySig) count++;
+                if (inp.tapScriptSig) count += (inp.tapScriptSig instanceof Map) ? inp.tapScriptSig.size : (Array.isArray(inp.tapScriptSig) ? inp.tapScriptSig.length : Object.keys(inp.tapScriptSig).length);
+                if (inp.finalScriptWitness && inp.finalScriptWitness.length > 0) count++;
+                if (inp.finalScriptSig && inp.finalScriptSig.length > 0) count++;
+            });
+            return count;
+        };
+
+        const initialSigs = getSigCount(tx);
+        const pathsToTry = new Set();
+
+        const extractPaths = (obj) => {
+            if (!obj) return;
+            if (typeof obj === 'object') {
+                if (obj.path) { const p = formatPath(obj.path); if (p) pathsToTry.add(p); }
+                if (obj instanceof Map) for (const v of obj.values()) extractPaths(v);
+                else if (Array.isArray(obj)) for (const v of obj) extractPaths(v);
+                else for (const k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) extractPaths(obj[k]);
+            }
+        };
+
+        tx.inputs.forEach(inp => { extractPaths(inp.bip32Derivation); extractPaths(inp.tapBip32Derivation); });
+
+        const purposes = [44, 49, 84, 86];
+        for (let p of purposes) for (let ch = 0; ch <= 1; ch++) for (let idx = 0; idx < 15; idx++) pathsToTry.add(`m/${p}'/0'/0'/${ch}/${idx}`);
+
+        for (const path of pathsToTry) {
+            try {
+                const childKey = masterKey.derive(path);
+                if (childKey.privateKey) tx.sign(childKey.privateKey);
+            } catch (e) {}
+        }
+
+        const finalSigs = getSigCount(tx);
+        const signaturesAdded = finalSigs - initialSigs;
+
+        if (signaturesAdded === 0) {
+            if (initialSigs > 0) throw new Error(`No new signatures added. Transaction already has ${initialSigs} signatures.`);
+            else throw new Error("No signatures added. Verify seed matches derivation paths.");
+        }
+
+        transactionIsFinalized = false;
+        try { tx.finalize(); transactionIsFinalized = true; } catch (e) {}
+
+        const signedPsbtBytes = tx.toPSBT();
+        zeroFillArray(seed);
+
+        // Update quorum dashboard with new sig count
+        const newModel = parseSecurityModel(tx);
+        buildQuorumDashboard(newModel);
+
+        // Build handoff screen
+        buildHandoffScreen(signedPsbtBytes, transactionIsFinalized, signaturesAdded, includeRawHex, newModel);
+
+        // Update step indicator
+        setStep(4);
+
+        // Close seed accordion
+        document.getElementById('accordion-trigger').classList.remove('open');
+        document.getElementById('accordion-body').classList.remove('open');
+
+    } catch (error) {
+        console.error("Signing Error:", error);
+        showStatus(`Signing Error: ${error.message}`, 'error');
+    } finally {
+        signBtn.disabled = false;
+    }
+}
+
+
+// =========================================================
+// POST-SIGNING HANDOFF SCREEN
+// =========================================================
+function buildHandoffScreen(signedPsbtBytes, isFinalized, signaturesAdded, includeRawHex, model) {
+    const section = document.getElementById('handoff-section');
+    const baseName = window.loadedPsbtFilename || 'transaction.psbt';
+    const downloadName = baseName.replace('.psbt', isFinalized ? '-finalized.psbt' : '-partial.psbt');
+
+    // Create download URL
+    const psbtUrl = URL.createObjectURL(new Blob([signedPsbtBytes], { type: "application/octet-stream" }));
+
+    let html = '';
+
+    if (isFinalized) {
+        // FINALIZED — Success state
+        html = `
+            <div class="skb-success">
+                <div class="skb-success-title">Quorum Reached — Transaction Finalized!</div>
+                <div class="skb-success-text">Added ${signaturesAdded} signature(s). This transaction is ready to broadcast from an online device.</div>
+                <div class="handoff-actions">
+                    <a href="${psbtUrl}" download="${downloadName}" class="handoff-download">Download Finalized PSBT</a>
+                    <button class="handoff-qr-toggle" onclick="toggleHandoffQR()">Show QR Code</button>
+                </div>`;
+
+        if (includeRawHex) {
+            try {
+                const tx = btc.Transaction.fromPSBT(signedPsbtBytes, { network: NETWORK });
+                const hexUrl = URL.createObjectURL(new Blob([tx.hex], { type: 'text/plain' }));
+                html += `<div class="handoff-actions" style="margin-top: 8px;">
+                    <a href="${hexUrl}" download="${downloadName.replace('.psbt', '-rawtx.txt')}" class="handoff-hex">Download Raw Hex</a>
+                </div>`;
+            } catch (e) {}
+        }
+
+        html += `</div>`;
+        showStatus('Transaction finalized! Ready to broadcast.', 'success');
+    } else {
+        // PARTIAL — Need more signatures
+        const remaining = (typeof model.requiredSigs === 'number' ? model.requiredSigs : model.totalKeys) - model.existingSigs;
+        html = `
+            <div class="skb-card" style="border-color: rgba(92, 156, 230, 0.3);">
+                <div class="skb-card-title" style="color: var(--skb-info);">Next Steps</div>
+                <div class="skb-alert skb-alert--info" style="margin-bottom: 14px;">
+                    <div>Signature added! You still need <strong>${remaining} more signature${remaining !== 1 ? 's' : ''}</strong> to finalize this transaction.</div>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--skb-text-muted); margin-bottom: 14px;">
+                    Save or scan the updated PSBT to pass it to the next signing device.
+                </p>
+                <div class="handoff-actions" style="justify-content: flex-start;">
+                    <a href="${psbtUrl}" download="${downloadName}" class="handoff-download partial">Download Partial PSBT</a>
+                    <button class="handoff-qr-toggle" onclick="toggleHandoffQR()">Show QR Code</button>
+                </div>
+            </div>`;
+
+        if (includeRawHex) {
+            // Can't get raw hex from partial — show note
+            html += `<div class="skb-alert skb-alert--warning" style="margin-top: 10px;"><div>Raw transaction hex is only available after the transaction is fully signed.</div></div>`;
+        }
+
+        showStatus(`Added ${signaturesAdded} signature(s). ${remaining} more needed.`, 'warning');
+    }
+
+    section.innerHTML = html;
+    section.style.display = 'block';
+
+    // Hide action section since we're done
+    document.getElementById('action-section').style.display = 'none';
+
+    // Store for QR generation
+    window._signedPsbtBytes = signedPsbtBytes;
+    window._isFinalized = isFinalized;
+    window._includeRawHex = includeRawHex;
+}
+
+window.toggleHandoffQR = async function() {
+    const qrDisplay = document.getElementById('qrDisplay');
+    if (qrDisplay.style.display === 'block') {
+        qrDisplay.style.display = 'none';
+        return;
+    }
+
+    if (!window._signedPsbtBytes || !QRCode) return;
+
+    const label = window._isFinalized ? 'Finalized PSBT' : 'Partial PSBT';
+    qrDisplay.innerHTML = `
+        <div class="skb-card">
+            <div class="skb-card-title">QR Code</div>
+            <div style="text-align: center;">
+                <div id="qrContainer" style="display: inline-block; background: white; padding: 16px; border-radius: var(--skb-radius-md);"></div>
+            </div>
+        </div>`;
+    qrDisplay.style.display = 'block';
+
+    try {
+        const canvas = document.createElement('canvas');
+        await QRCode.toCanvas(canvas, bytesToBase64(window._signedPsbtBytes), {
+            width: 600, margin: 2, color: { dark: '#000000', light: '#FFFFFF' }
+        });
+        document.getElementById('qrContainer').appendChild(canvas);
+    } catch (error) {
+        let msg = error.message.includes("too big") ? "Transaction is too large for a static QR. Please download the file instead." : error.message;
+        document.getElementById('qrContainer').innerHTML = `<div style="color: var(--skb-danger); padding: 20px;">${msg}</div>`;
+    }
+
+    if (window._includeRawHex && window._isFinalized) {
+        try {
+            const tx = btc.Transaction.fromPSBT(window._signedPsbtBytes, { network: NETWORK });
+            const canvas2 = document.createElement('canvas');
+            await QRCode.toCanvas(canvas2, tx.hex, {
+                width: 600, margin: 2, color: { dark: '#000000', light: '#FFFFFF' }
+            });
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-top: 16px; text-align: center;';
+            wrapper.innerHTML = '<div style="font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Raw Transaction Hex</div>';
+            const qrBox = document.createElement('div');
+            qrBox.style.cssText = 'display: inline-block; background: white; padding: 16px; border-radius: var(--skb-radius-md);';
+            qrBox.appendChild(canvas2);
+            wrapper.appendChild(qrBox);
+            document.getElementById('qrContainer').parentElement.appendChild(wrapper);
+        } catch (e) {}
+    }
+};
+
+
+// =========================================================
+// RESET
+// =========================================================
+function resetAll() {
+    document.getElementById('psbtInput').value = '';
+    document.getElementById('feeRate').value = '';
+    document.getElementById('includeRawHex').checked = false;
+
+    document.getElementById('upload-zone').style.display = 'block';
+    document.getElementById('file-loaded-indicator').style.display = 'none';
+    ['quorum-card', 'review-card', 'seed-accordion', 'action-section', 'handoff-section', 'qrDisplay'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+    });
+
+    // Close accordion
+    document.getElementById('accordion-trigger').classList.remove('open');
+    document.getElementById('accordion-body').classList.remove('open');
+    document.getElementById('advanced-content').classList.remove('open');
+
+    if (psbtQrCode) window.togglePsbtScanner();
+    if (seedQrCode) window.toggleSeedScanner();
+
+    clearSensitiveData();
+    window.loadedPsbtFilename = 'transaction.psbt';
+    window._signedPsbtBytes = null;
+    psbtScanProcessing = false;
+    setStep(1);
+    showStatus('Cleared all data.', 'success');
+    setTimeout(() => showStatus(''), 2000);
+}
+
+
+// =========================================================
+// THEME TOGGLE
+// =========================================================
+window.toggleTheme = function() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme');
+    const btn = document.getElementById('theme-btn');
+    if (currentTheme === 'light') {
+        html.removeAttribute('data-theme');
+        localStorage.setItem('safekeepTheme', 'dark');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+    } else {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('safekeepTheme', 'light');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+};
+
+
+// =========================================================
+// INIT
+// =========================================================
+document.addEventListener('DOMContentLoaded', async () => {
+    // Theme icon
+    if (localStorage.getItem('safekeepTheme') === 'light') {
+        document.getElementById('theme-btn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+
+    // Build initial seed grid
+    window.updateSeedGrid();
+
+    // File input handler
+    document.getElementById('psbtInput').addEventListener('change', async (e) => {
+        if (!e.target.files.length) return;
+        const file = e.target.files[0];
+        window.loadedPsbtFilename = file.name;
+        const arrayBuffer = await file.arrayBuffer();
+        await parseAndDisplayPSBTBuffer(new Uint8Array(arrayBuffer));
+        e.target.value = '';
+    });
+
+    // Sign button
+    document.getElementById('signBtn').addEventListener('click', signTransaction);
+
+    // Cleanup on leave
+    window.addEventListener('beforeunload', clearSensitiveData);
+
+    // Auto-load session seed
+    if (window.SeedSession) {
+        const sessionSeed = await window.SeedSession.init();
+        if (sessionSeed && sessionSeed.mnemonic) {
+            const words = sessionSeed.mnemonic.trim().split(/\s+/);
+            if (words.length === 24) {
+                document.querySelector('input[name="seedLength"][value="24"]').checked = true;
+                window.updateSeedGrid();
+            }
+            setTimeout(() => {
+                fillPastedWords(words, 0);
+                const statusEl = document.getElementById('session-seed-status');
+                if (statusEl) statusEl.textContent = `Loaded from session (${words.length} words)`;
+            }, 50);
+
+            // Also load passphrase from session
+            const pp = window.SeedSession.getPassphrase();
+            if (pp) document.getElementById('passphrase').value = pp;
+        }
+    }
+});
+</script>
+</body>
+</html>

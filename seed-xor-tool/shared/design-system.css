@@ -1,0 +1,1161 @@
+/* ============================================
+   SafeKeepBitcoin — Unified Design System
+   Version 1.0
+   ============================================
+   Usage: Import in any tool's index.html:
+   <link rel="stylesheet" href="../shared/design-system.css">
+
+   When bundled by Vite + singlefile, this gets
+   inlined into each standalone HTML automatically.
+   ============================================ */
+
+/* ---- Theme Variables ---- */
+:root {
+  /* Backgrounds */
+  --skb-bg-primary: #0d0d0d;
+  --skb-bg-secondary: #141414;
+  --skb-bg-tertiary: #1a1a1a;
+  --skb-bg-input: #1e1e1e;
+
+  /* Borders */
+  --skb-border: #2a2a2a;
+  --skb-border-hover: #3a3a3a;
+
+  /* Brand Colors */
+  --skb-primary: #f7931a;
+  --skb-primary-hover: #ffaa33;
+  --skb-primary-muted: rgba(247, 147, 26, 0.08);
+
+  --skb-secondary: #03dac6;
+  --skb-secondary-hover: #04f5de;
+  --skb-secondary-muted: rgba(3, 218, 198, 0.08);
+
+  --skb-danger: #cf6679;
+  --skb-danger-muted: rgba(207, 102, 121, 0.08);
+
+  --skb-info: #5c9ce6;
+  --skb-info-muted: rgba(92, 156, 230, 0.08);
+
+  /* Text
+     --skb-text-muted is used for tool subtitles, hint text, and most
+     "secondary" prose. Lifted from #777 → #a0a0a8 for legibility
+     on the new --skb-surface-tool background. --skb-text-dim is the lowest
+     tier (chevrons, disabled states); also lifted to keep it readable. */
+  --skb-text: #e0e0e0;
+  --skb-text-muted: #a0a0a8;
+  --skb-text-dim: #7a7a82;
+
+  /* Typography */
+  --skb-mono: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  --skb-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* Sizing */
+  --skb-radius-sm: 6px;
+  --skb-radius-md: 10px;
+  --skb-radius-lg: 14px;
+  --skb-container-max: 880px;
+
+  /* Effects */
+  --skb-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --skb-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --skb-transition: 0.2s ease;
+
+  /* Tool button surface — used by .dash-tool-card on the dashboard
+     and in the left-hand sidebar (body.tool-active).
+     Distinct from --skb-bg-secondary so tool buttons read as
+     interactive surfaces, not background panels. */
+  --skb-surface-tool: #1c1c20;
+  --skb-surface-tool-hover: #26262c;
+  --skb-surface-tool-active: rgba(247, 147, 26, 0.10);
+  --skb-surface-tool-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- Light Theme ---- */
+[data-theme="light"] {
+  --skb-bg-primary: #f2f2f4;
+  --skb-bg-secondary: #ffffff;
+  --skb-bg-tertiary: #f7f7f8;
+  --skb-bg-input: #eaeaec;
+  --skb-border: #d0d0d4;
+  --skb-border-hover: #b0b0b4;
+  --skb-primary: #d87c14;
+  --skb-primary-hover: #c06a0a;
+  --skb-primary-muted: rgba(216, 124, 20, 0.06);
+  --skb-secondary: #018786;
+  --skb-secondary-hover: #016b6a;
+  --skb-secondary-muted: rgba(1, 135, 134, 0.06);
+  --skb-danger: #b00020;
+  --skb-danger-muted: rgba(176, 0, 32, 0.06);
+  --skb-info: #1565c0;
+  --skb-info-muted: rgba(21, 101, 192, 0.06);
+  --skb-text: #1a1a1a;
+  --skb-text-muted: #475569;
+  --skb-text-dim: #64748b;
+  --skb-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --skb-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+  /* Tool button surface — light-theme variants */
+  --skb-surface-tool: #ffffff;
+  --skb-surface-tool-hover: #f5f7fa;
+  --skb-surface-tool-active: rgba(216, 124, 20, 0.08);
+  --skb-surface-tool-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+
+/* ============================================
+   Base Reset & Body
+   ============================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--skb-bg-primary);
+  color: var(--skb-text);
+  font-family: var(--skb-sans);
+  line-height: 1.6;
+  transition: background var(--skb-transition), color var(--skb-transition);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
+/* ============================================
+   Header / Navigation
+   ============================================ */
+.skb-header {
+  background: var(--skb-bg-secondary);
+  border-bottom: 1px solid var(--skb-border);
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background var(--skb-transition), border var(--skb-transition);
+}
+
+.skb-brand {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--skb-text);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+.skb-brand span { color: var(--skb-primary); }
+
+.skb-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.skb-theme-btn {
+  background: var(--skb-bg-input);
+  border: 1px solid var(--skb-border);
+  color: var(--skb-text-muted);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--skb-transition);
+  line-height: 1;
+}
+.skb-theme-btn:hover { border-color: var(--skb-primary); color: var(--skb-text); }
+
+
+/* ============================================
+   Layout
+   ============================================ */
+.skb-container {
+  max-width: var(--skb-container-max);
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+
+/* ============================================
+   Page Title
+   ============================================ */
+.skb-page-title {
+  text-align: center;
+  margin-bottom: 0.25rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--skb-text);
+}
+
+.skb-page-subtitle {
+  text-align: center;
+  color: var(--skb-text-muted);
+  font-size: 0.88rem;
+  margin-bottom: 1.5rem;
+}
+
+
+/* ============================================
+   Cards
+   ============================================ */
+.skb-card {
+  background: var(--skb-bg-secondary);
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--skb-shadow);
+  margin-bottom: 1.25rem;
+  transition: background var(--skb-transition), border var(--skb-transition);
+}
+
+.skb-card-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--skb-text-muted);
+  font-weight: 700;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.skb-card-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--skb-border);
+}
+
+
+/* ============================================
+   Form Controls
+   ============================================ */
+.skb-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.skb-control-group {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skb-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--skb-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.skb-select,
+.skb-input {
+  background: var(--skb-bg-input);
+  color: var(--skb-text);
+  border: 1px solid var(--skb-border);
+  padding: 10px 12px;
+  border-radius: var(--skb-radius-sm);
+  font-size: 0.9rem;
+  font-family: var(--skb-sans);
+  width: 100%;
+  transition: border var(--skb-transition);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.skb-select {
+  cursor: pointer;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23777' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.skb-select:focus,
+.skb-input:focus {
+  outline: none;
+  border-color: var(--skb-secondary);
+  box-shadow: 0 0 0 3px var(--skb-secondary-muted);
+}
+
+.skb-textarea {
+  width: 100%;
+  min-height: 80px;
+  background: var(--skb-bg-input);
+  color: var(--skb-primary);
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-sm);
+  padding: 14px;
+  font-size: 1.1rem;
+  font-family: var(--skb-mono);
+  letter-spacing: 2px;
+  resize: none;
+  transition: border var(--skb-transition);
+}
+.skb-textarea:focus {
+  outline: none;
+  border-color: var(--skb-primary);
+  box-shadow: 0 0 0 3px var(--skb-primary-muted);
+}
+
+.skb-checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--skb-text);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.skb-checkbox-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--skb-primary);
+  cursor: pointer;
+}
+
+
+/* ============================================
+   Buttons
+   ============================================ */
+
+/* Primary — Orange. Main CTAs (Generate, Sign, Confirm) */
+.skb-btn-primary {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  font-size: 1rem;
+  background: var(--skb-primary);
+  color: #111;
+  border: none;
+  border-radius: var(--skb-radius-md);
+  cursor: pointer;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: all var(--skb-transition);
+}
+.skb-btn-primary:hover {
+  background: var(--skb-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(247, 147, 26, 0.25);
+}
+.skb-btn-primary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Secondary — Teal outline. Import, Export, Load */
+.skb-btn-secondary {
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--skb-secondary);
+  color: var(--skb-secondary);
+  border-radius: var(--skb-radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all var(--skb-transition);
+  white-space: nowrap;
+}
+.skb-btn-secondary:hover {
+  background: var(--skb-secondary-muted);
+}
+
+/* Danger — Red outline. Delete, Clear */
+.skb-btn-danger {
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--skb-danger);
+  color: var(--skb-danger);
+  border-radius: var(--skb-radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all var(--skb-transition);
+}
+.skb-btn-danger:hover {
+  background: var(--skb-danger-muted);
+}
+
+/* Small — Compact utility buttons. Copy, QR, etc. */
+.skb-btn-sm {
+  padding: 7px 14px;
+  font-size: 0.78rem;
+  background: var(--skb-bg-input);
+  border: 1px solid var(--skb-border);
+  color: var(--skb-text);
+  border-radius: var(--skb-radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all var(--skb-transition);
+  white-space: nowrap;
+}
+.skb-btn-sm:hover {
+  border-color: var(--skb-text-muted);
+}
+
+/* Icon button — Square, for single-action icons */
+.skb-btn-icon {
+  background: var(--skb-bg-input);
+  border: 1px solid var(--skb-border);
+  color: var(--skb-text-muted);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--skb-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  transition: all var(--skb-transition);
+  flex-shrink: 0;
+}
+.skb-btn-icon:hover {
+  border-color: var(--skb-secondary);
+  color: var(--skb-secondary);
+}
+
+/* Button row */
+.skb-btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.skb-btn-row > * { flex: 1; min-width: 120px; }
+
+
+/* ============================================
+   Progress Bar
+   ============================================ */
+.skb-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--skb-text-muted);
+}
+
+.skb-progress-track {
+  flex: 1;
+  height: 6px;
+  background: var(--skb-bg-tertiary);
+  border-radius: 3px;
+  margin: 0 12px;
+  overflow: hidden;
+}
+
+.skb-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--skb-primary), var(--skb-primary-hover));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+
+/* ============================================
+   Tabs
+   ============================================ */
+.skb-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--skb-border);
+  margin-bottom: 1.25rem;
+  gap: 0;
+}
+
+.skb-tab {
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--skb-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all var(--skb-transition);
+  font-family: var(--skb-sans);
+}
+.skb-tab:hover {
+  color: var(--skb-text);
+}
+.skb-tab.active {
+  color: var(--skb-secondary);
+  border-bottom-color: var(--skb-secondary);
+}
+
+.skb-tab-content {
+  display: none;
+}
+.skb-tab-content.active {
+  display: block;
+}
+
+
+/* ============================================
+   Step Indicator (for multi-step workflows)
+   ============================================ */
+.skb-steps {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1.25rem;
+  background: var(--skb-bg-secondary);
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--skb-shadow);
+}
+
+.skb-step {
+  flex: 1;
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--skb-text-dim);
+  border-right: 1px solid var(--skb-border);
+  transition: all var(--skb-transition);
+}
+.skb-step:last-child { border-right: none; }
+
+.skb-step.active {
+  color: var(--skb-primary);
+  background: var(--skb-primary-muted);
+}
+.skb-step.completed {
+  color: var(--skb-secondary);
+  background: var(--skb-secondary-muted);
+}
+
+.skb-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 0.7rem;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.skb-step.active .skb-step-num {
+  background: var(--skb-primary);
+  border-color: var(--skb-primary);
+  color: #111;
+}
+.skb-step.completed .skb-step-num {
+  background: var(--skb-secondary);
+  border-color: var(--skb-secondary);
+  color: #111;
+}
+
+
+/* ============================================
+   Result / Output Area
+   ============================================ */
+.skb-result {
+  border: 1px solid var(--skb-secondary);
+  border-radius: var(--skb-radius-lg);
+  padding: 1.5rem;
+  background: var(--skb-secondary-muted);
+}
+
+.skb-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.skb-result-title {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--skb-secondary);
+  font-weight: 700;
+}
+
+.skb-result-actions {
+  display: flex;
+  gap: 6px;
+}
+
+
+/* ============================================
+   Seed Word Grid (output display)
+   ============================================ */
+.skb-word-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 1rem;
+}
+@media (max-width: 640px) { .skb-word-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 440px) { .skb-word-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.skb-word-pill {
+  background: var(--skb-bg-input);
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--skb-mono);
+  font-size: 0.88rem;
+}
+.skb-word-num {
+  color: var(--skb-text-dim);
+  font-size: 0.75rem;
+  min-width: 18px;
+  user-select: none;
+}
+.skb-word-text {
+  color: var(--skb-primary);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+
+/* ============================================
+   Seed Input Grid (editable)
+   ============================================ */
+.skb-seed-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 1rem;
+}
+@media (max-width: 640px) { .skb-seed-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 440px) { .skb-seed-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.skb-word-box {
+  display: flex;
+  align-items: center;
+  background: var(--skb-bg-input);
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-sm);
+  position: relative;
+  transition: border var(--skb-transition);
+}
+.skb-word-box:focus-within {
+  border-color: var(--skb-secondary);
+}
+.skb-word-box.invalid {
+  border-color: var(--skb-danger);
+  box-shadow: 0 0 0 3px var(--skb-danger-muted);
+}
+.skb-word-box .word-num {
+  padding: 8px;
+  padding-right: 4px;
+  color: var(--skb-text-dim);
+  font-size: 0.75rem;
+  font-family: var(--skb-mono);
+  user-select: none;
+  min-width: 24px;
+  text-align: right;
+}
+.skb-word-box input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--skb-primary);
+  padding: 8px 8px 8px 4px;
+  font-family: var(--skb-mono);
+  font-size: 0.88rem;
+  font-weight: 600;
+  outline: none;
+  width: 100%;
+  min-width: 0;
+}
+
+
+/* ============================================
+   Data Display (xpub, addresses, etc.)
+   ============================================ */
+.skb-data-row {
+  background: var(--skb-bg-input);
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.skb-data-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--skb-text-muted);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.skb-data-value {
+  font-family: var(--skb-mono);
+  font-size: 0.82rem;
+  color: var(--skb-text);
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+}
+
+
+/* ============================================
+   Tables
+   ============================================ */
+.skb-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.skb-table th {
+  background: var(--skb-bg-tertiary);
+  color: var(--skb-secondary);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--skb-border);
+}
+.skb-table td {
+  padding: 8px 10px;
+  font-family: var(--skb-mono);
+  font-size: 0.8rem;
+  color: var(--skb-text);
+  border-bottom: 1px solid var(--skb-border);
+  word-break: break-all;
+}
+.skb-table tr:last-child td { border-bottom: none; }
+
+
+/* ============================================
+   Alerts & Status
+   ============================================ */
+.skb-alert {
+  border-radius: var(--skb-radius-sm);
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.skb-alert--success {
+  background: var(--skb-secondary-muted);
+  border: 1px solid rgba(3, 218, 198, 0.2);
+  color: var(--skb-secondary);
+}
+
+.skb-alert--warning {
+  background: var(--skb-primary-muted);
+  border: 1px solid rgba(247, 147, 26, 0.15);
+  color: var(--skb-primary);
+}
+
+.skb-alert--error {
+  background: var(--skb-danger-muted);
+  border: 1px solid rgba(207, 102, 121, 0.2);
+  color: var(--skb-danger);
+}
+
+.skb-alert--info {
+  background: var(--skb-info-muted);
+  border: 1px solid rgba(92, 156, 230, 0.15);
+  color: var(--skb-info);
+}
+
+
+/* ============================================
+   Hint Row (inline tips / quick actions)
+   ============================================ */
+.skb-hint {
+  background: var(--skb-secondary-muted);
+  border: 1px solid rgba(3, 218, 198, 0.15);
+  border-radius: var(--skb-radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--skb-secondary);
+}
+.skb-hint-text { flex: 1; }
+
+
+/* ============================================
+   File Upload Zone
+   ============================================ */
+.skb-upload-zone {
+  border: 2px dashed var(--skb-border);
+  border-radius: var(--skb-radius-md);
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--skb-transition);
+}
+.skb-upload-zone:hover {
+  border-color: var(--skb-primary);
+  background: var(--skb-primary-muted);
+}
+.skb-upload-text {
+  font-size: 0.9rem;
+  color: var(--skb-text-muted);
+}
+.skb-upload-text strong { color: var(--skb-primary); }
+
+.skb-file-loaded {
+  background: var(--skb-secondary-muted);
+  border: 1px solid rgba(3, 218, 198, 0.2);
+  border-radius: var(--skb-radius-md);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.skb-file-loaded-name {
+  font-family: var(--skb-mono);
+  font-size: 0.88rem;
+  color: var(--skb-secondary);
+  font-weight: 600;
+}
+.skb-file-loaded-meta {
+  font-size: 0.78rem;
+  color: var(--skb-text-dim);
+}
+
+
+/* ============================================
+   Passphrase Section
+   ============================================ */
+.skb-passphrase-section {
+  border: 1px dashed var(--skb-primary);
+  border-radius: var(--skb-radius-md);
+  padding: 1rem 1.25rem;
+  background: var(--skb-primary-muted);
+  margin-top: 1.25rem;
+}
+
+.skb-passphrase-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--skb-primary);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.skb-passphrase-row {
+  display: flex;
+  gap: 8px;
+}
+
+.skb-passphrase-input {
+  flex: 1;
+  background: var(--skb-bg-input);
+  color: var(--skb-text);
+  border: 1px solid var(--skb-border);
+  padding: 10px 12px;
+  border-radius: var(--skb-radius-sm);
+  font-family: var(--skb-mono);
+  font-size: 0.9rem;
+  transition: border var(--skb-transition);
+}
+.skb-passphrase-input:focus {
+  outline: none;
+  border-color: var(--skb-primary);
+  box-shadow: 0 0 0 3px var(--skb-primary-muted);
+}
+
+
+/* ============================================
+   QR Code Container
+   ============================================ */
+.skb-qr-container {
+  display: none;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-md);
+  margin-top: 10px;
+  text-align: center;
+}
+.skb-qr-container.visible { display: block; }
+.skb-qr-container canvas {
+  image-rendering: pixelated;
+  max-width: 100%;
+}
+
+
+/* ============================================
+   Scanner Overlay
+   ============================================ */
+.skb-scanner {
+  display: none;
+  margin-top: 12px;
+  padding: 12px;
+  background: #000;
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-md);
+}
+.skb-scanner.visible { display: block; }
+.skb-scanner-progress {
+  margin-top: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--skb-info);
+}
+
+
+/* ============================================
+   Save Seed Banner
+   ============================================ */
+.skb-save-banner {
+  background: linear-gradient(135deg, var(--skb-primary-muted), var(--skb-secondary-muted));
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-md);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 1.25rem;
+}
+.skb-save-banner-text {
+  font-size: 0.88rem;
+  color: var(--skb-text);
+}
+.skb-save-banner-text strong {
+  color: var(--skb-primary);
+}
+
+
+/* ============================================
+   Transaction Detail (Signer)
+   ============================================ */
+.skb-tx-detail {
+  background: var(--skb-bg-input);
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-md);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.skb-tx-detail-header {
+  background: var(--skb-bg-tertiary);
+  padding: 8px 14px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--skb-text-muted);
+  border-bottom: 1px solid var(--skb-border);
+}
+.skb-tx-detail-body { padding: 12px 14px; }
+
+.skb-tx-output {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--skb-border);
+}
+.skb-tx-output:last-child { border-bottom: none; }
+
+.skb-tx-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+.skb-tx-badge--send {
+  background: var(--skb-danger-muted);
+  color: var(--skb-danger);
+  border: 1px solid rgba(207, 102, 121, 0.2);
+}
+.skb-tx-badge--change {
+  background: var(--skb-secondary-muted);
+  color: var(--skb-secondary);
+  border: 1px solid rgba(3, 218, 198, 0.2);
+}
+
+.skb-tx-fee {
+  background: var(--skb-primary-muted);
+  border: 1px solid rgba(247, 147, 26, 0.15);
+  border-radius: var(--skb-radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  margin-top: 12px;
+}
+.skb-tx-fee-label { color: var(--skb-text-muted); font-weight: 600; }
+.skb-tx-fee-value { color: var(--skb-primary); font-weight: 700; font-family: var(--skb-mono); }
+
+
+/* ============================================
+   Success Card
+   ============================================ */
+.skb-success {
+  background: var(--skb-secondary-muted);
+  border: 1px solid rgba(3, 218, 198, 0.2);
+  border-radius: var(--skb-radius-lg);
+  padding: 1.5rem;
+  text-align: center;
+}
+.skb-success-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--skb-secondary);
+  margin-bottom: 0.5rem;
+}
+.skb-success-text {
+  font-size: 0.88rem;
+  color: var(--skb-text-muted);
+  margin-bottom: 1rem;
+}
+.skb-success-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+
+/* ============================================
+   Modals
+   ============================================ */
+.skb-modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.skb-modal-overlay.visible {
+  display: flex;
+}
+
+.skb-modal {
+  background: var(--skb-bg-secondary);
+  border: 1px solid var(--skb-border);
+  border-radius: var(--skb-radius-lg);
+  padding: 1.5rem;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.skb-modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: var(--skb-text);
+}
+
+
+/* ============================================
+   Strength Bar (passphrase)
+   ============================================ */
+.skb-strength-bar {
+  height: 6px;
+  width: 100%;
+  background: var(--skb-bg-tertiary);
+  border-radius: 3px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.skb-strength-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s, background 0.3s;
+  border-radius: 3px;
+}
+
+
+/* ============================================
+   Breadcrumb / Back Link
+   ============================================ */
+.skb-breadcrumb {
+  text-align: center;
+  margin-top: 2rem;
+  font-size: 0.78rem;
+  color: var(--skb-text-dim);
+}
+.skb-breadcrumb a {
+  color: var(--skb-text-muted);
+  text-decoration: none;
+  transition: color var(--skb-transition);
+}
+.skb-breadcrumb a:hover { color: var(--skb-primary); }
+
+
+/* ============================================
+   Print Styles
+   ============================================ */
+.skb-print-only { display: none; }
+
+@media print {
+  body { background: #fff; color: #000; }
+  .skb-header, .skb-btn-primary, .skb-btn-secondary, .skb-btn-sm,
+  .skb-btn-icon, .skb-btn-danger, .skb-save-banner,
+  .skb-seed-selector, .skb-breadcrumb, .skb-scanner { display: none !important; }
+  .skb-card { box-shadow: none; border: 1px solid #ccc; }
+  .skb-print-only { display: block; }
+}
+
+
+/* ============================================
+   Responsive
+   ============================================ */
+@media (max-width: 640px) {
+  .skb-container { padding: 1rem 0.75rem 3rem; }
+  .skb-card { padding: 1rem; }
+  .skb-controls { flex-direction: column; }
+  .skb-control-group { min-width: 100%; }
+  .skb-steps { flex-direction: column; }
+  .skb-step { border-right: none; border-bottom: 1px solid var(--skb-border); }
+  .skb-step:last-child { border-bottom: none; }
+  .skb-seed-selector { flex-direction: column; align-items: stretch; }
+  .skb-seed-selector-actions { justify-content: flex-end; }
+}

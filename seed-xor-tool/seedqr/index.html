@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SeedQR Generator</title>
+<script>
+  if (localStorage.getItem('safekeepTheme') === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+</script>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cpath d='M 250 25 L 75 75 L 75 250 C 75 375 175 450 250 475 C 325 450 425 375 425 250 L 425 75 Z' fill='%23f7931a' /%3E%3Cg transform='translate(250, 250) rotate(14) scale(0.6) translate(-244, -244)' fill='%23ffffff'%3E%3Cpath d='M336.8,240.8c22.4-17.6,36.8-45.6,36.8-76v-3.2c0-52-41.6-95.2-93.6-96.8V21.6c0-12-9.6-21.6-21.6-21.6c-12,0-21.6,9.6-21.6,21.6v43.2h-20V21.6c0-12-9.6-21.6-21.6-21.6s-21.6,9.6-21.6,21.6v43.2h-52.8c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h53.6v0.8c-0.8,2.4-1.6,4.8-1.6,7.2v258.4H120c-12,0-21.6,9.6-21.6,21.6s9.6,21.6,21.6,21.6h52.8v48.8c0,12,9.6,21.6,21.6,21.6c12,0,21.6-9.6,21.6-21.6v-49.6c52-1.6,93.6-44.8,93.6-96.8v-3.2C373.6,286.4,359.2,258.4,336.8,240.8z M330.4,320c0,29.6-24,53.6-53.6,53.6h-59.2V116c0-2.4-0.8-4.8-1.6-7.2V108h60.8c29.6,0,53.6,24,53.6,53.6v3.2c0,29.6-24,53.6-53.6,53.6c-12,0-21.6,9.6-21.6,21.6v0.8v0.8c0,12,9.6,21.6,21.6,21.6c29.6,0,53.6,24,53.6,53.6V320z'/%3E%3C/g%3E%3C/svg%3E">
+
+<style>
+  /* --- Theme Variables --- */
+  :root {
+    --bg: #0f0f0f;
+    --card: #161616;
+    --card2: #1c1c1c;
+    --border: #2a2a2a;
+    --orange: #f7931a;
+    --teal: #03dac6;
+    --red: #cf6679;
+    --muted: #888;
+    --text: #e0e0e0;
+    --mono: 'Courier New', Courier, monospace;
+    --input-bg: #2c2c2c;
+  }
+  [data-theme="light"] {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --card2: #f0f0f0;
+    --border: #cccccc;
+    --text: #121212;
+    --muted: #555555;
+    --teal: #018786;
+    --red: #b00020;
+    --input-bg: #e0e0e0;
+    --orange: #d87c14;
+  }
+
+  /* --- Base Styles --- */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6; transition: background-color 0.3s ease, color 0.3s ease; }
+  nav { background: var(--card); border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+  .nav-brand { font-weight: 800; font-size: 1.15rem; color: var(--text); text-decoration: none; }
+  .nav-brand span { color: var(--orange); }
+
+  .container { max-width: 850px; margin: 0 auto; padding: 0 1rem 3rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.8); margin-bottom: 25px; }
+  [data-theme="light"] .card { box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+  h1 { text-align: center; color: var(--text); text-transform: uppercase; letter-spacing: 2px; font-size: 1.5rem; margin-bottom: 5px;}
+  .subtitle { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+  /* --- Tabs --- */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab { padding: 10px 20px; cursor: pointer; color: var(--muted); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid transparent; transition: all 0.3s; }
+  .tab.active { color: var(--teal); border-bottom: 2px solid var(--teal); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* --- Buttons & Inputs --- */
+  .btn { display: block; width: 100%; padding: 15px; font-size: 1.1rem; background: var(--teal); color: #111; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s; margin-bottom: 10px; }
+  .btn:hover { background: #00ebd5; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(3,218,198,0.3); }
+  .btn-secondary { padding: 10px 15px; background: transparent; border: 1px solid var(--teal); color: var(--teal); border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; text-transform: uppercase; font-size: 0.85rem; }
+  .btn-secondary:hover { background: rgba(3,218,198,0.1); }
+  .btn-orange { background: var(--orange); color: #111; border-color: var(--orange); }
+  .btn-orange:hover { background: #ffaa33; box-shadow: 0 6px 20px rgba(247,147,26,0.3); border-color: #ffaa33;}
+
+  input[type="password"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 1rem; width: 100%; transition: border-color 0.3s ease; margin-bottom: 15px; }
+  input[type="password"]:focus { outline: none; border-color: var(--teal); }
+  input[type="file"] { padding: 10px; background: var(--card2); border: 1px dashed var(--orange); cursor: pointer; width: 100%; margin-bottom: 15px; border-radius: 8px; color: var(--text);}
+  
+  .radio-group { display: flex; gap: 15px; margin-top: 5px; margin-bottom: 15px;}
+  .radio-group label { cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: normal; color: var(--text); font-size: 0.95rem; text-transform: none; letter-spacing: normal;}
+
+  /* --- Seed Grid Input & Autocomplete --- */
+  .seed-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; }
+  @media (max-width: 600px) { .seed-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 450px) { .seed-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .word-box { display: flex; align-items: center; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; position: relative; transition: border-color 0.3s ease; }
+  .word-box:focus-within { border-color: var(--orange); }
+  .word-box.invalid { border-color: var(--red); box-shadow: 0 0 5px rgba(207, 102, 121, 0.4); }
+  .word-box span { color: var(--muted); font-size: 0.8em; width: 22px; user-select: none; }
+  .word-box input { width: 100%; background: transparent; border: none; color: var(--orange); font-family: var(--mono); font-size: 15px; outline: none; }
+
+  .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--card2); border: 1px solid var(--border); border-radius: 4px; max-height: 150px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 8px 16px rgba(0,0,0,0.5); }
+  [data-theme="light"] .autocomplete-list { box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+  .autocomplete-item { padding: 8px 10px; cursor: pointer; font-family: var(--mono); font-size: 14px; color: var(--text); border-bottom: 1px solid var(--border); transition: background-color 0.2s; }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.active-suggestion { background: var(--teal); color: #000; font-weight: bold; }
+
+  /* --- Outputs & Camera --- */
+  .status { margin-top: 15px; padding: 12px; border-radius: 6px; font-size: 0.95rem; text-align: center; display: none; font-weight: bold; }
+  .status.success { background: rgba(3,218,198,0.1); color: var(--teal); display: block; border: 1px solid var(--teal); }
+  .status.error { background: rgba(207,102,121,0.1); color: var(--red); display: block; border: 1px solid var(--red); }
+
+  .qr-container { display: flex; flex-direction: column; align-items: center; background: var(--bg); padding: 20px; border-radius: 8px; border: 1px solid var(--border); margin-top: 20px; display: none;}
+  canvas { image-rendering: pixelated; border: 10px solid white; border-radius: 4px; }
+  
+  .camera-box { border: 2px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 20px; display: none; background: #000; }
+  #reader-import, #reader-verify { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 4px; overflow: hidden; }
+
+  /* --- Print Logic --- */
+  @media print {
+      body * { visibility: hidden; }
+      #printable-area, #printable-area * { visibility: visible; }
+      #printable-area { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 20px;}
+      .print-title { font-family: sans-serif; margin-bottom: 20px; color: black !important;}
+      #blank-grid-container svg { max-width: 100%; height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="../index.html" class="nav-brand">SafeKeep<span>Bitcoin</span></a>
+  <button type="button" id="theme-btn" style="background:transparent; border:none; color:var(--text); font-size:1.2rem; cursor:pointer;">☀️</button>
+</nav>
+
+<div class="container" id="main-ui">
+    <h1>Seed QR Code</h1>
+    <div class="subtitle">Create and verify hand-drawn, air-gapped seed backups</div>
+
+    <div class="card">
+        <div class="tabs">
+            <div class="tab active" data-target="tab-generate">1. Create SeedQR</div>
+            <div class="tab" data-target="tab-verify">2. Verify Physical QR</div>
+        </div>
+
+        <div id="tab-generate" class="tab-content active">
+            
+            <div style="margin-bottom: 25px; padding: 15px; background: rgba(3, 218, 198, 0.05); border: 1px solid var(--teal); border-radius: 6px;">
+                <h4 style="margin-top: 0; color: var(--teal); margin-bottom: 10px;">⚡ Quick Import Seed</h4>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" class="btn-secondary" id="btn-show-decrypt">🔐 Load Note (.skb)</button>
+                    <button type="button" class="btn-secondary" id="btn-camera-import">📷 Scan QR</button>
+                </div>
+                <span style="display: block; font-size: 0.85em; color: var(--muted); margin-top: 8px;">Auto-fills the grid below</span>
+            </div>
+
+            <div id="camera-import-box" class="camera-box">
+                <div id="reader-import"></div>
+                <button type="button" class="btn" id="btn-cancel-import" style="margin-top:15px; width: 100%; background: var(--red); color: white;">Cancel Scan</button>
+            </div>
+
+            <div id="decrypt-box" style="display: none; background: var(--card2); padding: 20px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 25px;">
+                <label style="font-size: 0.85rem; font-weight: bold; color: var(--orange); text-transform: uppercase;">Load Workspace (.skb encrypted)</label>
+                <input type="file" id="decrypt-file" accept=".skb">
+                <label style="font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase;">Decryption Password</label>
+                <input type="password" id="decrypt-password" placeholder="Password for .skb file">
+                <button type="button" class="btn btn-orange" id="btn-process-decrypt">Decrypt & Extract Seed</button>
+                <div id="decrypt-status" class="status"></div>
+            </div>
+
+            <label style="font-size: 0.85rem; font-weight: bold; color: var(--muted); text-transform: uppercase;">Seed Length</label>
+            <div class="radio-group">
+                <label><input type="radio" name="seedLength" value="12" checked onchange="window.updateSeedGrid()"> 12 Words</label>
+                <label><input type="radio" name="seedLength" value="24" onchange="window.updateSeedGrid()"> 24 Words</label>
+            </div>
+
+            <div id="seed-grid-container" class="seed-grid"></div>
+            
+            <hr style="border: none; border-top: 1px dashed var(--border); margin: 25px 0;">
+            
+            <button type="button" class="btn" id="btn-generate">Generate SeedQR Format</button>
+            <div id="generate-status" class="status"></div>
+            
+            <div id="qr-output" class="qr-container">
+                <canvas id="qr-canvas"></canvas>
+                <p style="margin: 15px 0; font-size: 0.95rem; color: var(--muted); text-align: center;">
+                    Grab a black Sharpie. Print the blank grid below, and carefully fill in the squares to match this master image.
+                </p>
+                <button type="button" class="btn-secondary" id="btn-print-blank" style="width: auto;">🖨️ Print Blank 29x29 Grid</button>
+            </div>
+        </div>
+
+        <div id="tab-verify" class="tab-content">
+            <p style="margin-bottom: 20px; color: var(--text); font-size: 1.05rem; text-align: center;">
+                Hold your finished hand-drawn SeedQR up to the camera. We will decode it and ensure it perfectly matches the seed phrase you entered in Step 1.
+            </p>
+            <button type="button" class="btn" id="btn-start-verify">📸 Start Verification Scan</button>
+            
+            <div id="camera-verify-box" class="camera-box" style="margin-top: 20px;">
+                <div id="reader-verify"></div>
+                <button type="button" class="btn" id="btn-cancel-verify" style="margin-top:15px; background: var(--red); color: white;">Cancel Scan</button>
+            </div>
+
+            <div id="verify-result" style="margin-top: 25px; text-align: center; font-size: 1.25rem; font-weight: bold; word-break: break-all; padding: 15px; border-radius: 8px;"></div>
+        </div>
+    </div>
+</div>
+
+<div id="printable-area" style="display: none;">
+    <h2 class="print-title">SafeKeep SeedQR Master (29x29)</h2>
+    <div id="blank-grid-container"></div>
+</div>
+
+<script type="module" src="./seedqr.js"></script>
+</body>
+</html>
