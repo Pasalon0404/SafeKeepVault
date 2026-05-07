@@ -30016,44 +30016,69 @@ function arm_onConfigChange() {
     _armDebounceTimer = setTimeout(arm_deriveWallet, 200);
 }
 
-// Cross-field validator for the Wallet Type × Key Format dropdowns.
-// Electrum's Watch-Only JSON export is single-sig only (the keystore
-// shape is bip32 with a single root_fingerprint slot — no x1/x2/x3
-// cosigner array), so the Multi-Sig × electrum_json combination is
-// invalid and must be prevented at the UI layer rather than at export
-// time. Hardware Wallet JSON works for both single and multi, so it's
-// the universal coercion target if we detect a clash.
+// Cross-field validator for the Address Type × Wallet Type × Key
+// Format dropdowns. Two rules govern the legal combinations:
+//
+//   1. SPECTER COMPATIBILITY (allowed): the previous version of this
+//      validator blocked the Multi-Sig × BIP-32 Watch-Only JSON
+//      (`electrum_json`) combination, on the grounds that Electrum's
+//      JSON keystore shape has only one root_fingerprint slot. That
+//      block has been removed because Specter wallet's import flow
+//      requires exactly that combination — Specter can ingest a
+//      multi-sig setup expressed as a series of single-key BIP-32
+//      Watch-Only JSON exports, one per cosigner. If the downstream
+//      export logic ever needs to differentiate the multi-sig case
+//      from the single-sig case for `electrum_json`, that's an
+//      export-layer concern, not a UI-validation concern.
+//
+//   2. TAPROOT MULTISIG GUARD (blocked): Taproot multi-signature
+//      (p2tr-multi, MuSig2/FROST etc.) is not yet formally
+//      standardized across wallet ecosystems. Allowing the UI to
+//      build a Taproot × Multi-Sig configuration would let users
+//      generate keys / descriptors that no other wallet can verify,
+//      which is exactly the kind of foot-gun this tool exists to
+//      prevent. So whenever Address Type = BIP-86 (Taproot), we
+//      force Wallet Type back to Single-Sig and disable the
+//      Multi-Sig option in the dropdown.
 //
 // Idempotent: safe to call repeatedly. Designed for both per-change
 // invocation (arm_onConfigChange) and one-shot init (arm_init), so
 // the initial dropdown state is always consistent.
 function arm_enforceCompatibility() {
+    const dvSel = document.getElementById('arm-derivation');
     const wtSel = document.getElementById('arm-wallet-type');
     const kfSel = document.getElementById('arm-key-format');
-    if (!wtSel || !kfSel) return;
+    if (!dvSel || !wtSel || !kfSel) return;
 
-    // Step 1 — auto-correction. If the user just flipped one dropdown
-    // into a state that conflicts with the other's CURRENT selection,
-    // coerce key-format to the universally-compatible Hardware Wallet
-    // JSON before we apply `disabled`. We coerce key-format rather
-    // than wallet-type because Address Type / Wallet Type capture
-    // user intent about the wallet itself, while Key Format is just
-    // an export packaging choice — the cheaper one to override.
-    if (wtSel.value === 'multi' && kfSel.value === 'electrum_json') {
-        kfSel.value = 'coldcard_json';
+    // Step 1 — auto-correction for the Taproot × Multi-Sig conflict.
+    // If the user just flipped Address Type to Taproot while Wallet
+    // Type was still on Multi-Sig, coerce Wallet Type back to
+    // Single-Sig BEFORE we apply the `disabled` bit on the option.
+    // Order matters: setting `disabled = true` on a currently-selected
+    // <option> leaves the <select> showing that option as the value
+    // even though it's nominally unselectable, so we must clear the
+    // selection first.
+    if (dvSel.value === '86' && wtSel.value === 'multi') {
+        wtSel.value = 'single';
     }
 
-    // Step 2 — paint the disabled bits. Each direction of the
-    // restriction is symmetrical: wallet=multi disables the
-    // electrum_json option, kf=electrum_json disables the multi
-    // option. We never touch any OTHER option, so user-friendly
-    // states like "single + electrum_json" and "multi + coldcard_json"
-    // remain freely selectable.
-    const electrumOpt = kfSel.querySelector('option[value="electrum_json"]');
-    if (electrumOpt) electrumOpt.disabled = (wtSel.value === 'multi');
-
+    // Step 2 — paint the disabled bits.
+    //
+    // Multi-Sig option: disabled iff Address Type is Taproot (BIP-86).
+    // For every other Address Type (BIP-84 / BIP-49 / BIP-44) the
+    // Multi-Sig option is freely selectable.
+    //
+    // BIP-32 Watch-Only JSON option: NEVER disabled by this validator.
+    // The Specter workflow needs `multi × electrum_json` to be a
+    // legal combination, so we explicitly clear any prior `disabled`
+    // attribute that earlier validator versions may have set on a
+    // cached DOM. (Setting to `false` is a no-op on a fresh DOM but
+    // a real side-effect on a hot-reloaded one — useful during dev.)
     const multiOpt = wtSel.querySelector('option[value="multi"]');
-    if (multiOpt) multiOpt.disabled = (kfSel.value === 'electrum_json');
+    if (multiOpt) multiOpt.disabled = (dvSel.value === '86');
+
+    const electrumOpt = kfSel.querySelector('option[value="electrum_json"]');
+    if (electrumOpt) electrumOpt.disabled = false;
 }
 
 function arm_clearPassphrase() {
@@ -30830,24 +30855,33 @@ async function arm_deriveWallet() {
             // every PSBT Electrum subsequently builds. Preview value is
             // the same structure the downloader produces (see
             // arm_computeElectrumSnapshot) so WYSIWYG.
-            if (isMulti) {
-                displayValue = 'Electrum multisig uses a per-cosigner import flow.\nSwitch to the Hardware Wallet JSON format for multi-sig exports.';
-            } else {
-                var electrumObj = {
-                    seed_version: 53,
-                    use_encryption: false,
-                    wallet_type: 'standard',
-                    keystore: {
-                        type: 'bip32',
-                        xpub: xpubValue,
-                        xprv: null,
-                        derivation: basePath,
-                        root_fingerprint: exportFP.toLowerCase(),
-                        label: 'SafeKeep Watch-Only ' + exportFP.toUpperCase()
-                    }
-                };
-                displayValue = JSON.stringify(electrumObj, null, 2);
-            }
+            // Both single-sig AND multi-sig wallets emit the same
+            // single-cosigner BIP-32 keystore shape. The previous
+            // version of this branch refused multi-sig with a warning
+            // string, but Specter's import flow specifically wants
+            // ONE such file PER COSIGNER — wallet_type stays "standard"
+            // even for the multi-sig case because the JSON describes a
+            // single key, not the wallet quorum.  The upstream xpub /
+            // path / fingerprint logic in this same function already
+            // computed the multi-sig values correctly when isMulti is
+            // true (basePath = m/48'/0'/0'/<bip48Suffix>, xpubValue =
+            // SLIP-132 multi-sig key matching that path), so the JSON
+            // body below is byte-identical between single and multi
+            // except for those derivation-driven fields.
+            var electrumObj = {
+                seed_version: 53,
+                use_encryption: false,
+                wallet_type: 'standard',
+                keystore: {
+                    type: 'bip32',
+                    xpub: xpubValue,
+                    xprv: null,
+                    derivation: basePath,
+                    root_fingerprint: exportFP.toLowerCase(),
+                    label: 'SafeKeep Watch-Only ' + exportFP.toUpperCase()
+                }
+            };
+            displayValue = JSON.stringify(electrumObj, null, 2);
         } else if (effectiveKeyFormat === 'electrum_coldcard_json') {
             // Electrum Compatible JSON — Coldcard-mimic keystore (task #197).
             //
@@ -31898,27 +31932,43 @@ async function arm_computeElectrumSnapshot() {
     const walletType = document.getElementById('arm-wallet-type').value;
     const isMulti    = walletType === 'multi';
 
-    // Electrum multisig wants a completely different wallet structure
-    // (x1/, x2/, x3/ keystore slots) and typically expects each
-    // cosigner's JSON to be imported separately through the multisig
-    // wizard — skeleton multisig generation is out of scope for this
-    // single-xpub export. Point the user at the Nunchuk JSON instead.
-    if (isMulti) {
-        throw new Error('Electrum multisig uses a per-cosigner import flow — export the Hardware Wallet JSON instead.');
-    }
+    // Multi-sig (Specter cosigner export): each cosigner is exported
+    // as ITS OWN BIP-32 watch-only JSON, then Specter combines the
+    // collected files into the multisig descriptor at import time.
+    // The JSON body shape is the same as single-sig (wallet_type:
+    // "standard", bip32 keystore, single xpub/derivation/root_fingerprint)
+    // — only the derivation path and SLIP-132 version bytes shift to
+    // the BIP-48 family. The previous implementation rejected multi-sig
+    // outright with a thrown Error; that throw is gone, replaced by the
+    // isMulti-aware version-byte and basePath selection below.
 
-    // SLIP-132 single-sig version bytes — Electrum is happy with
-    // zpub/ypub/xpub, same table as the Coldcard snapshot.
+    // SLIP-132 version bytes. Single-sig keys are zpub/ypub/xpub;
+    // multi-sig (BIP-48) keys are Zpub (P2WSH) / Ypub (P2SH-P2WSH) /
+    // xpub. This mirrors the lookup tables already in arm_deriveWallet
+    // so the download payload byte-matches the live preview.
     const slip132Single = {
         '84': { private: 0x04b2430c, public: 0x04b24746 },
         '49': { private: 0x049d7878, public: 0x049d7cb2 },
         '44': { private: 0x0488ade4, public: 0x0488b21e },
         '86': { private: 0x0488ade4, public: 0x0488b21e }
     };
-    const versionBytes = slip132Single[pathType];
+    const slip132Multi = {
+        '84': { private: 0x02aa7a99, public: 0x02aa7ed3 },  // Zpub (P2WSH)
+        '49': { private: 0x0295b005, public: 0x0295b43f },  // Ypub (P2SH-P2WSH)
+        '44': { private: 0x0488ade4, public: 0x0488b21e },
+        '86': { private: 0x0488ade4, public: 0x0488b21e }
+    };
+    const versionBytes = (isMulti ? slip132Multi : slip132Single)[pathType];
     if (!versionBytes) throw new Error('Unsupported derivation type: ' + pathType);
 
-    const basePath = 'm/' + pathType + "'/0'/0'";
+    // BIP-48 script-type suffix: 0'=Legacy, 1'=Nested, 2'=Native SegWit
+    // (Taproot reuses '2' here purely for table consistency; the
+    // upstream validator prevents Taproot × Multi from ever reaching
+    // this code path).
+    const bip48Suffix = { '44': "0'", '49': "1'", '84': "2'", '86': "2'" };
+    const basePath = isMulti
+        ? "m/48'/0'/0'/" + bip48Suffix[pathType]
+        : 'm/' + pathType + "'/0'/0'";
 
     const seedBytes = await bip39.mnemonicToSeed(mnemonic, passphrase);
     const hdkey = HDKey.fromMasterSeed(seedBytes, versionBytes);
@@ -31939,9 +31989,14 @@ async function arm_computeElectrumSnapshot() {
 
     // derivationKey: the abbreviated derivation tag used in the
     // download filename so a single seed can export multiple account
-    // structures without overwriting earlier files. Single-sig only —
-    // multisig was rejected above.
-    const derivationKey = 'bip' + pathType;
+    // structures without overwriting earlier files. For multi-sig
+    // exports we tag with bip48_<N> to match the actual path
+    // (m/48'/0'/0'/N') and to avoid collisions with single-sig
+    // bip84/bip49/bip44 exports of the same seed. Same pattern the
+    // Nunchuk snapshot uses — see arm_computeNunchukSnapshot.
+    const derivationKey = isMulti
+        ? ('bip48_' + ({ '44': '0', '49': '1', '84': '2', '86': '2' }[pathType] || '2'))
+        : ('bip' + pathType);
 
     const jsonObj = {
         seed_version: 53,
