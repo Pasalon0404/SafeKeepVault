@@ -173,11 +173,14 @@ This session covered ~75 tasks. The biggest themes:
 
 ### Web app / boot.html (most numerous changes)
 - **Vault Identifier 3-word phrase** — the dashboard chip used to
-  show 8 hex chars of SHA-256(mnemonic). Now derives from the LUKS
-  dm-crypt UUID via `_getVaultDriveHex()` and renders as a Title-Case
-  3-word BIP-39 phrase (e.g. "Parent Wash Copy"). Stays constant
-  across seed swaps because it's a property of the drive, not the
-  loaded seed.
+  show 8 hex chars of SHA-256(mnemonic). *Architectural Pivot:* This
+  now acts as an Anti-Evil Maid integrity check deterministically 
+  derived from a hash of the **Master Seed**, *not* the underlying 
+  LUKS container. This "Coldcard-style" approach guarantees UX 
+  continuity across OS updates (e.g., v1.23 to v1.24). If a user 
+  boots the drive and sees an unfamiliar 3-word phrase, it serves 
+  as an immediate, tamper-evident warning that either the passphrase 
+  was entered incorrectly or the hardware/software was swapped.
 - **Light-mode contrast fix** — the active seed fingerprint badge
   was invisible against the lightened light-theme background.
   Scoped CSS override under `[data-theme="light"]`.
