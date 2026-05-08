@@ -31,3 +31,13 @@ You can compile the core cryptography app on any system with **Node.js** and **n
 git clone [https://github.com/Pasalon0404/SafeKeepVault.git](https://github.com/Pasalon0404/SafeKeepVault.git)
 cd SafeKeepVault
 npm install
+
+## Developer & Architectural Documentation
+
+If you are auditing the codebase, contributing, or simply want to understand how the stripped-down Ubuntu OS is constructed under the hood, please refer to our comprehensive **[Project Notes](PROJECT_NOTES.md)**. 
+
+This developer handbook contains in-depth technical documentation on:
+* The Vite build pipeline and offline HTML bundler.
+* Partition layouts and chroot bind-mount safety patterns.
+* Kiosk diagnostic halts, WebKit styling, and runtime regressions.
+* Specific context for resuming development sessions with AI assistants.
