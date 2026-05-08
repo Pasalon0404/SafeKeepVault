@@ -176,7 +176,7 @@ This session covered ~75 tasks. The biggest themes:
   show 8 hex chars of SHA-256(mnemonic). *Architectural Pivot:* This
   now acts as an Anti-Evil Maid integrity check deterministically 
   derived from a hash of the **Master Seed**, *not* the underlying 
-  LUKS container. This "Coldcard-style" approach guarantees UX 
+  LUKS container. This approach guarantees UX 
   continuity across OS updates (e.g., v1.23 to v1.24). If a user 
   boots the drive and sees an unfamiliar 3-word phrase, it serves 
   as an immediate, tamper-evident warning that either the passphrase 
