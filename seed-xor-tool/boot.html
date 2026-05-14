@@ -4582,7 +4582,7 @@
                <span class="skb-seed-accordion__last-word"
                      data-role="last-word">—</span>
                <span class="skb-seed-accordion__sep">·</span>
-               <span class="skb-seed-accordion__fp-label">FP</span>
+               <span class="skb-seed-accordion__fp-label">fingerprint</span>
                <span class="skb-seed-accordion__fp"
                      data-role="fingerprint">--------</span>
              </span>
@@ -4682,31 +4682,61 @@
       transform: rotate(180deg);
     }
 
-    /* Panel — height transition. max-height is generous enough for
-       a 24-word grid plus any future per-tool sibling content, while
-       still being a finite numeric value so the height transition
-       runs in a fixed time regardless of actual content height. */
+    /* Panel — height transition.
+       Uses the `grid-template-rows: 0fr → 1fr` pattern instead of
+       a max-height pinch. Why: the previous design transitioned
+       max-height from 0 → 1400px over 0.22s, but real seed grids
+       are ~200-300px tall, so the timeline spent its first ~85%
+       animating empty space before the content's true height was
+       crossed. Visually that read as "instant pop" on open and a
+       "smooth glide" on close — the asymmetry the user reported.
+       grid-template-rows interpolates the row's height from 0 to
+       the actual content height, so open and close mirror each
+       other to the millisecond.
+       Requires the inner panel to declare `min-height: 0` (so the
+       grid item can collapse below its min-content height) and
+       `overflow: hidden` (to clip its own content while the row
+       is shorter than its natural height). Chromium has supported
+       fr-unit interpolation since v122 (Feb 2024), well below the
+       portable ungoogled-chromium baseline. */
     .skb-seed-accordion__panel {
-      max-height: 0;
+      display: grid;
+      grid-template-rows: 0fr;
       overflow: hidden;
-      transition: max-height 0.22s ease;
+      transition: grid-template-rows 0.22s ease;
     }
     .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__panel {
-      max-height: 1400px;
+      grid-template-rows: 1fr;
     }
     .skb-seed-accordion__panel-inner {
+      /* The grid-row trick relies on these two: min-height:0 lets
+         the row shrink below the content's min-content height
+         during the closed state; overflow:hidden clips the seed
+         grid while the row is mid-animation so cells don't poke
+         out below the wrapper's border. */
+      min-height: 0;
+      overflow: hidden;
       padding: 0.7rem 0.85rem 0.85rem;
     }
     @media print {
-      /* Print always shows the full grid — no toggle, no animation. */
+      /* Print always shows the full grid — no toggle, no animation.
+         Bypass the grid layout entirely so the printer renders the
+         panel as a normal flow block at its natural height. */
       .skb-seed-accordion__toggle,
       .skb-seed-accordion__chevron { display: none !important; }
-      .skb-seed-accordion__panel { max-height: none !important; }
+      .skb-seed-accordion__panel {
+        display: block !important;
+        grid-template-rows: none !important;
+        overflow: visible !important;
+      }
       .skb-seed-accordion {
         border: 0 !important;
         background: transparent !important;
       }
-      .skb-seed-accordion__panel-inner { padding: 0 !important; }
+      .skb-seed-accordion__panel-inner {
+        overflow: visible !important;
+        padding: 0 !important;
+      }
     }
 
     .bip85-out-cell {
@@ -6789,7 +6819,7 @@
                                     <span class="skb-seed-accordion__label">Last word</span>
                                     <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
                                     <span class="skb-seed-accordion__sep">·</span>
-                                    <span class="skb-seed-accordion__fp-label">FP</span>
+                                    <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
                                 <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
@@ -6968,7 +6998,7 @@
                                 <span class="skb-seed-accordion__label">Last word</span>
                                 <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
                                 <span class="skb-seed-accordion__sep">·</span>
-                                <span class="skb-seed-accordion__fp-label">FP</span>
+                                <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                 <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                             </span>
                             <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
@@ -7047,7 +7077,7 @@
                                     <span class="skb-seed-accordion__label">Last word</span>
                                     <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
                                     <span class="skb-seed-accordion__sep">·</span>
-                                    <span class="skb-seed-accordion__fp-label">FP</span>
+                                    <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
                                 <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
@@ -7170,7 +7200,7 @@
                                     <span class="skb-seed-accordion__label">Last word</span>
                                     <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
                                     <span class="skb-seed-accordion__sep">·</span>
-                                    <span class="skb-seed-accordion__fp-label">FP</span>
+                                    <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
                                 <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
@@ -7521,7 +7551,7 @@
                                     <span class="skb-seed-accordion__label">Last word</span>
                                     <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
                                     <span class="skb-seed-accordion__sep">·</span>
-                                    <span class="skb-seed-accordion__fp-label">FP</span>
+                                    <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
                                 <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
@@ -8525,7 +8555,7 @@
                                 <span class="skb-seed-accordion__label">Last word</span>
                                 <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
                                 <span class="skb-seed-accordion__sep">·</span>
-                                <span class="skb-seed-accordion__fp-label">FP</span>
+                                <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                 <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                             </span>
                             <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
@@ -8827,7 +8857,7 @@
                                 <span class="skb-seed-accordion__label">Last word</span>
                                 <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
                                 <span class="skb-seed-accordion__sep">·</span>
-                                <span class="skb-seed-accordion__fp-label">FP</span>
+                                <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                 <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                             </span>
                             <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
