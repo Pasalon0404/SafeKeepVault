@@ -29,14 +29,46 @@
         var _skbUiScaleRaw = localStorage.getItem('safekeepUiScale');
         var _skbUiScale = parseFloat(_skbUiScaleRaw);
         // Whitelist — must match _SKB_UI_SCALE_VALID in the main
-        // script block. Any tampered value falls back to 1.
-        if (_skbUiScale === 0.8 || _skbUiScale === 1 ||
-            _skbUiScale === 1.25 || _skbUiScale === 1.5) {
-          // body is not parsed yet at this point, so stash the
-          // resolved scale on documentElement and let the
-          // DOMContentLoaded handler in the main script block push
-          // it onto body.style.zoom as soon as body exists.
-          document.documentElement.setAttribute('data-ui-scale', String(_skbUiScale));
+        // script block. Any tampered or unknown value falls back to
+        // 1 (Standard). Earlier builds of this bootstrap accepted
+        // only {0.8, 1, 1.25, 1.5} which silently dropped five of
+        // the eight live presets (0.5 / 0.67 / 0.75 / 0.9 / 1.1)
+        // and accepted a 1.5 value the runtime never produces;
+        // the .indexOf() check below now mirrors the live ladder
+        // exactly so every persisted choice round-trips through a
+        // soft reload.
+        var _SKB_VALID_SCALES = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25];
+        if (_SKB_VALID_SCALES.indexOf(_skbUiScale) === -1) {
+          _skbUiScale = 1;
+        }
+        // body is not parsed yet at this point, so stash the
+        // resolved scale on documentElement and let the
+        // DOMContentLoaded handler in the main script block push
+        // it onto body.style.zoom as soon as body exists.
+        document.documentElement.setAttribute('data-ui-scale', String(_skbUiScale));
+
+        // Sidebar-fit pre-flag.
+        //
+        // The persistent dashboard sidebar layout (defined further
+        // down in the stylesheet) was designed for >= 1100 unscaled
+        // CSS pixels of horizontal space. The historical gate for
+        // that layout was a flat `@media (min-width: 1100px)` rule,
+        // which has a UX bug on small displays paired with the UI
+        // scaling preset: `body.style.zoom` shrinks the rendered
+        // size of every child element but leaves the viewport's
+        // reported width unchanged, so on a 1024-wide laptop at
+        // scale 0.5 the sidebar layout *would* fit (it occupies
+        // only 550 raw pixels) yet the @media rule still required
+        // 1100 raw pixels to fire — keeping the sidebar hidden.
+        //
+        // The fix is to gate the sidebar layout on a body/html
+        // class instead of a media query, computed as
+        // (window.innerWidth >= 1100 * scale). We seed the class
+        // here, before first paint, so the dashboard renders in
+        // the correct mode immediately rather than flashing the
+        // wrong layout while we wait for DOMContentLoaded.
+        if (window.innerWidth >= 1100 * _skbUiScale) {
+          document.documentElement.classList.add('skb-sidebar-fits');
         }
       } catch (e) { /* kiosk may block */ }
     </script>
@@ -1195,10 +1227,12 @@
        on the content panel so the drawer expands smoothly without JS-driven
        height measurement.
 
-       Sidebar mode (body.tool-active at >=1100px) auto-expands the drawer
-       via a CSS override further down, so a power user navigating inside
-       an active tool can still reach every specialist without re-opening
-       the drawer on every tool switch. */
+       Sidebar mode (body.tool-active when html.skb-sidebar-fits is set —
+       see the PHASE 3 block below for how that class is computed from the
+       viewport width and the active UI scale) auto-expands the drawer via
+       a CSS override further down, so a power user navigating inside an
+       active tool can still reach every specialist without re-opening the
+       drawer on every tool switch. */
     .dash-advanced {
       margin: 0.25rem 0 1.5rem;
       border: 2px solid var(--skb-border);
@@ -2189,12 +2223,25 @@
 
     /* ================================================================
        PHASE 3 — PERSISTENT SIDEBAR / MASTER-DETAIL LAYOUT
-       When body.tool-active is set (and viewport >= 1100px),
-       .boot-content becomes a two-column CSS Grid:
-         Column 1 (280px): Dashboard in collapsed sidebar mode
-         Column 2 (1fr):   Active tool workspace, centered & capped
+       When body.tool-active is set AND html carries
+       .skb-sidebar-fits, .boot-content becomes a two-column flex:
+         Column 1 (~280px): Dashboard in collapsed sidebar mode
+         Column 2 (1fr):    Active tool workspace, centered & capped
        System screens (loading, welcome, backup) and the full
        Dashboard use single-column layout as before.
+
+       The .skb-sidebar-fits class on <html> is the single source of
+       truth for "the sidebar layout fits at the user's current UI
+       scale". It is set/cleared by skui_updateSidebarFit() (in the
+       UI SCALE section below) using the formula
+         window.innerWidth >= 1100 * scale
+       and seeded by the pre-paint bootstrap so first paint is
+       correct. This replaces the former
+         @media (min-width: 1100px)
+       gate, which read the raw viewport and so kept the sidebar
+       hidden whenever the user scaled the UI down enough that the
+       sidebar would actually fit (the scaling shrinks the rendered
+       content but not the value @media measures against).
        ================================================================ */
 
     /* ---- Master-Detail Flex on .boot-content ----
@@ -2204,210 +2251,212 @@
        its own overflow-y PLUS a critical `min-width: 0` that stops long
        unbroken strings (base64 PSBTs, xpubs, QR payloads) from dictating
        the pane's flex basis and shoving the sidebar off-screen. */
-    @media (min-width: 1100px) {
-      body.tool-active .boot-content {
-        display: flex;
-        flex-direction: row;
-        align-items: stretch;
-        gap: 0;
-        width: 100vw;
-        max-width: 100vw;
-        height: 100vh;
-        max-height: 100vh;
-        overflow: hidden;
-      }
-
-      /* Dashboard is the anchored sidebar — fixed basis, forbidden from
-         shrinking, with its own internal scroll so a tall drawer doesn't
-         force the layout past the viewport. Replaces the former sticky
-         positioning: the parent is now viewport-locked with `overflow:
-         hidden`, so sticky is unnecessary. The `.dash-inner` border-right
-         still handles the visible divider between sidebar and content. */
-      body.tool-active #state-dashboard.state-visible {
-        flex: 0 0 clamp(340px, 25vw, 25vw);
-        flex-shrink: 0;
-        min-width: 340px;
-        max-width: 25vw;
-        height: 100%;
-        max-height: 100vh;
-        overflow-y: auto;
-        overflow-x: hidden;
-        z-index: 10;
-      }
-
-      /* Active tool fills the remaining main-axis space. `min-width: 0`
-         is the single most important property here — without it, a flex
-         item defaults to `min-width: auto` (== min-content), so a long
-         unbroken base64 string inflates the item's flex basis past its
-         fair share and overflows the row. With it, the item honors the
-         flex container's width and horizontal overflow scrolls *inside*
-         the pane instead of leaking into the page. */
-      body.tool-active [id^="state-"].state-visible:not(#state-dashboard) {
-        flex: 1 1 0;
-        flex-grow: 1;
-        min-width: 0;
-        min-height: 0;
-        height: 100%;
-        max-height: 100vh;
-        overflow-y: auto;
-        overflow-x: auto;
-        padding: 0 clamp(1.5rem, 2vw, 3rem);
-      }
+    html.skb-sidebar-fits body.tool-active .boot-content {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: 0;
+      width: 100vw;
+      max-width: 100vw;
+      height: 100vh;
+      max-height: 100vh;
+      overflow: hidden;
     }
 
-    /* ---- Sidebar-Mode Dashboard (collapsed vertical menu) ---- */
-    @media (min-width: 1100px) {
-      /* The sidebar's right-edge rule lives HERE (on the inner
-         content wrapper) rather than on the sticky outer container.
-         `.dash-inner` must be forcefully height-bounded to fit-content
-         or the block defaults — when nested inside a sticky+overflow
-         ancestor that shares a grid cell with a very tall column-2
-         tool — leak the scroll-container's 100vh layout height back
-         into the inner block, producing a border that runs the full
-         viewport even though the drawer is closed. The `!important`
-         flag here and on the outer `#state-dashboard` are belt-and-
-         suspenders against that specific interaction. `display: block`
-         is re-asserted to defeat any inherited flex/grid from dev-
-         mode overlays (the SafeKeepOS mock has been known to inject
-         `display: flex` via JS when it boots in the wrong order). */
-      body.tool-active .dash-inner {
-        display: block !important;
-        height: fit-content !important;
-        padding: 1rem 0.75rem;
-        border-right: 2px solid var(--skb-border);
-      }
+    /* Dashboard is the anchored sidebar — fixed basis, forbidden from
+       shrinking, with its own internal scroll so a tall drawer doesn't
+       force the layout past the viewport. Replaces the former sticky
+       positioning: the parent is now viewport-locked with `overflow:
+       hidden`, so sticky is unnecessary. The `.dash-inner` border-right
+       still handles the visible divider between sidebar and content. */
+    html.skb-sidebar-fits body.tool-active #state-dashboard.state-visible {
+      flex: 0 0 clamp(340px, 25vw, 25vw);
+      flex-shrink: 0;
+      min-width: 340px;
+      max-width: 25vw;
+      height: 100%;
+      max-height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      z-index: 10;
+    }
 
-      /* Hide the identity card, passphrase row, and settings in sidebar.
-         The cipher dropdown is now a sibling of the combined command row
-         (rather than a child of .dash-passphrase), so it needs an explicit
-         selector here or it would leak into sidebar mode. */
-      body.tool-active .dash-identity,
-      body.tool-active .dash-passphrase,
-      body.tool-active .dash-command-row,
-      body.tool-active #dash-cipher-dropdown,
-      body.tool-active .dash-settings,
-      body.tool-active .dash-footer-brutalist,
-      body.tool-active #amnesia-ghost-badge {
-        display: none;
-      }
+    /* Active tool fills the remaining main-axis space. `min-width: 0`
+       is the single most important property here — without it, a flex
+       item defaults to `min-width: auto` (== min-content), so a long
+       unbroken base64 string inflates the item's flex basis past its
+       fair share and overflows the row. With it, the item honors the
+       flex container's width and horizontal overflow scrolls *inside*
+       the pane instead of leaking into the page. */
+    html.skb-sidebar-fits body.tool-active [id^="state-"].state-visible:not(#state-dashboard) {
+      flex: 1 1 0;
+      flex-grow: 1;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      max-height: 100vh;
+      overflow-y: auto;
+      overflow-x: auto;
+      padding: 0 clamp(1.5rem, 2vw, 3rem);
+    }
 
-      /* Show the compact sidebar seed status (hidden by default on full dashboard) */
-      body.tool-active #sidebar-seed-status {
-        display: block !important;
-      }
+    /* ---- Sidebar-Mode Dashboard (collapsed vertical menu) ----
+       Was @media (min-width: 1100px). Now gated on the same
+       html.skb-sidebar-fits class as the master-detail layout
+       above, so the compaction styling fires in lockstep with the
+       layout switch — see the long comment above the PHASE 3
+       block for the rationale. */
 
-      /* Section labels: smaller for sidebar */
-      body.tool-active .dash-section-label span {
-        font-size: 0.6rem;
-        letter-spacing: 0.2em;
-      }
-      body.tool-active .dash-section-label::after {
-        display: none;
-      }
+    /* The sidebar's right-edge rule lives HERE (on the inner
+       content wrapper) rather than on the sticky outer container.
+       `.dash-inner` must be forcefully height-bounded to fit-content
+       or the block defaults — when nested inside a sticky+overflow
+       ancestor that shares a grid cell with a very tall column-2
+       tool — leak the scroll-container's 100vh layout height back
+       into the inner block, producing a border that runs the full
+       viewport even though the drawer is closed. The `!important`
+       flag here and on the outer `#state-dashboard` are belt-and-
+       suspenders against that specific interaction. `display: block`
+       is re-asserted to defeat any inherited flex/grid from dev-
+       mode overlays (the SafeKeepOS mock has been known to inject
+       `display: flex` via JS when it boots in the wrong order). */
+    html.skb-sidebar-fits body.tool-active .dash-inner {
+      display: block !important;
+      height: fit-content !important;
+      padding: 1rem 0.75rem;
+      border-right: 2px solid var(--skb-border);
+    }
 
-      /* Tool grid: single-column flex in sidebar (enables order resorting) */
-      body.tool-active .dash-tool-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-        margin-bottom: 1rem;
-      }
-      body.tool-active .dash-tool-grid.cols-2,
-      body.tool-active .dash-tool-grid.cols-3 {
-        display: flex;
-        flex-direction: column;
-      }
+    /* Hide the identity card, passphrase row, and settings in sidebar.
+       The cipher dropdown is now a sibling of the combined command row
+       (rather than a child of .dash-passphrase), so it needs an explicit
+       selector here or it would leak into sidebar mode. */
+    html.skb-sidebar-fits body.tool-active .dash-identity,
+    html.skb-sidebar-fits body.tool-active .dash-passphrase,
+    html.skb-sidebar-fits body.tool-active .dash-command-row,
+    html.skb-sidebar-fits body.tool-active #dash-cipher-dropdown,
+    html.skb-sidebar-fits body.tool-active .dash-settings,
+    html.skb-sidebar-fits body.tool-active .dash-footer-brutalist,
+    html.skb-sidebar-fits body.tool-active #amnesia-ghost-badge {
+      display: none;
+    }
 
-      /* Advanced Tools drawer in sidebar mode:
-         - Strip the heavy chrome (border/background) so the drawer blends
-           visually with the rest of the sidebar menu.
-         - Keep the toggle fully interactive. The `.is-open` class on
-           `.dash-advanced` is the single source of truth for the drawer's
-           expanded/collapsed state; because the same DOM element carries
-           between layouts, whatever state the user sets on the dashboard
-           persists when a tool opens and the UI flips into sidebar mode,
-           and vice versa.
-         - Sublabel is hidden (no room in the narrow column); chevron
-           stays visible and shrinks so it fits cleanly at the trailing
-           edge of the toggle row. */
-      body.tool-active .dash-advanced {
-        border: none;
-        background: transparent;
-        margin: 0.5rem 0 0.75rem;
-      }
-      body.tool-active .dash-advanced-toggle {
-        padding: 0.4rem 0 0.4rem;
-        gap: 0.5rem;
-      }
-      body.tool-active .dash-advanced-toggle:hover {
-        background: transparent;
-      }
-      body.tool-active .dash-advanced-label {
-        font-size: 0.6rem;
-        letter-spacing: 0.2em;
-      }
-      body.tool-active .dash-advanced-sublabel {
-        display: none;
-      }
-      body.tool-active .dash-advanced-chevron {
-        width: 1.2rem;
-        height: 1.2rem;
-        font-size: 0.85rem;
-      }
-      body.tool-active .dash-advanced-content .dash-tool-grid {
-        padding: 0;
-      }
+    /* Show the compact sidebar seed status (hidden by default on full dashboard) */
+    html.skb-sidebar-fits body.tool-active #sidebar-seed-status {
+      display: block !important;
+    }
 
-      /* Tool cards: compact for sidebar */
-      body.tool-active .dash-tool-card {
-        padding: 0.5rem 0.6rem;
-        gap: 0.5rem;
-        overflow: hidden;
-      }
-      body.tool-active .dash-tool-icon {
-        width: 1.8rem;
-        height: 1.8rem;
-        font-size: 0.9rem;
-        border-width: 1px;
-      }
-      body.tool-active .dash-tool-name {
-        font-size: 0.72rem;
-        white-space: nowrap;
-      }
-      body.tool-active .dash-tool-subtitle {
-        font-size: 0.6rem;
-        font-weight: 500;
-        white-space: nowrap;
-        color: var(--skb-text-muted);
-      }
-      body.tool-active .dash-tool-chevron {
-        display: none;
-      }
+    /* Section labels: smaller for sidebar */
+    html.skb-sidebar-fits body.tool-active .dash-section-label span {
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-section-label::after {
+      display: none;
+    }
 
-      /* Highlight the active tool card — anchor the user's current location.
-         Uses a stronger background tint and a left-edge accent stripe to
-         make the selection unmistakable in the sidebar. */
-      body.tool-active .dash-tool-card.sidebar-active {
-        border-color: var(--skb-primary);
-        background: var(--skb-surface-tool-active);
-        box-shadow: inset 3px 0 0 var(--skb-primary);
-      }
-      body.tool-active .dash-tool-card.sidebar-active:hover {
-        background: var(--skb-surface-tool-active);
-        transform: none;
-      }
-      body.tool-active .dash-tool-card.sidebar-active .dash-tool-icon {
-        border-color: var(--skb-primary);
-        color: var(--skb-primary);
-      }
-      body.tool-active .dash-tool-card.sidebar-active .dash-tool-name {
-        color: var(--skb-primary);
-      }
+    /* Tool grid: single-column flex in sidebar (enables order resorting) */
+    html.skb-sidebar-fits body.tool-active .dash-tool-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-tool-grid.cols-2,
+    html.skb-sidebar-fits body.tool-active .dash-tool-grid.cols-3 {
+      display: flex;
+      flex-direction: column;
+    }
 
-      /* Sidebar branding header */
-      body.tool-active .dash-status-bar {
-        display: none;
-      }
+    /* Advanced Tools drawer in sidebar mode:
+       - Strip the heavy chrome (border/background) so the drawer blends
+         visually with the rest of the sidebar menu.
+       - Keep the toggle fully interactive. The `.is-open` class on
+         `.dash-advanced` is the single source of truth for the drawer's
+         expanded/collapsed state; because the same DOM element carries
+         between layouts, whatever state the user sets on the dashboard
+         persists when a tool opens and the UI flips into sidebar mode,
+         and vice versa.
+       - Sublabel is hidden (no room in the narrow column); chevron
+         stays visible and shrinks so it fits cleanly at the trailing
+         edge of the toggle row. */
+    html.skb-sidebar-fits body.tool-active .dash-advanced {
+      border: none;
+      background: transparent;
+      margin: 0.5rem 0 0.75rem;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-toggle {
+      padding: 0.4rem 0 0.4rem;
+      gap: 0.5rem;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-toggle:hover {
+      background: transparent;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-sublabel {
+      display: none;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-chevron {
+      width: 1.2rem;
+      height: 1.2rem;
+      font-size: 0.85rem;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-content .dash-tool-grid {
+      padding: 0;
+    }
+
+    /* Tool cards: compact for sidebar */
+    html.skb-sidebar-fits body.tool-active .dash-tool-card {
+      padding: 0.5rem 0.6rem;
+      gap: 0.5rem;
+      overflow: hidden;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-tool-icon {
+      width: 1.8rem;
+      height: 1.8rem;
+      font-size: 0.9rem;
+      border-width: 1px;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-tool-name {
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-tool-subtitle {
+      font-size: 0.6rem;
+      font-weight: 500;
+      white-space: nowrap;
+      color: var(--skb-text-muted);
+    }
+    html.skb-sidebar-fits body.tool-active .dash-tool-chevron {
+      display: none;
+    }
+
+    /* Highlight the active tool card — anchor the user's current location.
+       Uses a stronger background tint and a left-edge accent stripe to
+       make the selection unmistakable in the sidebar. */
+    html.skb-sidebar-fits body.tool-active .dash-tool-card.sidebar-active {
+      border-color: var(--skb-primary);
+      background: var(--skb-surface-tool-active);
+      box-shadow: inset 3px 0 0 var(--skb-primary);
+    }
+    html.skb-sidebar-fits body.tool-active .dash-tool-card.sidebar-active:hover {
+      background: var(--skb-surface-tool-active);
+      transform: none;
+    }
+    html.skb-sidebar-fits body.tool-active .dash-tool-card.sidebar-active .dash-tool-icon {
+      border-color: var(--skb-primary);
+      color: var(--skb-primary);
+    }
+    html.skb-sidebar-fits body.tool-active .dash-tool-card.sidebar-active .dash-tool-name {
+      color: var(--skb-primary);
+    }
+
+    /* Sidebar branding header */
+    html.skb-sidebar-fits body.tool-active .dash-status-bar {
+      display: none;
     }
 
     /* ---- Workspace Centering & Typography Constraints ---- */
@@ -2416,13 +2465,15 @@
        share the exact same left edge — no split-axis misalignment. */
 
     /* ---- Unconditional Wrap Safeguard (all breakpoints) ----
-       The 80ch cap below is gated by a min-width: 1100px media
-       query, so on narrow viewports (laptops, Chromium kiosk
-       windows) long unbreakable strings — base64 PSBTs, hex
-       hashes, raw xpubs — can physically stretch their parent
-       containers and blow out the flex layout, pushing the
-       sidebar offscreen (the exact failure mode Task #83
-       corrected at the wrapper level).
+       The 80ch cap below is gated by the html.skb-sidebar-fits
+       class (formerly @media min-width: 1100px), so on narrow
+       viewports — or on wider viewports where the user has scaled
+       the UI up enough that the sidebar layout no longer fits —
+       long unbreakable strings (base64 PSBTs, hex hashes, raw
+       xpubs) can physically stretch their parent containers and
+       blow out the flex layout, pushing the sidebar offscreen
+       (the exact failure mode Task #83 corrected at the wrapper
+       level).
 
        This rule forces those strings to wrap at ANY character
        boundary, regardless of viewport width. word-break
@@ -2449,59 +2500,65 @@
       overflow-wrap: break-word;
     }
 
-    @media (min-width: 1100px) {
+    /* ---- Workspace centering & typography caps ----
+       Was @media (min-width: 1100px). Same html.skb-sidebar-fits
+       gate as the layout/compaction blocks above. */
 
-      /* Workspace wrapper: center the entire tool within column 2 */
-      body.tool-active [id^="state-"].state-visible:not(#state-dashboard) {
-        max-width: 800px;
-        margin: 0 auto;
-        width: 100%;
-      }
-
-      /* Textareas, code, hex data: hard cap at 80ch for legibility */
-      body.tool-active textarea,
-      body.tool-active .skb-textarea,
-      body.tool-active pre,
-      body.tool-active code,
-      body.tool-active .psbt-raw,
-      body.tool-active .eob-pool-raw,
-      body.tool-active .eob-hash-display,
-      body.tool-active .arm-xpub-val {
-        max-width: 80ch;
-      }
-
-      /* Inputs, selects: comfortable but not banner-wide */
-      body.tool-active input[type="text"],
-      body.tool-active input[type="password"],
-      body.tool-active input[type="number"],
-      body.tool-active input[type="email"],
-      body.tool-active select,
-      body.tool-active .skb-input,
-      body.tool-active .skb-select {
-        max-width: 600px;
-      }
-
-      /* Buttons: cap width */
-      body.tool-active .skb-btn,
-      body.tool-active .skb-btn--primary,
-      body.tool-active .skb-btn-primary,
-      body.tool-active .skb-btn-secondary,
-      body.tool-active .skb-btn-danger {
-        max-width: 400px;
-      }
+    /* Workspace wrapper: center the entire tool within column 2 */
+    html.skb-sidebar-fits body.tool-active [id^="state-"].state-visible:not(#state-dashboard) {
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
     }
 
-    /* ---- Responsive collapse: below 1100px, single column ---- */
-    @media (max-width: 1099px) {
-      /* On narrow screens, tool-active has no effect —
-         Dashboard hides, tool fills full width, same as mobile */
-      body.tool-active #state-dashboard.state-visible {
-        display: none;
-      }
-      /* Also hide the Command Center so tool UI stays clean on mobile */
-      body.tool-active .dash-status-bar {
-        display: none;
-      }
+    /* Textareas, code, hex data: hard cap at 80ch for legibility */
+    html.skb-sidebar-fits body.tool-active textarea,
+    html.skb-sidebar-fits body.tool-active .skb-textarea,
+    html.skb-sidebar-fits body.tool-active pre,
+    html.skb-sidebar-fits body.tool-active code,
+    html.skb-sidebar-fits body.tool-active .psbt-raw,
+    html.skb-sidebar-fits body.tool-active .eob-pool-raw,
+    html.skb-sidebar-fits body.tool-active .eob-hash-display,
+    html.skb-sidebar-fits body.tool-active .arm-xpub-val {
+      max-width: 80ch;
+    }
+
+    /* Inputs, selects: comfortable but not banner-wide */
+    html.skb-sidebar-fits body.tool-active input[type="text"],
+    html.skb-sidebar-fits body.tool-active input[type="password"],
+    html.skb-sidebar-fits body.tool-active input[type="number"],
+    html.skb-sidebar-fits body.tool-active input[type="email"],
+    html.skb-sidebar-fits body.tool-active select,
+    html.skb-sidebar-fits body.tool-active .skb-input,
+    html.skb-sidebar-fits body.tool-active .skb-select {
+      max-width: 600px;
+    }
+
+    /* Buttons: cap width */
+    html.skb-sidebar-fits body.tool-active .skb-btn,
+    html.skb-sidebar-fits body.tool-active .skb-btn--primary,
+    html.skb-sidebar-fits body.tool-active .skb-btn-primary,
+    html.skb-sidebar-fits body.tool-active .skb-btn-secondary,
+    html.skb-sidebar-fits body.tool-active .skb-btn-danger {
+      max-width: 400px;
+    }
+
+    /* ---- Responsive collapse: when sidebar layout doesn't fit ----
+       Was @media (max-width: 1099px). Now keys on the negation of
+       the .skb-sidebar-fits class so it fires whenever the JS
+       reactive determines the sidebar layout would overflow at the
+       active UI scale (raw viewport too narrow OR scaled-up content
+       too tall to share width with the tool). The single source of
+       truth keeps this in lockstep with the show-side rules above —
+       no more "off by 1 pixel" race between the @media min/max
+       boundaries either. */
+    html:not(.skb-sidebar-fits) body.tool-active #state-dashboard.state-visible {
+      /* Dashboard hides; tool fills full width, same as mobile. */
+      display: none;
+    }
+    html:not(.skb-sidebar-fits) body.tool-active .dash-status-bar {
+      /* Also hide the Command Center so the tool UI stays clean. */
+      display: none;
     }
 
     /* ================================================================
@@ -9097,11 +9154,12 @@ document.addEventListener('keydown', function(evt) {
 // GLOBAL ESCAPE-KEY KIOSK ESCAPE HATCH
 // ---------------------------------------------
 // Context: SafeKeep runs in Chromium kiosk mode (no browser
-// chrome, no back button, no address bar). On narrow
-// viewports (<1100px) the dashboard sidebar is hidden by a
-// media query, so once a user opens a tool they have no
-// visible way to navigate back to the dashboard — they are
-// trapped inside whatever tool they opened.
+// chrome, no back button, no address bar). When the dashboard
+// sidebar layout doesn't fit at the active UI scale (raw
+// viewport_width < 1100 * scale — see html.skb-sidebar-fits in
+// the stylesheet), the sidebar is hidden, so once a user opens a
+// tool they have no visible way to navigate back to the
+// dashboard — they are trapped inside whatever tool they opened.
 //
 // Fix: a global Escape-key listener that routes back to the
 // dashboard via the existing showState() router. Entirely
@@ -10478,6 +10536,16 @@ function skui_setUiScale(scale) {
         document.body.style.zoom = String(s);
     } catch (e) { /* extremely unlikely */ }
 
+    // Mirror the active scale onto documentElement[data-ui-scale]
+    // so any selector (or future analytics) can read it without
+    // round-tripping through localStorage. The pre-paint bootstrap
+    // sets this attribute too, but only at first paint — once the
+    // user clicks a different scale preset that initial value goes
+    // stale unless we re-sync here.
+    try {
+        document.documentElement.setAttribute('data-ui-scale', String(s));
+    } catch (e) { /* noop */ }
+
     // Persist for soft-reload. Kiosk/private-browsing contexts may
     // throw on write; fail silently.
     try {
@@ -10486,6 +10554,13 @@ function skui_setUiScale(scale) {
 
     // Sync the segmented-control pressed state.
     skui_syncUiScaleButtons(s);
+
+    // Sidebar-fit recompute. Changing the scale shifts the
+    // (1100 * scale) breakpoint, so even on a viewport that didn't
+    // change size the sidebar layout may need to flip on or off.
+    // Without this call the user would have to resize the window
+    // to get the layout to update after toggling a scale preset.
+    skui_updateSidebarFit();
 }
 
 function skui_syncUiScaleButtons(activeScale) {
@@ -10514,9 +10589,87 @@ function skui_initUiScale() {
     // always in sync with what the selector will render).
     try { document.body.style.zoom = String(s); } catch (e) { /* noop */ }
 
+    // Mirror onto documentElement so attribute selectors stay
+    // accurate even if the bootstrap fell back to "1" because
+    // localStorage was unreadable at pre-paint time.
+    try { document.documentElement.setAttribute('data-ui-scale', String(s)); } catch (e) { /* noop */ }
+
     // Sync the segmented-control highlight to match.
     skui_syncUiScaleButtons(s);
+
+    // Re-evaluate the sidebar-fit class now that body exists and
+    // we have the canonical scale value. The bootstrap set this
+    // class pre-paint when localStorage was readable; rerun here
+    // to cover the kiosk-blocks-localStorage path where the
+    // bootstrap silently fell back to scale=1 and the class would
+    // otherwise reflect the wrong threshold.
+    skui_updateSidebarFit();
 }
+
+// ------------------------------------------------------------------
+// SIDEBAR-FIT REACTIVE — keeps html.skb-sidebar-fits in sync with
+// the available scaled horizontal space.
+// ------------------------------------------------------------------
+// The persistent dashboard sidebar layout (see the PHASE 3 block in
+// the stylesheet) is gated on the `html.skb-sidebar-fits` class,
+// not on a media query. The class is true when the *scaled* layout
+// fits in the raw viewport — i.e.
+//
+//     window.innerWidth >= 1100 * activeUiScale
+//
+// 1100 is the unscaled width at which the sidebar layout was
+// designed to look right (Dashboard ≈ 280px + Tool ≈ 800px + gaps).
+// `body.style.zoom = s` shrinks rendered content by `s`× but does
+// NOT change what the viewport reports to JS or to @media queries,
+// so the threshold has to be multiplied by `s`.
+//
+// Why a class instead of a media query: media queries cannot
+// consume CSS custom properties, so we can't write
+//   @media (min-width: calc(1100px * var(--scale)))
+// and we'd otherwise need a separate @media block per preset
+// (eight presets × three layout blocks = 24 duplicated rules).
+//
+// Called from: skui_setUiScale (after a preset click),
+// skui_initUiScale (on DOMContentLoaded), and the resize listener
+// registered below. Idempotent — safe to call as often as needed.
+function skui_updateSidebarFit() {
+    // Determine the active scale. We prefer body.style.zoom since
+    // that is what is actually rendering on screen; fall back to
+    // documentElement[data-ui-scale] (set by the bootstrap before
+    // body existed); fall back to 1 if neither is meaningful.
+    var s = 1;
+    try {
+        var rawZoom = (document.body && document.body.style.zoom) || '';
+        var z = parseFloat(rawZoom);
+        if (!isNaN(z) && z > 0) {
+            s = z;
+        } else {
+            var attr = document.documentElement.getAttribute('data-ui-scale');
+            var a = parseFloat(attr);
+            if (!isNaN(a) && a > 0) s = a;
+        }
+    } catch (e) { /* keep s = 1 */ }
+
+    // Sanity floor — paranoia against a corrupted scale that would
+    // collapse the threshold and force the layout on at any width
+    // (which would shove the tool pane off-screen on a phone).
+    if (!(s >= 0.25 && s <= 4)) s = 1;
+
+    var fits = window.innerWidth >= (1100 * s);
+    var cls = document.documentElement.classList;
+    if (fits) {
+        cls.add('skb-sidebar-fits');
+    } else {
+        cls.remove('skb-sidebar-fits');
+    }
+}
+
+// Recompute on viewport resize so users dragging the kiosk window
+// (or rotating a tablet) get the right layout immediately. Direct
+// listener — no debounce — because xrandr/window-manager resize
+// events are coarse already and the only work is one classList
+// toggle.
+window.addEventListener('resize', skui_updateSidebarFit);
 
 function skui_syncThemeGlyph() {
     var btn = document.getElementById('dash-theme-btn');
