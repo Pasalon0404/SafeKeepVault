@@ -4716,6 +4716,28 @@
          out below the wrapper's border. */
       min-height: 0;
       overflow: hidden;
+      /* Vertical padding is gated on the [data-collapsed="0"]
+         override below. The grid track collapses to 0px when the
+         wrapper is closed, but with box-sizing:border-box the
+         inner's padding still reserves space (padding can't be
+         negative, so even with min-height:0 the inner measures at
+         least padding-top + padding-bottom tall). That residual
+         ~24px is what was leaving the top row of seed words
+         peeking out through the collapsed wrapper. Stripping the
+         vertical padding when closed makes the wrapper measure
+         truly 0px. Horizontal padding stays put unconditionally —
+         it doesn't contribute to the height and keeps the seed
+         grid indented from the wrapper's left edge. */
+      padding: 0 0.85rem;
+      /* Transition the padding in lockstep with the grid-row
+         transition so the inner's natural height shrinks at the
+         same rate as the row track. Without this the padding
+         would snap to 0 the instant the data-collapsed flips,
+         producing a tiny visual hiccup at the start of the close
+         animation. */
+      transition: padding 0.22s ease;
+    }
+    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__panel-inner {
       padding: 0.7rem 0.85rem 0.85rem;
     }
     @media print {
@@ -6275,7 +6297,7 @@
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.23b</span>
+                        <span class="version" id="dash-version">v1.24b</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
