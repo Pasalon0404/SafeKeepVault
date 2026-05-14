@@ -4502,66 +4502,154 @@
       .bip85-out-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
-    /* ============================================================
-       Privacy Mask — shoulder-surfing defense for seed-phrase grids.
-       Applied to .privacy-mask containers; toggles via data-masked.
-       When masked: heavy blur + selection/interaction disabled.
-       Default state ("data-masked=1") is hidden — see privacyMaskReset()
-       which is called by showState() on every tool navigation.
-       ============================================================ */
-    .privacy-mask {
-      position: relative;
-      transition: filter 120ms ease;
-    }
-    .privacy-mask[data-masked="1"] {
-      filter: blur(10px);
-      user-select: none;
-      -webkit-user-select: none;
-      pointer-events: none;
-    }
-    .privacy-mask[data-masked="1"]::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: rgba(20, 20, 20, 0.18);
-      border-radius: var(--skb-radius-sm);
-      pointer-events: none;
-    }
-    /* Never blur on print — backup sheets must be legible. */
-    @media print {
-      .privacy-mask, .privacy-mask[data-masked="1"] {
-        filter: none !important;
-        user-select: auto !important;
-        pointer-events: auto !important;
-      }
-      .privacy-mask[data-masked="1"]::after { display: none !important; }
-    }
+    /* (Privacy-mask CSS removed — replaced by .skb-seed-accordion
+       below. The blur-toggle pattern has been retired across the
+       entire suite; every seed-phrase display now uses the accordion
+       component for both shoulder-surfing protection and screen-real-
+       estate efficiency.) */
 
-    /* Eye-icon toggle button used next to every masked seed container. */
-    .privacy-mask-btn {
-      padding: 0.2rem 0.6rem;
-      font-size: 0.72rem;
-      border: 1px solid var(--skb-border);
-      color: var(--skb-text-muted);
+    /* ============================================================
+       Seed Accordion — reusable expand/collapse seed display
+       ============================================================
+       Replaces the .privacy-mask blur pattern across the suite.
+       Shared markup shape (any tool that uses this just emits the
+       same shell — id and inner grid id are tool-specific):
+
+         <div class="skb-seed-accordion" id="<TOOL>-seed-accordion"
+              data-collapsed="1">
+           <button class="skb-seed-accordion__toggle" type="button"
+                   aria-expanded="false"
+                   onclick="seedAccordionToggle('<TOOL>-seed-accordion')">
+             <span class="skb-seed-accordion__summary">
+               <span class="skb-seed-accordion__label">Last word</span>
+               <span class="skb-seed-accordion__last-word"
+                     data-role="last-word">—</span>
+               <span class="skb-seed-accordion__sep">·</span>
+               <span class="skb-seed-accordion__fp-label">FP</span>
+               <span class="skb-seed-accordion__fp"
+                     data-role="fingerprint">--------</span>
+             </span>
+             <span class="skb-seed-accordion__chevron"
+                   aria-hidden="true">▾</span>
+           </button>
+           <div class="skb-seed-accordion__panel">
+             <div class="skb-seed-accordion__panel-inner">
+               <div class="bip85-out-grid"
+                    id="<TOOL>-seed-grid"><!-- cells --></div>
+             </div>
+           </div>
+         </div>
+
+       Behavior is driven entirely by the data-collapsed attribute on
+       the wrapper. data-collapsed="1" → panel max-height 0 (hidden);
+       data-collapsed="0" → max-height up to a generous bound that
+       accommodates a 24-word grid. The chevron rotates 180° on the
+       open state.
+
+       Print-time the accordion always renders fully expanded (the
+       printed page should never have a clickable toggle). */
+    .skb-seed-accordion {
+      border: 2px solid var(--skb-border);
+      border-radius: var(--skb-radius-sm);
+      background: var(--skb-bg-input);
+      overflow: hidden;
+      margin-bottom: 0.6rem;
+    }
+    .skb-seed-accordion__toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.55rem 0.85rem;
       background: transparent;
-      border-radius: 3px;
+      border: 0;
+      color: var(--skb-text);
       cursor: pointer;
-      font-family: inherit;
+      font-family: var(--skb-mono);
+      font-size: 0.85rem;
+      text-align: left;
+      transition: background 120ms ease;
+    }
+    .skb-seed-accordion__toggle:hover {
+      background: var(--skb-bg-secondary, rgba(0,0,0,0.06));
+    }
+    .skb-seed-accordion__toggle:focus-visible {
+      outline: 2px solid var(--skb-primary);
+      outline-offset: -2px;
+    }
+    .skb-seed-accordion__summary {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.45rem;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .skb-seed-accordion__label,
+    .skb-seed-accordion__fp-label {
+      font-size: 0.66rem;
+      color: var(--skb-text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .skb-seed-accordion__last-word {
+      font-weight: 700;
+      color: var(--skb-text);
+    }
+    .skb-seed-accordion__sep {
+      color: var(--skb-text-dim);
+      flex-shrink: 0;
+    }
+    .skb-seed-accordion__fp {
+      font-weight: 800;
+      color: var(--skb-secondary, var(--skb-primary));
+      letter-spacing: 0.1em;
+      font-family: var(--skb-mono);
+    }
+    .skb-seed-accordion__chevron {
       display: inline-flex;
       align-items: center;
-      gap: 0.3rem;
-      line-height: 1;
+      justify-content: center;
+      width: 1.2rem;
+      height: 1.2rem;
+      font-size: 0.85rem;
+      color: var(--skb-text-muted);
+      flex-shrink: 0;
+      transition: transform 0.18s ease;
     }
-    .privacy-mask-btn:hover {
-      border-color: var(--skb-primary);
-      color: var(--skb-primary);
+    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__chevron {
+      transform: rotate(180deg);
     }
-    .privacy-mask-btn[data-showing="1"] {
-      border-color: var(--skb-primary);
-      color: var(--skb-primary);
+
+    /* Panel — height transition. max-height is generous enough for
+       a 24-word grid plus any future per-tool sibling content, while
+       still being a finite numeric value so the height transition
+       runs in a fixed time regardless of actual content height. */
+    .skb-seed-accordion__panel {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.22s ease;
+    }
+    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__panel {
+      max-height: 1400px;
+    }
+    .skb-seed-accordion__panel-inner {
+      padding: 0.7rem 0.85rem 0.85rem;
     }
     @media print {
-      .privacy-mask-btn { display: none !important; }
+      /* Print always shows the full grid — no toggle, no animation. */
+      .skb-seed-accordion__toggle,
+      .skb-seed-accordion__chevron { display: none !important; }
+      .skb-seed-accordion__panel { max-height: none !important; }
+      .skb-seed-accordion {
+        border: 0 !important;
+        background: transparent !important;
+      }
+      .skb-seed-accordion__panel-inner { padding: 0 !important; }
     }
 
     .bip85-out-cell {
@@ -4641,8 +4729,9 @@
     /* Armory's read-only loaded seed grid reuses the shared bip85-out-* classes
        (3-col orange-bordered cells with absolute top-left numbering) for visual
        parity with Output Descriptor and the other tools. The #arm-seed-grid ID
-       is preserved so privacyMaskToggle, arm_init, arm_clearSeed, arm_restoreSeed,
-       arm_loadManualSeed, and the print rule continue to address this element. */
+       is preserved so arm_init, arm_clearSeed, arm_restoreSeed, arm_loadManualSeed,
+       the print rule, and the .skb-seed-accordion summary helpers continue to
+       address this element. */
     .arm-config-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -6628,16 +6717,32 @@
                 <div class="skb-card" style="margin-bottom: 1rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                         <label style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text);">Seed to Split</label>
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <button type="button" class="privacy-mask-btn" id="xor-seed-mask-btn" title="Show seed phrase"
-                                    onclick="privacyMaskToggle('xor-seed-grid', 'xor-seed-mask-btn')">Show</button>
-                            <span style="font-size: 0.7rem; color: var(--skb-text-muted);" id="xor-seed-source"></span>
-                        </div>
+                        <span style="font-size: 0.7rem; color: var(--skb-text-muted);" id="xor-seed-source"></span>
                     </div>
 
                     <!-- Read-only grid display (shown when seed is loaded) -->
                     <div id="xor-seed-display" style="display: none;">
-                        <div class="bip85-out-grid privacy-mask" id="xor-seed-grid" data-masked="1"></div>
+                        <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id
+                             is xor-seed-accordion; the inner grid keeps id="xor-seed-grid"
+                             so xor_showSeedGrid's existing render code is unchanged. -->
+                        <div class="skb-seed-accordion" id="xor-seed-accordion" data-collapsed="1">
+                            <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
+                                    onclick="seedAccordionToggle('xor-seed-accordion')">
+                                <span class="skb-seed-accordion__summary">
+                                    <span class="skb-seed-accordion__label">Last word</span>
+                                    <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
+                                    <span class="skb-seed-accordion__sep">·</span>
+                                    <span class="skb-seed-accordion__fp-label">FP</span>
+                                    <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
+                                </span>
+                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            </button>
+                            <div class="skb-seed-accordion__panel">
+                                <div class="skb-seed-accordion__panel-inner">
+                                    <div class="bip85-out-grid" id="xor-seed-grid"></div>
+                                </div>
+                            </div>
+                        </div>
                         <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.75rem; border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); font-size: 0.8rem;" onclick="xor_clearSeed()">Clear &amp; Enter Different Seed</button>
                     </div>
 
@@ -6796,13 +6901,28 @@
 
             <div class="skb-card">
                 <div style="margin-bottom: 1rem;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                        <label style="font-size: 0.85rem; color: var(--skb-text-muted);">Master Seed</label>
-                        <button type="button" class="privacy-mask-btn" id="bip85-master-mask-btn" title="Show seed phrase"
-                                onclick="privacyMaskToggle('bip85-master-grid', 'bip85-master-mask-btn')">Show</button>
-                    </div>
-                    <div class="bip85-out-grid privacy-mask" id="bip85-master-grid" data-masked="1">
-                        <div style="grid-column: 1 / -1; text-align: center; padding: 1rem; color: var(--skb-text-muted); font-size: 0.85rem;">No master seed loaded.</div>
+                    <label style="font-size: 0.85rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Master Seed</label>
+                    <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id is
+                         bip85-master-accordion; inner grid keeps id="bip85-master-grid". -->
+                    <div class="skb-seed-accordion" id="bip85-master-accordion" data-collapsed="1">
+                        <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
+                                onclick="seedAccordionToggle('bip85-master-accordion')">
+                            <span class="skb-seed-accordion__summary">
+                                <span class="skb-seed-accordion__label">Last word</span>
+                                <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
+                                <span class="skb-seed-accordion__sep">·</span>
+                                <span class="skb-seed-accordion__fp-label">FP</span>
+                                <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
+                            </span>
+                            <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="skb-seed-accordion__panel">
+                            <div class="skb-seed-accordion__panel-inner">
+                                <div class="bip85-out-grid" id="bip85-master-grid">
+                                    <div style="grid-column: 1 / -1; text-align: center; padding: 1rem; color: var(--skb-text-muted); font-size: 0.85rem;">No master seed loaded.</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -6860,13 +6980,28 @@
                     </div>
 
                     <div style="margin-bottom: 1rem;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <label style="font-size: 0.85rem; color: var(--skb-text-muted);">Child Seed Words</label>
-                            <button type="button" class="privacy-mask-btn" id="bip85-result-mask-btn" title="Show seed phrase"
-                                    onclick="privacyMaskToggle('bip85-result-grid', 'bip85-result-mask-btn')">Show</button>
-                        </div>
-                        <div class="bip85-out-grid privacy-mask" id="bip85-result-grid" data-masked="1">
-                            <!-- Filled by bip85_generate() -->
+                        <label style="font-size: 0.85rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Child Seed Words</label>
+                        <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id is
+                             bip85-result-accordion; inner grid keeps id="bip85-result-grid". -->
+                        <div class="skb-seed-accordion" id="bip85-result-accordion" data-collapsed="1">
+                            <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
+                                    onclick="seedAccordionToggle('bip85-result-accordion')">
+                                <span class="skb-seed-accordion__summary">
+                                    <span class="skb-seed-accordion__label">Last word</span>
+                                    <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
+                                    <span class="skb-seed-accordion__sep">·</span>
+                                    <span class="skb-seed-accordion__fp-label">FP</span>
+                                    <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
+                                </span>
+                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            </button>
+                            <div class="skb-seed-accordion__panel">
+                                <div class="skb-seed-accordion__panel-inner">
+                                    <div class="bip85-out-grid" id="bip85-result-grid">
+                                        <!-- Filled by bip85_generate() -->
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
@@ -6965,15 +7100,30 @@
                 <div class="skb-card" style="margin-bottom: 1rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                         <label style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text);">Seed Phrase</label>
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <button type="button" class="privacy-mask-btn" id="desc-seed-mask-btn" title="Show seed phrase"
-                                    onclick="privacyMaskToggle('desc-seed-grid', 'desc-seed-mask-btn')">Show</button>
-                            <span style="font-size: 0.7rem; color: var(--skb-text-muted);" id="desc-seed-source"></span>
-                        </div>
+                        <span style="font-size: 0.7rem; color: var(--skb-text-muted);" id="desc-seed-source"></span>
                     </div>
 
                     <div id="desc-seed-display" style="display: none;">
-                        <div class="bip85-out-grid privacy-mask" id="desc-seed-grid" data-masked="1"></div>
+                        <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id is
+                             desc-seed-accordion; inner grid keeps id="desc-seed-grid". -->
+                        <div class="skb-seed-accordion" id="desc-seed-accordion" data-collapsed="1">
+                            <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
+                                    onclick="seedAccordionToggle('desc-seed-accordion')">
+                                <span class="skb-seed-accordion__summary">
+                                    <span class="skb-seed-accordion__label">Last word</span>
+                                    <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
+                                    <span class="skb-seed-accordion__sep">·</span>
+                                    <span class="skb-seed-accordion__fp-label">FP</span>
+                                    <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
+                                </span>
+                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            </button>
+                            <div class="skb-seed-accordion__panel">
+                                <div class="skb-seed-accordion__panel-inner">
+                                    <div class="bip85-out-grid" id="desc-seed-grid"></div>
+                                </div>
+                            </div>
+                        </div>
                         <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
                             <button type="button" class="skb-btn" style="flex: 1; font-size: 0.78rem; border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted);" onclick="desc_clearSeed()">CLEAR</button>
                             <button type="button" class="skb-btn" style="flex: 1; font-size: 0.78rem; border: 1px dashed var(--skb-primary); background: transparent; color: var(--skb-primary);" onclick="desc_restoreSeed()">RESTORE</button>
@@ -7297,42 +7447,58 @@
                 <div class="skb-card" style="margin-bottom: 1rem;">
 
                     <!-- Read-only session seed (auto-filled from SeedSession).
-                         The "Seed Words" label + privacy-mask Show/Hide toggle
-                         live inside this container so they disappear cleanly
-                         alongside the session grid when the user switches to
-                         manual mode via sqr_clearAndEdit() — no stray toggle
-                         button pointing at a hidden grid. -->
+                         The "Seed Words" label + accordion live inside this
+                         container so they disappear cleanly alongside the
+                         session grid when the user switches to manual mode
+                         via sqr_clearAndEdit(). -->
                     <div id="sqr-session-section">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                            <label style="font-size: 0.85rem; color: var(--skb-text-muted);">Seed Words</label>
-                            <button type="button" class="privacy-mask-btn" id="sqr-session-mask-btn" title="Show seed phrase"
-                                    onclick="privacyMaskToggle('sqr-session-grid', 'sqr-session-mask-btn')">Show</button>
+                        <label style="font-size: 0.85rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Seed Words</label>
+                        <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id is
+                             sqr-session-accordion; inner grid keeps id="sqr-session-grid".
+                             The session grid is read-only (display only), so the accordion
+                             pattern is identical to the other display tools. -->
+                        <div class="skb-seed-accordion" id="sqr-session-accordion" data-collapsed="1" style="margin-bottom: 0.75rem;">
+                            <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
+                                    onclick="seedAccordionToggle('sqr-session-accordion')">
+                                <span class="skb-seed-accordion__summary">
+                                    <span class="skb-seed-accordion__label">Last word</span>
+                                    <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
+                                    <span class="skb-seed-accordion__sep">·</span>
+                                    <span class="skb-seed-accordion__fp-label">FP</span>
+                                    <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
+                                </span>
+                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            </button>
+                            <div class="skb-seed-accordion__panel">
+                                <div class="skb-seed-accordion__panel-inner">
+                                    <div id="sqr-session-grid" class="bip85-out-grid"></div>
+                                </div>
+                            </div>
                         </div>
-                        <div id="sqr-session-grid" class="bip85-out-grid privacy-mask" data-masked="1" style="margin-bottom: 0.75rem;"></div>
                         <button type="button" class="skb-btn" style="width: 100%; border-color: var(--skb-text-muted); color: var(--skb-text-muted); font-size: 0.82rem;" onclick="sqr_clearAndEdit()">Clear &amp; Enter Different Seed</button>
                     </div>
 
                     <!-- Manual input section (hidden when session seed loaded).
-                         Carries its own "Seed Words" label + privacy-mask toggle
-                         that targets the editable word grid, mirroring the
-                         sqr-session-section pattern. Default masked so typed
-                         words aren't visible over the user's shoulder; the
-                         mask's pointer-events:none means the user must click
-                         Show before they can focus the input cells. -->
+                         The .privacy-mask blur was REMOVED from the editable word
+                         grid here (no accordion replacement either): an input grid
+                         is where the user actively types seed words via individual
+                         <input> cells, and hiding it behind a collapse defeats the
+                         purpose of the form. The visible-by-default grid lets the
+                         user start typing immediately on entry. The other 5 tools
+                         (which display a loaded seed) keep the accordion treatment
+                         since their concern is privacy of an already-known seed,
+                         not in-flight typing. -->
                     <div id="sqr-manual-section" style="display: none;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                            <label style="font-size: 0.85rem; color: var(--skb-text-muted);">Seed Words</label>
-                            <button type="button" class="privacy-mask-btn" id="sqr-manual-mask-btn" title="Show seed phrase"
-                                    onclick="privacyMaskToggle('sqr-input-grid', 'sqr-manual-mask-btn')">Show</button>
-                        </div>
+                        <label style="font-size: 0.85rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Seed Words</label>
                         <!-- Length toggle -->
                         <div style="display: flex; gap: 0; margin-bottom: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;">
                             <button type="button" id="sqr-len-12" class="tool-tab-btn active" style="flex: 1;" onclick="sqr_setLength(12)">12 Words</button>
                             <button type="button" id="sqr-len-24" class="tool-tab-btn" style="flex: 1;" onclick="sqr_setLength(24)">24 Words</button>
                         </div>
 
-                        <!-- Editable word grid -->
-                        <div id="sqr-input-grid" class="rst-grid privacy-mask" data-masked="1" style="margin-bottom: 0.75rem;"></div>
+                        <!-- Editable word grid (no privacy-mask, no accordion — see
+                             rationale comment above). -->
+                        <div id="sqr-input-grid" class="rst-grid" style="margin-bottom: 0.75rem;"></div>
 
                         <!-- Camera import for manual section -->
                         <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem; font-size: 0.82rem;" onclick="sqr_startImportScan()">Import from QR Scan</button>
@@ -8283,14 +8449,37 @@
                 <div class="skb-card" style="margin-bottom: 1rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                         <span style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text);">Master Seed</span>
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <button type="button" class="privacy-mask-btn" id="arm-seed-mask-btn" title="Show seed phrase"
-                                    onclick="privacyMaskToggle('arm-seed-grid', 'arm-seed-mask-btn')">Show</button>
-                            <span class="arm-fingerprint" id="arm-fingerprint">--------</span>
-                        </div>
+                        <span class="arm-fingerprint" id="arm-fingerprint">--------</span>
                     </div>
-                    <div class="bip85-out-grid privacy-mask" id="arm-seed-grid" data-masked="1">
-                        <!-- Filled by JS -->
+                    <!-- Seed Accordion (replaces .privacy-mask blur).
+                         Wrapper id is `arm-seed-accordion`; the inner
+                         grid keeps `id="arm-seed-grid"` so the existing
+                         arm_deriveWallet / arm_clearSeed render code
+                         that targets the grid by id continues to work
+                         unchanged. arm_deriveWallet calls
+                         seedAccordionRefreshSummary('arm-seed-accordion',
+                         baseFP) right after rendering so the collapsed
+                         summary row (last word + fingerprint) updates
+                         in lockstep with the grid. -->
+                    <div class="skb-seed-accordion" id="arm-seed-accordion" data-collapsed="1">
+                        <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
+                                onclick="seedAccordionToggle('arm-seed-accordion')">
+                            <span class="skb-seed-accordion__summary">
+                                <span class="skb-seed-accordion__label">Last word</span>
+                                <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
+                                <span class="skb-seed-accordion__sep">·</span>
+                                <span class="skb-seed-accordion__fp-label">FP</span>
+                                <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
+                            </span>
+                            <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="skb-seed-accordion__panel">
+                            <div class="skb-seed-accordion__panel-inner">
+                                <div class="bip85-out-grid" id="arm-seed-grid">
+                                    <!-- Filled by JS -->
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <!-- Manual seed input (hidden by default, shown on Clear) -->
                     <div id="arm-seed-input-area" style="display: none;">
@@ -8569,14 +8758,29 @@
             <div style="margin-bottom: 1rem;">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
                     <label style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text);">Seed to Split</label>
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <button type="button" class="privacy-mask-btn" id="s39-seed-mask-btn" title="Show seed phrase"
-                                onclick="privacyMaskToggle('s39-seed-grid', 's39-seed-mask-btn')">Show</button>
-                        <span style="font-size: 0.7rem; color: var(--skb-text-muted);" id="s39-seed-source"></span>
-                    </div>
+                    <span style="font-size: 0.7rem; color: var(--skb-text-muted);" id="s39-seed-source"></span>
                 </div>
                 <div id="s39-seed-display" style="display: none;">
-                    <div class="bip85-out-grid privacy-mask" id="s39-seed-grid" data-masked="1"></div>
+                    <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id is
+                         s39-seed-accordion; inner grid keeps id="s39-seed-grid". -->
+                    <div class="skb-seed-accordion" id="s39-seed-accordion" data-collapsed="1">
+                        <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
+                                onclick="seedAccordionToggle('s39-seed-accordion')">
+                            <span class="skb-seed-accordion__summary">
+                                <span class="skb-seed-accordion__label">Last word</span>
+                                <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
+                                <span class="skb-seed-accordion__sep">·</span>
+                                <span class="skb-seed-accordion__fp-label">FP</span>
+                                <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
+                            </span>
+                            <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="skb-seed-accordion__panel">
+                            <div class="skb-seed-accordion__panel-inner">
+                                <div class="bip85-out-grid" id="s39-seed-grid"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div id="s39-seed-empty" style="text-align: center; padding: 1.5rem; color: var(--skb-text-muted); font-size: 0.85rem;">
                     No master seed loaded. Return to the Dashboard and load a seed first.
@@ -12784,75 +12988,137 @@ function skui_toggleVis(inputId, btnId) {
     }
 }
 
-/*
+/* (privacyMaskToggle / privacyMaskReset removed — replaced by the
+   .skb-seed-accordion component below. Every seed-phrase display
+   across the suite now uses the accordion pattern instead of the
+   blur-toggle pattern these helpers used to drive.) */
+
+/* ═══════════════════════════════════════════════════════════════════
+ * SEED ACCORDION — reusable expand/collapse seed display
  * ═══════════════════════════════════════════════════════════════════
- * PRIVACY MASK — seed-phrase shoulder-surfing defense
- * ═══════════════════════════════════════════════════════════════════
  *
- * The Armory, Script, Covenant, Shard, and Lineage tools all render
- * the active seed phrase in plaintext. That is a shoulder-surfing
- * hazard and causes user anxiety the moment a tool is opened.
+ * Shared helpers for the .skb-seed-accordion CSS component (defined
+ * near the top of the page <style>). Each tool's
+ * seed display wraps its existing `.bip85-out-grid` in the accordion
+ * shell with a unique wrapper id (e.g. `arm-seed-accordion`); the
+ * inner grid keeps its existing id (`arm-seed-grid` etc.) so the
+ * tool's render code that targets the grid by id continues to work
+ * without modification.
  *
- * Behaviour:
- *   • Seed containers ship with class="privacy-mask" data-masked="1"
- *     so they render blurred + non-selectable from the first paint.
- *   • An eye-icon toggle button (.privacy-mask-btn) sits adjacent to
- *     each container. Clicking it calls privacyMaskToggle(containerId,
- *     btnId) which flips data-masked between "1" and "0" and swaps
- *     the button label between "Show" and "Hide".
- *   • showState() calls privacyMaskReset() on every navigation so
- *     leaving a tool and returning always re-masks the seed.
- *   • Printing is unaffected — the @media print rule strips the blur
- *     and hides the toggle button (see CSS .privacy-mask + .privacy-mask-btn).
+ * The collapsed view shows the LAST WORD of the seed phrase plus the
+ * fingerprint, in a single horizontal row, so the user can recognise
+ * which seed is loaded without having to expand. The expanded view
+ * shows the full grid exactly as before.
  *
- * There is intentionally only one CSS class and one pair of JS helpers
- * shared across all 5 tools — no per-tool duplication.
+ * Tool integration is two lines:
+ *   1. Wrap the existing grid in the accordion shell HTML (see the
+ *      template comment in the .skb-seed-accordion CSS block).
+ *   2. After the tool renders its grid AND knows the fingerprint,
+ *      call seedAccordionRefreshSummary(accordionId, fingerprint).
+ *      The helper auto-extracts the last word from the grid by
+ *      reading the last `.bip85-out-word` cell, so no per-tool
+ *      word-tracking is required.
  */
 
 /**
- * Toggle a privacy-masked container between Show / Hide state.
- * Safe to call on elements that don't exist (returns silently).
- *
- * @param {string} containerId — DOM id of the .privacy-mask element
- * @param {string} btnId       — DOM id of the associated toggle button
+ * Toggle a seed accordion between collapsed and expanded.
+ * Called from the toggle button's inline onclick.
  */
-function privacyMaskToggle(containerId, btnId) {
-    var container = document.getElementById(containerId);
-    var btn       = document.getElementById(btnId);
-    if (!container) return;
-    var isMasked = container.getAttribute('data-masked') !== '0';
-    if (isMasked) {
-        container.setAttribute('data-masked', '0');
-        if (btn) {
-            btn.setAttribute('data-showing', '1');
-            btn.innerHTML = 'Hide';
-            btn.title = 'Hide seed phrase';
+function seedAccordionToggle(accordionId) {
+    var el = document.getElementById(accordionId);
+    if (!el) return;
+    var isCollapsed = el.getAttribute('data-collapsed') !== '0';
+    el.setAttribute('data-collapsed', isCollapsed ? '0' : '1');
+    var toggle = el.querySelector('.skb-seed-accordion__toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', isCollapsed ? 'true' : 'false');
+}
+
+/**
+ * Refresh the collapsed-state summary row for an accordion. Reads the
+ * last word from whatever the tool just rendered into the inner grid
+ * (no per-tool word tracking needed). The fingerprint argument is
+ * optional — pass undefined to leave the existing fingerprint text
+ * untouched (useful when a tool re-renders the grid but the FP didn't
+ * change), or pass a string to update it.
+ *
+ * @param {string} accordionId — id of the .skb-seed-accordion wrapper
+ * @param {string} [fingerprint] — 8-hex (or display string) for the FP slot
+ */
+function seedAccordionRefreshSummary(accordionId, fingerprint) {
+    var el = document.getElementById(accordionId);
+    if (!el) return;
+
+    // Extract the last word from the inner grid's last cell. We read
+    // `.bip85-out-word` because that's the cell-content class shared
+    // by every grid in the suite (BIP-85, XOR, Shamir, SeedQR, Seed
+    // Management). If the grid is empty, show an em-dash placeholder.
+    var grid = el.querySelector('.bip85-out-grid');
+    var lastWord = '';
+    if (grid) {
+        var cells = grid.querySelectorAll('.bip85-out-word');
+        if (cells.length > 0) {
+            lastWord = (cells[cells.length - 1].textContent || '').trim();
         }
-    } else {
-        container.setAttribute('data-masked', '1');
-        if (btn) {
-            btn.removeAttribute('data-showing');
-            btn.innerHTML = 'Show';
-            btn.title = 'Show seed phrase';
-        }
+    }
+    var lastWordEl = el.querySelector('[data-role="last-word"]');
+    if (lastWordEl) lastWordEl.textContent = lastWord || '—';
+
+    if (typeof fingerprint === 'string') {
+        var fpEl = el.querySelector('[data-role="fingerprint"]');
+        if (fpEl) fpEl.textContent = fingerprint || '--------';
     }
 }
 
 /**
- * Reset every .privacy-mask element on the page back to the masked
- * (hidden) state. Called by showState() on every tool navigation so
- * re-entering a tool always blurs the seed again.
+ * Convenience: refresh the summary from a mnemonic alone (no cached
+ * fingerprint needed). Derives the BIP-32 root fingerprint from the
+ * mnemonic — using the standard `mnemonicToSeed → HDKey.fromMasterSeed
+ * → root.fingerprint` chain — and hands it to seedAccordionRefreshSummary.
+ *
+ * This is what every tool's grid-render function calls: a single
+ * line that updates both the last-word slot (auto-read from the grid)
+ * and the fingerprint slot (computed from the mnemonic argument).
+ * No per-tool fingerprint plumbing needed.
+ *
+ * Async because BIP-39 seed derivation runs PBKDF2 under the hood;
+ * the helper kicks off the derivation and updates the accordion
+ * when the FP resolves. The last-word slot updates synchronously
+ * via the inner call so the visible part of the summary never
+ * lags the grid render.
  */
-function privacyMaskReset() {
-    var masks = document.querySelectorAll('.privacy-mask');
-    for (var i = 0; i < masks.length; i++) {
-        masks[i].setAttribute('data-masked', '1');
+async function seedAccordionRefreshSummaryFromMnemonic(accordionId, mnemonic) {
+    // Sync last-word update first so the visible summary updates
+    // immediately even if FP derivation is slow.
+    seedAccordionRefreshSummary(accordionId);
+    if (!mnemonic || typeof mnemonic !== 'string') return;
+    var BM = window.BtcMath || {};
+    if (!BM.bip39 || !BM.HDKey) return;
+    try {
+        var seedBytes = await BM.bip39.mnemonicToSeed(mnemonic.trim(), '');
+        var root = BM.HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+        var fp = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
+        // Zero the seed buffer — defensive memory hygiene matching
+        // the pattern used elsewhere in the file.
+        if (seedBytes instanceof Uint8Array) seedBytes.fill(0);
+        seedAccordionRefreshSummary(accordionId, fp);
+    } catch (e) {
+        // Bad mnemonic / lib unavailable — leave the FP slot at its
+        // previous value (likely '--------' on a fresh accordion).
     }
-    var btns = document.querySelectorAll('.privacy-mask-btn');
-    for (var j = 0; j < btns.length; j++) {
-        btns[j].removeAttribute('data-showing');
-        btns[j].innerHTML = 'Show';
-        btns[j].title = 'Show seed phrase';
+}
+
+/**
+ * Collapse every seed accordion on the page. Called by showState() on
+ * tool navigation so the collapsed view is always the starting state
+ * when the user enters a tool — matches the original privacy-mask
+ * "always-hidden-on-arrival" behaviour.
+ */
+function seedAccordionResetAll() {
+    var nodes = document.querySelectorAll('.skb-seed-accordion');
+    for (var i = 0; i < nodes.length; i++) {
+        nodes[i].setAttribute('data-collapsed', '1');
+        var toggle = nodes[i].querySelector('.skb-seed-accordion__toggle');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
     }
 }
 
@@ -13706,8 +13972,10 @@ function _wipeAllVolatileSeedState() {
         if (wcEl) wcEl.textContent = '-- words loaded into RAM';
     } catch (_) {}
 
-    // --- Privacy mask reset across every tool's seed display ---
-    try { if (typeof privacyMaskReset === 'function') privacyMaskReset(); } catch (_) {}
+    // --- Seed accordion reset across every tool's seed display ---
+    // Collapses every .skb-seed-accordion back to its summary-row state
+    // so the next time the user opens a tool, the seed grid starts hidden.
+    try { if (typeof seedAccordionResetAll === 'function') seedAccordionResetAll(); } catch (_) {}
 
     // --- Sidebar + storage-firewall refresh so UI reflects no-seed state ---
     try { if (typeof _globalSeedStatusUpdate === 'function') _globalSeedStatusUpdate(); } catch (_) {}
@@ -15560,11 +15828,11 @@ function showState(stateId) {
     // but PRESERVE the 4 persistent tool states (Shard, Covenant, Forge, Lineage)
     if (typeof _wipeSensitiveDOM === 'function') _wipeSensitiveDOM(_persistentToolStates);
 
-    // Reset every privacy-masked seed container back to Hidden on
-    // any navigation. This enforces the "state resets to Hidden on
-    // navigation away from tool" contract for the Armory, Script,
-    // Covenant, Shard, and Lineage seed-phrase displays.
-    if (typeof privacyMaskReset === 'function') privacyMaskReset();
+    // Reset every .skb-seed-accordion back to its collapsed summary-
+    // row state on any navigation. This enforces the "seed display
+    // starts hidden on tool entry" contract across the Armory,
+    // Script, Covenant, Shard, Lineage, and SeedQR tools.
+    if (typeof seedAccordionResetAll === 'function') seedAccordionResetAll();
 
     // Stop any live per-share Shamir verification scanners so the camera
     // LED doesn't remain lit after the user navigates away mid-quiz.
@@ -21781,6 +22049,13 @@ function xor_showSeedGrid(mnemonic, source) {
     document.getElementById('xor-seed-empty').style.display = 'none';
     const srcEl = document.getElementById('xor-seed-source');
     if (srcEl) srcEl.textContent = source || '';
+    // Refresh the seed accordion's collapsed summary (last word + FP)
+    // — fires async since BIP-39 seed derivation is async, but the
+    // last-word slot updates synchronously so the visible summary
+    // never lags the grid render.
+    if (typeof seedAccordionRefreshSummaryFromMnemonic === 'function') {
+        seedAccordionRefreshSummaryFromMnemonic('xor-seed-accordion', mnemonic);
+    }
 }
 
 // --- Clear seed: switch to manual input mode ---
@@ -21790,6 +22065,13 @@ function xor_clearSeed() {
     document.getElementById('xor-seed-empty').style.display = 'none';
     document.getElementById('xor-seed-input-area').style.display = 'block';
     document.getElementById('xor-seed-source').textContent = '';
+    // Reset the accordion summary so it doesn't briefly show the
+    // previous seed's last word + FP after the user re-enters a
+    // different mnemonic.
+    if (typeof seedAccordionRefreshSummary === 'function') {
+        document.getElementById('xor-seed-grid').innerHTML = '';
+        seedAccordionRefreshSummary('xor-seed-accordion', '--------');
+    }
     xor_buildInputGrid(xor_state.inputLength);
 }
 
@@ -23332,6 +23614,11 @@ function bip85_autoFillMasterSeed() {
     if (!grid) return;
     if (!seed) {
         grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 1rem; color: var(--skb-text-muted); font-size: 0.85rem;">No master seed loaded.</div>';
+        // Reset accordion summary so the FP/last-word slots don't
+        // show stale data from a previous session.
+        if (typeof seedAccordionRefreshSummary === 'function') {
+            seedAccordionRefreshSummary('bip85-master-accordion', '--------');
+        }
         return;
     }
     const words = seed.trim().split(/\s+/);
@@ -23343,6 +23630,17 @@ function bip85_autoFillMasterSeed() {
                          '<div class="bip85-out-word">' + word + '</div>';
         grid.appendChild(cell);
     });
+    // Refresh the master-seed accordion's collapsed summary. We pass
+    // SeedSession.fingerprint directly when available (cheap, sync) —
+    // falls back to the async derivation helper if not.
+    if (typeof seedAccordionRefreshSummary === 'function') {
+        const sessionFp = window.SeedSession?.get?.()?.fingerprint;
+        if (sessionFp) {
+            seedAccordionRefreshSummary('bip85-master-accordion', sessionFp);
+        } else if (typeof seedAccordionRefreshSummaryFromMnemonic === 'function') {
+            seedAccordionRefreshSummaryFromMnemonic('bip85-master-accordion', seed);
+        }
+    }
 }
 
 async function bip85_generate() {
@@ -23444,6 +23742,12 @@ async function bip85_generate() {
         });
         document.getElementById('bip85-output').style.display = 'block';
         _bip85HasWork = true;
+        // Refresh the child-seed accordion's collapsed summary. childFP
+        // was already computed above (line 23792); pass it sync rather
+        // than recomputing via the async helper.
+        if (typeof seedAccordionRefreshSummary === 'function') {
+            seedAccordionRefreshSummary('bip85-result-accordion', childFP);
+        }
 
         // Render QR code of the child seed
         const qrCanvas = document.getElementById('bip85-qr');
@@ -23620,6 +23924,10 @@ function desc_showSeedGrid(mnemonic, source) {
     document.getElementById('desc-seed-input-area').style.display = 'none';
     document.getElementById('desc-seed-empty').style.display = 'none';
     document.getElementById('desc-seed-source').textContent = source || '';
+    // Refresh the seed accordion's collapsed summary (last word + FP).
+    if (typeof seedAccordionRefreshSummaryFromMnemonic === 'function') {
+        seedAccordionRefreshSummaryFromMnemonic('desc-seed-accordion', mnemonic);
+    }
 }
 
 function desc_clearSeed() {
@@ -23629,6 +23937,11 @@ function desc_clearSeed() {
     document.getElementById('desc-seed-input-area').style.display = 'block';
     document.getElementById('desc-seed-source').textContent = '';
     document.getElementById('desc-output').style.display = 'none';
+    // Reset accordion summary so it doesn't briefly show stale data.
+    if (typeof seedAccordionRefreshSummary === 'function') {
+        document.getElementById('desc-seed-grid').innerHTML = '';
+        seedAccordionRefreshSummary('desc-seed-accordion', '--------');
+    }
     desc_buildInputGrid(desc_state.inputLength);
 }
 
@@ -25913,6 +26226,18 @@ function sqr_autoFillMasterSeed() {
     sqr_state.inputLength = words.length;
     document.getElementById('sqr-session-section').style.display = 'block';
     document.getElementById('sqr-manual-section').style.display = 'none';
+
+    // Refresh the seed accordion's collapsed summary (last word + FP).
+    // SeedSession.fingerprint is sync-available, so prefer it over the
+    // async derivation helper for snappier UI.
+    if (typeof seedAccordionRefreshSummary === 'function') {
+        var sessionFp = (seed && seed.fingerprint) ? seed.fingerprint : '';
+        if (sessionFp) {
+            seedAccordionRefreshSummary('sqr-session-accordion', sessionFp);
+        } else if (typeof seedAccordionRefreshSummaryFromMnemonic === 'function') {
+            seedAccordionRefreshSummaryFromMnemonic('sqr-session-accordion', mnemonic);
+        }
+    }
 
     // Passphrase pre-fill removed (Task #45) — the SeedQR tool no longer
     // exposes a passphrase input. Encoding a passphrase into a SeedQR is
@@ -29989,6 +30314,17 @@ function arm_init() {
     const fp = session.fingerprint || window.SafeKeepOS?.getFingerprint() || '--------';
     document.getElementById('arm-fingerprint').textContent = fp;
 
+    // Sync the seed-accordion's collapsed summary row so it reflects
+    // the freshly-rendered grid. The helper extracts the last word
+    // from the grid we just populated (it reads the trailing
+    // .bip85-out-word cell), and stamps the same fingerprint we just
+    // wrote into #arm-fingerprint into the accordion's FP slot.
+    // Safe to call even if the accordion DOM isn't present on every
+    // tool — the helper short-circuits on missing wrapper id.
+    if (typeof seedAccordionRefreshSummary === 'function') {
+        seedAccordionRefreshSummary('arm-seed-accordion', fp);
+    }
+
     // Load existing passphrase from session if any
     const pp = window.SeedSession?.getPassphrase?.() || window.SafeKeepOS?.getPassphrase?.() || '';
     document.getElementById('arm-passphrase').value = pp;
@@ -30089,20 +30425,38 @@ function arm_clearPassphrase() {
 function arm_clearSeed() {
     _armOverrideMnemonic = null;
     document.getElementById('arm-seed-grid').innerHTML = '';
-    document.getElementById('arm-seed-grid').style.display = 'none';
+    // Hide the whole accordion (not just the inner grid) when the seed
+    // is cleared, so the user doesn't see an empty-but-styled wrapper
+    // floating above the manual-input area. The wrapper-level hide is
+    // the right level of granularity now that the grid is one slot
+    // inside a structured component.
+    var armSeedAcc = document.getElementById('arm-seed-accordion');
+    if (armSeedAcc) armSeedAcc.style.display = 'none';
     document.getElementById('arm-seed-input-area').style.display = 'block';
     document.getElementById('arm-fingerprint').textContent = '--------';
     document.getElementById('arm-checksum-word').textContent = '---';
     document.getElementById('arm-xpub').textContent = 'No seed loaded';
     document.getElementById('arm-path').textContent = '---';
     document.getElementById('arm-addr-body').innerHTML = '';
+    // Reset the accordion's collapsed summary back to placeholders so
+    // it doesn't briefly flash the previous seed's last word + FP if
+    // the user re-loads a different seed.
+    if (typeof seedAccordionRefreshSummary === 'function') {
+        seedAccordionRefreshSummary('arm-seed-accordion', '--------');
+    }
     arm_buildInputGrid(_armInputLength);
 }
 
 function arm_restoreSeed() {
     _armOverrideMnemonic = null;
     document.getElementById('arm-seed-input-area').style.display = 'none';
-    document.getElementById('arm-seed-grid').style.display = '';
+    // Restore the accordion wrapper, not just the inner grid (see the
+    // arm_clearSeed comment for why we toggle at the wrapper level).
+    // The accordion's own collapsed/expanded state is preserved across
+    // hide/show via the data-collapsed attribute — restoring display
+    // just makes the wrapper visible again, it doesn't force-expand.
+    var armSeedAccR = document.getElementById('arm-seed-accordion');
+    if (armSeedAccR) armSeedAccR.style.display = '';
     // Re-run full init to repopulate from session
     arm_init();
 }
@@ -32015,7 +32369,17 @@ async function arm_computeElectrumSnapshot() {
     return {
         fingerprint:   fingerprint,
         derivationKey: derivationKey,
-        jsonText:      JSON.stringify(jsonObj, null, 2)
+        // jsonText is consumed exclusively by the download writer
+        // (`_armSaveExportToTransfer`) — never by the on-screen
+        // <textarea>, which builds its own pretty-printed view in
+        // `arm_deriveWallet`. Minified output here keeps the file as
+        // a single line with no carriage returns, which matches the
+        // serialization wallets like Specter / Electrum emit and
+        // avoids ambiguity with downstream parsers that key on
+        // formatting. The live preview stays pretty-printed for
+        // human readability — see the electrum_json branch in
+        // `arm_deriveWallet` for the WYSIWYG preview path.
+        jsonText:      JSON.stringify(jsonObj)
     };
 }
 
@@ -32199,7 +32563,15 @@ async function arm_computeElectrumColdcardSnapshot() {
     return {
         fingerprint:   fpHexBE,
         derivationKey: derivationKey,
-        jsonText:      JSON.stringify(jsonObj, null, 2)
+        // jsonText is consumed exclusively by the download writer
+        // (`_armSaveExportToTransfer`) — never by the on-screen
+        // <textarea>, which builds its own pretty-printed view in
+        // `arm_deriveWallet`. Minified output here matches the
+        // single-line serialization wallets like Electrum/Coldcard
+        // emit. The live preview stays pretty-printed for human
+        // readability — see the electrum_coldcard_json branch in
+        // `arm_deriveWallet` for the WYSIWYG preview path.
+        jsonText:      JSON.stringify(jsonObj)
     };
 }
 
@@ -33952,6 +34324,10 @@ function s39_showSeedGrid(mnemonic) {
                          '<div class="bip85-out-word">' + word + '</div>';
         grid.appendChild(cell);
     });
+    // Refresh the seed accordion's collapsed summary (last word + FP).
+    if (typeof seedAccordionRefreshSummaryFromMnemonic === 'function') {
+        seedAccordionRefreshSummaryFromMnemonic('s39-seed-accordion', mnemonic);
+    }
 }
 
 /**
