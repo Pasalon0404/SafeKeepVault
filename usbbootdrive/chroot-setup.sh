@@ -520,6 +520,131 @@ autocutsel -fork -selection PRIMARY 2>/dev/null
 CLIPEOF
 chmod +x /usr/local/bin/start-clipboard-sync
 
+# ==================================================================
+#  Multi-monitor mirroring helper
+#
+#  SafeKeep's kiosk runs a bare X11 session with no display manager.
+#  When a second monitor is attached (e.g. an Intel NUC with HDMI +
+#  DisplayPort), Xorg defaults to an extended desktop: the cursor
+#  spawns on one physical screen and the zenity unlock dialog opens
+#  on the other. There is no panel, no taskbar, and no visible cue
+#  that the missing dialog exists — the user appears to be locked
+#  out before they ever see the unlock prompt.
+#
+#  Forcing `--same-as` mirroring across every connected output keeps
+#  the unlock UI co-located with the cursor on every screen, which
+#  matches the kiosk's "single-purpose appliance" intent.
+#
+#  This helper is written into the image at build time and invoked
+#  from /etc/xdg/openbox/autostart BEFORE safekeep-boot launches.
+#  Failure modes are explicitly non-fatal so an unusual driver or
+#  EDID mismatch can never block the boot sequence.
+# ==================================================================
+echo "Installing multi-monitor mirroring helper..."
+cat > /usr/local/bin/safekeep-mirror-displays << 'MIRROREOF'
+#!/bin/sh
+# safekeep-mirror-displays — force every connected X output to clone the primary.
+#
+# Why: SafeKeep boots into a no-WM Openbox session with no panel. On
+# a multi-monitor host, X defaults to an extended desktop and the
+# zenity unlock dialog can land on a screen the cursor cannot reach
+# (the user has no visible cursor to drag across the invisible seam
+# between displays, and there is no taskbar to alt-tab to). Mirroring
+# guarantees the unlock UI is reachable regardless of which physical
+# port the firmware enumerated first.
+#
+# Behaviour contract — all of these are "exit 0, do nothing":
+#   * xrandr binary not on PATH (e.g. a future Wayland kiosk build)
+#   * DISPLAY unset (we are not actually inside an X session)
+#   * xrandr returns no connected outputs (headless / no monitors)
+#   * exactly one connected output (mirroring is a no-op)
+#
+# Per-output `xrandr --same-as` failures are logged but do NOT abort
+# the script — one display refusing a common mode must never prevent
+# the others from being mirrored, and must never block safekeep-boot.
+
+set -u
+
+LOG=/tmp/safekeep-mirror-displays.log
+log() {
+    # date -Iseconds isn't in BusyBox; fall back to plain `date`.
+    ts="$(date -Iseconds 2>/dev/null || date 2>/dev/null || echo '')"
+    printf '[%s] %s\n' "$ts" "$*" >> "$LOG" 2>/dev/null || true
+}
+
+# 1. Need the xrandr binary. Provided by x11-xserver-utils, which is
+#    already installed alongside xset by chroot-setup.sh.
+if ! command -v xrandr >/dev/null 2>&1; then
+    log "xrandr not on PATH — display mirroring skipped."
+    exit 0
+fi
+
+# 2. Need an X session to talk to. Openbox autostart runs under the
+#    user's X session so DISPLAY is normally :0, but check anyway —
+#    a future systemd-launched variant might call this from outside
+#    the session.
+if [ -z "${DISPLAY-}" ]; then
+    log "DISPLAY is unset — not inside an X session, skipping."
+    exit 0
+fi
+
+# 3. Enumerate connected outputs.
+#    xrandr --query lines look like:
+#       HDMI-1 connected primary 1920x1080+0+0 (normal …) 510mm x 290mm
+#       DP-1 disconnected (normal left inverted right x axis y axis)
+#    We want only "connected" (the leading space in the awk pattern
+#    excludes "disconnected", which contains "connected" as a
+#    substring and would otherwise match).
+outputs="$(xrandr --query 2>/dev/null | awk '/ connected / {print $1}')"
+
+if [ -z "$outputs" ]; then
+    log "xrandr reports no connected outputs — leaving display config alone."
+    exit 0
+fi
+
+# 4. Find the primary. xrandr only flags a "primary" output when one
+#    has been explicitly assigned; on a fresh boot with no profile,
+#    no output may carry that flag. Fall back to the first connected
+#    output and promote it so --same-as has something to anchor to.
+primary="$(xrandr --query 2>/dev/null | awk '/ connected primary / {print $1; exit}')"
+if [ -z "$primary" ]; then
+    primary="$(printf '%s\n' "$outputs" | head -n 1)"
+    log "No output flagged primary — promoting $primary."
+    if ! xrandr --output "$primary" --primary 2>>"$LOG"; then
+        log "WARN: failed to promote $primary to primary (continuing)."
+    fi
+fi
+
+# 5. Count connected outputs. Single-monitor setups are the common
+#    case and require no further work.
+n="$(printf '%s\n' "$outputs" | grep -c .)"
+log "Detected $n connected output(s); primary=$primary."
+
+if [ "$n" -le 1 ]; then
+    log "Single-monitor setup — no mirroring required."
+    exit 0
+fi
+
+# 6. Mirror every non-primary connected output onto the primary.
+#    --auto picks each output's preferred mode; --same-as anchors its
+#    framebuffer origin at the primary's (0,0) so the cursor and any
+#    UI window appear on every physical screen simultaneously.
+fails=0
+for out in $outputs; do
+    [ "$out" = "$primary" ] && continue
+    if xrandr --output "$out" --auto --same-as "$primary" 2>>"$LOG"; then
+        log "Mirrored $out -> $primary."
+    else
+        fails=$((fails + 1))
+        log "WARN: failed to mirror $out -> $primary (continuing)."
+    fi
+done
+
+log "Display mirror setup complete (failures: $fails)."
+exit 0
+MIRROREOF
+chmod +x /usr/local/bin/safekeep-mirror-displays
+
 # Create .desktop file for file manager launcher in tint2
 cat > /usr/share/applications/safekeep-files.desktop << 'DESKEOF'
 [Desktop Entry]
@@ -571,6 +696,17 @@ export GIO_USE_VOLUME_MONITOR=unix
 
 # Sync clipboard between apps (PRIMARY ↔ CLIPBOARD)
 /usr/local/bin/start-clipboard-sync &
+
+# Force every connected display to mirror the primary BEFORE the unlock
+# UI is launched. Without this, multi-monitor hosts (Intel NUC w/ two
+# screens, Mac with external display, etc.) leave the cursor on one
+# screen and the zenity unlock dialog on another — effectively locking
+# the user out of their own boot. The helper exits silently on
+# single-monitor setups and on hardware where xrandr cannot find a
+# common mode, so it can never block the boot sequence.
+# Run synchronously: safekeep-boot's first action is to draw a zenity
+# dialog, which must already see the mirrored layout.
+/usr/local/bin/safekeep-mirror-displays || true
 
 # NOTE: tint2 is intentionally NOT launched here.
 # SafeKeep runs in true kiosk mode (--kiosk) with no OS panel, clock,
