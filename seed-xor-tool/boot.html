@@ -33193,6 +33193,88 @@ async function auth_taggedHash(tag, data) {
     return new Uint8Array(await crypto.subtle.digest('SHA-256', combined));
 }
 
+/** Bitcoin double-SHA256. Returns a 32-byte Uint8Array. */
+async function auth_sha256d(bytes) {
+    var first  = await crypto.subtle.digest('SHA-256', bytes);
+    var second = await crypto.subtle.digest('SHA-256', first);
+    return new Uint8Array(second);
+}
+
+/**
+ * Compute the BIP-322 prevHash — the txid of the virtual `to_spend`
+ * transaction, in internal byte order (NOT display-reversed). This
+ * is the exact value `to_sign.vin[0].prevout.hash` must carry.
+ *
+ * Why this helper exists: an earlier version of the signer used a
+ * shortcut — `sha256d(toSpendScriptSig)` — instead of hashing the
+ * full to_spend serialization. That shortcut produced a value no
+ * other implementation would ever compute, so signatures only
+ * verified inside our own echo chamber. This helper builds the
+ * to_spend transaction with EVERY field pinned to the BIP-322
+ * spec value (no library defaults), serializes it, and double-
+ * SHA256s the result.
+ *
+ * BIP-322 contract for the to_spend transaction:
+ *   nVersion          = 0
+ *   nLockTime         = 0
+ *   vin.length        = 1
+ *   vin[0].prevout.hash  = 0x00…00 (32 zero bytes)
+ *   vin[0].prevout.n     = 0xFFFFFFFF
+ *   vin[0].scriptSig     = OP_0 PUSH32 <messageHash>
+ *   vin[0].nSequence     = 0
+ *   vin[0].nWitness      = (empty — to_spend never has a witness)
+ *   vout.length       = 1
+ *   vout[0].nValue       = 0
+ *   vout[0].scriptPubKey = messageChallenge (= the address's
+ *                          output script — what `btc.pXxx(...).script`
+ *                          returns).
+ */
+async function auth_buildBip322PrevHash(addressScript, messageHash, btc) {
+    // scriptSig per BIP-322: OP_0 (0x00) + PUSH32 (0x20) + 32 bytes
+    var toSpendScriptSig = new Uint8Array(34);
+    toSpendScriptSig[0] = 0x00; // OP_0
+    toSpendScriptSig[1] = 0x20; // PUSH 32 bytes
+    toSpendScriptSig.set(messageHash, 2);
+
+    // Construct the to_spend tx with EVERY spec field made
+    // explicit. @scure/btc-signer would otherwise default to
+    // version=2 and sequence=0xFFFFFFFF (DEFAULT_VERSION /
+    // DEFAULT_SEQUENCE in transaction.js); both are baked into
+    // the legacy tx serialization and therefore into the txid,
+    // so default-behavior produces a prevHash that no spec-
+    // compliant verifier (Sparrow, Bitcoin Core reference impl)
+    // will ever match.
+    var toSpend = new btc.Transaction({
+        version: 0,                 // BIP-322: nVersion = 0
+        lockTime: 0,                // BIP-322: nLockTime = 0
+        allowUnknownOutputs: true   // accept the OP_RETURN-style outputs
+                                    // BIP-322 demands without library push-back
+    });
+    // IMPORTANT — add the output BEFORE the input.
+    // @scure/btc-signer treats `finalScriptSig` on an input as
+    // "this input has been signed" and will then reject any
+    // subsequent addOutput call with "Tx has signed outputs,
+    // cannot add new one". Adding the output first sidesteps that
+    // ordering check; the on-the-wire serialization is identical.
+    toSpend.addOutput({
+        script: addressScript,      // BIP-322: scriptPubKey = messageChallenge
+        amount: BigInt(0)           // BIP-322: nValue = 0
+    });
+    toSpend.addInput({
+        txid: new Uint8Array(32),   // BIP-322: prevout.hash = 32 zeros
+        index: 0xFFFFFFFF,          // BIP-322: prevout.n = 0xFFFFFFFF
+        sequence: 0,                // BIP-322: nSequence = 0
+        finalScriptSig: toSpendScriptSig
+    });
+
+    // Serialize WITH scriptSig, WITHOUT segwit witness (to_spend
+    // has no witness). This matches Bitcoin's pre-segwit txid
+    // computation, which is what every BIP-322 implementation
+    // double-SHA256s to derive the prevHash.
+    var rawBytes = toSpend.toBytes(true, false);
+    return await auth_sha256d(rawBytes);
+}
+
 /** BIP-322 "simple" sign */
 async function auth_sign() {
     var resultEl = document.getElementById('auth-result');
@@ -33223,22 +33305,6 @@ async function auth_sign() {
         var indices = auth_parsePath(pathStr);
         var firstIndex = indices.length > 0 ? (indices[0] & 0x7fffffff) : 84;
 
-        // Build the "to_spend" transaction script:
-        //   OP_0 OP_RETURN <32-byte message hash>
-        //   (simplified: we just need the scriptPubKey for the to_sign tx)
-        var toSpendScriptSig = new Uint8Array(34);
-        toSpendScriptSig[0] = 0x00; // OP_0
-        toSpendScriptSig[1] = 0x20; // OP_PUSH32
-        toSpendScriptSig.set(messageHash, 2);
-
-        // Build the "to_sign" virtual transaction
-        var network = {
-            bech32: 'bc',
-            pubKeyHash: 0x00,
-            scriptHash: 0x05,
-            bip32: { public: 0x0488b21e, private: 0x0488ade4 }
-        };
-
         var signature;
 
         if (firstIndex === 86) {
@@ -33247,26 +33313,39 @@ async function auth_sign() {
             var xOnly = _authDerivedKey.publicKey.slice(1, 33);
             var p2trOutput = btc.p2tr(xOnly);
 
-            var tx = new btc.Transaction({ allowUnknownOutputs: true });
+            // Compute the BIP-322 prevHash from a real, spec-compliant
+            // to_spend tx. Mirrors what every external verifier
+            // (Sparrow, Bitcoin Core's reference impl) computes —
+            // see auth_buildBip322PrevHash for the spec contract.
+            var prevHash = await auth_buildBip322PrevHash(
+                p2trOutput.script, messageHash, btc
+            );
 
-            // Input: spending the virtual to_spend output
-            // The prevout hash is SHA256d of the to_spend tx (we use a dummy for BIP-322)
-            var prevHash = new Uint8Array(await crypto.subtle.digest('SHA-256',
-                new Uint8Array(await crypto.subtle.digest('SHA-256', toSpendScriptSig))));
+            // Build the to_sign tx with EVERY spec field made
+            // explicit. Without these overrides @scure/btc-signer
+            // would default version=2 and sequence=0xFFFFFFFF, both
+            // baked into the BIP-341 sighash and therefore into the
+            // signature — silently producing off-spec output.
+            var tx = new btc.Transaction({
+                version: 0,                 // BIP-322: nVersion = 0
+                lockTime: 0,                // BIP-322: nLockTime = 0
+                allowUnknownOutputs: true   // accept the OP_RETURN output
+            });
 
             tx.addInput({
-                txid: prevHash,
-                index: 0,
+                txid: prevHash,             // BIP-322: prevout.hash = txid(to_spend)
+                index: 0,                   // BIP-322: prevout.n = 0
+                sequence: 0,                // BIP-322: nSequence = 0
                 witnessUtxo: {
                     script: p2trOutput.script,
-                    amount: BigInt(0)
+                    amount: BigInt(0)       // BIP-322: utxo's amount = 0
                 },
                 tapInternalKey: xOnly
             });
 
             tx.addOutput({
-                script: new Uint8Array([0x6a]), // OP_RETURN
-                amount: BigInt(0)
+                script: new Uint8Array([0x6a]),  // BIP-322: scriptPubKey = OP_RETURN
+                amount: BigInt(0)                // BIP-322: nValue = 0
             });
 
             tx.signIdx(_authDerivedKey.privateKey, 0);
@@ -33284,14 +33363,28 @@ async function auth_sign() {
             // Native SegWit (P2WPKH): ECDSA witness [sig, pubkey]
             var p2wpkhOutput = btc.p2wpkh(_authDerivedKey.publicKey);
 
-            var tx2 = new btc.Transaction({ allowUnknownOutputs: true });
+            // Spec-compliant prevHash — see Taproot branch comment
+            // above and auth_buildBip322PrevHash for the contract.
+            var prevHash2 = await auth_buildBip322PrevHash(
+                p2wpkhOutput.script, messageHash, btc
+            );
 
-            var prevHash2 = new Uint8Array(await crypto.subtle.digest('SHA-256',
-                new Uint8Array(await crypto.subtle.digest('SHA-256', toSpendScriptSig))));
+            // to_sign with strict BIP-322 parameters. Same explicit
+            // overrides as the Taproot branch — never let the
+            // library defaults silently choose version=2 or
+            // sequence=0xFFFFFFFF, both of which feed into the
+            // BIP-143 sighash and would otherwise produce
+            // signatures that only verify in our own echo chamber.
+            var tx2 = new btc.Transaction({
+                version: 0,                 // BIP-322: nVersion = 0
+                lockTime: 0,                // BIP-322: nLockTime = 0
+                allowUnknownOutputs: true
+            });
 
             tx2.addInput({
-                txid: prevHash2,
-                index: 0,
+                txid: prevHash2,            // BIP-322: prevout.hash = txid(to_spend)
+                index: 0,                   // BIP-322: prevout.n = 0
+                sequence: 0,                // BIP-322: nSequence = 0
                 witnessUtxo: {
                     script: p2wpkhOutput.script,
                     amount: BigInt(0)
@@ -33299,8 +33392,8 @@ async function auth_sign() {
             });
 
             tx2.addOutput({
-                script: new Uint8Array([0x6a]), // OP_RETURN
-                amount: BigInt(0)
+                script: new Uint8Array([0x6a]),  // BIP-322: scriptPubKey = OP_RETURN
+                amount: BigInt(0)                // BIP-322: nValue = 0
             });
 
             tx2.signIdx(_authDerivedKey.privateKey, 0);
@@ -33505,15 +33598,10 @@ async function auth_verify() {
             throw new Error('Trailing bytes after witness stack — refusing to verify a malformed signature.');
         }
 
-        // ── 2. Build the BIP-322 message hash & to_spend script ────────
-        // These are reused for whichever address type we end up checking.
+        // ── 2. Build the BIP-322 message hash ──────────────────────────
+        // Reused below to derive the prevHash via auth_buildBip322PrevHash.
         var messageBytes = new TextEncoder().encode(message);
         var messageHash = await auth_taggedHash('BIP0322-signed-message', messageBytes);
-
-        var toSpendScriptSig = new Uint8Array(34);
-        toSpendScriptSig[0] = 0x00; // OP_0
-        toSpendScriptSig[1] = 0x20; // OP_PUSH32
-        toSpendScriptSig.set(messageHash, 2);
 
         // ── 3. Branch by address type ──────────────────────────────────
         if (address.startsWith('bc1q')) {
@@ -33556,25 +33644,42 @@ async function auth_verify() {
             }
 
             // ── Reconstruct the to_sign transaction (mirrors auth_sign) ─
-            // The prevout txid is sha256d(toSpendScriptSig). This MUST
-            // match the construction used at signing time, otherwise the
-            // sighash will not line up and even valid signatures will
-            // fail to verify.
-            var prevHash = new Uint8Array(await crypto.subtle.digest('SHA-256',
-                new Uint8Array(await crypto.subtle.digest('SHA-256', toSpendScriptSig))));
+            // The prevout txid is the BIP-322 spec value: sha256d of the
+            // fully-serialized to_spend tx. auth_buildBip322PrevHash pins
+            // every field of to_spend (version=0, sequence=0, prevout
+            // hash=zeros, prevout n=0xFFFFFFFF, scriptSig=OP_0 PUSH32
+            // messageHash, output value=0, scriptPubKey=address script)
+            // so this prevHash will agree with what any spec-compliant
+            // verifier (Sparrow, Bitcoin Core's reference impl)
+            // independently computes.
+            var prevHash = await auth_buildBip322PrevHash(
+                p2wpkhOut.script, messageHash, btc
+            );
 
-            var tx = new btc.Transaction({ allowUnknownOutputs: true });
+            // Build to_sign with the same strict overrides used by
+            // auth_sign. Letting @scure/btc-signer's defaults
+            // (version=2, sequence=0xFFFFFFFF) leak through here
+            // would silently shift the sighash and cause valid
+            // sigs from spec-compliant signers to fail verification
+            // — exactly the echo-chamber failure mode this commit
+            // is fixing.
+            var tx = new btc.Transaction({
+                version: 0,                 // BIP-322: nVersion = 0
+                lockTime: 0,                // BIP-322: nLockTime = 0
+                allowUnknownOutputs: true
+            });
             tx.addInput({
-                txid: prevHash,
-                index: 0,
+                txid: prevHash,             // BIP-322: prevout.hash = txid(to_spend)
+                index: 0,                   // BIP-322: prevout.n = 0
+                sequence: 0,                // BIP-322: nSequence = 0
                 witnessUtxo: {
                     script: p2wpkhOut.script,
                     amount: BigInt(0)
                 }
             });
             tx.addOutput({
-                script: new Uint8Array([0x6a]), // OP_RETURN
-                amount: BigInt(0)
+                script: new Uint8Array([0x6a]),  // BIP-322: scriptPubKey = OP_RETURN
+                amount: BigInt(0)                // BIP-322: nValue = 0
             });
 
             // BIP-143 sighash. For a P2WPKH input the script code passed
