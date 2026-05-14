@@ -33227,8 +33227,21 @@ function auth_showQR() {
     });
 }
 
-/** BIP-322 simple verification for P2WPKH addresses.
- *  Reconstructs the to_sign transaction and verifies the witness signature. */
+/** BIP-322 "simple" verification.
+ *
+ *  IMPORTANT — this used to be a structural check only: it decoded the
+ *  witness, confirmed the embedded pubkey hashed to the supplied address,
+ *  and then declared success. That meant the message text was never fed
+ *  into a CHECKSIG operation, so flipping a single character of the
+ *  plaintext (or even replacing the message entirely) still verified
+ *  "valid". That is a critical security flaw for an attestation tool.
+ *
+ *  This implementation now reconstructs the BIP-322 virtual `to_spend`
+ *  and `to_sign` transactions exactly as `auth_sign` does, recomputes the
+ *  BIP-143 sighash, and runs a real `secp256k1.verify(derSig, sighash,
+ *  pubkey)` call. If the message, address, signature, or embedded pubkey
+ *  is altered by a single byte, the resulting sighash changes and the
+ *  ECDSA check will fail. */
 async function auth_verify() {
     var resultEl = document.getElementById('auth-verify-result');
     resultEl.style.display = 'block';
@@ -33243,59 +33256,184 @@ async function auth_verify() {
         }
 
         var btc = window.BtcMath?.btcSigner;
+        var secp = window.BtcMath?.secp256k1;
         if (!btc) throw new Error('btc-signer not loaded.');
+        if (!secp) throw new Error('secp256k1 verifier not loaded.');
 
-        // Decode the witness from base64
-        var witBytes = auth_base64Decode(sigB64);
+        // ── 1. Decode the witness blob ─────────────────────────────────
+        var witBytes;
+        try {
+            witBytes = auth_base64Decode(sigB64);
+        } catch (decodeErr) {
+            throw new Error('Signature is not valid base64.');
+        }
+        if (witBytes.length < 2) {
+            throw new Error('Signature payload is too short to contain a witness.');
+        }
 
-        // Parse witness items
         var offset = 0;
         var itemCount = witBytes[offset++];
+        if (itemCount === 0 || itemCount >= 0xfd) {
+            // BIP-322 simple uses tiny witness stacks (1 or 2 items). A
+            // count of 0 or a multi-byte CompactSize here is malformed.
+            throw new Error('Malformed witness: unexpected item count.');
+        }
+
         var items = [];
         for (var i = 0; i < itemCount; i++) {
+            if (offset >= witBytes.length) throw new Error('Truncated witness stack.');
             var len = witBytes[offset];
             if (len < 0xfd) {
                 offset += 1;
             } else if (len === 0xfd) {
+                if (offset + 3 > witBytes.length) throw new Error('Truncated witness length prefix.');
                 len = witBytes[offset + 1] | (witBytes[offset + 2] << 8);
                 offset += 3;
             } else {
                 throw new Error('Witness item too large.');
             }
+            if (offset + len > witBytes.length) throw new Error('Truncated witness item.');
             items.push(witBytes.slice(offset, offset + len));
             offset += len;
         }
+        if (offset !== witBytes.length) {
+            throw new Error('Trailing bytes after witness stack — refusing to verify a malformed signature.');
+        }
 
-        // For P2WPKH: items = [der_signature, compressed_pubkey]
-        // For P2TR: items = [schnorr_signature]
-        if (address.startsWith('bc1q') && items.length === 2) {
-            // P2WPKH verification
-            // The pubkey should produce the given address
-            var pubkey = items[1];
-            var expectedAddr = btc.p2wpkh(pubkey).address;
-            if (expectedAddr !== address) {
-                throw new Error('Public key in witness does not match the given address. Expected ' + expectedAddr);
+        // ── 2. Build the BIP-322 message hash & to_spend script ────────
+        // These are reused for whichever address type we end up checking.
+        var messageBytes = new TextEncoder().encode(message);
+        var messageHash = await auth_taggedHash('BIP0322-signed-message', messageBytes);
+
+        var toSpendScriptSig = new Uint8Array(34);
+        toSpendScriptSig[0] = 0x00; // OP_0
+        toSpendScriptSig[1] = 0x20; // OP_PUSH32
+        toSpendScriptSig.set(messageHash, 2);
+
+        // ── 3. Branch by address type ──────────────────────────────────
+        if (address.startsWith('bc1q')) {
+            // ── P2WPKH (Native SegWit, BIP-84) ─────────────────────────
+            // Expected witness: [ derSig || sighashType, compressedPubkey ]
+            if (items.length !== 2) {
+                throw new Error('P2WPKH witness must have exactly 2 items (signature + pubkey); got ' + items.length + '.');
+            }
+
+            var sigWithType = items[0];
+            var pubkey      = items[1];
+
+            if (sigWithType.length < 9 || sigWithType.length > 73) {
+                throw new Error('DER signature length out of range: ' + sigWithType.length);
+            }
+            if (pubkey.length !== 33 || (pubkey[0] !== 0x02 && pubkey[0] !== 0x03)) {
+                throw new Error('Witness pubkey is not a 33-byte compressed secp256k1 point.');
+            }
+
+            var derSig = sigWithType.slice(0, sigWithType.length - 1);
+            var sighashType = sigWithType[sigWithType.length - 1];
+            // BIP-322 reference signatures use SIGHASH_ALL. Refuse anything
+            // else so an attacker can't smuggle in a SIGHASH_NONE signature
+            // that effectively binds to nothing.
+            if (sighashType !== 0x01) {
+                throw new Error('Unexpected sighash flag 0x' + sighashType.toString(16) + ' (expected SIGHASH_ALL).');
+            }
+
+            // Address binding: the pubkey in the witness MUST hash to the
+            // address the user pasted. Without this, an attacker could
+            // attach any valid signature for any pubkey.
+            var p2wpkhOut;
+            try {
+                p2wpkhOut = btc.p2wpkh(pubkey);
+            } catch (e) {
+                throw new Error('Failed to derive P2WPKH script from witness pubkey: ' + e.message);
+            }
+            if (p2wpkhOut.address !== address) {
+                throw new Error('Public key in witness does not match the given address. Expected ' + p2wpkhOut.address);
+            }
+
+            // ── Reconstruct the to_sign transaction (mirrors auth_sign) ─
+            // The prevout txid is sha256d(toSpendScriptSig). This MUST
+            // match the construction used at signing time, otherwise the
+            // sighash will not line up and even valid signatures will
+            // fail to verify.
+            var prevHash = new Uint8Array(await crypto.subtle.digest('SHA-256',
+                new Uint8Array(await crypto.subtle.digest('SHA-256', toSpendScriptSig))));
+
+            var tx = new btc.Transaction({ allowUnknownOutputs: true });
+            tx.addInput({
+                txid: prevHash,
+                index: 0,
+                witnessUtxo: {
+                    script: p2wpkhOut.script,
+                    amount: BigInt(0)
+                }
+            });
+            tx.addOutput({
+                script: new Uint8Array([0x6a]), // OP_RETURN
+                amount: BigInt(0)
+            });
+
+            // BIP-143 sighash. For a P2WPKH input the script code passed
+            // here must be the implicit P2PKH form; @scure/btc-signer's
+            // preimageWitnessV0 expects exactly that, so build it from
+            // the witness program hash.
+            var pkhScript = new Uint8Array(25);
+            pkhScript[0] = 0x76;                  // OP_DUP
+            pkhScript[1] = 0xa9;                  // OP_HASH160
+            pkhScript[2] = 0x14;                  // PUSH 20
+            pkhScript.set(p2wpkhOut.hash, 3);     // <pkh>
+            pkhScript[23] = 0x88;                 // OP_EQUALVERIFY
+            pkhScript[24] = 0xac;                 // OP_CHECKSIG
+
+            var sighash = tx.preimageWitnessV0(0, pkhScript, sighashType, BigInt(0));
+
+            // ── Strict cryptographic check ─────────────────────────────
+            // `prehash: false`: we have already produced the final 32-byte
+            // digest ourselves; without this flag noble would sha256 the
+            // input again.
+            // `format: 'der'`: Bitcoin signatures are DER-encoded; noble
+            // defaults to 64-byte compact form which would reject a valid
+            // BIP-322 sig as "wrong length".
+            // `lowS: false`: BIP-322 inherits Bitcoin Core's behavior of
+            // accepting either S half during verification (Core only
+            // *produces* low-S sigs; verification is permissive). We do
+            // not need to enforce malleability resistance here because
+            // the signature is bound to the message via the digest, not
+            // hashed elsewhere.
+            var ok = false;
+            try {
+                ok = secp.verify(derSig, sighash, pubkey, { prehash: false, format: 'der', lowS: false });
+            } catch (e) {
+                throw new Error('Signature failed to parse as DER ECDSA: ' + e.message);
+            }
+            if (!ok) {
+                throw new Error('Signature does not match the supplied message and address.');
             }
 
             resultEl.style.color = 'var(--skb-primary)';
-            resultEl.textContent = 'Witness structure valid. Pubkey matches address ' + address.slice(0, 12) + '...';
+            resultEl.textContent = '✓ Valid BIP-322 signature — message is cryptographically bound to ' + address.slice(0, 12) + '…';
 
-        } else if (address.startsWith('bc1p') && items.length === 1) {
-            // Taproot: we can check signature length (64 or 65 bytes for Schnorr)
-            if (items[0].length !== 64 && items[0].length !== 65) {
-                throw new Error('Invalid Schnorr signature length: ' + items[0].length);
-            }
-
-            resultEl.style.color = 'var(--skb-primary)';
-            resultEl.textContent = 'Taproot witness structure valid. Schnorr signature (' + items[0].length + ' bytes).';
+        } else if (address.startsWith('bc1p')) {
+            // ── P2TR (Taproot, BIP-86) ─────────────────────────────────
+            // Full BIP-341 keypath verification (Schnorr against the
+            // tweaked output key, with the BIP-341 sighash) is not yet
+            // wired up. Refuse loudly rather than green-light a Taproot
+            // signature we cannot actually validate — that was the old
+            // bug that allowed altered messages to verify.
+            throw new Error(
+                'Taproot (bc1p…) signature verification is not yet implemented in this build. ' +
+                'A structural check would not actually prove the message is signed, so verification has been refused. ' +
+                'Use a Native SegWit (bc1q…) address for now.'
+            );
 
         } else {
-            throw new Error('Unsupported address format or unexpected witness structure.');
+            throw new Error(
+                'Unsupported address format. This verifier currently supports Native SegWit (bc1q…) BIP-322 signatures only.'
+            );
         }
 
     } catch (e) {
         resultEl.style.color = 'var(--skb-danger)';
-        resultEl.textContent = 'Verification failed: ' + e.message;
+        resultEl.textContent = '✗ Verification failed: ' + e.message;
     }
 }
 

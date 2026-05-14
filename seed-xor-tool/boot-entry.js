@@ -15,6 +15,11 @@ import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { HDKey } from '@scure/bip32';
 import * as btcSigner from '@scure/btc-signer';
+// Raw curve primitives — needed by auth_verify for BIP-322 ECDSA/Schnorr
+// signature checks. Without these, the Message Signer can only inspect the
+// witness *shape* and cannot prove the signature actually binds to the
+// supplied plaintext message.
+import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 
 // QR code generation and scanning
 import QRCode from 'qrcode';
@@ -41,7 +46,7 @@ try {
 }
 
 // Expose to window so boot.js and inline scripts can use them
-window.BtcMath = { bip39, wordlist, HDKey, btcSigner };
+window.BtcMath = { bip39, wordlist, HDKey, btcSigner, secp256k1, schnorr };
 window.SLIP39 = { generateMnemonics, combineMnemonics };
 window.Miniscript = Miniscript;
 window.QRCode = QRCode;
