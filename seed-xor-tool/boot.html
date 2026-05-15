@@ -2459,10 +2459,23 @@
       display: none;
     }
 
-    /* ---- Workspace Centering & Typography Constraints ---- */
-    /* The tool state div itself is the workspace wrapper.
-       Cap its width and center it so .tool-hero and all content
-       share the exact same left edge — no split-axis misalignment. */
+    /* ---- Workspace Width & Typography Constraints ---- */
+    /* The tool state div itself is the workspace wrapper. It
+       stretches to fill column 2 of the master-detail layout
+       (flex-grow: 1, set in the layout block above). Readability
+       is protected at the element level — see the per-element
+       max-width rules below for textareas, inputs, buttons, and
+       see .tool-hero-desc for the prose paragraph cap.
+       An earlier version of this rule capped the wrapper itself
+       at 800px and centered it. That looked fine at scale=1 on a
+       1080-1366 viewport, but interacted badly with the UI scale
+       preset: at scale=0.67 on a 1366-wide screen the user has
+       roughly 2040 CSS pixels of effective layout space across
+       column 2, of which the wrapper would refuse to consume
+       more than 800 — leaving a wide empty void on the right of
+       the tool pane. Stretching the wrapper full-width fixes
+       that without making the prose harder to read, because the
+       prose-bearing elements all carry their own readability caps. */
 
     /* ---- Unconditional Wrap Safeguard (all breakpoints) ----
        The 80ch cap below is gated by the html.skb-sidebar-fits
@@ -2504,10 +2517,15 @@
        Was @media (min-width: 1100px). Same html.skb-sidebar-fits
        gate as the layout/compaction blocks above. */
 
-    /* Workspace wrapper: center the entire tool within column 2 */
+    /* Workspace wrapper: stretch to fill column 2.
+       No max-width — readability is enforced by the per-element
+       caps below (textareas/code at 80ch, inputs at 600px,
+       buttons at 400px, .tool-hero-desc at 580px). Cards,
+       accordions, and other panel-like containers intentionally
+       have NO cap so they fill the full width of the wrapper —
+       this is what gives the master-detail layout its modern
+       "stretched panel" look at any UI scale. */
     html.skb-sidebar-fits body.tool-active [id^="state-"].state-visible:not(#state-dashboard) {
-      max-width: 800px;
-      margin: 0 auto;
       width: 100%;
     }
 
