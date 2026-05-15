@@ -33201,6 +33201,34 @@ async function auth_sha256d(bytes) {
 }
 
 /**
+ * Reverse the byte order of a Uint8Array (returns a fresh array,
+ * does not mutate). Used to convert between Bitcoin's two
+ * conventions for a "txid":
+ *
+ *   internal byte order  = the raw sha256d output of the tx serialization.
+ *                          This is what goes on the wire in vin[N].prevout.hash.
+ *   display byte order   = the reverse of the above. This is what humans
+ *                          see in block explorers and what most APIs use
+ *                          when accepting a "txid" string from a user.
+ *
+ * @scure/btc-signer's `addInput({ txid })` expects DISPLAY-order
+ * bytes and reverses them internally before placing them on the
+ * wire. So when we already hold the internal-order sha256d (what
+ * BIP-322 needs the wire to carry verbatim), we have to reverse
+ * it BEFORE handing it to addInput so btc-signer's reversal
+ * cancels ours out and the wire ends up with the raw sha256d.
+ *
+ * This was the residual byte-level mismatch behind 0007: the
+ * library's reversal silently flipped the prevout.hash, producing
+ * a different sighash from every spec-compliant external verifier.
+ */
+function auth_reverseBytes(bytes) {
+    var out = new Uint8Array(bytes.length);
+    for (var i = 0; i < bytes.length; i++) out[i] = bytes[bytes.length - 1 - i];
+    return out;
+}
+
+/**
  * Compute the BIP-322 prevHash — the txid of the virtual `to_spend`
  * transaction, in internal byte order (NOT display-reversed). This
  * is the exact value `to_sign.vin[0].prevout.hash` must carry.
@@ -33333,7 +33361,13 @@ async function auth_sign() {
             });
 
             tx.addInput({
-                txid: prevHash,             // BIP-322: prevout.hash = txid(to_spend)
+                // btc-signer reverses `txid` internally (it expects
+                // display-order bytes), so we pre-reverse the raw
+                // sha256d to make the round trip a no-op. The wire
+                // prevout.hash then carries the raw sha256d that
+                // BIP-322 / Bitcoin standard mandates. See the long
+                // comment on auth_reverseBytes for the convention.
+                txid: auth_reverseBytes(prevHash),  // BIP-322: prevout.hash = txid(to_spend)
                 index: 0,                   // BIP-322: prevout.n = 0
                 sequence: 0,                // BIP-322: nSequence = 0
                 witnessUtxo: {
@@ -33382,7 +33416,14 @@ async function auth_sign() {
             });
 
             tx2.addInput({
-                txid: prevHash2,            // BIP-322: prevout.hash = txid(to_spend)
+                // Pre-reverse — see Taproot branch above and the
+                // auth_reverseBytes doc-comment for the convention.
+                // Without this, btc-signer reverses our raw sha256d
+                // again on its way to the wire, putting display-
+                // order bytes in prevout.hash and producing a
+                // sighash that no spec-compliant external verifier
+                // (Sparrow, Bitcoin Core reference impl) agrees with.
+                txid: auth_reverseBytes(prevHash2),  // BIP-322: prevout.hash = txid(to_spend)
                 index: 0,                   // BIP-322: prevout.n = 0
                 sequence: 0,                // BIP-322: nSequence = 0
                 witnessUtxo: {
@@ -33549,8 +33590,14 @@ async function auth_verify() {
         var message = document.getElementById('auth-verify-message').value;
         var sigB64 = document.getElementById('auth-verify-sig').value.trim();
 
-        if (!address || !message || !sigB64) {
-            throw new Error('Please fill in all fields (address, message, and signature).');
+        // Note: empty message is intentionally allowed — BIP-322's
+        // own test vectors include the empty-string case. We only
+        // require an address and a signature blob; an empty message
+        // string will hash to a deterministic BIP-322 messageHash
+        // and the cryptographic check below will pass or fail on
+        // its own merits.
+        if (!address || !sigB64) {
+            throw new Error('Address and signature are required.');
         }
 
         var btc = window.BtcMath?.btcSigner;
@@ -33669,7 +33716,12 @@ async function auth_verify() {
                 allowUnknownOutputs: true
             });
             tx.addInput({
-                txid: prevHash,             // BIP-322: prevout.hash = txid(to_spend)
+                // Pre-reverse — see auth_reverseBytes doc-comment.
+                // sign and verify must use the SAME pre-reversal so
+                // the wire prevout.hash (and therefore the sighash)
+                // is identical on both sides; otherwise even our
+                // own valid signatures would fail to verify.
+                txid: auth_reverseBytes(prevHash),  // BIP-322: prevout.hash = txid(to_spend)
                 index: 0,                   // BIP-322: prevout.n = 0
                 sequence: 0,                // BIP-322: nSequence = 0
                 witnessUtxo: {
