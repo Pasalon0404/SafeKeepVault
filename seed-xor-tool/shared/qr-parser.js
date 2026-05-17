@@ -10,7 +10,11 @@
  * Detection order:
  *   1. Numeric SeedQR (Sparrow Standard)
  *        - Exactly 48 ASCII digits (12 words) or 96 ASCII digits (24 words).
- *        - Each 4-digit chunk is a 1-indexed BIP-39 word number in [1, 2048].
+ *        - Each 4-digit chunk is a 0-indexed BIP-39 word array position
+ *          in [0, 2047]. So "0000" = wordlist[0] ("abandon"), "2047" =
+ *          wordlist[2047] ("zoo"). This is the encoding Sparrow Wallet
+ *          and SeedSigner actually emit (verified empirically against a
+ *          live Sparrow-generated SeedQR with a BIP-39-valid checksum).
  *        - Returns: "word1 word2 ... wordN" (space-separated mnemonic).
  *
  *   2. Compact SeedQR (Binary, SeedSigner format)
@@ -90,11 +94,18 @@ function parseQRScan(text, binaryData) {
 /**
  * Decode a 48 or 96-digit Sparrow Numeric SeedQR string to a BIP-39
  * word array. Returns null if any 4-digit chunk is out of the
- * 1-2048 range or the wordlist is unavailable.
+ * 0-2047 range or the wordlist is unavailable.
  *
- * Sparrow's Standard SeedQR encodes each BIP-39 word as its 1-indexed
- * position (0001 = first word "abandon", 2048 = last word "zoo"),
- * concatenated and zero-padded to 4 digits per word.
+ * Sparrow's Standard SeedQR encodes each BIP-39 word as its 0-indexed
+ * position in the wordlist array (0000 = first word "abandon", 2047 =
+ * last word "zoo"), concatenated and zero-padded to 4 digits per word.
+ *
+ * Verified empirically against a live Sparrow-generated SeedQR:
+ *   "118513101065108603670751118201010885153715700335"
+ * decodes (0-indexed) to "neither phrase lunch march combine fuel need
+ * arrow huge scan session clarify" — BIP-39 checksum valid. The
+ * 1-indexed interpretation of the same payload yields a different
+ * 12-word string with a failing checksum.
  */
 function _numericSeedQrToWords(digitString) {
     // Wordlist lookup chain: BtcMath (kiosk + most standalone tools) →
@@ -111,10 +122,10 @@ function _numericSeedQrToWords(digitString) {
     var words = [];
     for (var i = 0; i < digitString.length; i += 4) {
         var chunk = digitString.slice(i, i + 4);
-        var idx1 = parseInt(chunk, 10);
-        // 1-indexed: 0001 → wordlist[0], 2048 → wordlist[2047]
-        if (!Number.isFinite(idx1) || idx1 < 1 || idx1 > 2048) return null;
-        words.push(wl[idx1 - 1]);
+        var idx = parseInt(chunk, 10);
+        // 0-indexed: 0000 → wordlist[0] ("abandon"), 2047 → wordlist[2047] ("zoo")
+        if (!Number.isFinite(idx) || idx < 0 || idx > 2047) return null;
+        words.push(wl[idx]);
     }
     return words;
 }

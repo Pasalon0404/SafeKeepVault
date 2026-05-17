@@ -189,21 +189,29 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // === CORE ENCODING LOGIC ===
 //
-// Numeric SeedQR — Sparrow / SeedSigner "Standard SeedQR" format.
+// Numeric SeedQR — Sparrow Wallet / SeedSigner "Standard SeedQR" format.
 //
-// Spec: each BIP-39 word is encoded as its 1-indexed position in the
-// official English wordlist, zero-padded to exactly 4 digits. So
-// "abandon" (the first word) → "0001", "zoo" (the last word) → "2048".
-// Concatenating 12 or 24 of these yields a 48- or 96-character digit
-// string, which is what a Sparrow / SeedSigner-compatible scanner
-// expects to decode.
+// Spec: each BIP-39 word is encoded as its 0-indexed position in the
+// English wordlist array, zero-padded to exactly 4 digits. So "abandon"
+// (the first word, array index 0) → "0000", "zoo" (the last word,
+// array index 2047) → "2047". Range: 0000..2047. Concatenating 12 or
+// 24 of these yields a 48- or 96-character digit string.
 //
-// Historical note: earlier revisions of this function used 0-indexed
-// values (range 0000..2047). That deviated from the SeedSigner spec
-// and made every QR generated here unreadable by spec-compliant
-// scanners (including this project's own shared/qr-parser.js, which
-// correctly decodes 1-indexed). The +1 below brings the encoder back
-// into spec compliance.
+// Verified empirically against a live Sparrow-generated SeedQR:
+// the captured payload "118513101065108603670751118201010885153715700335"
+// decoded 0-indexed (chunks used directly as array indices) yields the
+// mnemonic "neither phrase lunch march combine fuel need arrow huge
+// scan session clarify" — BIP-39 checksum VALID. The 1-indexed reading
+// of the same payload produces a different 12-word string with a
+// FAILING checksum, conclusively ruling out 1-indexed.
+//
+// History: this function was 0-indexed (correct), then briefly +1'd to
+// "1-indexed" (commit f36ba82) based on a misreading of SeedSigner's
+// docs which described word positions colloquially ("1st through 2048th
+// word") but encoded them as array offsets. The empirical Sparrow test
+// in commit f36ba82's follow-up exposed the error. This restores the
+// original spec-compliant 0-indexed form. Indirect import from indexOf
+// (which is 0-based natively) means no adjustment is needed.
 function encodeSeedToNumeric(seedString) {
     const words = seedString.trim().toLowerCase().split(/\s+/).filter(w => w.length > 0);
     if (words.length !== 12 && words.length !== 24) {
@@ -214,9 +222,8 @@ function encodeSeedToNumeric(seedString) {
     for (let word of words) {
         const index = bip39Wordlist.indexOf(word);
         if (index === -1) throw new Error(`Invalid BIP-39 word found: "${word}"`);
-        // 1-indexed per SeedSigner Standard SeedQR spec: array index 0
-        // ("abandon") encodes as "0001"; array index 2047 ("zoo") as "2048".
-        numericString += (index + 1).toString().padStart(4, '0');
+        // 0-indexed: array index 0 ("abandon") → "0000"; index 2047 ("zoo") → "2047".
+        numericString += index.toString().padStart(4, '0');
     }
     return numericString;
 }
