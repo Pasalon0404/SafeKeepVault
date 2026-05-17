@@ -22,3 +22,8 @@ window.BtcMath = {
 
 window.QRCode = QRCode;
 window.URDecoder = URDecoder;
+
+// Universal QR parser (shared/qr-parser.js). Looks up window.BtcMath.wordlist
+// lazily at scan time. html5-qrcode delivers decoded text only (no raw bytes),
+// so only the Numeric SeedQR + text-passthrough paths are reachable here.
+import '../shared/qr-parser.js';

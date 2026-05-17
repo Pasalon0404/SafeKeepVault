@@ -398,6 +398,11 @@ function startScanner(targetId, container) {
         { facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
         (decodedText) => {
             window.toggleScanner(targetId);
+            // Route through universal QR parser. Sparrow Numeric SeedQR
+            // (48/96 digits) → mnemonic string; everything else passes
+            // through unchanged. html5-qrcode doesn't expose raw bytes,
+            // so Compact SeedQR is N/A here.
+            if (window.QRParser) decodedText = window.QRParser.parseQRScan(decodedText, null);
             const words = decodedText.trim().split(/[\s\n]+/);
             const gridId = targetId === 'split' ? 'grid-split' : `grid-merge-${targetId}`;
 

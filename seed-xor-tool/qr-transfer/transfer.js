@@ -1,5 +1,11 @@
 import QRCode from 'qrcode';
 
+// Universal QR parser (shared/qr-parser.js). qr-transfer scans animated text
+// chunks ("loop/index/total~filename~ext~mime~data~checksum"), never SeedQR
+// signatures, so the parser is a transparent passthrough here — wired in for
+// codebase-wide parity. No wordlist needed.
+import '../shared/qr-parser.js';
+
 // --- SVG ICON STRINGS ---
 const EYE_OPEN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
 const EYE_CLOSED_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
@@ -260,7 +266,13 @@ document.getElementById('startReceiveBtn').addEventListener('click', () => {
     html5QrCode.start(
         { facingMode: "environment" },
         { fps: 15, qrbox: { width: 300, height: 300 } },
-        (decodedText) => { processQRData(decodedText); },
+        (decodedText) => {
+            // Route through universal QR parser. qr-transfer's animated
+            // chunk format never matches SeedQR signatures, so the parser
+            // is a transparent passthrough here — wired in for parity.
+            if (window.QRParser) decodedText = window.QRParser.parseQRScan(decodedText, null);
+            processQRData(decodedText);
+        },
         (errorMessage) => { /* ignore */ }
     ).catch(err => alert("Camera error: " + err));
 });

@@ -381,6 +381,10 @@ window.toggleScanner = function() {
             { facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText) => {
                 window.toggleScanner();
+                // Route through universal QR parser. Sparrow Numeric SeedQR
+                // (48/96 digits) → mnemonic string; everything else passes
+                // through unchanged.
+                if (window.QRParser) decodedText = window.QRParser.parseQRScan(decodedText, null);
                 const words = decodedText.trim().split(/[\s\n]+/);
                 if (words.length === 24 && document.querySelector('input[name="seedLength"][value="12"]').checked) {
                     document.querySelector('input[name="seedLength"][value="24"]').checked = true;

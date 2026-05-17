@@ -1,3 +1,7 @@
+// Universal QR parser (shared/qr-parser.js). secure-note's scanner reads
+// passwords for the encrypt/decrypt fields, so the parser is a transparent
+// passthrough here — wired in for codebase-wide parity. No wordlist needed.
+import '../shared/qr-parser.js';
 
 // --- SVG ICON STRINGS ---
 const EYE_OPEN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
@@ -60,6 +64,10 @@ window.openScanner = function(targetId) {
         { facingMode: "environment" },
         { fps: 15, qrbox: { width: 250, height: 250 } },
         (decodedText) => {
+            // Route through universal QR parser. secure-note scans only ever
+            // contain passwords — never SeedQR signatures — so the parser is
+            // a transparent passthrough here; wired in for codebase-wide parity.
+            if (window.QRParser) decodedText = window.QRParser.parseQRScan(decodedText, null);
             document.getElementById(activeTargetInput).value = decodedText;
             window.closeScanner();
         },

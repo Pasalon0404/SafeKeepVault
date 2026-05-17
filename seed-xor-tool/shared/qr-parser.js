@@ -32,12 +32,20 @@
  * so callers can wrap nested parser calls without worrying about
  * double-decoding.
  *
- * Dependencies (loaded by boot-entry.js):
- *   - window.BtcMath.bip39    — @scure/bip39 (entropyToMnemonic)
- *   - window.BtcMath.wordlist — English BIP-39 wordlist (2048 strings)
+ * Dependencies:
+ *   - English BIP-39 wordlist (2048 strings). Looked up in this order:
+ *       1. window.BtcMath.wordlist  (kiosk / signer / seedxor / bip85 / descriptor)
+ *       2. window.QR_PARSER_WORDLIST (fallback for tools that don't expose BtcMath
+ *          but have their own local wordlist array — e.g. the legacy seedqr tool)
+ *     If neither is present, Numeric SeedQR detection silently degrades to
+ *     text passthrough, which is the correct behavior for tools that only
+ *     ever scan non-seed text (qr-transfer, secure-note).
+ *   - window.BtcMath.bip39 (@scure/bip39 entropyToMnemonic) — required only for
+ *     Compact SeedQR (binary) detection. Standalone tools using html5-qrcode
+ *     never see binary data and so don't need this.
  *
- * Exposed as window.QRParser.parseQRScan for inline scripts in boot.html
- * (matching the pattern used by SKScanner, BtcMath, etc.).
+ * Exposed as window.QRParser.parseQRScan for inline scripts and standalone
+ * tools (matching the pattern used by SKScanner, BtcMath, etc.).
  */
 
 function parseQRScan(text, binaryData) {
@@ -89,9 +97,15 @@ function parseQRScan(text, binaryData) {
  * concatenated and zero-padded to 4 digits per word.
  */
 function _numericSeedQrToWords(digitString) {
-    var wl = (typeof window !== 'undefined' && window.BtcMath)
-        ? window.BtcMath.wordlist
-        : null;
+    // Wordlist lookup chain: BtcMath (kiosk + most standalone tools) →
+    // explicit fallback global (legacy seedqr tool exposes its local
+    // 2048-word array here). Both shapes are just plain arrays of 2048
+    // lowercase strings — interchangeable for index lookup.
+    var wl = null;
+    if (typeof window !== 'undefined') {
+        if (window.BtcMath && window.BtcMath.wordlist) wl = window.BtcMath.wordlist;
+        else if (window.QR_PARSER_WORDLIST) wl = window.QR_PARSER_WORDLIST;
+    }
     if (!wl || wl.length !== 2048) return null;
 
     var words = [];

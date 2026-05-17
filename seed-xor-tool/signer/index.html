@@ -536,6 +536,11 @@ window.onPsbtScanSuccess = async function(decodedText) {
     // (camera can fire extra frames before async stop() completes)
     if (psbtScanProcessing) return;
 
+    // Route through universal QR parser. PSBT scans (URv2, BBQr, hex, base43,
+    // base64) never match SeedQR signatures, so the parser is a transparent
+    // passthrough here — wired in for codebase-wide parity.
+    if (window.QRParser) decodedText = window.QRParser.parseQRScan(decodedText, null);
+
     try {
         if (decodedText.toLowerCase().startsWith('ur:')) {
             if (!activeUrDecoder) return; // Scanner closing, ignore stale callbacks
@@ -645,6 +650,10 @@ window.toggleSeedScanner = function() {
             { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText) => {
                 window.toggleSeedScanner();
+                // Route through universal QR parser. Sparrow Numeric SeedQR
+                // (48/96 digits) → mnemonic string; text mnemonics and
+                // everything else pass through unchanged.
+                if (window.QRParser) decodedText = window.QRParser.parseQRScan(decodedText, null);
                 const words = decodedText.trim().split(/[\s\n]+/);
                 if (words.length === 24 && document.querySelector('input[name="seedLength"][value="12"]').checked) {
                     document.querySelector('input[name="seedLength"][value="24"]').checked = true;

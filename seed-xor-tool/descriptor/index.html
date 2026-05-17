@@ -499,6 +499,12 @@ function startScannerForBlock(index, container) {
         (decodedText) => {
             window.toggleScanner(index);
 
+            // Route through universal QR parser. Sparrow Numeric SeedQR
+            // (48/96 digits) → mnemonic string; xpubs and everything else
+            // pass through unchanged so the xpub-detection regex below
+            // continues to fire correctly.
+            if (window.QRParser) decodedText = window.QRParser.parseQRScan(decodedText, null);
+
             // Check if this is an xpub/xpub-like key
             if (decodedText.match(/^[xyzXYZtuvTUV]pub[0-9A-Za-z]+$/)) {
                 // Fill xpub field

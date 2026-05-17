@@ -1,5 +1,13 @@
 import QRCode from 'qrcode';
 
+// Universal QR parser (shared/qr-parser.js). This tool doesn't expose
+// window.BtcMath (no @scure/bip39 import), so we publish the local
+// wordlist under window.QR_PARSER_WORDLIST below — the parser checks
+// that as a fallback when BtcMath.wordlist isn't available. Numeric
+// SeedQR detection becomes available; the Compact path stays disabled
+// (html5-qrcode used here doesn't deliver raw bytes anyway).
+import '../shared/qr-parser.js';
+
 // ==========================================
 // 1. BIP-39 WORDLIST
 // ==========================================
@@ -8,8 +16,14 @@ const bip39Wordlist = ["abandon","ability","able","about","above","absent","abso
 
     // ... PASTE YOUR 2048 WORDS HERE ...
 
+// Bridge the local wordlist into the universal QR parser so its Numeric
+// SeedQR detection can resolve word indices. The parser checks
+// window.BtcMath.wordlist first, then falls back to this.
+if (typeof window !== 'undefined' && bip39Wordlist.length === 2048) {
+    window.QR_PARSER_WORDLIST = bip39Wordlist;
+}
 
-let currentNumericSeed = ""; 
+let currentNumericSeed = "";
 
 // === UI & TABS HELPERS ===
 document.getElementById('theme-btn').addEventListener('click', (e) => {
@@ -317,13 +331,18 @@ document.getElementById('btn-camera-import').addEventListener('click', (e) => {
     html5QrCodeImport = new Html5Qrcode("reader-import");
     
     html5QrCodeImport.start(
-        { facingMode: "environment" }, 
+        { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         (decodedText) => {
             html5QrCodeImport.stop().then(() => {
                 document.getElementById('camera-import-box').style.display = 'none';
             }).catch(console.error);
-            
+
+            // Route through universal QR parser. Sparrow Numeric SeedQR
+            // (48/96 digits) → mnemonic string; text mnemonics and
+            // everything else pass through unchanged.
+            if (window.QRParser) decodedText = window.QRParser.parseQRScan(decodedText, null);
+
             const words = decodedText.trim().split(/[\s\n]+/);
             if (words.length === 24) document.querySelector('input[name="seedLength"][value="24"]').checked = true;
             else document.querySelector('input[name="seedLength"][value="12"]').checked = true;
@@ -470,7 +489,14 @@ document.getElementById('btn-start-verify').addEventListener('click', (e) => {
             html5QrCodeVerify.stop().then(() => {
                 document.getElementById('camera-verify-box').style.display = 'none';
             }).catch(console.error);
-            
+
+            // Route through universal QR parser. A Numeric SeedQR scan would
+            // now be converted to text mnemonic; the existing letter-check
+            // below then round-trips it back to numeric via encodeSeedToNumeric
+            // for the comparison against currentNumericSeed, yielding the
+            // same numeric form either way.
+            if (window.QRParser) scannedText = window.QRParser.parseQRScan(scannedText, null);
+
             const resBox = document.getElementById('verify-result');
             resBox.style.background = 'var(--card2)';
 
