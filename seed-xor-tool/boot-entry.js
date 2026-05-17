@@ -54,7 +54,10 @@ window.jsQR = jsQR;
 window.URDecoder = URDecoder;
 window.CBOR = CBOR;
 
-// Import shared modules — Vite will bundle these
+// Import shared modules — Vite will bundle these.
+// qr-parser.js must load BEFORE boot.js so the inline scripts in
+// boot.html see window.QRParser at the moment they wire up scanners.
+import './shared/qr-parser.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
 

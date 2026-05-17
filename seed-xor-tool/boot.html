@@ -14747,10 +14747,16 @@ async function vaultUnlockScanQR() {
     area.style.display = 'block';
     try {
         _vaultUnlockQrScanner = SKScanner.create('vault-unlock-qr-reader');
-        await _vaultUnlockQrScanner.start({ fps: 10 }, function(text) {
+        await _vaultUnlockQrScanner.start({ fps: 10 }, function(text, binaryData) {
             vaultUnlockStopQR();
-            if (text) {
-                document.getElementById('vault-unlock-password').value = text.trim();
+            // Route through universal QR parser (shared/qr-parser.js).
+            // For plain-text password QRs this is a transparent passthrough;
+            // a scanned SeedQR would be converted to a mnemonic string.
+            var parsed = window.QRParser
+                ? window.QRParser.parseQRScan(text, binaryData)
+                : text;
+            if (parsed) {
+                document.getElementById('vault-unlock-password').value = parsed.trim();
                 document.getElementById('vault-unlock-status').textContent = 'Password scanned from QR.';
                 document.getElementById('vault-unlock-status').className = 'rst-status valid';
             }
@@ -16670,7 +16676,15 @@ function _psbtOnQrScanned(text, binaryData) {
     // so after we resolve a static QR, ignore further calls while stopping.
     if (_psbtScanProcessing) return;
 
-    const trimmed = text.trim();
+    // Route through universal QR parser (shared/qr-parser.js). For PSBT
+    // mode (UR/BBQr/base64) this is a transparent passthrough; for seed
+    // mode the parser converts Numeric or Compact SeedQR signatures →
+    // mnemonic string here, and sqr_wordsFromScan further down is
+    // idempotent on that string.
+    const parsed = window.QRParser
+        ? window.QRParser.parseQRScan(text, binaryData)
+        : text;
+    const trimmed = (parsed || '').trim();
 
     // ---- SEED QR MODE: inject words into the temp seed textarea ----
     if (_psbtCameraTarget === 'seed') {
@@ -24773,11 +24787,16 @@ async function desc_scanCosignerQR(idx) {
     area.style.display = 'block';
     try {
         _descCosignerScanners[idx] = SKScanner.create('desc-ms-qr-reader-' + idx);
-        await _descCosignerScanners[idx].start({ fps: 10 }, function(text) {
+        await _descCosignerScanners[idx].start({ fps: 10 }, function(text, binaryData) {
             desc_stopCosignerQR(idx);
+            // Route through universal QR parser (passthrough for xpubs — they
+            // never match the 48/96-digit or 16/32-byte SeedQR signatures).
+            var parsed = window.QRParser
+                ? window.QRParser.parseQRScan(text, binaryData)
+                : text;
             var inputEl = document.getElementById('desc-ms-xpub-' + idx);
             if (inputEl) {
-                inputEl.value = text.trim();
+                inputEl.value = (parsed || '').trim();
                 showStatus('Co-signer key ' + idx + ' scanned from QR.', 'success');
             }
         });
@@ -25511,7 +25530,7 @@ async function descv_scanQR() {
     try {
         _descvQrScanner = SKScanner.create('descv-qr-reader');
         await _descvQrScanner.start({ fps: 10 }, function(text, binaryData) {
-            _descvOnQrScanned(text);
+            _descvOnQrScanned(text, binaryData);
         });
     } catch (err) {
         showStatus('Camera failed: ' + err.message, 'error');
@@ -25519,9 +25538,15 @@ async function descv_scanQR() {
     }
 }
 
-function _descvOnQrScanned(text) {
+function _descvOnQrScanned(text, binaryData) {
     if (_descvScanProcessing) return;
-    var trimmed = (text || '').trim();
+    // Route through universal QR parser (shared/qr-parser.js). Descriptors,
+    // URv2 frames, and BBQr frames don't match SeedQR signatures so the
+    // parser is a transparent passthrough for this callsite.
+    var parsed = window.QRParser
+        ? window.QRParser.parseQRScan(text, binaryData)
+        : text;
+    var trimmed = (parsed || '').trim();
     if (!trimmed) return;
 
     // Route 1: UR-encoded QR (single-frame or animated)
@@ -26831,38 +26856,39 @@ var SKScanner = (function() {
 })();
 
 
-// --- Shared Compact SeedQR scan decoder ---
-// Used by EVERY seed scanner in the vault (Glyph, Shard, Ledger, Seal, Restore).
-// Accepts (text, binaryData) from SKScanner callback.
+// --- Shared seed-mnemonic extractor (used by EVERY seed scanner) ---
+//
+// Used by Glyph, Shard, Ledger, Seal, Restore, SLIP-39, PSBT-seed-mode, etc.
+// Accepts (text, binaryData) from the SKScanner callback.
 //   text       = decoded string from jsQR (code.data)
 //   binaryData = Uint8ClampedArray of raw QR bytes (code.binaryData)
-// Returns an array of BIP-39 words, or null if the scan is not a valid seed.
+// Returns an array of 12 or 24 BIP-39 words, or null otherwise.
+//
+// Routes the scan through the central universal parser
+// (shared/qr-parser.js → window.QRParser.parseQRScan). The parser
+// handles:
+//   • Numeric SeedQR (Sparrow Standard) — 48 or 96 digit string,
+//     1-indexed 4-digit chunks → BIP-39 words.
+//   • Compact SeedQR (SeedSigner binary) — 16 or 32 raw entropy bytes
+//     → entropyToMnemonic (appends SHA-256 checksum).
+//   • Plain text fallback — returns the scanner text exactly as-is.
+//
+// We then split on whitespace, accept a 12- or 24-token count, and let
+// the caller mark each token valid/invalid against the BIP-39 wordlist
+// (preserving the existing "fill grid + mark typo'd words red" UX —
+// we intentionally do NOT validate wordlist membership here).
 function sqr_wordsFromScan(text, binaryData) {
+    var parser = window.QRParser;
+    if (!parser || typeof parser.parseQRScan !== 'function') return null;
 
-    // ---- Priority 1: Compact SeedQR — raw binary bytes from jsQR ----
-    // jsQR's binaryData is a clean Uint8ClampedArray — no charset mangling.
-    // 12-word seed = 16 bytes of entropy  |  24-word seed = 32 bytes
-    if (binaryData && (binaryData.length === 16 || binaryData.length === 32)) {
-        try {
-            return sqr_decodeCompact(new Uint8Array(binaryData));
-        } catch (_) {
-            // Not valid BIP-39 entropy — fall through to text parse
-        }
-    }
+    var parsed = parser.parseQRScan(text, binaryData);
+    var trimmed = (parsed || '').trim();
+    if (!trimmed) return null;
 
-    // ---- Priority 2: Plain mnemonic text (space-separated BIP-39 words) ----
-    // Guard: require at least one letter [a-z] so pure-numeric strings
-    // (legacy Standard SeedQR: 48/96 digits) are NEVER accepted.
-    var str = text || '';
-    var trimmed = str.trim();
-    if (trimmed.length > 0 && /[a-z]/i.test(trimmed)) {
-        var parts = trimmed.split(/[\s\n,]+/).filter(function(w) { return w.length > 0; });
-        if (parts.length === 12 || parts.length === 24) {
-            return parts.map(function(w) { return w.toLowerCase(); });
-        }
-    }
+    var parts = trimmed.split(/[\s\n,]+/).filter(function(w) { return w.length > 0; });
+    if (parts.length !== 12 && parts.length !== 24) return null;
 
-    return null;
+    return parts.map(function(w) { return w.toLowerCase(); });
 }
 
 // --- Generate Compact SeedQR ---
@@ -27608,8 +27634,8 @@ function xfr_startReceive() {
 
     if (xfr_state.recvScanner) { xfr_state.recvScanner.stop(); xfr_state.recvScanner = null; }
     xfr_state.recvScanner = SKScanner.create('xfr-recv-reader');
-    xfr_state.recvScanner.start({ fps: 15 }, function(text) {
-        xfr_processQR(text);
+    xfr_state.recvScanner.start({ fps: 15 }, function(text, binaryData) {
+        xfr_processQR(text, binaryData);
     }).catch(function(err) {
         showStatus('Camera error: ' + err, 'error');
     });
@@ -27622,7 +27648,14 @@ function xfr_stopReceive() {
 }
 
 // Smart router: detect animated chunk vs static text
-function xfr_processQR(qrData) {
+function xfr_processQR(qrData, binaryData) {
+    // Route through universal QR parser (shared/qr-parser.js). The animated
+    // file-chunk format ("loop/index/total~filename~ext~mime~data~checksum")
+    // doesn't match SeedQR signatures, so the parser is a transparent
+    // passthrough for transfer scans.
+    if (window.QRParser && typeof window.QRParser.parseQRScan === 'function') {
+        qrData = window.QRParser.parseQRScan(qrData, binaryData);
+    }
     try {
         var parts = qrData.split('~');
         // Animated chunk: 6 parts with "loop/index/total" header in parts[0]
@@ -28380,10 +28413,15 @@ async function rlq_scanPassword(target) {
 
     try {
         _rlqPwScanner = SKScanner.create(readerId);
-        await _rlqPwScanner.start({ fps: 10 }, function(text) {
+        await _rlqPwScanner.start({ fps: 10 }, function(text, binaryData) {
             // On successful scan: populate the password field and stop
             rlq_stopPasswordScan(target);
-            document.getElementById(fieldId).value = text.trim();
+            // Route through universal QR parser (passthrough for plaintext
+            // passwords — they don't match SeedQR signatures).
+            var parsed = window.QRParser
+                ? window.QRParser.parseQRScan(text, binaryData)
+                : text;
+            document.getElementById(fieldId).value = (parsed || '').trim();
             showStatus('Password scanned via QR — field populated.', 'success');
         });
     } catch (err) {
@@ -34487,11 +34525,18 @@ async function s39r_scanShareQR() {
     area.style.display = 'block';
     try {
         _s39rQrScanner = SKScanner.create('s39r-qr-reader');
-        await _s39rQrScanner.start({ fps: 10 }, function(text) {
+        await _s39rQrScanner.start({ fps: 10 }, function(text, binaryData) {
             s39r_stopQR();
-            if (!text) { s39r_showLocalStatus('QR code was empty.', 'error'); return; }
+            // Route through universal QR parser. SLIP-39 share QRs are
+            // plaintext words — they don't match the 48/96-digit or
+            // 16/32-byte BIP-39 SeedQR signatures, so the parser is a
+            // transparent passthrough here.
+            var parsed = window.QRParser
+                ? window.QRParser.parseQRScan(text, binaryData)
+                : text;
+            if (!parsed) { s39r_showLocalStatus('QR code was empty.', 'error'); return; }
             // SLIP-39 shares are plaintext words in the QR — may be uppercase
-            var normalized = text.trim().toLowerCase();
+            var normalized = parsed.trim().toLowerCase();
             var words = normalized.split(/\s+/);
             if (words.length === 20 || words.length === 33) {
                 // Auto-fill the textarea and add immediately
@@ -35424,14 +35469,20 @@ async function s39v_scanShareQR(index) {
     try {
         var scanner = SKScanner.create('s39v-qr-reader-' + index);
         _s39vQrScanners[index] = scanner;
-        await scanner.start({ fps: 10 }, function(text) {
+        await scanner.start({ fps: 10 }, function(text, binaryData) {
             s39v_stopShareQR(index);
-            if (!text) {
+            // Route through universal QR parser. SLIP-39 share QRs are
+            // plaintext words — they don't match BIP-39 SeedQR signatures,
+            // so the parser is a transparent passthrough here.
+            var parsed = window.QRParser
+                ? window.QRParser.parseQRScan(text, binaryData)
+                : text;
+            if (!parsed) {
                 s39v_showShareStatus(index, 'QR code was empty.', 'error');
                 return;
             }
             // SLIP-39 shares are plaintext words in the QR — may be uppercase or padded
-            var normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
+            var normalized = parsed.trim().toLowerCase().replace(/\s+/g, ' ');
             var words = normalized.split(/\s+/);
             var ta = document.getElementById('s39v-share-input-' + index);
             if (ta) ta.value = normalized;
