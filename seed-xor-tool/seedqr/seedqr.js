@@ -188,17 +188,35 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // === CORE ENCODING LOGIC ===
+//
+// Numeric SeedQR — Sparrow / SeedSigner "Standard SeedQR" format.
+//
+// Spec: each BIP-39 word is encoded as its 1-indexed position in the
+// official English wordlist, zero-padded to exactly 4 digits. So
+// "abandon" (the first word) → "0001", "zoo" (the last word) → "2048".
+// Concatenating 12 or 24 of these yields a 48- or 96-character digit
+// string, which is what a Sparrow / SeedSigner-compatible scanner
+// expects to decode.
+//
+// Historical note: earlier revisions of this function used 0-indexed
+// values (range 0000..2047). That deviated from the SeedSigner spec
+// and made every QR generated here unreadable by spec-compliant
+// scanners (including this project's own shared/qr-parser.js, which
+// correctly decodes 1-indexed). The +1 below brings the encoder back
+// into spec compliance.
 function encodeSeedToNumeric(seedString) {
     const words = seedString.trim().toLowerCase().split(/\s+/).filter(w => w.length > 0);
     if (words.length !== 12 && words.length !== 24) {
         throw new Error(`Expected 12 or 24 words, but found ${words.length}.`);
     }
-    
+
     let numericString = "";
     for (let word of words) {
         const index = bip39Wordlist.indexOf(word);
         if (index === -1) throw new Error(`Invalid BIP-39 word found: "${word}"`);
-        numericString += index.toString().padStart(4, '0');
+        // 1-indexed per SeedSigner Standard SeedQR spec: array index 0
+        // ("abandon") encodes as "0001"; array index 2047 ("zoo") as "2048".
+        numericString += (index + 1).toString().padStart(4, '0');
     }
     return numericString;
 }
