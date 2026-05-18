@@ -6532,6 +6532,55 @@
                             </select>
                         </div>
                     </div>
+                    <!-- Animated-QR playback controls. The two sliders mutate the
+                         shared PSBT_QR_CHUNK_SIZE (Density) and PSBT_QR_FRAME_MS
+                         (Speed) used by _psbtPaintQr for ALL three format branches
+                         above (standard / nunchuk-hex / electrum-hex). The painter
+                         flips .disabled / shows the small note below when the
+                         payload fits in a single static frame, since neither knob
+                         has any effect there. Live numeric readouts use `oninput`
+                         for snappy feedback during drag; the actual re-render is
+                         deferred to `onchange` (slider release) so we don't redraw
+                         the canvas on every pixel of mouse movement. -->
+                    <div id="psbt-qr-playback"
+                         style="display: flex; flex-wrap: wrap; gap: 0.75rem 1rem;
+                                margin-top: 0.6rem; padding: 0.55rem 0.75rem;
+                                background: var(--skb-bg-inset, #0a0a0a);
+                                border: 1px solid var(--skb-border);
+                                border-radius: var(--skb-radius-sm);
+                                font-size: 0.78rem; color: var(--skb-text-muted);">
+                        <div style="flex: 1 1 220px; display: flex; align-items: center; gap: 0.5rem;">
+                            <label for="psbt-qr-density" style="white-space: nowrap;"
+                                   title="Lower density = more frames but visually simpler / larger QR squares.">Density:</label>
+                            <input type="range" id="psbt-qr-density"
+                                   min="400" max="1800" step="100" value="1800"
+                                   oninput="psbtPreviewQrDensity(this.value)"
+                                   onchange="psbtSetQrDensity(this.value)"
+                                   aria-label="QR fragment size (characters per frame)"
+                                   style="flex: 1; min-width: 80px;">
+                            <span id="psbt-qr-density-value"
+                                  style="font-family: var(--skb-mono); color: var(--skb-text);
+                                         min-width: 5.5em; text-align: right;">1800 chars</span>
+                        </div>
+                        <div style="flex: 1 1 220px; display: flex; align-items: center; gap: 0.5rem;">
+                            <label for="psbt-qr-speed" style="white-space: nowrap;"
+                                   title="Frame cadence. Slower = more time for the receiving camera to lock onto each frame.">Speed:</label>
+                            <input type="range" id="psbt-qr-speed"
+                                   min="100" max="500" step="25" value="300"
+                                   oninput="psbtPreviewQrFrameMs(this.value)"
+                                   onchange="psbtSetQrFrameMs(this.value)"
+                                   aria-label="QR animation frame interval in milliseconds"
+                                   style="flex: 1; min-width: 80px;">
+                            <span id="psbt-qr-speed-value"
+                                  style="font-family: var(--skb-mono); color: var(--skb-text);
+                                         min-width: 5.5em; text-align: right;">300 ms</span>
+                        </div>
+                        <div id="psbt-qr-playback-static-note"
+                             style="flex: 1 0 100%; font-size: 0.72rem; color: var(--skb-text-dim);
+                                    display: none;">
+                            Single static frame &mdash; density and speed only apply to animated multi-frame QRs.
+                        </div>
+                    </div>
                     <!-- Task #92: BlueWallet UR-encoding advisory. The JS renderer
                          (_psbtRenderQr) flips .style.display to 'block' whenever the
                          payload length crosses PSBT_QR_ANIM_THRESHOLD and an animated
@@ -20691,6 +20740,76 @@ function psbtQrFormatChange(fmt) {
     _psbtRenderQr();
 }
 
+// ---- User-facing playback controls (Density + Speed) ----
+//
+// These four functions are wired to the two range sliders in the Signed
+// PSBT export card (id="psbt-qr-playback"). Density adjusts the per-frame
+// chunk size; Speed adjusts the inter-frame interval. Both knobs apply
+// universally to whichever format is selected in the dropdown above —
+// the painter (_psbtPaintQr) reads PSBT_QR_CHUNK_SIZE and PSBT_QR_FRAME_MS
+// at render time, and ALL three format branches funnel through that
+// painter, so a single pair of controls covers standard / nunchuk-hex /
+// electrum-hex without per-format wiring.
+//
+// `oninput` handlers update only the numeric readout label — cheap, runs
+// on every pixel of slider drag for snappy feedback. `onchange` handlers
+// (slider release) commit the new value into the runtime state and call
+// _psbtRenderQr() to tear down any in-flight animation and rebuild from
+// scratch at the new size / cadence. The frame counter ("Frame N of M")
+// updates automatically because paintFrame inside _psbtPaintQr always
+// reads totalFrames from chunks.length each cycle — so when chunks are
+// rebuilt at a new density, the counter reflects the new total on the
+// very next paint.
+
+function psbtPreviewQrDensity(v) {
+    var n = parseInt(v, 10);
+    if (!Number.isFinite(n)) return;
+    var label = document.getElementById('psbt-qr-density-value');
+    if (label) label.textContent = n + ' chars';
+}
+
+function psbtSetQrDensity(v) {
+    var n = parseInt(v, 10);
+    // Defensive clamp matching the slider's HTML bounds; ignores anything
+    // outside the supported range rather than silently corrupting state.
+    if (!Number.isFinite(n) || n < 100 || n > 5000) return;
+    PSBT_QR_CHUNK_SIZE = n;
+    psbtPreviewQrDensity(v);
+    _psbtRenderQr();
+}
+
+function psbtPreviewQrFrameMs(v) {
+    var n = parseInt(v, 10);
+    if (!Number.isFinite(n)) return;
+    var label = document.getElementById('psbt-qr-speed-value');
+    if (label) label.textContent = n + ' ms';
+}
+
+function psbtSetQrFrameMs(v) {
+    var n = parseInt(v, 10);
+    if (!Number.isFinite(n) || n < 50 || n > 2000) return;
+    PSBT_QR_FRAME_MS = n;
+    psbtPreviewQrFrameMs(v);
+    _psbtRenderQr();
+}
+
+// Toggle the visual enabled-state of the Density + Speed sliders based
+// on whether the painter just took the static or animated branch. Called
+// from inside _psbtPaintQr at the end of each branch so the controls
+// always reflect the actual mode of the QR the user is looking at. We
+// don't *prevent* the user from dragging the sliders in static mode —
+// the controls will still update PSBT_QR_CHUNK_SIZE / PSBT_QR_FRAME_MS
+// and re-render — but the visual cue + note tell the user the changes
+// don't currently have an observable effect.
+function _psbtSetPlaybackControlsAnimated(animated) {
+    var density = document.getElementById('psbt-qr-density');
+    var speed   = document.getElementById('psbt-qr-speed');
+    var note    = document.getElementById('psbt-qr-playback-static-note');
+    if (density) density.disabled = !animated;
+    if (speed)   speed.disabled   = !animated;
+    if (note)    note.style.display = animated ? 'none' : 'block';
+}
+
 // ---- QR rendering engine (multi-format) ----
 
 async function _psbtRenderQr() {
@@ -20938,9 +21057,19 @@ function _psbtStopQrAnimation() {
 // BlueWallet and Sparrow — slow enough for a phone camera to lock and
 // decode each frame, fast enough that a ~10-frame PSBT finishes in
 // ~3 seconds of on-screen time.
+//
+// Runtime mutability: PSBT_QR_CHUNK_SIZE and PSBT_QR_FRAME_MS below are
+// declared with `var` so the user-facing Density and Speed sliders in
+// the Signed-PSBT export card (id="psbt-qr-playback") can reassign them
+// at runtime — see psbtSetQrDensity / psbtSetQrFrameMs near the bottom
+// of this script block. The values written here are the DEFAULTS used
+// when the page first loads (and the values the sliders snap to in
+// their HTML `value=` attributes). PSBT_QR_ANIM_THRESHOLD stays fixed
+// because it's a static-vs-animated architectural boundary, not a
+// per-scan tunable.
 var PSBT_QR_ANIM_THRESHOLD = 2800;
-var PSBT_QR_CHUNK_SIZE = 1800;
-var PSBT_QR_FRAME_MS = 300;
+var PSBT_QR_CHUNK_SIZE = 1800;   // user-tunable via Density slider (range 400..1800)
+var PSBT_QR_FRAME_MS = 300;      // user-tunable via Speed slider   (range 100..500)
 
 // Format chosen for animated frames: `pNofM <chunk>`. This is the
 // legacy multipart format first popularised by Specter-Desktop and
@@ -21020,6 +21149,10 @@ async function _psbtPaintQr(canvas, payload, qrOpts, counterEl, counterBuilder) 
                 total: 1,
                 totalChars: payload.length
             });
+            // Static frame — density / speed sliders have no observable
+            // effect, so visually grey them out and surface the small
+            // "applies to animated only" note. See _psbtSetPlaybackControlsAnimated.
+            _psbtSetPlaybackControlsAnimated(false);
         } catch (eStatic) {
             counterEl.textContent = 'QR generation failed: ' + eStatic.message;
         }
@@ -21027,6 +21160,11 @@ async function _psbtPaintQr(canvas, payload, qrOpts, counterEl, counterBuilder) 
     }
 
     // ---- Animated multi-frame path ----
+    // Density + Speed sliders are meaningful here — enable them and hide
+    // the static-only note. _psbtRenderQr will be re-invoked on any
+    // slider commit (onchange) to rebuild chunks at the new size and
+    // restart setInterval at the new cadence.
+    _psbtSetPlaybackControlsAnimated(true);
     var chunks = [];
     for (var i = 0; i < payload.length; i += PSBT_QR_CHUNK_SIZE) {
         chunks.push(payload.slice(i, i + PSBT_QR_CHUNK_SIZE));
