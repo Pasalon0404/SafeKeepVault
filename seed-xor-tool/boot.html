@@ -6315,7 +6315,7 @@
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.24b</span>
+                        <span class="version" id="dash-version">v1.25b</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -16349,7 +16349,25 @@ function psbtResetToIngest() {
 
     const ta = document.getElementById('psbt-temp-seed-input');
     if (ta) ta.value = '';
-    document.getElementById('psbt-passphrase').value = '';
+
+    // Re-inherit the dashboard's currently-active passphrase and
+    // fingerprint rather than blanking these fields. Without this,
+    // clicking "Load Different" (or starting any new PSBT ingestion
+    // mid-session) silently reverts the signer's local math to the
+    // base un-passphrased seed even though the dashboard still shows
+    // the passphrased fingerprint as active — _psbtCheckFingerprints
+    // would then read an empty psbt-passphrase input at line ~19954
+    // and derive a fingerprint that no longer matches the PSBT the
+    // user just loaded. Mirrors the population pattern in
+    // openPsbtSigner() so both entry points to the ingest phase show
+    // identical global state.
+    const _globalFp = document.getElementById('dash-fingerprint')?.textContent || '--------';
+    const _vaultFpEl = document.getElementById('psbt-vault-fp');
+    if (_vaultFpEl) _vaultFpEl.textContent = _globalFp;
+    const _globalPp = (window.SafeKeepOS && window.SafeKeepOS.getPassphrase)
+        ? (window.SafeKeepOS.getPassphrase() || '')
+        : '';
+    document.getElementById('psbt-passphrase').value = _globalPp;
 
     psbtSetStep(1);
     psbtShowStatus('', '');
