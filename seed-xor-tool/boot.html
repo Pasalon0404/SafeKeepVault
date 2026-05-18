@@ -14661,6 +14661,35 @@ function vaultLock() {
     // Reset the temp seed word grid to blank
     if (typeof vtmp_clearAll === 'function') vtmp_clearAll();
 
+    // Clear the DASHBOARD passphrase input + applied-state flags.
+    // Without this block the UI silently desyncs from the derivation
+    // engine after a lock/unlock cycle: SeedSession.clear() +
+    // SafeKeepOS.clearPassphrase() above correctly drop the passphrase
+    // from RAM, but the dashboard's local UI state stays as if the
+    // passphrase were still "applied" — dash-pp-input keeps its
+    // stale text and pp_config._passphraseActive stays true, so
+    // _dash_updatePassphraseButtons() (L13011, the function that
+    // decides Apply-vs-Cancel button visibility from
+    // pp_config._passphraseActive at line 13017) paints the red 'x'
+    // Cancel button on the next render even though the engine has
+    // already reverted to the base seed fingerprint. Mirrors the
+    // relevant subset of dash_clearPassphrase() at line 13102.
+    var dashPpInput = document.getElementById('dash-pp-input');
+    if (dashPpInput) {
+        dashPpInput.value = '';
+        // Also reset the Show/Hide visibility toggle so the next
+        // session doesn't open with the input in revealed-text mode.
+        dashPpInput.type = 'password';
+    }
+    if (typeof pp_config !== 'undefined') {
+        pp_config._passphraseActive = false;
+        pp_config._lastAppliedFP = '';
+        pp_config._lastAppliedPassphrase = '';
+    }
+    if (typeof _dash_updatePassphraseButtons === 'function') {
+        _dash_updatePassphraseButtons();
+    }
+
     // Update sidebar
     if (typeof _globalSeedStatusUpdate === 'function') _globalSeedStatusUpdate();
 
