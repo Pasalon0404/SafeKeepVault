@@ -24,7 +24,10 @@ import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 // QR code generation and scanning
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
-import { URDecoder } from '@ngraveio/bc-ur';
+// UR (Blockchain Commons Uniform Resources): URDecoder is consumed by the
+// PSBT and descriptor scanner code on the INPUT side; UR + UREncoder are
+// used by the PSBT Signer's ur:crypto-psbt OUTPUT path (new 4th format).
+import { UR, UREncoder, URDecoder } from '@ngraveio/bc-ur';
 
 // CBOR decoder — transitive dependency of @ngraveio/bc-ur, used to decode
 // crypto-output payloads from UR QR codes into output descriptor strings.
@@ -51,6 +54,8 @@ window.SLIP39 = { generateMnemonics, combineMnemonics };
 window.Miniscript = Miniscript;
 window.QRCode = QRCode;
 window.jsQR = jsQR;
+window.UR = UR;
+window.UREncoder = UREncoder;
 window.URDecoder = URDecoder;
 window.CBOR = CBOR;
 

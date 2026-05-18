@@ -6529,6 +6529,7 @@
                                 <option value="standard" selected>Standard (Base64) QR (Supports BlueWallet &amp; Sparrow)</option>
                                 <option value="nunchuk-hex">Nunchuk Raw Hex QR (Supports Sparrow &amp; BlueWallet)</option>
                                 <option value="electrum-hex">Electrum Raw Hex QR (Supports Sparrow &amp; BlueWallet)</option>
+                                <option value="ur">UR (ur:crypto-psbt) — animated, Supports BlueWallet, Sparrow, Keystone, Specter</option>
                             </select>
                         </div>
                     </div>
@@ -20737,7 +20738,40 @@ function _psbtEncodeBase43(bytes) {
 function psbtQrFormatChange(fmt) {
     _psbtQrFormat = fmt;
     _psbtStopQrAnimation();
+    // Reconfigure the Density slider for the new format's natural unit
+    // and sensible range. UR uses bytes-per-fragment (small, 50..400);
+    // the legacy pNofM formats use characters-per-chunk (large, 400..1800).
+    // Slider value snaps to the current per-format state so the user
+    // sees the active size for the format they just picked.
+    _psbtReconfigureDensitySlider(fmt);
     _psbtRenderQr();
+}
+
+// Per-format slider configuration. Keeps the two density semantics
+// (UR bytes vs pNofM chars) cleanly separated even though they share
+// the same physical slider control.
+var _PSBT_DENSITY_CONFIGS = {
+    'ur':           { min:  50, max:  400, step:  25, unit: ' bytes', stateName: '_psbtUrFragmentSize' },
+    'standard':     { min: 400, max: 1800, step: 100, unit: ' chars',  stateName: 'PSBT_QR_CHUNK_SIZE' },
+    'nunchuk-hex':  { min: 400, max: 1800, step: 100, unit: ' chars',  stateName: 'PSBT_QR_CHUNK_SIZE' },
+    'electrum-hex': { min: 400, max: 1800, step: 100, unit: ' chars',  stateName: 'PSBT_QR_CHUNK_SIZE' }
+};
+
+function _psbtReconfigureDensitySlider(fmt) {
+    var cfg = _PSBT_DENSITY_CONFIGS[fmt] || _PSBT_DENSITY_CONFIGS['standard'];
+    var slider = document.getElementById('psbt-qr-density');
+    var label  = document.getElementById('psbt-qr-density-value');
+    if (!slider || !label) return;
+    // Read the format-appropriate live state value (named indirection
+    // so future formats just add an entry to _PSBT_DENSITY_CONFIGS).
+    var currentValue = (cfg.stateName === '_psbtUrFragmentSize')
+        ? _psbtUrFragmentSize
+        : PSBT_QR_CHUNK_SIZE;
+    slider.min   = String(cfg.min);
+    slider.max   = String(cfg.max);
+    slider.step  = String(cfg.step);
+    slider.value = String(currentValue);
+    label.textContent = currentValue + cfg.unit;
 }
 
 // ---- User-facing playback controls (Density + Speed) ----
@@ -20764,16 +20798,25 @@ function psbtQrFormatChange(fmt) {
 function psbtPreviewQrDensity(v) {
     var n = parseInt(v, 10);
     if (!Number.isFinite(n)) return;
+    var cfg = _PSBT_DENSITY_CONFIGS[_psbtQrFormat] || _PSBT_DENSITY_CONFIGS['standard'];
     var label = document.getElementById('psbt-qr-density-value');
-    if (label) label.textContent = n + ' chars';
+    if (label) label.textContent = n + cfg.unit;
 }
 
 function psbtSetQrDensity(v) {
     var n = parseInt(v, 10);
-    // Defensive clamp matching the slider's HTML bounds; ignores anything
-    // outside the supported range rather than silently corrupting state.
-    if (!Number.isFinite(n) || n < 100 || n > 5000) return;
-    PSBT_QR_CHUNK_SIZE = n;
+    // Defensive clamp matching the widest supported range across all
+    // formats; per-format min/max enforcement happens via the slider's
+    // own HTML attributes (set by _psbtReconfigureDensitySlider).
+    if (!Number.isFinite(n) || n < 50 || n > 5000) return;
+    // Dispatch to the format-appropriate state variable. UR fragments
+    // are sized in bytes (_psbtUrFragmentSize); pNofM chunks are sized
+    // in characters (PSBT_QR_CHUNK_SIZE).
+    if (_psbtQrFormat === 'ur') {
+        _psbtUrFragmentSize = n;
+    } else {
+        PSBT_QR_CHUNK_SIZE = n;
+    }
     psbtPreviewQrDensity(v);
     _psbtRenderQr();
 }
@@ -20857,7 +20900,102 @@ async function _psbtRenderQr() {
         _allFormatOpts[_foi].disabled = false;
     }
 
-    if (_psbtQrFormat === 'electrum-hex') {
+    if (_psbtQrFormat === 'ur') {
+        // ---- UR (ur:crypto-psbt) — animated BC-UR ----
+        //
+        // The BlueWallet-compatible animated format. Encodes the raw PSBT
+        // bytes as a CBOR byte string (inverse of the input scanner's
+        // ur.decodeCBOR() call at the _psbtHandleUrFrame path), wraps it
+        // in a UR with type 'crypto-psbt' per BCR-2020-006, and emits
+        // exactly fragmentsLength deterministic frames. Decoders that
+        // implement fountain mode collect mixtures for error-correction;
+        // decoders that only understand pure frames work just as well
+        // because we cycle the deterministic M frames — and that's all
+        // they need to assemble the message.
+        //
+        // Unlike the legacy pNofM path, the static-vs-animated decision
+        // here is made by the encoder itself: maxFragmentLength is the
+        // input, fragmentsLength === 1 means "the PSBT fits in a single
+        // UR fragment", which we render as a one-frame static QR. No
+        // PSBT_QR_ANIM_THRESHOLD involved.
+        if (!_psbtSignedBytes) {
+            counterEl.textContent = 'No signed PSBT available';
+            return;
+        }
+        if (!window.UR || !window.UREncoder || !window.CBOR || !window.Buffer) {
+            counterEl.textContent = 'UR libraries not loaded (rebuild boot.html with Vite).';
+            return;
+        }
+        titleEl.textContent = 'Signed PSBT — UR (ur:crypto-psbt) QR';
+        hintEl.textContent  = 'Animated BC-UR. Compatible with BlueWallet, Sparrow, Specter, Keystone, etc.';
+        try {
+            // 1. CBOR-wrap the raw PSBT bytes. The input scanner pulls
+            //    bytes back out via ur.decodeCBOR() (boot.html line
+            //    ~16805) so this is the symmetric encode step. CBOR
+            //    encoding of a Buffer produces a major-type-2 byte
+            //    string, which is exactly what crypto-psbt expects.
+            var psbtBuf = window.Buffer.from(_psbtSignedBytes);
+            var cborPayload = window.CBOR.encode(psbtBuf);
+
+            // 2. Build the UR object. Type 'crypto-psbt' per BCR-2020-006.
+            var urObj = new window.UR(cborPayload, 'crypto-psbt');
+
+            // 3. Encoder at user-selected fragment size (bytes per
+            //    fragment BEFORE bytewords; rendered string is roughly
+            //    2× that plus the ur:type/seq/checksum prefix).
+            var encoder = new window.UREncoder(urObj, _psbtUrFragmentSize);
+            var totalFrames = encoder.fragmentsLength;
+
+            // 4. Materialise the deterministic frame set.
+            var urFrames = new Array(totalFrames);
+            for (var ui = 0; ui < totalFrames; ui++) urFrames[ui] = encoder.nextPart();
+
+            // QR options: chunky modules (errorCorrection L), generous
+            // quiet zone (margin 4) — matches the hex branches' phone-
+            // camera-friendly tuning.
+            var urQrOpts = {
+                width: 580,
+                margin: 4,
+                errorCorrectionLevel: 'L',
+                color: { dark: '#000000', light: '#ffffff' }
+            };
+
+            // 5. Total rendered character count (for the counter label).
+            var totalUrChars = 0;
+            for (var uj = 0; uj < urFrames.length; uj++) totalUrChars += urFrames[uj].length;
+
+            // Counter builder for UR — note the "fragments" wording
+            // matches BC-UR vocabulary; not "chunks".
+            var urCounterBuilder = function (s) {
+                var sizeNote = _psbtUrFragmentSize + ' B/fragment';
+                return s.animated
+                    ? 'UR — Fragment ' + s.frame + ' of ' + s.total +
+                      ' (' + sizeNote + ', ' + totalUrChars.toLocaleString() + ' total chars)'
+                    : 'UR — single fragment (' + s.totalChars.toLocaleString() + ' chars)';
+            };
+
+            if (totalFrames <= 1) {
+                // Whole PSBT fits in one UR fragment — render statically.
+                await window.QRCode.toCanvas(canvas, urFrames[0], urQrOpts);
+                _psbtStripCanvasInlineSize(canvas);
+                counterEl.textContent = urCounterBuilder({
+                    animated: false,
+                    frame: 1,
+                    total: 1,
+                    totalChars: urFrames[0].length
+                });
+                _psbtSetPlaybackControlsAnimated(false);
+                return;
+            }
+
+            _psbtSetPlaybackControlsAnimated(true);
+            await _psbtAnimateFrames(canvas, urFrames, urQrOpts, counterEl, urCounterBuilder, totalUrChars);
+        } catch (eUr) {
+            counterEl.textContent = 'UR encoding failed: ' + eUr.message;
+        }
+        return;
+
+    } else if (_psbtQrFormat === 'electrum-hex') {
         // ---- ELECTRUM RAW HEX QR ----
         // Live-fire finding (Dave): Electrum's camera parser rejects
         // the `bitcoin:?tx=<hex>` URI scheme and the base43 PSBT
@@ -21071,6 +21209,16 @@ var PSBT_QR_ANIM_THRESHOLD = 2800;
 var PSBT_QR_CHUNK_SIZE = 1800;   // user-tunable via Density slider (range 400..1800)
 var PSBT_QR_FRAME_MS = 300;      // user-tunable via Speed slider   (range 100..500)
 
+// UR-specific fragment size in BYTES (max bytes per UR fragment before
+// bytewords encoding doubles the rendered character count). Default 200
+// is the BlueWallet sweet spot: small enough that typical phone cameras
+// can lock onto each frame without focus hunting, big enough that a
+// typical 2-of-3 multisig PSBT (~1.5–2 KB) finishes in 10–15 frames.
+// Range exposed to the user: 50..400 bytes via the Density slider when
+// the UR format is the active selection. The slider is reconfigured by
+// psbtQrFormatChange() each time the user picks a different format.
+var _psbtUrFragmentSize = 200;
+
 // Format chosen for animated frames: `pNofM <chunk>`. This is the
 // legacy multipart format first popularised by Specter-Desktop and
 // now understood by virtually every PSBT-capable wallet that accepts
@@ -21170,35 +21318,60 @@ async function _psbtPaintQr(canvas, payload, qrOpts, counterEl, counterBuilder) 
         chunks.push(payload.slice(i, i + PSBT_QR_CHUNK_SIZE));
     }
     var totalFrames = chunks.length;
+    // Build the final frame payloads up front: each pNofM frame is the
+    // chunk prefixed with its "p<idx>of<total> " sequence header.
+    var frames = new Array(totalFrames);
+    for (var k = 0; k < totalFrames; k++) {
+        frames[k] = 'p' + (k + 1) + 'of' + totalFrames + ' ' + chunks[k];
+    }
+    // Hand off to the shared animator. payload.length is the raw chunk
+    // total (used by counterBuilder for "N total chars" — still semantic
+    // for the legacy formats); the animator handles cycling + counter
+    // updates identically for pNofM and UR.
+    await _psbtAnimateFrames(canvas, frames, qrOpts, counterEl, counterBuilder, payload.length);
+}
+
+// Generic frame animator. Cycles a pre-built array of complete QR
+// payload strings at PSBT_QR_FRAME_MS, updating the frame counter via
+// counterBuilder on every tick. Used by:
+//   • the pNofM legacy path (frames already wrapped with "p<i>of<N> "
+//     prefix by _psbtPaintQr's animated branch);
+//   • the UR path (frames are complete `ur:crypto-psbt/...` strings
+//     produced by UREncoder.nextPart()).
+// Defence-in-depth: stops any prior animation before starting, so the
+// caller is free to invoke us straight after a state change without
+// having to call _psbtStopQrAnimation() themselves.
+async function _psbtAnimateFrames(canvas, frames, qrOpts, counterEl, counterBuilder, totalChars) {
+    _psbtStopQrAnimation();
+    var totalFrames = frames.length;
     var frameIdx = 0;
 
     async function paintFrame() {
-        var framePayload = 'p' + (frameIdx + 1) + 'of' + totalFrames + ' ' + chunks[frameIdx];
         try {
-            await window.QRCode.toCanvas(canvas, framePayload, qrOpts);
-            // Strip inline width/height so the resizable wrapper rules
-            // apply on every animated frame too — without this the QR
-            // bitmap appears to "snap back" to 580px on each frame
-            // refresh whenever the user has dragged the wrapper larger.
+            await window.QRCode.toCanvas(canvas, frames[frameIdx], qrOpts);
+            // Strip inline width/height so the resizable wrapper's
+            // stylesheet width:100% rule wins on every animated frame —
+            // without this the QR bitmap appears to "snap back" to 580px
+            // on each refresh whenever the user has dragged the wrapper.
             _psbtStripCanvasInlineSize(canvas);
             counterEl.textContent = counterBuilder({
                 animated: true,
                 frame: frameIdx + 1,
                 total: totalFrames,
-                totalChars: payload.length
+                totalChars: totalChars
             });
         } catch (eFrame) {
             // Don't stop the animation on a transient render error —
-            // the next frame might succeed. Just surface the error in
-            // the counter line.
+            // the next frame might succeed. Surface the error in the
+            // counter line and keep cycling.
             counterEl.textContent = 'QR frame render failed: ' + eFrame.message;
         }
         frameIdx = (frameIdx + 1) % totalFrames;
     }
 
     // Paint the first frame synchronously so the canvas is never
-    // blank between the old content and the first animated tick,
-    // THEN hand off to setInterval for the remaining cycles.
+    // blank between old content and the first animated tick, THEN
+    // hand off to setInterval for the remaining cycles.
     await paintFrame();
     _psbtQrAnimTimer = setInterval(paintFrame, PSBT_QR_FRAME_MS);
 }
