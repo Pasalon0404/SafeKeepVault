@@ -8449,7 +8449,7 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.25b</span>
+                        <span class="version" id="dash-version">v1.26b</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -8660,10 +8660,14 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                                 style="font-size: 0.78rem; padding: 0.25rem 0.5rem; border-radius: var(--skb-radius-sm);
                                        background: var(--skb-bg-inset, #0a0a0a); color: var(--skb-text);
                                        border: 1px solid var(--skb-border); font-family: var(--skb-mono);">
-                                <option value="standard" selected>Standard (Base64) QR (Supports BlueWallet &amp; Sparrow)</option>
-                                <option value="nunchuk-hex">Nunchuk Raw Hex QR (Supports Sparrow &amp; BlueWallet)</option>
-                                <option value="electrum-hex">Electrum Raw Hex QR (Supports Sparrow &amp; BlueWallet)</option>
-                                <option value="ur">UR (ur:crypto-psbt) — animated, Supports BlueWallet, Sparrow, Keystone, Specter</option>
+                                <!-- Order matters: top-to-bottom matches the prioritisation in the
+                                     directive (most-common formats first). Internal value= strings
+                                     are UNCHANGED — _psbtRenderQr branches on these constants, so
+                                     reordering / relabelling the options here is purely cosmetic. -->
+                                <option value="standard" selected>Standard (Base64)</option>
+                                <option value="ur">UR (ur:crypto-psbt)</option>
+                                <option value="nunchuk-hex">Raw Hex Type 1 (Nunchuk)</option>
+                                <option value="electrum-hex">Raw Hex Type 2 (Electrum)</option>
                             </select>
                         </div>
                     </div>
@@ -10841,15 +10845,37 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                     <div style="font-size: 0.7rem; color: var(--skb-text-muted);">
                         A passphrase creates a completely separate wallet. Leave blank for the default wallet.
                     </div>
-                    <!-- Dual Fingerprint Display -->
-                    <div id="arm-pp-fingerprint" style="display: none; margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(3,218,198,0.08); border: 1px solid rgba(3,218,198,0.2); border-radius: var(--skb-radius-sm); font-size: 0.78rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: var(--skb-text-muted);">Base Seed</span>
-                            <span style="font-family: var(--skb-mono); color: var(--skb-text-dim);" id="arm-base-fp">--------</span>
+                    <!-- Dual Fingerprint Display.
+                         Two stacked rows, each its own surrounding box, themed
+                         with the project's canonical tokens so the colours stay
+                         in sync with the dashboard and tool-sidebar treatments:
+                           • Master Seed row     → teal   (--skb-secondary*)
+                           • Passphrase Wallet   → purple (--skb-passphrase-active*)
+                         Fingerprint hex on both rows is always #fff (high
+                         contrast, matches the master-seed sidebar legibility
+                         rule applied in _globalSeedStatusUpdate). The
+                         "Master Seed" label replaces the older "Base Seed"
+                         wording so the nomenclature matches the dashboard
+                         identity label ("Master Seed Active"). -->
+                    <div id="arm-pp-fingerprint" style="display: none; margin-top: 0.5rem; font-size: 0.78rem;">
+                        <!-- Master Seed (teal) -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;
+                                    padding: 0.5rem 0.75rem;
+                                    background: var(--skb-secondary-muted, rgba(3, 218, 198, 0.12));
+                                    border: 1px solid var(--skb-secondary);
+                                    border-radius: var(--skb-radius-sm);">
+                            <span style="color: var(--skb-secondary); font-weight: 600;">Master Seed</span>
+                            <span style="font-family: var(--skb-mono); color: #fff; font-weight: 600;" id="arm-base-fp">--------</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.3rem;">
-                            <span style="color: var(--skb-secondary); font-weight: 600;">Passphrase Wallet</span>
-                            <span style="font-family: var(--skb-mono); color: var(--skb-secondary); font-weight: 600;" id="arm-pp-fp">--------</span>
+                        <!-- Passphrase Wallet (purple) -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;
+                                    margin-top: 0.3rem;
+                                    padding: 0.5rem 0.75rem;
+                                    background: var(--skb-passphrase-active-muted, rgba(187, 134, 252, 0.12));
+                                    border: 1px solid var(--skb-passphrase-active);
+                                    border-radius: var(--skb-radius-sm);">
+                            <span style="color: var(--skb-passphrase-active); font-weight: 600;">Passphrase Wallet</span>
+                            <span style="font-family: var(--skb-mono); color: #fff; font-weight: 600;" id="arm-pp-fp">--------</span>
                         </div>
                     </div>
                 </div>
@@ -14335,7 +14361,12 @@ function _globalSeedStatusUpdate() {
         statusEl.style.borderColor = isPassphrase ? 'var(--skb-passphrase-active)' : 'var(--skb-secondary)';
         statusEl.style.background  = isPassphrase ? 'rgba(187, 134, 252, 0.08)' : 'rgba(34, 197, 94, 0.06)';
         labelEl.style.color        = isPassphrase ? 'var(--skb-passphrase-active)' : 'var(--skb-secondary)';
-        fpEl.style.color           = isPassphrase ? 'var(--skb-passphrase-active)' : '#fff';
+        // Fingerprint hex always renders white regardless of mode — the
+        // border + label color carry the semantic teal-vs-purple cue,
+        // while the fingerprint itself stays high-contrast for legibility.
+        // Previously this matched the label colour, which left the
+        // passphrase-active fingerprint as low-contrast purple-on-purple.
+        fpEl.style.color           = '#fff';
 
         // ── Dashboard badge: same semantic via class toggle ──
         // The dashboard fingerprint badge (.dash-fingerprint-badge) is a
@@ -22232,17 +22263,49 @@ function psbtSetQrDensity(v) {
     _psbtRenderQr();
 }
 
+// Speed slider — inverted mapping for intuitive UX.
+//
+// The slider's underlying `value` attribute (range 100..500, step 25,
+// default 300 — see the <input type="range" id="psbt-qr-speed"> markup)
+// is mapped INVERSELY to milliseconds. Moving the thumb to the RIGHT
+// (higher raw value) produces a SHORTER interval (faster animation),
+// which is what users intuitively expect from a "Speed" control —
+// before this inversion, dragging right slowed the animation down,
+// since the raw value was passed through as ms directly.
+//
+// Math: actualMs = (slider.min + slider.max) - rawValue
+//                = 600                       - rawValue
+//
+// Trace:
+//   raw 100 (leftmost)  → 500 ms (slowest)
+//   raw 300 (default)   → 300 ms (unchanged from pre-inversion default)
+//   raw 500 (rightmost) → 100 ms (fastest)
+//
+// The pivot 600 = slider.min(100) + slider.max(500). Inlined as a
+// constant rather than read from the DOM each call — the slider's
+// HTML attributes are fixed at build time, so this can't drift.
+var _PSBT_SPEED_INVERT_PIVOT = 600;
+
 function psbtPreviewQrFrameMs(v) {
     var n = parseInt(v, 10);
     if (!Number.isFinite(n)) return;
+    // Display the ACTUAL ms (post-inversion) so the readout matches
+    // the real setInterval cadence the painter uses. Otherwise the
+    // user would see "500 ms" while the animation ran at 100 ms.
+    var actualMs = _PSBT_SPEED_INVERT_PIVOT - n;
     var label = document.getElementById('psbt-qr-speed-value');
-    if (label) label.textContent = n + ' ms';
+    if (label) label.textContent = actualMs + ' ms';
 }
 
 function psbtSetQrFrameMs(v) {
     var n = parseInt(v, 10);
-    if (!Number.isFinite(n) || n < 50 || n > 2000) return;
-    PSBT_QR_FRAME_MS = n;
+    if (!Number.isFinite(n)) return;
+    // Bounds check operates on the COMPUTED actualMs, not the raw
+    // slider value — the safe ms range (50..2000) is what's actually
+    // meaningful for setInterval; the slider's raw range can vary.
+    var actualMs = _PSBT_SPEED_INVERT_PIVOT - n;
+    if (actualMs < 50 || actualMs > 2000) return;
+    PSBT_QR_FRAME_MS = actualMs;
     psbtPreviewQrFrameMs(v);
     _psbtRenderQr();
 }
@@ -22337,7 +22400,7 @@ async function _psbtRenderQr() {
             counterEl.textContent = 'UR libraries not loaded (rebuild boot.html with Vite).';
             return;
         }
-        titleEl.textContent = 'Signed PSBT — UR (ur:crypto-psbt) QR';
+        titleEl.textContent = 'Signed PSBT — UR (ur:crypto-psbt)';
         hintEl.textContent  = 'Animated BC-UR. Compatible with BlueWallet, Sparrow, Specter, Keystone, etc.';
         try {
             // 1. CBOR-wrap the raw PSBT bytes. The input scanner pulls
@@ -22433,7 +22496,7 @@ async function _psbtRenderQr() {
             return;
         }
         var electrumHexPayload = _psbtRawTxHex.toUpperCase();
-        titleEl.textContent = 'Raw Transaction — Electrum Raw Hex QR';
+        titleEl.textContent = 'Raw Transaction — Raw Hex Type 2 (Electrum)';
         hintEl.textContent  = "Scan with Electrum's camera to broadcast. Raw hex (alphanumeric mode).";
         // Route through the shared painter: below threshold → single
         // static frame (original behaviour); above threshold → animated
@@ -22484,7 +22547,7 @@ async function _psbtRenderQr() {
             counterEl.textContent = 'Hex encoding failed: ' + eHex.message;
             return;
         }
-        titleEl.textContent = 'Signed PSBT — Nunchuk Raw Hex QR';
+        titleEl.textContent = 'Signed PSBT — Raw Hex Type 1 (Nunchuk)';
         hintEl.textContent  = "Scan with Nunchuk's camera to broadcast. Raw hex (alphanumeric mode).";
         // Route through the shared painter so large multisig PSBTs —
         // which routinely exceed single-frame capacity in hex form —
@@ -22514,7 +22577,7 @@ async function _psbtRenderQr() {
         }
         const base64 = btoa(String.fromCharCode(..._psbtSignedBytes));
         payload = base64;
-        titleText = 'Signed PSBT — QR Export';
+        titleText = 'Signed PSBT — Standard (Base64)';
         hintText = 'Point your coordinator wallet\'s camera at this QR code to transfer the signed PSBT.';
     }
 
@@ -37688,72 +37751,6 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
     </div>
 </div>
-
-<!-- ============================================================
-     TEMPORARY: Display Diagnostics Overlay
-     ------------------------------------------------------------
-     Floating readout of the viewport / screen / DPR values that
-     drive layout scaling. Built specifically to diagnose the
-     ZBook-monitor scaling bug without access to the locked-down
-     kiosk's developer console.
-
-     • Fixed bottom-left so it doesn't overlap the lock button,
-       theme toggle, or sidebar status banners that live in the
-       top-right and top-left respectively.
-     • z-index: 2147483647 (INT32_MAX) — sits above EVERY existing
-       overlay including #vault-lock-overlay (z: 9999), error
-       banners (z: 999999), and dialogs (z: 99999).
-     • pointer-events: none so the overlay never intercepts a
-       click meant for whatever is underneath it.
-     • Inline styles only — no dependency on the stylesheet, so
-       this works even if the layout engine is mid-collapse.
-
-     Remove this block (HTML + the small script directly below)
-     once the scaling investigation concludes.
-     ============================================================ -->
-<div id="diag-display-overlay" aria-hidden="true"
-     style="position: fixed; bottom: 12px; left: 12px;
-            z-index: 2147483647; pointer-events: none;
-            background: rgba(8, 12, 24, 0.94);
-            color: #5eead4;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            font-size: 12px; line-height: 1.55;
-            padding: 10px 14px;
-            border: 1px solid #5eead4;
-            border-radius: 6px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-            white-space: pre;
-            max-width: 320px;">
-    <div style="color: #fb923c; font-weight: 700; letter-spacing: 0.06em;
-                margin-bottom: 4px; text-transform: uppercase; font-size: 11px;">Display Diagnostics</div>
-    <div id="diag-display-body">(initializing&hellip;)</div>
-</div>
-<script>
-// Display Diagnostics — live readout of viewport / screen / DPR.
-// IIFE so the helper name doesn't leak onto the global window object
-// (one less thing to clean up when the overlay is removed). Updates
-// on every window resize; the kiosk has no orientationchange events
-// to worry about, but resize covers Wayland output reconfiguration
-// and Chromium's own viewport recompute on display changes.
-(function() {
-    function _updateDiagDisplay() {
-        var body = document.getElementById('diag-display-body');
-        if (!body) return;
-        body.textContent =
-            'window.innerWidth   : ' + window.innerWidth  + '\n' +
-            'window.innerHeight  : ' + window.innerHeight + '\n' +
-            'screen.width        : ' + screen.width  + '\n' +
-            'screen.height       : ' + screen.height + '\n' +
-            'devicePixelRatio    : ' + window.devicePixelRatio;
-    }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', _updateDiagDisplay);
-    } else {
-        _updateDiagDisplay();
-    }
-    window.addEventListener('resize', _updateDiagDisplay);
-})();
-</script>
 
 </body>
 </html>
