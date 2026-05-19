@@ -6526,10 +6526,14 @@
                                 style="font-size: 0.78rem; padding: 0.25rem 0.5rem; border-radius: var(--skb-radius-sm);
                                        background: var(--skb-bg-inset, #0a0a0a); color: var(--skb-text);
                                        border: 1px solid var(--skb-border); font-family: var(--skb-mono);">
-                                <option value="standard" selected>Standard (Base64) QR (Supports BlueWallet &amp; Sparrow)</option>
-                                <option value="nunchuk-hex">Nunchuk Raw Hex QR (Supports Sparrow &amp; BlueWallet)</option>
-                                <option value="electrum-hex">Electrum Raw Hex QR (Supports Sparrow &amp; BlueWallet)</option>
-                                <option value="ur">UR (ur:crypto-psbt) — animated, Supports BlueWallet, Sparrow, Keystone, Specter</option>
+                                <!-- Order matters: top-to-bottom matches the prioritisation in the
+                                     directive (most-common formats first). Internal value= strings
+                                     are UNCHANGED — _psbtRenderQr branches on these constants, so
+                                     reordering / relabelling the options here is purely cosmetic. -->
+                                <option value="standard" selected>Standard (Base64)</option>
+                                <option value="ur">UR (ur:crypto-psbt)</option>
+                                <option value="nunchuk-hex">Raw Hex Type 1 (Nunchuk)</option>
+                                <option value="electrum-hex">Raw Hex Type 2 (Electrum)</option>
                             </select>
                         </div>
                     </div>
@@ -21000,7 +21004,7 @@ async function _psbtRenderQr() {
             counterEl.textContent = 'UR libraries not loaded (rebuild boot.html with Vite).';
             return;
         }
-        titleEl.textContent = 'Signed PSBT — UR (ur:crypto-psbt) QR';
+        titleEl.textContent = 'Signed PSBT — UR (ur:crypto-psbt)';
         hintEl.textContent  = 'Animated BC-UR. Compatible with BlueWallet, Sparrow, Specter, Keystone, etc.';
         try {
             // 1. CBOR-wrap the raw PSBT bytes. The input scanner pulls
@@ -21096,7 +21100,7 @@ async function _psbtRenderQr() {
             return;
         }
         var electrumHexPayload = _psbtRawTxHex.toUpperCase();
-        titleEl.textContent = 'Raw Transaction — Electrum Raw Hex QR';
+        titleEl.textContent = 'Raw Transaction — Raw Hex Type 2 (Electrum)';
         hintEl.textContent  = "Scan with Electrum's camera to broadcast. Raw hex (alphanumeric mode).";
         // Route through the shared painter: below threshold → single
         // static frame (original behaviour); above threshold → animated
@@ -21147,7 +21151,7 @@ async function _psbtRenderQr() {
             counterEl.textContent = 'Hex encoding failed: ' + eHex.message;
             return;
         }
-        titleEl.textContent = 'Signed PSBT — Nunchuk Raw Hex QR';
+        titleEl.textContent = 'Signed PSBT — Raw Hex Type 1 (Nunchuk)';
         hintEl.textContent  = "Scan with Nunchuk's camera to broadcast. Raw hex (alphanumeric mode).";
         // Route through the shared painter so large multisig PSBTs —
         // which routinely exceed single-frame capacity in hex form —
@@ -21177,7 +21181,7 @@ async function _psbtRenderQr() {
         }
         const base64 = btoa(String.fromCharCode(..._psbtSignedBytes));
         payload = base64;
-        titleText = 'Signed PSBT — QR Export';
+        titleText = 'Signed PSBT — Standard (Base64)';
         hintText = 'Point your coordinator wallet\'s camera at this QR code to transfer the signed PSBT.';
     }
 
