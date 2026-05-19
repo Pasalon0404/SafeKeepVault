@@ -20899,17 +20899,49 @@ function psbtSetQrDensity(v) {
     _psbtRenderQr();
 }
 
+// Speed slider — inverted mapping for intuitive UX.
+//
+// The slider's underlying `value` attribute (range 100..500, step 25,
+// default 300 — see the <input type="range" id="psbt-qr-speed"> markup)
+// is mapped INVERSELY to milliseconds. Moving the thumb to the RIGHT
+// (higher raw value) produces a SHORTER interval (faster animation),
+// which is what users intuitively expect from a "Speed" control —
+// before this inversion, dragging right slowed the animation down,
+// since the raw value was passed through as ms directly.
+//
+// Math: actualMs = (slider.min + slider.max) - rawValue
+//                = 600                       - rawValue
+//
+// Trace:
+//   raw 100 (leftmost)  → 500 ms (slowest)
+//   raw 300 (default)   → 300 ms (unchanged from pre-inversion default)
+//   raw 500 (rightmost) → 100 ms (fastest)
+//
+// The pivot 600 = slider.min(100) + slider.max(500). Inlined as a
+// constant rather than read from the DOM each call — the slider's
+// HTML attributes are fixed at build time, so this can't drift.
+var _PSBT_SPEED_INVERT_PIVOT = 600;
+
 function psbtPreviewQrFrameMs(v) {
     var n = parseInt(v, 10);
     if (!Number.isFinite(n)) return;
+    // Display the ACTUAL ms (post-inversion) so the readout matches
+    // the real setInterval cadence the painter uses. Otherwise the
+    // user would see "500 ms" while the animation ran at 100 ms.
+    var actualMs = _PSBT_SPEED_INVERT_PIVOT - n;
     var label = document.getElementById('psbt-qr-speed-value');
-    if (label) label.textContent = n + ' ms';
+    if (label) label.textContent = actualMs + ' ms';
 }
 
 function psbtSetQrFrameMs(v) {
     var n = parseInt(v, 10);
-    if (!Number.isFinite(n) || n < 50 || n > 2000) return;
-    PSBT_QR_FRAME_MS = n;
+    if (!Number.isFinite(n)) return;
+    // Bounds check operates on the COMPUTED actualMs, not the raw
+    // slider value — the safe ms range (50..2000) is what's actually
+    // meaningful for setInterval; the slider's raw range can vary.
+    var actualMs = _PSBT_SPEED_INVERT_PIVOT - n;
+    if (actualMs < 50 || actualMs > 2000) return;
+    PSBT_QR_FRAME_MS = actualMs;
     psbtPreviewQrFrameMs(v);
     _psbtRenderQr();
 }
