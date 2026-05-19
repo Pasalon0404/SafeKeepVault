@@ -8707,15 +8707,37 @@
                     <div style="font-size: 0.7rem; color: var(--skb-text-muted);">
                         A passphrase creates a completely separate wallet. Leave blank for the default wallet.
                     </div>
-                    <!-- Dual Fingerprint Display -->
-                    <div id="arm-pp-fingerprint" style="display: none; margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(3,218,198,0.08); border: 1px solid rgba(3,218,198,0.2); border-radius: var(--skb-radius-sm); font-size: 0.78rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: var(--skb-text-muted);">Base Seed</span>
-                            <span style="font-family: var(--skb-mono); color: var(--skb-text-dim);" id="arm-base-fp">--------</span>
+                    <!-- Dual Fingerprint Display.
+                         Two stacked rows, each its own surrounding box, themed
+                         with the project's canonical tokens so the colours stay
+                         in sync with the dashboard and tool-sidebar treatments:
+                           • Master Seed row     → teal   (--skb-secondary*)
+                           • Passphrase Wallet   → purple (--skb-passphrase-active*)
+                         Fingerprint hex on both rows is always #fff (high
+                         contrast, matches the master-seed sidebar legibility
+                         rule applied in _globalSeedStatusUpdate). The
+                         "Master Seed" label replaces the older "Base Seed"
+                         wording so the nomenclature matches the dashboard
+                         identity label ("Master Seed Active"). -->
+                    <div id="arm-pp-fingerprint" style="display: none; margin-top: 0.5rem; font-size: 0.78rem;">
+                        <!-- Master Seed (teal) -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;
+                                    padding: 0.5rem 0.75rem;
+                                    background: var(--skb-secondary-muted, rgba(3, 218, 198, 0.12));
+                                    border: 1px solid var(--skb-secondary);
+                                    border-radius: var(--skb-radius-sm);">
+                            <span style="color: var(--skb-secondary); font-weight: 600;">Master Seed</span>
+                            <span style="font-family: var(--skb-mono); color: #fff; font-weight: 600;" id="arm-base-fp">--------</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.3rem;">
-                            <span style="color: var(--skb-secondary); font-weight: 600;">Passphrase Wallet</span>
-                            <span style="font-family: var(--skb-mono); color: var(--skb-secondary); font-weight: 600;" id="arm-pp-fp">--------</span>
+                        <!-- Passphrase Wallet (purple) -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;
+                                    margin-top: 0.3rem;
+                                    padding: 0.5rem 0.75rem;
+                                    background: var(--skb-passphrase-active-muted, rgba(187, 134, 252, 0.12));
+                                    border: 1px solid var(--skb-passphrase-active);
+                                    border-radius: var(--skb-radius-sm);">
+                            <span style="color: var(--skb-passphrase-active); font-weight: 600;">Passphrase Wallet</span>
+                            <span style="font-family: var(--skb-mono); color: #fff; font-weight: 600;" id="arm-pp-fp">--------</span>
                         </div>
                     </div>
                 </div>
@@ -12971,7 +12993,12 @@ function _globalSeedStatusUpdate() {
         statusEl.style.borderColor = isPassphrase ? 'var(--skb-passphrase-active)' : 'var(--skb-secondary)';
         statusEl.style.background  = isPassphrase ? 'rgba(187, 134, 252, 0.08)' : 'rgba(34, 197, 94, 0.06)';
         labelEl.style.color        = isPassphrase ? 'var(--skb-passphrase-active)' : 'var(--skb-secondary)';
-        fpEl.style.color           = isPassphrase ? 'var(--skb-passphrase-active)' : '#fff';
+        // Fingerprint hex always renders white regardless of mode — the
+        // border + label color carry the semantic teal-vs-purple cue,
+        // while the fingerprint itself stays high-contrast for legibility.
+        // Previously this matched the label colour, which left the
+        // passphrase-active fingerprint as low-contrast purple-on-purple.
+        fpEl.style.color           = '#fff';
 
         // ── Dashboard badge: same semantic via class toggle ──
         // The dashboard fingerprint badge (.dash-fingerprint-badge) is a
