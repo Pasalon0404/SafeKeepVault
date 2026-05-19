@@ -436,7 +436,7 @@ cat > /etc/xdg/openbox/menu.xml << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <openbox_menu xmlns="http://openbox.org/3.4/menu">
 <menu id="root-menu" label="SafeKeep OS">
-  <item label="SafeKeep Tools (Browser)"><action name="Execute"><command>ungoogled-chromium --kiosk --start-fullscreen --app="file:///opt/safekeep/boot.html" --disable-dev-tools --incognito --force-device-scale-factor=$(get-safekeep-scale) --no-sandbox --no-first-run --allow-file-access-from-files --disable-web-security --disable-gpu --password-store=basic --disable-notifications --noerrdialogs --disable-infobars --disable-session-crashed-bubble --use-fake-ui-for-media-stream --disable-features=XdgDesktopPortalFilePicker,NativeNotifications</command></action></item>
+  <item label="SafeKeep Tools (Browser)"><action name="Execute"><command>bash -c 'ungoogled-chromium --kiosk --start-fullscreen --app="file:///opt/safekeep/boot.html" --disable-dev-tools --incognito --force-device-scale-factor=$(get-safekeep-scale) --no-sandbox --no-first-run --allow-file-access-from-files --disable-web-security --disable-gpu --password-store=basic --disable-notifications --noerrdialogs --disable-infobars --disable-session-crashed-bubble --use-fake-ui-for-media-stream --disable-features=XdgDesktopPortalFilePicker,NativeNotifications'</command></action></item>
   <separator />
   <item label="Unlock Vault (Ctrl+Alt+U)"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e unlock-vault</command></action></item>
   <item label="Setup Vault - First Time (Ctrl+Alt+S)"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e setup-vault</command></action></item>
