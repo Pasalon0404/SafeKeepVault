@@ -36325,5 +36325,71 @@ document.addEventListener('DOMContentLoaded', function () {
     </div>
 </div>
 
+<!-- ============================================================
+     TEMPORARY: Display Diagnostics Overlay
+     ------------------------------------------------------------
+     Floating readout of the viewport / screen / DPR values that
+     drive layout scaling. Built specifically to diagnose the
+     ZBook-monitor scaling bug without access to the locked-down
+     kiosk's developer console.
+
+     • Fixed bottom-left so it doesn't overlap the lock button,
+       theme toggle, or sidebar status banners that live in the
+       top-right and top-left respectively.
+     • z-index: 2147483647 (INT32_MAX) — sits above EVERY existing
+       overlay including #vault-lock-overlay (z: 9999), error
+       banners (z: 999999), and dialogs (z: 99999).
+     • pointer-events: none so the overlay never intercepts a
+       click meant for whatever is underneath it.
+     • Inline styles only — no dependency on the stylesheet, so
+       this works even if the layout engine is mid-collapse.
+
+     Remove this block (HTML + the small script directly below)
+     once the scaling investigation concludes.
+     ============================================================ -->
+<div id="diag-display-overlay" aria-hidden="true"
+     style="position: fixed; bottom: 12px; left: 12px;
+            z-index: 2147483647; pointer-events: none;
+            background: rgba(8, 12, 24, 0.94);
+            color: #5eead4;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px; line-height: 1.55;
+            padding: 10px 14px;
+            border: 1px solid #5eead4;
+            border-radius: 6px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            white-space: pre;
+            max-width: 320px;">
+    <div style="color: #fb923c; font-weight: 700; letter-spacing: 0.06em;
+                margin-bottom: 4px; text-transform: uppercase; font-size: 11px;">Display Diagnostics</div>
+    <div id="diag-display-body">(initializing&hellip;)</div>
+</div>
+<script>
+// Display Diagnostics — live readout of viewport / screen / DPR.
+// IIFE so the helper name doesn't leak onto the global window object
+// (one less thing to clean up when the overlay is removed). Updates
+// on every window resize; the kiosk has no orientationchange events
+// to worry about, but resize covers Wayland output reconfiguration
+// and Chromium's own viewport recompute on display changes.
+(function() {
+    function _updateDiagDisplay() {
+        var body = document.getElementById('diag-display-body');
+        if (!body) return;
+        body.textContent =
+            'window.innerWidth   : ' + window.innerWidth  + '\n' +
+            'window.innerHeight  : ' + window.innerHeight + '\n' +
+            'screen.width        : ' + screen.width  + '\n' +
+            'screen.height       : ' + screen.height + '\n' +
+            'devicePixelRatio    : ' + window.devicePixelRatio;
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _updateDiagDisplay);
+    } else {
+        _updateDiagDisplay();
+    }
+    window.addEventListener('resize', _updateDiagDisplay);
+})();
+</script>
+
 </body>
 </html>
