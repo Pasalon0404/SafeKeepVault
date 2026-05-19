@@ -327,7 +327,70 @@ echo "Universal camera hardware support complete."
 
 # ==================================================================
 
-SCALE_FACTOR="2"
+# ==================================================================
+#  Dynamic UI scale factor — chosen at boot time by physical hardware
+#
+#  Replaces an earlier hardcoded `SCALE_FACTOR="2"` that was baked into
+#  the image at build time. The "2" worked beautifully on 2012 Retina
+#  Macs but crushed the kiosk viewport to 960x540 on a 1920x1080 ZBook
+#  monitor — Chromium's --force-device-scale-factor halves the CSS-pixel
+#  viewport at 2× regardless of whether the panel actually has the
+#  density to justify it.
+#
+#  Solution: emit a small helper script that picks the right factor at
+#  boot, based on the actual monitor xrandr reports. The same USB image
+#  now renders correctly on both Retina/4K hosts (gets 2× → readable
+#  UI) and conventional 1080p/1440p hosts (gets 1× → uncrushed layout).
+#
+#  Threshold: 2500 px is just above the 2304 (15" Retina), 2560 (1440p,
+#  iMac 5K split-mode) lower bound and well below the 3840 (4K). A FHD
+#  1920px panel falls firmly in the 1× bucket.
+#
+#  Fallbacks: if xrandr is missing, fails, or returns no active mode,
+#  the helper emits "1". Under-scaling produces a small-but-usable UI;
+#  over-scaling actively breaks the layout (the bug this exists to
+#  prevent), so the safe default is 1.
+# ==================================================================
+echo "Installing dynamic UI scale-factor helper..."
+cat > /usr/local/bin/get-safekeep-scale << 'SCALEEOF'
+#!/bin/sh
+# get-safekeep-scale — print Chromium --force-device-scale-factor for
+# the currently-attached primary display, chosen by xrandr at boot.
+#
+# Output: a single digit on stdout. "2" for Retina/4K (width >= 2500
+# CSS px), "1" otherwise. Always defaults to "1" on any error.
+#
+# Invoked from /etc/xdg/openbox/autostart (the normal-boot path that
+# launches safekeep-boot → Chromium), from the SafeKeep Tools menu
+# item in /etc/xdg/openbox/menu.xml, and from the safekeep-browser
+# .desktop launcher (via `sh -c`).
+
+DISPLAY="${DISPLAY:-:0}"
+export DISPLAY
+
+# Take the width of the FIRST xrandr mode marked active (`*+`). This
+# is more robust than parsing "connected primary" — not every kiosk
+# host explicitly designates a primary output, but `*+` is universal
+# and unambiguously identifies the current active mode of each output.
+WIDTH=$(xrandr 2>/dev/null \
+    | awk '/\*\+/ { split($1, a, "x"); print a[1]; exit }')
+
+# Reject empty / non-numeric — fall back to 1 (under-scale is safe;
+# over-scale is the regression we're guarding against).
+case "$WIDTH" in
+    ''|*[!0-9]*)
+        echo 1
+        exit 0
+        ;;
+esac
+
+if [ "$WIDTH" -ge 2500 ]; then
+    echo 2
+else
+    echo 1
+fi
+SCALEEOF
+chmod +x /usr/local/bin/get-safekeep-scale
 
 echo "Configuring Openbox application rules and shortcuts..."
 mkdir -p /etc/xdg/openbox
@@ -363,11 +426,17 @@ cat > /etc/xdg/openbox/rc.xml << 'EOF'
 EOF
 
 echo "Configuring Openbox Menu..."
-cat > /etc/xdg/openbox/menu.xml << EOF
+# Heredoc is quoted so the literal string `$(get-safekeep-scale)`
+# survives into menu.xml unchanged — without quoting, bash would
+# execute it at BUILD time inside the chroot (where there is no
+# X session, so xrandr fails and the helper falls back to "1"),
+# baking the wrong value into the image. Verified no other $...
+# refs in the body that would have relied on build-time expansion.
+cat > /etc/xdg/openbox/menu.xml << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <openbox_menu xmlns="http://openbox.org/3.4/menu">
 <menu id="root-menu" label="SafeKeep OS">
-  <item label="SafeKeep Tools (Browser)"><action name="Execute"><command>ungoogled-chromium --kiosk --start-fullscreen --app="file:///opt/safekeep/boot.html" --disable-dev-tools --incognito --force-device-scale-factor=${SCALE_FACTOR} --no-sandbox --no-first-run --allow-file-access-from-files --disable-web-security --disable-gpu --password-store=basic --disable-notifications --noerrdialogs --disable-infobars --disable-session-crashed-bubble --use-fake-ui-for-media-stream --disable-features=XdgDesktopPortalFilePicker,NativeNotifications</command></action></item>
+  <item label="SafeKeep Tools (Browser)"><action name="Execute"><command>ungoogled-chromium --kiosk --start-fullscreen --app="file:///opt/safekeep/boot.html" --disable-dev-tools --incognito --force-device-scale-factor=$(get-safekeep-scale) --no-sandbox --no-first-run --allow-file-access-from-files --disable-web-security --disable-gpu --password-store=basic --disable-notifications --noerrdialogs --disable-infobars --disable-session-crashed-bubble --use-fake-ui-for-media-stream --disable-features=XdgDesktopPortalFilePicker,NativeNotifications</command></action></item>
   <separator />
   <item label="Unlock Vault (Ctrl+Alt+U)"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e unlock-vault</command></action></item>
   <item label="Setup Vault - First Time (Ctrl+Alt+S)"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e setup-vault</command></action></item>
@@ -466,12 +535,17 @@ Type=Application
 Categories=System;
 DESKEOF
 
-# Create .desktop files for all SafeKeep apps (for the taskbar)
-cat > /usr/share/applications/safekeep-browser.desktop << DESKEOF
+# Create .desktop files for all SafeKeep apps (for the taskbar).
+# Heredoc is quoted so `$(get-safekeep-scale)` survives literally into
+# the .desktop file (no build-time evaluation inside the chroot). The
+# Exec line is wrapped in `sh -c '...'` because .desktop launchers
+# parse Exec without running it through a shell — they'd otherwise
+# treat `$(...)` as a literal argument, not a substitution.
+cat > /usr/share/applications/safekeep-browser.desktop << 'DESKEOF'
 [Desktop Entry]
 Name=SafeKeep Tools
 Comment=Open SafeKeep Bitcoin Tools
-Exec=ungoogled-chromium --app="file:///opt/safekeep/boot.html" --disable-dev-tools --incognito --force-device-scale-factor=${SCALE_FACTOR} --no-sandbox --no-first-run --allow-file-access-from-files --disable-web-security --disable-gpu --password-store=basic --disable-notifications --use-fake-ui-for-media-stream --disable-features=XdgDesktopPortalFilePicker,NativeNotifications
+Exec=sh -c 'ungoogled-chromium --app="file:///opt/safekeep/boot.html" --disable-dev-tools --incognito --force-device-scale-factor=$(get-safekeep-scale) --no-sandbox --no-first-run --allow-file-access-from-files --disable-web-security --disable-gpu --password-store=basic --disable-notifications --use-fake-ui-for-media-stream --disable-features=XdgDesktopPortalFilePicker,NativeNotifications'
 Icon=chromium
 Type=Application
 Categories=Network;
@@ -681,7 +755,14 @@ PCMEOF
 
 # 10. Configure Autostart
 echo "Configuring Autostart..."
-cat > /etc/xdg/openbox/autostart << EOF
+# Heredoc is quoted so `$(get-safekeep-scale)` near the bottom of the
+# block survives literally into the autostart file — without quoting,
+# bash would substitute it at BUILD time inside the chroot (no X
+# session, helper returns "1") and bake that fixed value in. With the
+# quote, the `#!/bin/sh` shebang gets to evaluate the substitution at
+# autostart time on the actual target hardware. Verified no other
+# build-time $... references inside this block.
+cat > /etc/xdg/openbox/autostart << 'EOF'
 #!/bin/sh
 
 xset s off
@@ -717,7 +798,7 @@ export GIO_USE_VOLUME_MONITOR=unix
 # Output is captured to a log file for post-mortem debugging.
 # Without this, any failure in safekeep-boot is completely invisible
 # because the process runs in the background with no controlling terminal.
-SAFEKEEP_SCALE_FACTOR=${SCALE_FACTOR} safekeep-boot >> /tmp/safekeep-boot.log 2>&1 &
+SAFEKEEP_SCALE_FACTOR=$(get-safekeep-scale) safekeep-boot >> /tmp/safekeep-boot.log 2>&1 &
 EOF
 chmod +x /etc/xdg/openbox/autostart
 
