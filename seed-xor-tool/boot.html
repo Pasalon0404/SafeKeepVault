@@ -2035,6 +2035,27 @@
       border: 2px solid var(--skb-border);
     }
 
+    /* ---- Disabled-state legibility: onboarding backup + quiz CTAs ----
+       "Verify My Backup" (#backup-proceed-verify-btn) and "Continue to
+       Dashboard" (#backup-continue-btn) inherit .skb-btn-primary:disabled
+       { opacity: 0.35 } over an orange fill with near-black (#111) text —
+       the label reads as unreadable faded dark grey before the user
+       unlocks the button. Force a legible muted-outline look instead:
+       drop the global fade, neutralise the fill to a bordered outline,
+       and use the theme-aware muted text token. -webkit-text-fill-color
+       is set alongside `color` because Chromium paints disabled controls
+       with a forced text-fill that otherwise wins over `color`.
+       ID-scoped so no other disabled button in the app is affected. */
+    #backup-proceed-verify-btn:disabled,
+    #backup-continue-btn:disabled {
+      opacity: 1 !important;
+      background: transparent !important;
+      border-color: var(--skb-border) !important;
+      color: var(--skb-text-muted) !important;
+      -webkit-text-fill-color: var(--skb-text-muted) !important;
+      cursor: not-allowed;
+    }
+
     /* ---- Inactive toggle-button contrast fix ----
        The Script Type selector (Output Descriptor), Number of Shares
        selector (Seed XOR Splitter — Split tab), word-count and
@@ -5843,8 +5864,10 @@
                         </div>
                     </div>
 
-                    <!-- Back button to re-view words -->
-                    <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem; opacity: 0.7;" onclick="onBackupShowWordsAgain()">
+                    <!-- Back button to re-view words. Hidden once the quiz is
+                         passed (typed or scanned) so the user can't loop back
+                         into the words view and restart the challenge. -->
+                    <button type="button" id="backup-show-again-btn" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem; opacity: 0.7;" onclick="onBackupShowWordsAgain()">
                         Show Words Again
                     </button>
 
@@ -11972,6 +11995,11 @@ function onBackupProceedToVerify() {
     // Reset state
     document.getElementById('backup-challenge-status').style.display = 'none';
     document.getElementById('backup-continue-btn').disabled = true;
+    // Re-show "Show Words Again" on every fresh entry to the verify phase
+    // (it gets hidden once the quiz is passed — see onBackupChallengeInput
+    // and _backupVerifyScanResult).
+    var _showAgainReset = document.getElementById('backup-show-again-btn');
+    if (_showAgainReset) _showAgainReset.style.display = '';
 
     // Focus first input
     var first = document.getElementById('backup-challenge-0');
@@ -11999,15 +12027,21 @@ function onBackupChallengeInput() {
     }
 
     var status = document.getElementById('backup-challenge-status');
+    var _showAgainBtn = document.getElementById('backup-show-again-btn');
     if (allCorrect) {
         _backupVerified = true;
         document.getElementById('backup-continue-btn').disabled = false;
         status.style.display = 'block';
         status.style.color = 'var(--skb-secondary, #03dac6)';
         status.textContent = 'All words correct — backup verified.';
+        // Quiz passed — hide "Show Words Again" so a click can't loop the
+        // user back into the words view and restart the challenge.
+        if (_showAgainBtn) _showAgainBtn.style.display = 'none';
     } else {
         document.getElementById('backup-continue-btn').disabled = true;
         status.style.display = 'none';
+        // Still working — keep the review option available.
+        if (_showAgainBtn) _showAgainBtn.style.display = '';
     }
 }
 
@@ -12065,6 +12099,10 @@ function _backupVerifyScanResult(success, message) {
     if (success) {
         _backupVerified = true;
         document.getElementById('backup-continue-btn').disabled = false;
+        // Backup confirmed via SeedQR scan — hide "Show Words Again" too,
+        // matching the typed-quiz success path.
+        var _showAgainScan = document.getElementById('backup-show-again-btn');
+        if (_showAgainScan) _showAgainScan.style.display = 'none';
         status.style.color = 'var(--skb-secondary, #03dac6)';
         status.textContent = message;
         // Also fill the challenge inputs as correct
@@ -34429,9 +34467,12 @@ function eob_init(context) {
         document.body.classList.remove('onboarding-forge');
     }
 
-    // Reset UI elements
-    document.getElementById('eob-btn-12').classList.remove('active');
-    document.getElementById('eob-btn-24').classList.add('active');
+    // Reset UI elements. Highlight the 12-word button to match the
+    // 128-bit engine default (eob_setWordCount(12) was called above).
+    // Previously this hardcoded btn-24 active, which visually contradicted
+    // the engine's 12-word default — the bug this corrects.
+    document.getElementById('eob-btn-12').classList.add('active');
+    document.getElementById('eob-btn-24').classList.remove('active');
     document.getElementById('eob-dice-display').textContent = '';
     document.getElementById('eob-dice-input').value = '';
     document.getElementById('eob-dice-count').textContent = '0';
