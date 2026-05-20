@@ -7796,11 +7796,34 @@
                 <p class="tool-hero-desc" id="eob-subtitle">Build your own entropy. Mix physical dice, mouse movement, digital randomness, and camera noise to create a private key.</p>
             </div>
 
-            <!-- 12/24 Toggle -->
+            <!-- 12/24 Toggle — default 12 words (128 bits) -->
             <div class="eob-word-toggle">
-                <button type="button" id="eob-btn-12" onclick="eob_setWordCount(12)">12 Words (128 bits)</button>
-                <button type="button" id="eob-btn-24" class="active" onclick="eob_setWordCount(24)">24 Words (256 bits)</button>
+                <button type="button" id="eob-btn-12" class="active" onclick="eob_setWordCount(12)">12 Words (128 bits)</button>
+                <button type="button" id="eob-btn-24" onclick="eob_setWordCount(24)">24 Words (256 bits)</button>
             </div>
+
+            <!-- EASY BUTTON: one-click CSPRNG seed generation (the default,
+                 frictionless path). Reuses the prominent .eob-forge-btn style.
+                 Wired to eob_generateSecureSeed(), which draws 16/32 bytes from
+                 crypto.getRandomValues() (per the selected word count) and hands
+                 them straight to the same finalize path the manual Forge uses. -->
+            <div class="eob-easy-area" style="margin: 0.75rem 0 1.25rem;">
+                <button type="button" class="eob-forge-btn" id="eob-easy-btn" style="width: 100%;" onclick="eob_generateSecureSeed()">
+                    Generate Secure Seed
+                </button>
+                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0.6rem 0 0; text-align: center;">
+                    Instantly creates a seed from your device's secure random number generator (CSPRNG). Recommended for most users.
+                </p>
+            </div>
+
+            <!-- ADVANCED: legacy manual physical-entropy collection. Hidden by
+                 default behind a <details> accordion so standard users see the
+                 one-click path above; advanced users can expand to mix physical
+                 dice, digital dice, mouse movement, and webcam noise. The forge
+                 button + entropy meter live inside here too, since they only
+                 matter for the manual flow. -->
+            <details class="eob-advanced" style="margin-bottom: 1rem;">
+                <summary style="cursor: pointer; font-weight: 600; padding: 0.6rem 0; color: var(--skb-text-muted); font-size: 0.85rem;">Advanced: Provide Manual Physical Entropy</summary>
 
             <!-- Entropy Meter -->
             <div class="eob-meter-wrap">
@@ -7905,6 +7928,8 @@
                     Collect enough entropy to enable the forge button.
                 </p>
             </div>
+            </details>
+            <!-- /ADVANCED accordion -->
 
             <!-- Forge Result (shown after forging in dashboard/forge context only) -->
             <div id="eob-forge-result" style="display: none;">
@@ -16029,7 +16054,9 @@ function eob_clearAll() {
     document.getElementById('eob-result-hex').textContent = '';
     document.getElementById('eob-result-bin').textContent = '';
     document.getElementById('eob-result-words').innerHTML = '';
-    _targetEntropyBits = 256;
+    // Reset to the 12-word default and re-sync the toggle UI (eob_setWordCount
+    // sets both _targetEntropyBits and the button active-classes).
+    eob_setWordCount(12);
 
     // Restore the Forge button label and clear the in-flight "Forging..."
     // state. Without this, a successful forge leaves the button stuck on
@@ -34323,7 +34350,7 @@ async function auth_verify() {
 
 var eob_context = 'forge';  // 'onboarding' | 'forge'
 
-var _targetEntropyBits = 256;
+var _targetEntropyBits = 128;  // default 12 words (128 bits); eob_setWordCount toggles to 256
 var _activeEntropyPool = '';
 var _eobEstimatedBits = 0;
 var _eobDiceCount = 0;
@@ -34368,7 +34395,11 @@ function eob_init(context) {
     _eobWiggleLastY = -1;
     _eobCamStream = null;
     _eobForgedMnemonic = '';
-    _targetEntropyBits = 256; // default 24 words
+    // Default to 12 words (128 bits). eob_setWordCount syncs both the
+    // _targetEntropyBits state AND the toggle button active-classes, so a
+    // re-entry after the user previously picked 24 words snaps back to the
+    // 12-word default in both the state and the UI.
+    eob_setWordCount(12);
 
     // Context-aware header and back button
     var titleEl = document.getElementById('eob-title');
@@ -34620,6 +34651,131 @@ async function eob_captureVideoNoise() {
     }
 }
 
+// ----------------------------------------------------------------------
+// Shared seed finalization.
+//
+// Takes a ready 16- or 32-byte entropy buffer, derives the BIP-39
+// mnemonic, and routes it per eob_context — IDENTICALLY for both the
+// manual Forge (eob_forgeSeed: SHA-256(pool) XOR CSPRNG) and the
+// one-click easy button (eob_generateSecureSeed: pure CSPRNG draw).
+// Centralising this guarantees the easy button "outputs the seed phrase
+// exactly as the manual tools do".
+//
+//   onboarding → SafeKeepOS.restoreMasterSeed (or _ephemeralCommitSeed)
+//                → transitionToBackup. Returns false ONLY if the disk-write
+//                verification fails (caller re-enables its trigger button).
+//   forge      → render Hex / Binary / word-grid into #eob-forge-result.
+//
+// Throws on hard errors (missing BIP-39 lib, mnemonic failure) for the
+// caller's catch. Zeroizes `entropy` once it has been consumed.
+// ----------------------------------------------------------------------
+async function _eobFinalizeEntropy(entropy) {
+    var bip39 = window.BtcMath?.bip39;
+    var wordlist = window.BtcMath?.wordlist;
+    if (!bip39 || !wordlist) throw new Error('BIP-39 library not available');
+
+    // Pass the raw entropy bytes DIRECTLY into BIP-39 mnemonic generation —
+    // same call the manual tools use. NOTE: do not zeroize `entropy` yet;
+    // the dashboard branch needs the raw bytes to render Hex/Binary.
+    var mnemonic = bip39.entropyToMnemonic(entropy, wordlist);
+    if (!mnemonic) throw new Error('Mnemonic generation failed.');
+
+    // Stop camera + detach listeners. No-op for the easy path (it never
+    // started them), but safe and keeps the manual path's behaviour.
+    eob_cleanup();
+
+    // ---- CONTEXT-AWARE ROUTING ----
+    if (eob_context === 'onboarding') {
+        // ONBOARDING: save as master seed → backup screen → dashboard.
+        // Onboarding doesn't display raw bytes, so zero `entropy` now.
+        entropy.fill(0);
+        // CIRCUIT BREAKER: ephemeral boot MUST NEVER call SafeKeepOS.
+        var result = _isEphemeralBoot()
+            ? await _ephemeralCommitSeed(mnemonic)
+            : await window.SafeKeepOS.restoreMasterSeed(mnemonic);
+        _showDiskVerification(result.diskVerified);
+
+        // HARD STOP: if disk write failed, do NOT proceed.
+        if (result.diskVerified === false) {
+            if (_SKB_DEV_MODE) {
+                console.warn('DEV MODE: Simulated successful vault write (Forge onboarding)');
+            } else {
+                showStatus('Seed generated but disk write FAILED. Do not proceed until resolved.', 'error');
+                return false;
+            }
+        }
+
+        _seedIsNew = true;
+        _pendingBackupSeed = result;
+        // Clear the full-screen wizard class — backup screen and dashboard
+        // render with normal layout.
+        document.body.classList.remove('onboarding-forge');
+        transitionToBackup(result);
+        showStatus('Master seed created — write down your backup words.', 'success');
+        return true;
+    }
+
+    // FORGE (dashboard): display results in-place.
+    _eobForgedMnemonic = mnemonic;
+
+    // Raw hex — compute BEFORE zeroizing entropy.
+    var hexStr = Array.from(entropy).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+    document.getElementById('eob-result-hex').textContent = hexStr;
+
+    // Raw binary — compute BEFORE zeroizing entropy.
+    var binStr = Array.from(entropy).map(function(b) { return b.toString(2).padStart(8, '0'); }).join(' ');
+    document.getElementById('eob-result-bin').textContent = binStr;
+
+    // Entropy rendered to the DOM — safe to zero the buffer now (cuts the
+    // in-RAM lifetime of the raw bytes; the user-visible strings persist).
+    entropy.fill(0);
+
+    // BIP-39 word grid (uses .bip85-out-grid layout).
+    var words = mnemonic.split(' ');
+    var gridHtml = '';
+    for (var w = 0; w < words.length; w++) {
+        gridHtml += '<div class="bip85-out-cell">' +
+            '<span class="bip85-out-num">' + (w + 1) + '.</span>' +
+            '<div class="bip85-out-word">' + words[w] + '</div>' +
+            '</div>';
+    }
+    document.getElementById('eob-result-words').innerHTML = gridHtml;
+    document.getElementById('eob-forge-result').style.display = 'block';
+    showStatus('Seed generated! Review your results below.', 'success');
+    return true;
+}
+
+// --- Easy Button: one-click CSPRNG seed generation ---
+//
+// The frictionless default path. Draws the exact entropy length straight
+// from the browser's CSPRNG (16 bytes / 128 bits for 12 words, 32 bytes /
+// 256 bits for 24 words, keyed off the word-count toggle via
+// _targetEntropyBits) and hands it DIRECTLY to the shared finalize path.
+// No manual pool, dice, mouse, or webcam required.
+async function eob_generateSecureSeed() {
+    if (_eobForging) return;        // share the in-flight guard with eob_forgeSeed
+    _eobForging = true;
+    var btn = document.getElementById('eob-easy-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+    try {
+        // 16 bytes for 128-bit (12-word), 32 bytes for 256-bit (24-word).
+        var entropyLength = _targetEntropyBits === 128 ? 16 : 32;
+        var entropy = new Uint8Array(entropyLength);
+        window.crypto.getRandomValues(entropy);
+
+        await _eobFinalizeEntropy(entropy);
+        // Whether finalize committed (onboarding → navigated to backup) or
+        // displayed the result (dashboard) or reported a disk failure, the
+        // easy button stays available so the user can regenerate / retry.
+        if (btn) { btn.disabled = false; btn.textContent = 'Generate Secure Seed'; }
+    } catch (err) {
+        showStatus('Secure seed generation failed: ' + err.message, 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Generate Secure Seed'; }
+    } finally {
+        _eobForging = false;
+    }
+}
+
 // --- Finalization: Forge Seed (context-aware) ---
 var _eobForging = false;
 
@@ -34670,88 +34826,24 @@ async function eob_forgeSeed() {
         userEntropy.fill(0);
         sysEntropy.fill(0);
 
-        // Convert to BIP-39 mnemonic — NOTE: do NOT zeroize `entropy` yet.
-        // The dashboard branch below needs the raw bytes to render the Hex
-        // and Binary displays. We zero it out AFTER rendering, at the end
-        // of each branch. Zeroing it here is the bug that caused Hex/Binary
-        // to display as all-zeros while the words came out correct.
-        var mnemonic = bip39.entropyToMnemonic(entropy, wordlist);
-        if (!mnemonic) throw new Error('Mnemonic generation failed.');
-
-        // Stop camera and detach listeners
-        eob_cleanup();
-
-        // ---- CONTEXT-AWARE ROUTING ----
-        if (eob_context === 'onboarding') {
-            // ONBOARDING: save as master seed → backup screen → dashboard
-            // Onboarding doesn't display raw bytes, so zero `entropy` now.
-            entropy.fill(0);
-            // CIRCUIT BREAKER: ephemeral boot MUST NEVER call SafeKeepOS.
-            var result = _isEphemeralBoot()
-                ? await _ephemeralCommitSeed(mnemonic)
-                : await window.SafeKeepOS.restoreMasterSeed(mnemonic);
-            _showDiskVerification(result.diskVerified);
-
-            // HARD STOP: If disk write failed, do NOT proceed.
-            if (result.diskVerified === false) {
-                if (_SKB_DEV_MODE) {
-                    console.warn('DEV MODE: Simulated successful vault write (Forge onboarding)');
-                } else {
-                    showStatus('Seed generated but disk write FAILED. Do not proceed until resolved.', 'error');
-                    if (forgeBtn) { forgeBtn.disabled = false; forgeBtn.textContent = 'Generate Master Seed'; }
-                    return;
-                }
-            }
-
-            _seedIsNew = true;
-            _pendingBackupSeed = result;
-            // Clear the full-screen wizard class — backup screen and
-            // dashboard should render with normal layout.
-            document.body.classList.remove('onboarding-forge');
-            transitionToBackup(result);
-            showStatus('Master seed forged from your entropy pool!', 'success');
-
-        } else {
-            // FORGE (dashboard): display results in-place
-            _eobForgedMnemonic = mnemonic;
-
-            // Raw hex — compute BEFORE zeroizing entropy
-            var hexStr = Array.from(entropy).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
-            document.getElementById('eob-result-hex').textContent = hexStr;
-
-            // Raw binary — compute BEFORE zeroizing entropy
-            var binStr = Array.from(entropy).map(function(b) { return b.toString(2).padStart(8, '0'); }).join(' ');
-            document.getElementById('eob-result-bin').textContent = binStr;
-
-            // Entropy has now been rendered to the DOM — safe to zero the
-            // buffer. (We still zero it to cut down the in-RAM lifetime of
-            // the raw bytes; the user-visible strings persist by design.)
-            entropy.fill(0);
-
-            // BIP-39 word grid (uses .bip85-out-grid layout)
-            var words = mnemonic.split(' ');
-            var gridHtml = '';
-            for (var w = 0; w < words.length; w++) {
-                gridHtml += '<div class="bip85-out-cell">' +
-                    '<span class="bip85-out-num">' + (w + 1) + '.</span>' +
-                    '<div class="bip85-out-word">' + words[w] + '</div>' +
-                    '</div>';
-            }
-            document.getElementById('eob-result-words').innerHTML = gridHtml;
-
-            // Show result card
-            document.getElementById('eob-forge-result').style.display = 'block';
-
-            // Restore the button label so it doesn't stay stuck on "Forging..."
-            // The pool was consumed, so updateMeter will re-disable it; but the
-            // *label* must come back so a subsequent reset → re-collect → re-forge
-            // shows the right verb the moment entropy crosses the threshold.
-            if (forgeBtn) {
-                forgeBtn.textContent = 'Generate Seed';
-                forgeBtn.disabled = true;  // pool consumed; updateMeter governs from here
-            }
-
-            showStatus('Seed generated! Review your results below.', 'success');
+        // Hand the XOR-mixed entropy to the shared finalize path — the
+        // SAME one the one-click easy button (eob_generateSecureSeed) uses,
+        // so both produce the seed phrase + routing identically. See
+        // _eobFinalizeEntropy for the mnemonic derivation, context routing,
+        // and result display.
+        var committed = await _eobFinalizeEntropy(entropy);
+        if (!committed) {
+            // Onboarding disk-write verification failed — re-enable the
+            // forge button so the user can retry.
+            if (forgeBtn) { forgeBtn.disabled = false; forgeBtn.textContent = 'Generate Master Seed'; }
+            return;
+        }
+        // Dashboard success: the pool was consumed, so re-disable the forge
+        // button (eob_updateMeter governs it from here) but restore its label
+        // so a later reset → re-collect shows the right verb.
+        if (eob_context === 'forge' && forgeBtn) {
+            forgeBtn.textContent = 'Generate Seed';
+            forgeBtn.disabled = true;
         }
 
     } catch (err) {
