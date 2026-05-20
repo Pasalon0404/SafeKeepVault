@@ -7983,16 +7983,38 @@
 
                     <div class="skb-card" style="margin-bottom: 1rem;">
                         <label style="font-size: 0.85rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.75rem;">Transmission Settings</label>
+                        <!-- Density + Speed range sliders. IDs (xfr-chunk-size,
+                             xfr-fps) and value/min/max are UNCHANGED from the
+                             prior number inputs, so xfr_startTransmit reads them
+                             exactly as before — this is a purely visual upgrade.
+                             Speed is FPS (higher = faster, naturally), so no
+                             inversion math is needed here (unlike the PSBT
+                             Signer's ms-based slider). Readouts update live on
+                             both oninput (drag) and onchange (release). -->
                         <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-                            <div style="flex: 1; min-width: 120px;">
+                            <div style="flex: 1; min-width: 200px;">
                                 <label style="font-size: 0.75rem; color: var(--skb-text-dim); display: block; margin-bottom: 0.25rem;">Density (bytes/chunk)</label>
-                                <input type="number" id="xfr-chunk-size" value="500" min="50" max="800"
-                                       style="width: 100%; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="range" id="xfr-chunk-size" value="500" min="50" max="800" step="50"
+                                           oninput="xfr_updateDensityReadout(this.value)"
+                                           onchange="xfr_updateDensityReadout(this.value)"
+                                           aria-label="QR fragment size in bytes per chunk"
+                                           style="flex: 1; min-width: 80px;">
+                                    <span id="xfr-chunk-size-value"
+                                          style="font-family: var(--skb-mono); color: var(--skb-text); min-width: 5.5em; text-align: right;">500 bytes</span>
+                                </div>
                             </div>
-                            <div style="flex: 1; min-width: 120px;">
+                            <div style="flex: 1; min-width: 200px;">
                                 <label style="font-size: 0.75rem; color: var(--skb-text-dim); display: block; margin-bottom: 0.25rem;">Speed (FPS)</label>
-                                <input type="number" id="xfr-fps" value="7" min="1" max="10"
-                                       style="width: 100%; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="range" id="xfr-fps" value="7" min="1" max="10" step="1"
+                                           oninput="xfr_updateSpeedReadout(this.value)"
+                                           onchange="xfr_updateSpeedReadout(this.value)"
+                                           aria-label="QR animation speed in frames per second"
+                                           style="flex: 1; min-width: 80px;">
+                                    <span id="xfr-fps-value"
+                                          style="font-family: var(--skb-mono); color: var(--skb-text); min-width: 5.5em; text-align: right;">7 FPS</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -27969,6 +27991,22 @@ function xfr_sendChunk(chunk, index, total) {
 
     document.getElementById('xfr-qr-info').textContent =
         'Loop ' + (xfr_state.currentLoop + 1) + '  |  Chunk ' + (index + 1) + ' / ' + total;
+}
+
+// Live readout updaters for the Density + Speed range sliders. Wired to
+// both oninput (during drag) and onchange (on release) so the numeric
+// label always tracks the thumb. These are display-only — the actual
+// slider values are read by xfr_startTransmit at Start time (by the
+// unchanged xfr-chunk-size / xfr-fps element IDs), so dragging mid-idle
+// just updates the label; the next transmission picks up the new values.
+function xfr_updateDensityReadout(v) {
+    var el = document.getElementById('xfr-chunk-size-value');
+    if (el) el.textContent = v + ' bytes';
+}
+
+function xfr_updateSpeedReadout(v) {
+    var el = document.getElementById('xfr-fps-value');
+    if (el) el.textContent = v + ' FPS';
 }
 
 // Start the animated loop
