@@ -863,6 +863,29 @@
     #sidebar-seed-fp {
       text-transform: uppercase;
     }
+
+    /* ---- Universal fingerprint capitalization (match the header) ----
+       Every wallet fingerprint shown in a tool body renders ALL CAPS to
+       match the dashboard badge + sidebar indicator. text-transform is
+       PURELY VISUAL: it does not alter the underlying hex strings (so
+       every fingerprint string-comparison — e.g. the Seed XOR
+       reconstruction match — is untouched) and it does not affect any
+       color-coding (passphrase-vs-master colors are set via inline
+       `color` / classes, which this rule never touches).
+
+       Covers the shared active-seed accordion fp (every tool that hosts
+       the seed selector: Seed Management, Output Descriptor, BIP-85,
+       Seed XOR, Shamir, Seed QR) plus each tool's own generated-
+       fingerprint displays. Seed XOR's target-fingerprint spans are
+       injected via innerHTML and are handled at their injection sites. */
+    .skb-seed-accordion__fp,
+    #arm-fingerprint, #arm-base-fp, #arm-pp-fp,
+    #desc-ms-local-fp, #desc-verify-fp, #desc-verify-my-fp,
+    #desc-print-fingerprint, #desc-print-pp-fingerprint,
+    #bip85-parent-fp, #bip85-child-fp,
+    #bip85-print-parent-fp, #bip85-print-child-fp {
+      text-transform: uppercase;
+    }
     /* Removed: the vestigial green ::after status dot on the fingerprint
        badge added visual noise without relaying useful information. The
        fact that a fingerprint is rendered at all already signals
@@ -23095,7 +23118,7 @@ async function xor_handleSplit() {
         warnBanner.innerHTML =
             'ALL ' + sharesCount + ' SHARES REQUIRED FOR RECOVERY<br>' +
             '<span style="font-size: 0.72rem; font-weight: 700; opacity: 0.9;">NO THRESHOLD RECOVERY &mdash; LOSING ANY ONE SHARE MEANS PERMANENT LOSS OF THE SEED</span><br>' +
-            '<span style="display: inline-block; margin-top: 0.35rem; font-size: 0.72rem; font-weight: 700; color: var(--skb-text); background: rgba(0,0,0,0.15); padding: 0.2rem 0.6rem; border: 1px dashed var(--skb-danger);">' +
+            '<span style="display: inline-block; margin-top: 0.35rem; font-size: 0.72rem; font-weight: 700; color: var(--skb-text); background: rgba(0,0,0,0.15); padding: 0.2rem 0.6rem; border: 1px dashed var(--skb-danger); text-transform: uppercase;">' +
             'TARGET MASTER FINGERPRINT: ' + targetBip32FP + '</span>';
         container.appendChild(warnBanner);
 
@@ -23111,7 +23134,7 @@ async function xor_handleSplit() {
                 '<div style="flex: 1; min-width: 0;">' +
                     '<div style="font-size: 0.95rem; font-weight: 900; color: var(--skb-danger); letter-spacing: 0.04em;">Share ' + (i + 1) + ' of ' + sharesCount + '</div>' +
                     '<div style="font-size: 0.7rem; font-weight: 800; color: var(--skb-danger); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.2rem;">ALL ' + sharesCount + ' REQUIRED FOR RECOVERY &mdash; NO THRESHOLD RECOVERY</div>' +
-                    '<div style="font-family: var(--skb-mono); font-size: 0.7rem; font-weight: 800; color: var(--skb-text); margin-top: 0.35rem;">Target Master Fingerprint: <span style="color: var(--skb-secondary, var(--skb-primary)); letter-spacing: 0.12em;">' + targetBip32FP + '</span></div>' +
+                    '<div style="font-family: var(--skb-mono); font-size: 0.7rem; font-weight: 800; color: var(--skb-text); margin-top: 0.35rem;">Target Master Fingerprint: <span style="color: var(--skb-secondary, var(--skb-primary)); letter-spacing: 0.12em; text-transform: uppercase;">' + targetBip32FP + '</span></div>' +
                 '</div>' +
                 '<div style="display: flex; gap: 0.5rem; flex-shrink: 0;">' +
                     '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="xor_copyShare(' + i + ')">Copy</button>' +
@@ -23205,7 +23228,7 @@ function xor_printShare(index) {
         '  .warn .sub { font-size: 11px; font-weight: 700; margin-top: 6px; color: #600; }' +
         '  .hdr { margin-top: 18px; font-size: 22px; font-weight: 900; color: #000; }' +
         '  .sub-hdr { font-size: 12px; font-weight: 700; color: #c00; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }' +
-        '  .fpbox { margin-top: 14px; padding: 10px 14px; border: 2px dashed #c00; display: inline-block; font-family: "Courier New", Courier, monospace; font-size: 13px; font-weight: 800; letter-spacing: 0.12em; }' +
+        '  .fpbox { margin-top: 14px; padding: 10px 14px; border: 2px dashed #c00; display: inline-block; font-family: "Courier New", Courier, monospace; font-size: 13px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }' +
         '  .fpbox strong { color: #c00; }' +
         '  .grid { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 24px; font-family: "Courier New", Courier, monospace; }' +
         '  .w { border-bottom: 1px solid #bbb; padding: 6px 2px; font-size: 15px; }' +
