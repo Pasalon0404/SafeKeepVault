@@ -8989,7 +8989,7 @@
             <div class="skb-card" style="margin-bottom: 1rem;">
                 <label style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; display: block;">Message to Sign</label>
                 <textarea id="auth-message" rows="4" placeholder="Enter the plaintext message to sign..."
-                          spellcheck="false" autocomplete="off"
+                          spellcheck="false" autocomplete="off" oninput="auth_saveState()"
                           style="width: 100%; box-sizing: border-box; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem; resize: vertical;"></textarea>
             </div>
 
@@ -14346,6 +14346,14 @@ function _wipeAllVolatileSeedState() {
     try { _armOverrideMnemonic = null; } catch (_) {}
     try { _descCosignerXpubs = {}; } catch (_) {}
 
+    // --- Message Signer (THE WITNESS) per-session tool cache ---
+    // Drop the sessionStorage snapshot of the Sign section so a fresh
+    // seed never inherits the previous seed's message/path/signature.
+    try { if (typeof auth_clearState === 'function') auth_clearState(); } catch (_) {}
+    try { _authDerivedKey = null; } catch (_) {}
+    try { _authDerivedAddress = ''; } catch (_) {}
+    try { _authLastSignature = ''; } catch (_) {}
+
     // --- BIP-85 Lineage children (mnemonics derived from master seed) ---
     try {
         _bip85LastResult = { mnemonic: '', wif: '', xprv: '', hex: '', path: '', appName: '', wordCount: 0 };
@@ -14799,6 +14807,14 @@ function vaultLock() {
     if (muPw) muPw.value = '';
     // Reset the temp seed word grid to blank
     if (typeof vtmp_clearAll === 'function') vtmp_clearAll();
+
+    // Drop the Message Signer (THE WITNESS) per-session cache so a
+    // locked-then-reopened vault never resurfaces the prior seed's
+    // signed message / derivation path / signature.
+    if (typeof auth_clearState === 'function') auth_clearState();
+    try { _authDerivedKey = null; } catch (_) {}
+    try { _authDerivedAddress = ''; } catch (_) {}
+    try { _authLastSignature = ''; } catch (_) {}
 
     // Clear the DASHBOARD passphrase input + applied-state flags.
     // Without this block the UI silently desyncs from the derivation
@@ -33567,15 +33583,92 @@ var AUTH_PATH_PRESETS = {
     '44': "m/44'/0'/0'/0/0"
 };
 
+// ── Tool-state persistence ──────────────────────────────────────────────
+// Per-session cache so the user doesn't lose work when navigating away to
+// another tool (e.g. the Courier) and back. Stored in sessionStorage so it
+// dies with the tab/kiosk session and is also explicitly wiped whenever the
+// master seed is cleared (see _wipeAllVolatileSeedState + vaultLock). Note:
+// everything cached here — message text, derivation path, derived address,
+// BIP-322 signature — is non-secret attestation data meant to be shared; the
+// private key is never persisted.
+var AUTH_STATE_KEY = 'skb_msg_state';
+
+/** Snapshot the Sign-section inputs/outputs into sessionStorage. */
+function auth_saveState() {
+    try {
+        var presetEl = document.getElementById('auth-path-preset');
+        var customEl = document.getElementById('auth-path-custom');
+        var msgEl = document.getElementById('auth-message');
+        var resultEl = document.getElementById('auth-result');
+        var resAddrEl = document.getElementById('auth-result-address');
+        var resMsgEl = document.getElementById('auth-result-message');
+
+        var resultShown = !!(resultEl && resultEl.style.display !== 'none');
+        var state = {
+            preset: presetEl ? presetEl.value : '84',
+            path: customEl ? customEl.value : '',
+            message: msgEl ? msgEl.value : '',
+            resultShown: resultShown,
+            resultAddress: (resultShown && resAddrEl) ? resAddrEl.textContent : '',
+            resultMessage: (resultShown && resMsgEl) ? resMsgEl.textContent : '',
+            resultSig: resultShown ? (_authLastSignature || '') : ''
+        };
+        sessionStorage.setItem(AUTH_STATE_KEY, JSON.stringify(state));
+    } catch (e) { /* sessionStorage unavailable — degrade silently */ }
+}
+
+/** Read the cached Sign-section state, or null if none/invalid. */
+function auth_loadState() {
+    try {
+        var raw = sessionStorage.getItem(AUTH_STATE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (e) { return null; }
+}
+
+/** Drop the cached state. Called from the global seed-wipe / lock hooks. */
+function auth_clearState() {
+    try { sessionStorage.removeItem(AUTH_STATE_KEY); } catch (e) { /* noop */ }
+}
+
 function auth_init() {
+    var cached = auth_loadState();
+
     var preset = document.getElementById('auth-path-preset');
-    if (preset) preset.value = '84';
     var custom = document.getElementById('auth-path-custom');
-    if (custom) custom.value = AUTH_PATH_PRESETS['84'];
-    document.getElementById('auth-message').value = '';
-    document.getElementById('auth-result').style.display = 'none';
-    document.getElementById('auth-qr-area').style.display = 'none';
-    _authLastSignature = '';
+
+    if (cached) {
+        // ── Rehydrate Sign section from the per-session cache ──
+        if (preset) preset.value = cached.preset || '84';
+        if (custom) {
+            custom.value = (typeof cached.path === 'string' && cached.path.length)
+                ? cached.path
+                : (AUTH_PATH_PRESETS[cached.preset] || AUTH_PATH_PRESETS['84']);
+        }
+        document.getElementById('auth-message').value = cached.message || '';
+
+        // Restore the result card only if a signature was previously generated.
+        if (cached.resultShown && cached.resultSig) {
+            document.getElementById('auth-result-address').textContent = cached.resultAddress || '';
+            document.getElementById('auth-result-message').textContent = cached.resultMessage || '';
+            document.getElementById('auth-result-sig').textContent = cached.resultSig || '';
+            _authLastSignature = cached.resultSig || '';
+            document.getElementById('auth-result').style.display = 'block';
+        } else {
+            document.getElementById('auth-result').style.display = 'none';
+            _authLastSignature = '';
+        }
+        // The QR is regenerated on demand from _authLastSignature; never restore it open.
+        document.getElementById('auth-qr-area').style.display = 'none';
+    } else {
+        // ── No cache: clean default entry state ──
+        if (preset) preset.value = '84';
+        if (custom) custom.value = AUTH_PATH_PRESETS['84'];
+        document.getElementById('auth-message').value = '';
+        document.getElementById('auth-result').style.display = 'none';
+        document.getElementById('auth-qr-area').style.display = 'none';
+        _authLastSignature = '';
+    }
 
     // Clear verify section so it's always blank on entry
     var va = document.getElementById('auth-verify-address');
@@ -33590,8 +33683,14 @@ function auth_init() {
     // Populate seed status from vault session
     auth_updateSeedStatus();
 
-    // Derive key from vault seed at default path
+    // Derive key from vault seed at the (possibly restored) path. This
+    // recomputes #auth-derived-address from the seed + path rather than
+    // trusting a cached string, so the live address always matches the
+    // currently loaded seed.
     auth_deriveKey();
+
+    // Persist the (re)initialised state so a fresh entry seeds the cache too.
+    auth_saveState();
 }
 
 /** Update the seed status banner from the vault session */
@@ -33650,6 +33749,7 @@ function auth_onPresetChange() {
         customInput.focus();
     }
     auth_deriveKey();
+    auth_saveState();
 }
 
 var _authDeriveTimer = null;
@@ -33681,6 +33781,10 @@ function auth_onPathChange() {
         _authDeriveTimer = null;
         auth_deriveKey();
     }, 300);
+
+    // Persist the path immediately (independent of the debounced derivation)
+    // so navigating away mid-edit doesn't lose the typed path.
+    auth_saveState();
 }
 
 /** Validate a BIP-32 path string without throwing.
@@ -34082,6 +34186,8 @@ async function auth_sign() {
         document.getElementById('auth-result-sig').textContent = signature;
         document.getElementById('auth-qr-area').style.display = 'none';
         resultEl.style.display = 'block';
+        // Cache the generated signature + inputs so it survives navigation.
+        auth_saveState();
         showStatus('Message signed successfully.', 'success');
 
     } catch (e) {
