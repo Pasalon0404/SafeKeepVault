@@ -9017,7 +9017,7 @@
 
                 <div style="display: flex; gap: 0.5rem;">
                     <button type="button" class="skb-btn" style="flex: 1;" onclick="auth_copy()">Copy Signature</button>
-                    <button type="button" class="skb-btn" style="flex: 1;" onclick="auth_showQR()">Show QR</button>
+                    <button type="button" class="skb-btn" style="flex: 1;" onclick="auth_showQR()">Export Verification QR</button>
                 </div>
 
                 <div id="auth-qr-area" style="display: none; text-align: center; margin-top: 0.75rem;">
@@ -34287,8 +34287,28 @@ function auth_showQR() {
         return;
     }
     if (!_authLastSignature) return;
+
+    // ── Air-gap verification bridge ──────────────────────────────────────
+    // Instead of encoding the raw base64 signature, bundle the full
+    // attestation (address + message + signature) into a deep-link to the
+    // online verifier so a phone can scan once and check the signature
+    // without any manual copy/paste across the air gap.
+    //
+    // SECURITY: address, message, and signature are all NON-SECRET data —
+    // they are exactly what a verifier needs and what BIP-322 is designed
+    // to publish. The private key / seed are never part of this payload.
+    //
+    // encodeURIComponent escapes the base64 alphabet's reserved query
+    // characters ('+' -> %2B, '/' -> %2F, '=' -> %3D) plus any punctuation
+    // in the message, so the values survive the query string intact.
+    var address = (document.getElementById('auth-result-address').textContent || '').trim();
+    var message = document.getElementById('auth-result-message').textContent || '';
+    var verifyUrl = 'https://verify.safekeepbitcoin.com/?address=' + encodeURIComponent(address) +
+                    '&msg=' + encodeURIComponent(message) +
+                    '&sig=' + encodeURIComponent(_authLastSignature);
+
     var canvas = document.getElementById('auth-qr-canvas');
-    window.QRCode.toCanvas(canvas, _authLastSignature, {
+    window.QRCode.toCanvas(canvas, verifyUrl, {
         width: 280,
         margin: 2,
         color: { dark: '#000000', light: '#ffffff' }
