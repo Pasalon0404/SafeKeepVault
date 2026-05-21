@@ -30434,8 +30434,16 @@ function wrec_init() {
     var nEl     = document.getElementById('wrec-ms-n');      if (nEl)       nEl.value       = data.msN || '3';
     var scrEl   = document.getElementById('wrec-script');    if (scrEl)     scrEl.value     = data.script || 'Native Segwit (P2WPKH)';
     var ppReqEl = document.getElementById('wrec-pp-required'); if (ppReqEl) ppReqEl.checked = !!data.ppRequired;
-    var descEl  = document.getElementById('wrec-descriptor'); if (descEl)   descEl.value    = data.descriptor || '';
-    var faEl    = document.getElementById('wrec-first-address'); if (faEl) faEl.value      = data.firstAddress || '';
+    // Descriptor + First Receiving Address always start EMPTY on tool
+    // entry — same fresh-start treatment as title / purpose / notes — so
+    // the print preview never inherits stale or example data. The Wallet
+    // Record tool is a pure recorder: the source of truth is the Output
+    // Descriptor tool, and the user re-pulls the live descriptor each
+    // session via "Pull Active Descriptor". The HTML placeholder hints
+    // (faint example text) stay visible because we only blank the value,
+    // never the placeholder attribute.
+    var descEl  = document.getElementById('wrec-descriptor'); if (descEl)   descEl.value    = '';
+    var faEl    = document.getElementById('wrec-first-address'); if (faEl) faEl.value      = '';
     // Additional Notes: same fresh-start treatment as title/purpose —
     // never paint saved text into the textarea on entry, so the
     // placeholder "e.g. Hardware: Coldcard Mk4 #A12 stored…" is always
@@ -30467,7 +30475,11 @@ function wrec_init() {
         notesEl._wrecCounterBound = true;
     }
 
-    _wrecRenderKeySetInputs(data.seedSets);
+    // Render the seed-set rows with EMPTY labels on entry (preserve the
+    // row count implied by the saved structure, but blank the content) so
+    // no stale "Set N (fingerprint …)" text reaches the print preview.
+    // The rows repopulate when the user pulls the active descriptor.
+    _wrecRenderKeySetInputs((data.seedSets || ['']).map(function() { return ''; }));
     _wrecRenderPassphraseRows(data.passphrases);
     wrec_onTypeChange(/*skipBuild*/true);
     wrec_onPassphraseRequiredChange(/*skipBuild*/true);
@@ -30606,8 +30618,8 @@ function _wrecParseDescriptor(s) {
      4. Script type parsed from the descriptor's outer wrapper.
      5. Per-key seed-set hints derived from each [fingerprint/path]
         block in the descriptor — printed as
-        "Set N (fp: ABC12345)" so the heir can verify each key by its
-        BIP-32 root fingerprint at restore time.
+        "Set N (fingerprint ABC12345)" so the heir can verify each key
+        by its BIP-32 root fingerprint at restore time.
      6. The active BIP-39 passphrase pulled from
         SafeKeepOS.getPassphrase() — tied to "Set 1" by default,
         which the user can re-target via the dropdown if a multisig
@@ -30630,7 +30642,11 @@ function wrec_pullDescriptor() {
     } catch (_) { d = ''; }
 
     if (!d) {
-        showStatus('No active descriptor found. Generate one in the Output Descriptor tool first.', 'error');
+        // UX guardrail: the Wallet Record tool is a recorder — it can only
+        // pull a descriptor the user has already built in the Output
+        // Descriptor tool. If that global state is empty, stop here with a
+        // clear, unmissable instruction rather than silently doing nothing.
+        alert('Please generate an Output Descriptor in the Output Descriptor tool first.');
         return;
     }
 
@@ -30677,14 +30693,16 @@ function wrec_pullDescriptor() {
     if (scrEl) scrEl.value = meta.script;
 
     // ── 4. Build seed-set hints from the descriptor's fingerprints ──
-    // Format: "Set N (fp: ABC12345)" — gives the heir a verifiable
-    // anchor without leaking words. If no fingerprints were extracted
-    // (malformed descriptor), fall back to a blank N-row default so
-    // the user can fill it in manually.
+    // Format: "Set N (fingerprint ABC12345)" — gives the heir a verifiable
+    // anchor without leaking words. The word "fingerprint" is spelled out
+    // (rather than the "fp:" abbreviation) so it reads unambiguously on a
+    // physical paper backup. Fingerprint is uppercased to match the global
+    // capitalization standard. If no fingerprints were extracted (malformed
+    // descriptor), fall back to a blank N-row default for manual entry.
     var seedSets;
     if (meta.fingerprints.length) {
         seedSets = meta.fingerprints.map(function(fp, i) {
-            return 'Set ' + (i + 1) + ' (fp: ' + fp.toUpperCase() + ')';
+            return 'Set ' + (i + 1) + ' (fingerprint ' + fp.toUpperCase() + ')';
         });
     } else {
         seedSets = [];
