@@ -877,13 +877,19 @@
        the seed selector: Seed Management, Output Descriptor, BIP-85,
        Seed XOR, Shamir, Seed QR) plus each tool's own generated-
        fingerprint displays. Seed XOR's target-fingerprint spans are
-       injected via innerHTML and are handled at their injection sites. */
+       injected via innerHTML and are handled at their injection sites.
+
+       Also covers the first-boot Onboarding backup flow: the
+       "write down your words" screen (#backup-fingerprint) and the
+       verification screen (#backup-verify-fingerprint), which were
+       missed in the original sweep and still rendered lowercase. */
     .skb-seed-accordion__fp,
     #arm-fingerprint, #arm-base-fp, #arm-pp-fp,
     #desc-ms-local-fp, #desc-verify-fp, #desc-verify-my-fp,
     #desc-print-fingerprint, #desc-print-pp-fingerprint,
     #bip85-parent-fp, #bip85-child-fp,
-    #bip85-print-parent-fp, #bip85-print-child-fp {
+    #bip85-print-parent-fp, #bip85-print-child-fp,
+    #backup-fingerprint, #backup-verify-fingerprint {
       text-transform: uppercase;
     }
     /* Removed: the vestigial green ::after status dot on the fingerprint
