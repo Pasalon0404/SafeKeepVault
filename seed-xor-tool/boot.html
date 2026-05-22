@@ -34192,6 +34192,15 @@ async function auth_sign() {
             );
         }
 
+        // BIP-322 v1.0.0 (Status: Complete, 2026-04-15) made the variant
+        // prefix mandatory: a "simple" signature is the base64 witness
+        // prepended with the 3-char human-readable prefix "smp". Apply it
+        // once here so the read-only text field, the _authLastSignature
+        // cache, and the QR deep-link payload all carry the spec-compliant
+        // prefixed string. (Pre-final verifiers assume "simple" when no
+        // prefix is present; Sparrow 2.4.x+ follows the finalized spec.)
+        signature = 'smp' + signature;
+
         // Show result
         _authLastSignature = signature;
         document.getElementById('auth-result-address').textContent = _authDerivedAddress;
@@ -34358,6 +34367,23 @@ async function auth_verify() {
         // its own merits.
         if (!address || !sigB64) {
             throw new Error('Address and signature are required.');
+        }
+
+        // BIP-322 v1.0.0 prepends a 3-char human-readable variant prefix
+        // (smp = simple, ful = full, pof = proof-of-funds) to the base64
+        // signature. Strip a recognised "smp" prefix before decoding so we
+        // can verify our own — and Sparrow 2.4.x+ — finalized-spec output.
+        // A genuinely unprefixed simple witness always base64-encodes to a
+        // leading 'A' (the witness item count 0x01/0x02 has its top 6 bits
+        // zero), so a leading "smp" can never collide with a real unprefixed
+        // signature. Unprefixed blobs remain accepted as the simple variant
+        // (the spec's pre-finalization backward-compatibility allowance).
+        var _authSigVariant = sigB64.slice(0, 3);
+        if (_authSigVariant === 'smp') {
+            sigB64 = sigB64.slice(3);
+        } else if (_authSigVariant === 'ful' || _authSigVariant === 'pof') {
+            throw new Error('This is a BIP-322 "' + _authSigVariant + '" (full / proof-of-funds) ' +
+                'signature. This tool verifies the "simple" (smp) variant only.');
         }
 
         var btc = window.BtcMath?.btcSigner;
