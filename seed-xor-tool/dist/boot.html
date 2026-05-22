@@ -862,6 +862,35 @@
     #sidebar-seed-fp {
       text-transform: uppercase;
     }
+
+    /* ---- Universal fingerprint capitalization (match the header) ----
+       Every wallet fingerprint shown in a tool body renders ALL CAPS to
+       match the dashboard badge + sidebar indicator. text-transform is
+       PURELY VISUAL: it does not alter the underlying hex strings (so
+       every fingerprint string-comparison — e.g. the Seed XOR
+       reconstruction match — is untouched) and it does not affect any
+       color-coding (passphrase-vs-master colors are set via inline
+       `color` / classes, which this rule never touches).
+
+       Covers the shared active-seed accordion fp (every tool that hosts
+       the seed selector: Seed Management, Output Descriptor, BIP-85,
+       Seed XOR, Shamir, Seed QR) plus each tool's own generated-
+       fingerprint displays. Seed XOR's target-fingerprint spans are
+       injected via innerHTML and are handled at their injection sites.
+
+       Also covers the first-boot Onboarding backup flow: the
+       "write down your words" screen (#backup-fingerprint) and the
+       verification screen (#backup-verify-fingerprint), which were
+       missed in the original sweep and still rendered lowercase. */
+    .skb-seed-accordion__fp,
+    #arm-fingerprint, #arm-base-fp, #arm-pp-fp,
+    #desc-ms-local-fp, #desc-verify-fp, #desc-verify-my-fp,
+    #desc-print-fingerprint, #desc-print-pp-fingerprint,
+    #bip85-parent-fp, #bip85-child-fp,
+    #bip85-print-parent-fp, #bip85-print-child-fp,
+    #backup-fingerprint, #backup-verify-fingerprint {
+      text-transform: uppercase;
+    }
     /* Removed: the vestigial green ::after status dot on the fingerprint
        badge added visual noise without relaying useful information. The
        fact that a fingerprint is rendered at all already signals
@@ -2032,6 +2061,27 @@
     .btn-secondary {
       border-radius: 0;
       border: 2px solid var(--skb-border);
+    }
+
+    /* ---- Disabled-state legibility: onboarding backup + quiz CTAs ----
+       "Verify My Backup" (#backup-proceed-verify-btn) and "Continue to
+       Dashboard" (#backup-continue-btn) inherit .skb-btn-primary:disabled
+       { opacity: 0.35 } over an orange fill with near-black (#111) text —
+       the label reads as unreadable faded dark grey before the user
+       unlocks the button. Force a legible muted-outline look instead:
+       drop the global fade, neutralise the fill to a bordered outline,
+       and use the theme-aware muted text token. -webkit-text-fill-color
+       is set alongside `color` because Chromium paints disabled controls
+       with a forced text-fill that otherwise wins over `color`.
+       ID-scoped so no other disabled button in the app is affected. */
+    #backup-proceed-verify-btn:disabled,
+    #backup-continue-btn:disabled {
+      opacity: 1 !important;
+      background: transparent !important;
+      border-color: var(--skb-border) !important;
+      color: var(--skb-text-muted) !important;
+      -webkit-text-fill-color: var(--skb-text-muted) !important;
+      cursor: not-allowed;
     }
 
     /* ---- Inactive toggle-button contrast fix ----
@@ -7977,8 +8027,10 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                         </div>
                     </div>
 
-                    <!-- Back button to re-view words -->
-                    <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem; opacity: 0.7;" onclick="onBackupShowWordsAgain()">
+                    <!-- Back button to re-view words. Hidden once the quiz is
+                         passed (typed or scanned) so the user can't loop back
+                         into the words view and restart the challenge. -->
+                    <button type="button" id="backup-show-again-btn" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem; opacity: 0.7;" onclick="onBackupShowWordsAgain()">
                         Show Words Again
                     </button>
 
@@ -8531,7 +8583,7 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                     <p style="font-size: 0.85rem; color: var(--skb-text-muted); margin: 0;">
                         Unlock the audit by either (a) entering the correct <strong>BIP-39 passphrase</strong> below,
                         (b) switching to a <strong>Temporary Seed</strong>, or (c) ticking
-                        <strong>Ignore Fingerprints (Force Sign)</strong> if you are certain the loaded seed is correct.
+                        <strong>Force Sign by Pubkey Match</strong> if you are certain the loaded seed is correct.
                     </p>
                 </div>
                 <div class="psbt-card" id="psbt-audit-card">
@@ -8620,8 +8672,8 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                     <div style="margin-top: 1rem;">
                         <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; font-size: 0.82rem; color: var(--skb-text-muted);">
                             <input type="checkbox" id="psbt-force-sign" onchange="_psbtUpdateAuditGate()" style="margin-top: 0.15rem; accent-color: var(--skb-primary);">
-                            <span><strong style="color: var(--skb-text);">Ignore Fingerprints (Force Sign)</strong><br>
-                            Try ALL derivation paths in the PSBT regardless of fingerprint match. Use this if you are certain the seed is correct but fingerprints don't align.</span>
+                            <span><strong style="color: var(--skb-text);">Force Sign by Pubkey Match</strong><br>
+                            Signs by deriving each path and matching pubkeys instead of fingerprints. Use this only when your seed is correct but the fingerprints genuinely don't match &mdash; e.g. a stripped-fingerprint multisig PSBT. Not needed for ordinary wildcard PSBTs (BlueWallet) &mdash; those sign automatically.</span>
                         </label>
                     </div>
                 </div>
@@ -9930,11 +9982,34 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                 <p class="tool-hero-desc" id="eob-subtitle">Build your own entropy. Mix physical dice, mouse movement, digital randomness, and camera noise to create a private key.</p>
             </div>
 
-            <!-- 12/24 Toggle -->
+            <!-- 12/24 Toggle — default 12 words (128 bits) -->
             <div class="eob-word-toggle">
-                <button type="button" id="eob-btn-12" onclick="eob_setWordCount(12)">12 Words (128 bits)</button>
-                <button type="button" id="eob-btn-24" class="active" onclick="eob_setWordCount(24)">24 Words (256 bits)</button>
+                <button type="button" id="eob-btn-12" class="active" onclick="eob_setWordCount(12)">12 Words (128 bits)</button>
+                <button type="button" id="eob-btn-24" onclick="eob_setWordCount(24)">24 Words (256 bits)</button>
             </div>
+
+            <!-- EASY BUTTON: one-click CSPRNG seed generation (the default,
+                 frictionless path). Reuses the prominent .eob-forge-btn style.
+                 Wired to eob_generateSecureSeed(), which draws 16/32 bytes from
+                 crypto.getRandomValues() (per the selected word count) and hands
+                 them straight to the same finalize path the manual Forge uses. -->
+            <div class="eob-easy-area" style="margin: 0.75rem 0 1.25rem;">
+                <button type="button" class="eob-forge-btn" id="eob-easy-btn" style="width: 100%;" onclick="eob_generateSecureSeed()">
+                    Generate Secure Seed
+                </button>
+                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0.6rem 0 0; text-align: center;">
+                    Instantly creates a seed from your device's secure random number generator (CSPRNG). Recommended for most users.
+                </p>
+            </div>
+
+            <!-- ADVANCED: legacy manual physical-entropy collection. Hidden by
+                 default behind a <details> accordion so standard users see the
+                 one-click path above; advanced users can expand to mix physical
+                 dice, digital dice, mouse movement, and webcam noise. The forge
+                 button + entropy meter live inside here too, since they only
+                 matter for the manual flow. -->
+            <details class="eob-advanced" style="margin-bottom: 1rem;">
+                <summary style="cursor: pointer; font-weight: 600; padding: 0.6rem 0; color: var(--skb-text-muted); font-size: 0.85rem;">Advanced: Provide Manual Physical Entropy</summary>
 
             <!-- Entropy Meter -->
             <div class="eob-meter-wrap">
@@ -10039,6 +10114,8 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                     Collect enough entropy to enable the forge button.
                 </p>
             </div>
+            </details>
+            <!-- /ADVANCED accordion -->
 
             <!-- Forge Result (shown after forging in dashboard/forge context only) -->
             <div id="eob-forge-result" style="display: none;">
@@ -10117,16 +10194,38 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
 
                     <div class="skb-card" style="margin-bottom: 1rem;">
                         <label style="font-size: 0.85rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.75rem;">Transmission Settings</label>
+                        <!-- Density + Speed range sliders. IDs (xfr-chunk-size,
+                             xfr-fps) and value/min/max are UNCHANGED from the
+                             prior number inputs, so xfr_startTransmit reads them
+                             exactly as before — this is a purely visual upgrade.
+                             Speed is FPS (higher = faster, naturally), so no
+                             inversion math is needed here (unlike the PSBT
+                             Signer's ms-based slider). Readouts update live on
+                             both oninput (drag) and onchange (release). -->
                         <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-                            <div style="flex: 1; min-width: 120px;">
+                            <div style="flex: 1; min-width: 200px;">
                                 <label style="font-size: 0.75rem; color: var(--skb-text-dim); display: block; margin-bottom: 0.25rem;">Density (bytes/chunk)</label>
-                                <input type="number" id="xfr-chunk-size" value="500" min="50" max="800"
-                                       style="width: 100%; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="range" id="xfr-chunk-size" value="500" min="50" max="800" step="50"
+                                           oninput="xfr_updateDensityReadout(this.value)"
+                                           onchange="xfr_updateDensityReadout(this.value)"
+                                           aria-label="QR fragment size in bytes per chunk"
+                                           style="flex: 1; min-width: 80px;">
+                                    <span id="xfr-chunk-size-value"
+                                          style="font-family: var(--skb-mono); color: var(--skb-text); min-width: 5.5em; text-align: right;">500 bytes</span>
+                                </div>
                             </div>
-                            <div style="flex: 1; min-width: 120px;">
+                            <div style="flex: 1; min-width: 200px;">
                                 <label style="font-size: 0.75rem; color: var(--skb-text-dim); display: block; margin-bottom: 0.25rem;">Speed (FPS)</label>
-                                <input type="number" id="xfr-fps" value="7" min="1" max="10"
-                                       style="width: 100%; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="range" id="xfr-fps" value="7" min="1" max="10" step="1"
+                                           oninput="xfr_updateSpeedReadout(this.value)"
+                                           onchange="xfr_updateSpeedReadout(this.value)"
+                                           aria-label="QR animation speed in frames per second"
+                                           style="flex: 1; min-width: 80px;">
+                                    <span id="xfr-fps-value"
+                                          style="font-family: var(--skb-mono); color: var(--skb-text); min-width: 5.5em; text-align: right;">7 FPS</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -11030,7 +11129,7 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
             <div class="skb-card" style="margin-bottom: 1rem;">
                 <label style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; display: block;">Message to Sign</label>
                 <textarea id="auth-message" rows="4" placeholder="Enter the plaintext message to sign..."
-                          spellcheck="false" autocomplete="off"
+                          spellcheck="false" autocomplete="off" oninput="auth_saveState()"
                           style="width: 100%; box-sizing: border-box; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem; resize: vertical;"></textarea>
             </div>
 
@@ -11052,7 +11151,7 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
 
                 <div style="display: flex; gap: 0.5rem;">
                     <button type="button" class="skb-btn" style="flex: 1;" onclick="auth_copy()">Copy Signature</button>
-                    <button type="button" class="skb-btn" style="flex: 1;" onclick="auth_showQR()">Show QR</button>
+                    <button type="button" class="skb-btn" style="flex: 1;" onclick="auth_showQR()">Export Verification QR</button>
                 </div>
 
                 <div id="auth-qr-area" style="display: none; text-align: center; margin-top: 0.75rem;">
@@ -13289,6 +13388,11 @@ function onBackupProceedToVerify() {
     // Reset state
     document.getElementById('backup-challenge-status').style.display = 'none';
     document.getElementById('backup-continue-btn').disabled = true;
+    // Re-show "Show Words Again" on every fresh entry to the verify phase
+    // (it gets hidden once the quiz is passed — see onBackupChallengeInput
+    // and _backupVerifyScanResult).
+    var _showAgainReset = document.getElementById('backup-show-again-btn');
+    if (_showAgainReset) _showAgainReset.style.display = '';
 
     // Focus first input
     var first = document.getElementById('backup-challenge-0');
@@ -13316,15 +13420,21 @@ function onBackupChallengeInput() {
     }
 
     var status = document.getElementById('backup-challenge-status');
+    var _showAgainBtn = document.getElementById('backup-show-again-btn');
     if (allCorrect) {
         _backupVerified = true;
         document.getElementById('backup-continue-btn').disabled = false;
         status.style.display = 'block';
         status.style.color = 'var(--skb-secondary, #03dac6)';
         status.textContent = 'All words correct — backup verified.';
+        // Quiz passed — hide "Show Words Again" so a click can't loop the
+        // user back into the words view and restart the challenge.
+        if (_showAgainBtn) _showAgainBtn.style.display = 'none';
     } else {
         document.getElementById('backup-continue-btn').disabled = true;
         status.style.display = 'none';
+        // Still working — keep the review option available.
+        if (_showAgainBtn) _showAgainBtn.style.display = '';
     }
 }
 
@@ -13382,6 +13492,10 @@ function _backupVerifyScanResult(success, message) {
     if (success) {
         _backupVerified = true;
         document.getElementById('backup-continue-btn').disabled = false;
+        // Backup confirmed via SeedQR scan — hide "Show Words Again" too,
+        // matching the typed-quiz success path.
+        var _showAgainScan = document.getElementById('backup-show-again-btn');
+        if (_showAgainScan) _showAgainScan.style.display = 'none';
         status.style.color = 'var(--skb-secondary, #03dac6)';
         status.textContent = message;
         // Also fill the challenge inputs as correct
@@ -15602,6 +15716,14 @@ function _wipeAllVolatileSeedState() {
     try { _armOverrideMnemonic = null; } catch (_) {}
     try { _descCosignerXpubs = {}; } catch (_) {}
 
+    // --- Message Signer (THE WITNESS) per-session tool cache ---
+    // Drop the sessionStorage snapshot of the Sign section so a fresh
+    // seed never inherits the previous seed's message/path/signature.
+    try { if (typeof auth_clearState === 'function') auth_clearState(); } catch (_) {}
+    try { _authDerivedKey = null; } catch (_) {}
+    try { _authDerivedAddress = ''; } catch (_) {}
+    try { _authLastSignature = ''; } catch (_) {}
+
     // --- BIP-85 Lineage children (mnemonics derived from master seed) ---
     try {
         _bip85LastResult = { mnemonic: '', wif: '', xprv: '', hex: '', path: '', appName: '', wordCount: 0 };
@@ -16055,6 +16177,14 @@ function vaultLock() {
     if (muPw) muPw.value = '';
     // Reset the temp seed word grid to blank
     if (typeof vtmp_clearAll === 'function') vtmp_clearAll();
+
+    // Drop the Message Signer (THE WITNESS) per-session cache so a
+    // locked-then-reopened vault never resurfaces the prior seed's
+    // signed message / derivation path / signature.
+    if (typeof auth_clearState === 'function') auth_clearState();
+    try { _authDerivedKey = null; } catch (_) {}
+    try { _authDerivedAddress = ''; } catch (_) {}
+    try { _authLastSignature = ''; } catch (_) {}
 
     // Clear the DASHBOARD passphrase input + applied-state flags.
     // Without this block the UI silently desyncs from the derivation
@@ -17371,7 +17501,9 @@ function eob_clearAll() {
     document.getElementById('eob-result-hex').textContent = '';
     document.getElementById('eob-result-bin').textContent = '';
     document.getElementById('eob-result-words').innerHTML = '';
-    _targetEntropyBits = 256;
+    // Reset to the 12-word default and re-sync the toggle UI (eob_setWordCount
+    // sets both _targetEntropyBits and the button active-classes).
+    eob_setWordCount(12);
 
     // Restore the Forge button label and clear the in-flight "Forging..."
     // state. Without this, a successful forge leaves the button stuck on
@@ -20359,7 +20491,7 @@ function _psbtUpdateSignGate() {
         signBtn.style.cursor = 'not-allowed';
         banner.style.display = 'block';
         banner.innerHTML = 'SIGNING BLOCKED &mdash; change address hijack detected. ' +
-            'Tick <strong>Ignore Fingerprints (Force Sign)</strong> above to override at your own risk ' +
+            'Tick <strong>Force Sign by Pubkey Match</strong> above to override at your own risk ' +
             '(use only if you have manually verified every destination on your coordinator).';
     } else if (hijack && forceSign) {
         // Force-sign override of a hijack: do NOT silently allow.
@@ -21130,7 +21262,7 @@ function _psbtCheckFingerprints(tx) {
 //   * the active fingerprint matches a declared signer, OR
 //   * the PSBT contains a wildcard fingerprint (00000000), OR
 //   * the PSBT declares no fingerprints at all (nothing to match against), OR
-//   * the user has explicitly ticked "Ignore Fingerprints (Force Sign)".
+//   * the user has explicitly ticked "Force Sign by Pubkey Match".
 //
 // In every other case we show a small mismatch notice in place of the
 // audit and disable the Sign button. This keeps the user from being
@@ -21737,11 +21869,11 @@ async function psbtDoSign() {
                 hint = ' Multisig PSBT — none of the ' + maxEntriesPerInput +
                     ' cosigner fingerprints per input matched yours (' + myFingerprint + '). ' +
                     'Either this is a Diet PSBT with cosigner fingerprints stripped, or you are not ' +
-                    'a cosigner of this wallet. Try enabling "Ignore Fingerprints (Force Sign)" to ' +
+                    'a cosigner of this wallet. Try enabling "Force Sign by Pubkey Match" to ' +
                     'attempt pubkey-match against each quorum slot.';
             } else if (totalDerivEntries > 0 && matchedByFp === 0 && !forceSign) {
                 // -------- BRANCH 4: SINGLE-SIG FP MISMATCH --------
-                hint = ' Fingerprint mismatch — your seed\'s fingerprint (' + myFingerprint + ') didn\'t match any PSBT entry. Try enabling "Force Sign" or check your passphrase.';
+                hint = ' Fingerprint mismatch — your seed\'s fingerprint (' + myFingerprint + ') didn\'t match any PSBT entry. Try enabling "Force Sign by Pubkey Match" or check your passphrase.';
             } else if (signIdxCalls > 0) {
                 // -------- BRANCH 5: PUBKEY-SCRIPT MISMATCH --------
                 // signIdx ran but no sigs landed AND no pre-existing sigs.
@@ -21760,7 +21892,7 @@ async function psbtDoSign() {
                 // as a co-signer of this wallet."
                 hint = ` Transaction already has ${initialSigs} signature(s) from another co-signer, ` +
                     'but YOUR seed wasn\'t recognised on any input. Load the correct seed phrase ' +
-                    'for this wallet, double-check your passphrase, or enable "Ignore Fingerprints (Force Sign)" ' +
+                    'for this wallet, double-check your passphrase, or enable "Force Sign by Pubkey Match" ' +
                     'to attempt pubkey-match against each quorum slot.';
             } else {
                 // -------- BRANCH 7: NO DERIVATION DATA --------
@@ -24372,7 +24504,7 @@ async function xor_handleSplit() {
         warnBanner.innerHTML =
             'ALL ' + sharesCount + ' SHARES REQUIRED FOR RECOVERY<br>' +
             '<span style="font-size: 0.72rem; font-weight: 700; opacity: 0.9;">NO THRESHOLD RECOVERY &mdash; LOSING ANY ONE SHARE MEANS PERMANENT LOSS OF THE SEED</span><br>' +
-            '<span style="display: inline-block; margin-top: 0.35rem; font-size: 0.72rem; font-weight: 700; color: var(--skb-text); background: rgba(0,0,0,0.15); padding: 0.2rem 0.6rem; border: 1px dashed var(--skb-danger);">' +
+            '<span style="display: inline-block; margin-top: 0.35rem; font-size: 0.72rem; font-weight: 700; color: var(--skb-text); background: rgba(0,0,0,0.15); padding: 0.2rem 0.6rem; border: 1px dashed var(--skb-danger); text-transform: uppercase;">' +
             'TARGET MASTER FINGERPRINT: ' + targetBip32FP + '</span>';
         container.appendChild(warnBanner);
 
@@ -24388,7 +24520,7 @@ async function xor_handleSplit() {
                 '<div style="flex: 1; min-width: 0;">' +
                     '<div style="font-size: 0.95rem; font-weight: 900; color: var(--skb-danger); letter-spacing: 0.04em;">Share ' + (i + 1) + ' of ' + sharesCount + '</div>' +
                     '<div style="font-size: 0.7rem; font-weight: 800; color: var(--skb-danger); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.2rem;">ALL ' + sharesCount + ' REQUIRED FOR RECOVERY &mdash; NO THRESHOLD RECOVERY</div>' +
-                    '<div style="font-family: var(--skb-mono); font-size: 0.7rem; font-weight: 800; color: var(--skb-text); margin-top: 0.35rem;">Target Master Fingerprint: <span style="color: var(--skb-secondary, var(--skb-primary)); letter-spacing: 0.12em;">' + targetBip32FP + '</span></div>' +
+                    '<div style="font-family: var(--skb-mono); font-size: 0.7rem; font-weight: 800; color: var(--skb-text); margin-top: 0.35rem;">Target Master Fingerprint: <span style="color: var(--skb-secondary, var(--skb-primary)); letter-spacing: 0.12em; text-transform: uppercase;">' + targetBip32FP + '</span></div>' +
                 '</div>' +
                 '<div style="display: flex; gap: 0.5rem; flex-shrink: 0;">' +
                     '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="xor_copyShare(' + i + ')">Copy</button>' +
@@ -24482,7 +24614,7 @@ function xor_printShare(index) {
         '  .warn .sub { font-size: 11px; font-weight: 700; margin-top: 6px; color: #600; }' +
         '  .hdr { margin-top: 18px; font-size: 22px; font-weight: 900; color: #000; }' +
         '  .sub-hdr { font-size: 12px; font-weight: 700; color: #c00; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }' +
-        '  .fpbox { margin-top: 14px; padding: 10px 14px; border: 2px dashed #c00; display: inline-block; font-family: "Courier New", Courier, monospace; font-size: 13px; font-weight: 800; letter-spacing: 0.12em; }' +
+        '  .fpbox { margin-top: 14px; padding: 10px 14px; border: 2px dashed #c00; display: inline-block; font-family: "Courier New", Courier, monospace; font-size: 13px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }' +
         '  .fpbox strong { color: #c00; }' +
         '  .grid { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 24px; font-family: "Courier New", Courier, monospace; }' +
         '  .w { border-bottom: 1px solid #bbb; padding: 6px 2px; font-size: 15px; }' +
@@ -29335,6 +29467,22 @@ function xfr_sendChunk(chunk, index, total) {
         'Loop ' + (xfr_state.currentLoop + 1) + '  |  Chunk ' + (index + 1) + ' / ' + total;
 }
 
+// Live readout updaters for the Density + Speed range sliders. Wired to
+// both oninput (during drag) and onchange (on release) so the numeric
+// label always tracks the thumb. These are display-only — the actual
+// slider values are read by xfr_startTransmit at Start time (by the
+// unchanged xfr-chunk-size / xfr-fps element IDs), so dragging mid-idle
+// just updates the label; the next transmission picks up the new values.
+function xfr_updateDensityReadout(v) {
+    var el = document.getElementById('xfr-chunk-size-value');
+    if (el) el.textContent = v + ' bytes';
+}
+
+function xfr_updateSpeedReadout(v) {
+    var el = document.getElementById('xfr-fps-value');
+    if (el) el.textContent = v + ' FPS';
+}
+
 // Start the animated loop
 async function xfr_startTransmit() {
     if (!xfr_state.originalFile) {
@@ -31672,8 +31820,16 @@ function wrec_init() {
     var nEl     = document.getElementById('wrec-ms-n');      if (nEl)       nEl.value       = data.msN || '3';
     var scrEl   = document.getElementById('wrec-script');    if (scrEl)     scrEl.value     = data.script || 'Native Segwit (P2WPKH)';
     var ppReqEl = document.getElementById('wrec-pp-required'); if (ppReqEl) ppReqEl.checked = !!data.ppRequired;
-    var descEl  = document.getElementById('wrec-descriptor'); if (descEl)   descEl.value    = data.descriptor || '';
-    var faEl    = document.getElementById('wrec-first-address'); if (faEl) faEl.value      = data.firstAddress || '';
+    // Descriptor + First Receiving Address always start EMPTY on tool
+    // entry — same fresh-start treatment as title / purpose / notes — so
+    // the print preview never inherits stale or example data. The Wallet
+    // Record tool is a pure recorder: the source of truth is the Output
+    // Descriptor tool, and the user re-pulls the live descriptor each
+    // session via "Pull Active Descriptor". The HTML placeholder hints
+    // (faint example text) stay visible because we only blank the value,
+    // never the placeholder attribute.
+    var descEl  = document.getElementById('wrec-descriptor'); if (descEl)   descEl.value    = '';
+    var faEl    = document.getElementById('wrec-first-address'); if (faEl) faEl.value      = '';
     // Additional Notes: same fresh-start treatment as title/purpose —
     // never paint saved text into the textarea on entry, so the
     // placeholder "e.g. Hardware: Coldcard Mk4 #A12 stored…" is always
@@ -31705,7 +31861,11 @@ function wrec_init() {
         notesEl._wrecCounterBound = true;
     }
 
-    _wrecRenderKeySetInputs(data.seedSets);
+    // Render the seed-set rows with EMPTY labels on entry (preserve the
+    // row count implied by the saved structure, but blank the content) so
+    // no stale "Set N (fingerprint …)" text reaches the print preview.
+    // The rows repopulate when the user pulls the active descriptor.
+    _wrecRenderKeySetInputs((data.seedSets || ['']).map(function() { return ''; }));
     _wrecRenderPassphraseRows(data.passphrases);
     wrec_onTypeChange(/*skipBuild*/true);
     wrec_onPassphraseRequiredChange(/*skipBuild*/true);
@@ -31844,8 +32004,8 @@ function _wrecParseDescriptor(s) {
      4. Script type parsed from the descriptor's outer wrapper.
      5. Per-key seed-set hints derived from each [fingerprint/path]
         block in the descriptor — printed as
-        "Set N (fp: ABC12345)" so the heir can verify each key by its
-        BIP-32 root fingerprint at restore time.
+        "Set N (fingerprint ABC12345)" so the heir can verify each key
+        by its BIP-32 root fingerprint at restore time.
      6. The active BIP-39 passphrase pulled from
         SafeKeepOS.getPassphrase() — tied to "Set 1" by default,
         which the user can re-target via the dropdown if a multisig
@@ -31868,7 +32028,11 @@ function wrec_pullDescriptor() {
     } catch (_) { d = ''; }
 
     if (!d) {
-        showStatus('No active descriptor found. Generate one in the Output Descriptor tool first.', 'error');
+        // UX guardrail: the Wallet Record tool is a recorder — it can only
+        // pull a descriptor the user has already built in the Output
+        // Descriptor tool. If that global state is empty, stop here with a
+        // clear, unmissable instruction rather than silently doing nothing.
+        alert('Please generate an Output Descriptor in the Output Descriptor tool first.');
         return;
     }
 
@@ -31915,14 +32079,16 @@ function wrec_pullDescriptor() {
     if (scrEl) scrEl.value = meta.script;
 
     // ── 4. Build seed-set hints from the descriptor's fingerprints ──
-    // Format: "Set N (fp: ABC12345)" — gives the heir a verifiable
-    // anchor without leaking words. If no fingerprints were extracted
-    // (malformed descriptor), fall back to a blank N-row default so
-    // the user can fill it in manually.
+    // Format: "Set N (fingerprint ABC12345)" — gives the heir a verifiable
+    // anchor without leaking words. The word "fingerprint" is spelled out
+    // (rather than the "fp:" abbreviation) so it reads unambiguously on a
+    // physical paper backup. Fingerprint is uppercased to match the global
+    // capitalization standard. If no fingerprints were extracted (malformed
+    // descriptor), fall back to a blank N-row default for manual entry.
     var seedSets;
     if (meta.fingerprints.length) {
         seedSets = meta.fingerprints.map(function(fp, i) {
-            return 'Set ' + (i + 1) + ' (fp: ' + fp.toUpperCase() + ')';
+            return 'Set ' + (i + 1) + ' (fingerprint ' + fp.toUpperCase() + ')';
         });
     } else {
         seedSets = [];
@@ -34787,15 +34953,92 @@ var AUTH_PATH_PRESETS = {
     '44': "m/44'/0'/0'/0/0"
 };
 
+// ── Tool-state persistence ──────────────────────────────────────────────
+// Per-session cache so the user doesn't lose work when navigating away to
+// another tool (e.g. the Courier) and back. Stored in sessionStorage so it
+// dies with the tab/kiosk session and is also explicitly wiped whenever the
+// master seed is cleared (see _wipeAllVolatileSeedState + vaultLock). Note:
+// everything cached here — message text, derivation path, derived address,
+// BIP-322 signature — is non-secret attestation data meant to be shared; the
+// private key is never persisted.
+var AUTH_STATE_KEY = 'skb_msg_state';
+
+/** Snapshot the Sign-section inputs/outputs into sessionStorage. */
+function auth_saveState() {
+    try {
+        var presetEl = document.getElementById('auth-path-preset');
+        var customEl = document.getElementById('auth-path-custom');
+        var msgEl = document.getElementById('auth-message');
+        var resultEl = document.getElementById('auth-result');
+        var resAddrEl = document.getElementById('auth-result-address');
+        var resMsgEl = document.getElementById('auth-result-message');
+
+        var resultShown = !!(resultEl && resultEl.style.display !== 'none');
+        var state = {
+            preset: presetEl ? presetEl.value : '84',
+            path: customEl ? customEl.value : '',
+            message: msgEl ? msgEl.value : '',
+            resultShown: resultShown,
+            resultAddress: (resultShown && resAddrEl) ? resAddrEl.textContent : '',
+            resultMessage: (resultShown && resMsgEl) ? resMsgEl.textContent : '',
+            resultSig: resultShown ? (_authLastSignature || '') : ''
+        };
+        sessionStorage.setItem(AUTH_STATE_KEY, JSON.stringify(state));
+    } catch (e) { /* sessionStorage unavailable — degrade silently */ }
+}
+
+/** Read the cached Sign-section state, or null if none/invalid. */
+function auth_loadState() {
+    try {
+        var raw = sessionStorage.getItem(AUTH_STATE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (e) { return null; }
+}
+
+/** Drop the cached state. Called from the global seed-wipe / lock hooks. */
+function auth_clearState() {
+    try { sessionStorage.removeItem(AUTH_STATE_KEY); } catch (e) { /* noop */ }
+}
+
 function auth_init() {
+    var cached = auth_loadState();
+
     var preset = document.getElementById('auth-path-preset');
-    if (preset) preset.value = '84';
     var custom = document.getElementById('auth-path-custom');
-    if (custom) custom.value = AUTH_PATH_PRESETS['84'];
-    document.getElementById('auth-message').value = '';
-    document.getElementById('auth-result').style.display = 'none';
-    document.getElementById('auth-qr-area').style.display = 'none';
-    _authLastSignature = '';
+
+    if (cached) {
+        // ── Rehydrate Sign section from the per-session cache ──
+        if (preset) preset.value = cached.preset || '84';
+        if (custom) {
+            custom.value = (typeof cached.path === 'string' && cached.path.length)
+                ? cached.path
+                : (AUTH_PATH_PRESETS[cached.preset] || AUTH_PATH_PRESETS['84']);
+        }
+        document.getElementById('auth-message').value = cached.message || '';
+
+        // Restore the result card only if a signature was previously generated.
+        if (cached.resultShown && cached.resultSig) {
+            document.getElementById('auth-result-address').textContent = cached.resultAddress || '';
+            document.getElementById('auth-result-message').textContent = cached.resultMessage || '';
+            document.getElementById('auth-result-sig').textContent = cached.resultSig || '';
+            _authLastSignature = cached.resultSig || '';
+            document.getElementById('auth-result').style.display = 'block';
+        } else {
+            document.getElementById('auth-result').style.display = 'none';
+            _authLastSignature = '';
+        }
+        // The QR is regenerated on demand from _authLastSignature; never restore it open.
+        document.getElementById('auth-qr-area').style.display = 'none';
+    } else {
+        // ── No cache: clean default entry state ──
+        if (preset) preset.value = '84';
+        if (custom) custom.value = AUTH_PATH_PRESETS['84'];
+        document.getElementById('auth-message').value = '';
+        document.getElementById('auth-result').style.display = 'none';
+        document.getElementById('auth-qr-area').style.display = 'none';
+        _authLastSignature = '';
+    }
 
     // Clear verify section so it's always blank on entry
     var va = document.getElementById('auth-verify-address');
@@ -34810,8 +35053,14 @@ function auth_init() {
     // Populate seed status from vault session
     auth_updateSeedStatus();
 
-    // Derive key from vault seed at default path
+    // Derive key from vault seed at the (possibly restored) path. This
+    // recomputes #auth-derived-address from the seed + path rather than
+    // trusting a cached string, so the live address always matches the
+    // currently loaded seed.
     auth_deriveKey();
+
+    // Persist the (re)initialised state so a fresh entry seeds the cache too.
+    auth_saveState();
 }
 
 /** Update the seed status banner from the vault session */
@@ -34870,6 +35119,7 @@ function auth_onPresetChange() {
         customInput.focus();
     }
     auth_deriveKey();
+    auth_saveState();
 }
 
 var _authDeriveTimer = null;
@@ -34901,6 +35151,10 @@ function auth_onPathChange() {
         _authDeriveTimer = null;
         auth_deriveKey();
     }, 300);
+
+    // Persist the path immediately (independent of the debounced derivation)
+    // so navigating away mid-edit doesn't lose the typed path.
+    auth_saveState();
 }
 
 /** Validate a BIP-32 path string without throwing.
@@ -35302,6 +35556,8 @@ async function auth_sign() {
         document.getElementById('auth-result-sig').textContent = signature;
         document.getElementById('auth-qr-area').style.display = 'none';
         resultEl.style.display = 'block';
+        // Cache the generated signature + inputs so it survives navigation.
+        auth_saveState();
         showStatus('Message signed successfully.', 'success');
 
     } catch (e) {
@@ -35395,8 +35651,28 @@ function auth_showQR() {
         return;
     }
     if (!_authLastSignature) return;
+
+    // ── Air-gap verification bridge ──────────────────────────────────────
+    // Instead of encoding the raw base64 signature, bundle the full
+    // attestation (address + message + signature) into a deep-link to the
+    // online verifier so a phone can scan once and check the signature
+    // without any manual copy/paste across the air gap.
+    //
+    // SECURITY: address, message, and signature are all NON-SECRET data —
+    // they are exactly what a verifier needs and what BIP-322 is designed
+    // to publish. The private key / seed are never part of this payload.
+    //
+    // encodeURIComponent escapes the base64 alphabet's reserved query
+    // characters ('+' -> %2B, '/' -> %2F, '=' -> %3D) plus any punctuation
+    // in the message, so the values survive the query string intact.
+    var address = (document.getElementById('auth-result-address').textContent || '').trim();
+    var message = document.getElementById('auth-result-message').textContent || '';
+    var verifyUrl = 'https://verify.safekeepbitcoin.com/?address=' + encodeURIComponent(address) +
+                    '&msg=' + encodeURIComponent(message) +
+                    '&sig=' + encodeURIComponent(_authLastSignature);
+
     var canvas = document.getElementById('auth-qr-canvas');
-    window.QRCode.toCanvas(canvas, _authLastSignature, {
+    window.QRCode.toCanvas(canvas, verifyUrl, {
         width: 280,
         margin: 2,
         color: { dark: '#000000', light: '#ffffff' }
@@ -35649,7 +35925,7 @@ async function auth_verify() {
 
 var eob_context = 'forge';  // 'onboarding' | 'forge'
 
-var _targetEntropyBits = 256;
+var _targetEntropyBits = 128;  // default 12 words (128 bits); eob_setWordCount toggles to 256
 var _activeEntropyPool = '';
 var _eobEstimatedBits = 0;
 var _eobDiceCount = 0;
@@ -35694,7 +35970,11 @@ function eob_init(context) {
     _eobWiggleLastY = -1;
     _eobCamStream = null;
     _eobForgedMnemonic = '';
-    _targetEntropyBits = 256; // default 24 words
+    // Default to 12 words (128 bits). eob_setWordCount syncs both the
+    // _targetEntropyBits state AND the toggle button active-classes, so a
+    // re-entry after the user previously picked 24 words snaps back to the
+    // 12-word default in both the state and the UI.
+    eob_setWordCount(12);
 
     // Context-aware header and back button
     var titleEl = document.getElementById('eob-title');
@@ -35724,9 +36004,12 @@ function eob_init(context) {
         document.body.classList.remove('onboarding-forge');
     }
 
-    // Reset UI elements
-    document.getElementById('eob-btn-12').classList.remove('active');
-    document.getElementById('eob-btn-24').classList.add('active');
+    // Reset UI elements. Highlight the 12-word button to match the
+    // 128-bit engine default (eob_setWordCount(12) was called above).
+    // Previously this hardcoded btn-24 active, which visually contradicted
+    // the engine's 12-word default — the bug this corrects.
+    document.getElementById('eob-btn-12').classList.add('active');
+    document.getElementById('eob-btn-24').classList.remove('active');
     document.getElementById('eob-dice-display').textContent = '';
     document.getElementById('eob-dice-input').value = '';
     document.getElementById('eob-dice-count').textContent = '0';
@@ -35946,6 +36229,131 @@ async function eob_captureVideoNoise() {
     }
 }
 
+// ----------------------------------------------------------------------
+// Shared seed finalization.
+//
+// Takes a ready 16- or 32-byte entropy buffer, derives the BIP-39
+// mnemonic, and routes it per eob_context — IDENTICALLY for both the
+// manual Forge (eob_forgeSeed: SHA-256(pool) XOR CSPRNG) and the
+// one-click easy button (eob_generateSecureSeed: pure CSPRNG draw).
+// Centralising this guarantees the easy button "outputs the seed phrase
+// exactly as the manual tools do".
+//
+//   onboarding → SafeKeepOS.restoreMasterSeed (or _ephemeralCommitSeed)
+//                → transitionToBackup. Returns false ONLY if the disk-write
+//                verification fails (caller re-enables its trigger button).
+//   forge      → render Hex / Binary / word-grid into #eob-forge-result.
+//
+// Throws on hard errors (missing BIP-39 lib, mnemonic failure) for the
+// caller's catch. Zeroizes `entropy` once it has been consumed.
+// ----------------------------------------------------------------------
+async function _eobFinalizeEntropy(entropy) {
+    var bip39 = window.BtcMath?.bip39;
+    var wordlist = window.BtcMath?.wordlist;
+    if (!bip39 || !wordlist) throw new Error('BIP-39 library not available');
+
+    // Pass the raw entropy bytes DIRECTLY into BIP-39 mnemonic generation —
+    // same call the manual tools use. NOTE: do not zeroize `entropy` yet;
+    // the dashboard branch needs the raw bytes to render Hex/Binary.
+    var mnemonic = bip39.entropyToMnemonic(entropy, wordlist);
+    if (!mnemonic) throw new Error('Mnemonic generation failed.');
+
+    // Stop camera + detach listeners. No-op for the easy path (it never
+    // started them), but safe and keeps the manual path's behaviour.
+    eob_cleanup();
+
+    // ---- CONTEXT-AWARE ROUTING ----
+    if (eob_context === 'onboarding') {
+        // ONBOARDING: save as master seed → backup screen → dashboard.
+        // Onboarding doesn't display raw bytes, so zero `entropy` now.
+        entropy.fill(0);
+        // CIRCUIT BREAKER: ephemeral boot MUST NEVER call SafeKeepOS.
+        var result = _isEphemeralBoot()
+            ? await _ephemeralCommitSeed(mnemonic)
+            : await window.SafeKeepOS.restoreMasterSeed(mnemonic);
+        _showDiskVerification(result.diskVerified);
+
+        // HARD STOP: if disk write failed, do NOT proceed.
+        if (result.diskVerified === false) {
+            if (_SKB_DEV_MODE) {
+                console.warn('DEV MODE: Simulated successful vault write (Forge onboarding)');
+            } else {
+                showStatus('Seed generated but disk write FAILED. Do not proceed until resolved.', 'error');
+                return false;
+            }
+        }
+
+        _seedIsNew = true;
+        _pendingBackupSeed = result;
+        // Clear the full-screen wizard class — backup screen and dashboard
+        // render with normal layout.
+        document.body.classList.remove('onboarding-forge');
+        transitionToBackup(result);
+        showStatus('Master seed created — write down your backup words.', 'success');
+        return true;
+    }
+
+    // FORGE (dashboard): display results in-place.
+    _eobForgedMnemonic = mnemonic;
+
+    // Raw hex — compute BEFORE zeroizing entropy.
+    var hexStr = Array.from(entropy).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+    document.getElementById('eob-result-hex').textContent = hexStr;
+
+    // Raw binary — compute BEFORE zeroizing entropy.
+    var binStr = Array.from(entropy).map(function(b) { return b.toString(2).padStart(8, '0'); }).join(' ');
+    document.getElementById('eob-result-bin').textContent = binStr;
+
+    // Entropy rendered to the DOM — safe to zero the buffer now (cuts the
+    // in-RAM lifetime of the raw bytes; the user-visible strings persist).
+    entropy.fill(0);
+
+    // BIP-39 word grid (uses .bip85-out-grid layout).
+    var words = mnemonic.split(' ');
+    var gridHtml = '';
+    for (var w = 0; w < words.length; w++) {
+        gridHtml += '<div class="bip85-out-cell">' +
+            '<span class="bip85-out-num">' + (w + 1) + '.</span>' +
+            '<div class="bip85-out-word">' + words[w] + '</div>' +
+            '</div>';
+    }
+    document.getElementById('eob-result-words').innerHTML = gridHtml;
+    document.getElementById('eob-forge-result').style.display = 'block';
+    showStatus('Seed generated! Review your results below.', 'success');
+    return true;
+}
+
+// --- Easy Button: one-click CSPRNG seed generation ---
+//
+// The frictionless default path. Draws the exact entropy length straight
+// from the browser's CSPRNG (16 bytes / 128 bits for 12 words, 32 bytes /
+// 256 bits for 24 words, keyed off the word-count toggle via
+// _targetEntropyBits) and hands it DIRECTLY to the shared finalize path.
+// No manual pool, dice, mouse, or webcam required.
+async function eob_generateSecureSeed() {
+    if (_eobForging) return;        // share the in-flight guard with eob_forgeSeed
+    _eobForging = true;
+    var btn = document.getElementById('eob-easy-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+    try {
+        // 16 bytes for 128-bit (12-word), 32 bytes for 256-bit (24-word).
+        var entropyLength = _targetEntropyBits === 128 ? 16 : 32;
+        var entropy = new Uint8Array(entropyLength);
+        window.crypto.getRandomValues(entropy);
+
+        await _eobFinalizeEntropy(entropy);
+        // Whether finalize committed (onboarding → navigated to backup) or
+        // displayed the result (dashboard) or reported a disk failure, the
+        // easy button stays available so the user can regenerate / retry.
+        if (btn) { btn.disabled = false; btn.textContent = 'Generate Secure Seed'; }
+    } catch (err) {
+        showStatus('Secure seed generation failed: ' + err.message, 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Generate Secure Seed'; }
+    } finally {
+        _eobForging = false;
+    }
+}
+
 // --- Finalization: Forge Seed (context-aware) ---
 var _eobForging = false;
 
@@ -35996,88 +36404,24 @@ async function eob_forgeSeed() {
         userEntropy.fill(0);
         sysEntropy.fill(0);
 
-        // Convert to BIP-39 mnemonic — NOTE: do NOT zeroize `entropy` yet.
-        // The dashboard branch below needs the raw bytes to render the Hex
-        // and Binary displays. We zero it out AFTER rendering, at the end
-        // of each branch. Zeroing it here is the bug that caused Hex/Binary
-        // to display as all-zeros while the words came out correct.
-        var mnemonic = bip39.entropyToMnemonic(entropy, wordlist);
-        if (!mnemonic) throw new Error('Mnemonic generation failed.');
-
-        // Stop camera and detach listeners
-        eob_cleanup();
-
-        // ---- CONTEXT-AWARE ROUTING ----
-        if (eob_context === 'onboarding') {
-            // ONBOARDING: save as master seed → backup screen → dashboard
-            // Onboarding doesn't display raw bytes, so zero `entropy` now.
-            entropy.fill(0);
-            // CIRCUIT BREAKER: ephemeral boot MUST NEVER call SafeKeepOS.
-            var result = _isEphemeralBoot()
-                ? await _ephemeralCommitSeed(mnemonic)
-                : await window.SafeKeepOS.restoreMasterSeed(mnemonic);
-            _showDiskVerification(result.diskVerified);
-
-            // HARD STOP: If disk write failed, do NOT proceed.
-            if (result.diskVerified === false) {
-                if (_SKB_DEV_MODE) {
-                    console.warn('DEV MODE: Simulated successful vault write (Forge onboarding)');
-                } else {
-                    showStatus('Seed generated but disk write FAILED. Do not proceed until resolved.', 'error');
-                    if (forgeBtn) { forgeBtn.disabled = false; forgeBtn.textContent = 'Generate Master Seed'; }
-                    return;
-                }
-            }
-
-            _seedIsNew = true;
-            _pendingBackupSeed = result;
-            // Clear the full-screen wizard class — backup screen and
-            // dashboard should render with normal layout.
-            document.body.classList.remove('onboarding-forge');
-            transitionToBackup(result);
-            showStatus('Master seed forged from your entropy pool!', 'success');
-
-        } else {
-            // FORGE (dashboard): display results in-place
-            _eobForgedMnemonic = mnemonic;
-
-            // Raw hex — compute BEFORE zeroizing entropy
-            var hexStr = Array.from(entropy).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
-            document.getElementById('eob-result-hex').textContent = hexStr;
-
-            // Raw binary — compute BEFORE zeroizing entropy
-            var binStr = Array.from(entropy).map(function(b) { return b.toString(2).padStart(8, '0'); }).join(' ');
-            document.getElementById('eob-result-bin').textContent = binStr;
-
-            // Entropy has now been rendered to the DOM — safe to zero the
-            // buffer. (We still zero it to cut down the in-RAM lifetime of
-            // the raw bytes; the user-visible strings persist by design.)
-            entropy.fill(0);
-
-            // BIP-39 word grid (uses .bip85-out-grid layout)
-            var words = mnemonic.split(' ');
-            var gridHtml = '';
-            for (var w = 0; w < words.length; w++) {
-                gridHtml += '<div class="bip85-out-cell">' +
-                    '<span class="bip85-out-num">' + (w + 1) + '.</span>' +
-                    '<div class="bip85-out-word">' + words[w] + '</div>' +
-                    '</div>';
-            }
-            document.getElementById('eob-result-words').innerHTML = gridHtml;
-
-            // Show result card
-            document.getElementById('eob-forge-result').style.display = 'block';
-
-            // Restore the button label so it doesn't stay stuck on "Forging..."
-            // The pool was consumed, so updateMeter will re-disable it; but the
-            // *label* must come back so a subsequent reset → re-collect → re-forge
-            // shows the right verb the moment entropy crosses the threshold.
-            if (forgeBtn) {
-                forgeBtn.textContent = 'Generate Seed';
-                forgeBtn.disabled = true;  // pool consumed; updateMeter governs from here
-            }
-
-            showStatus('Seed generated! Review your results below.', 'success');
+        // Hand the XOR-mixed entropy to the shared finalize path — the
+        // SAME one the one-click easy button (eob_generateSecureSeed) uses,
+        // so both produce the seed phrase + routing identically. See
+        // _eobFinalizeEntropy for the mnemonic derivation, context routing,
+        // and result display.
+        var committed = await _eobFinalizeEntropy(entropy);
+        if (!committed) {
+            // Onboarding disk-write verification failed — re-enable the
+            // forge button so the user can retry.
+            if (forgeBtn) { forgeBtn.disabled = false; forgeBtn.textContent = 'Generate Master Seed'; }
+            return;
+        }
+        // Dashboard success: the pool was consumed, so re-disable the forge
+        // button (eob_updateMeter governs it from here) but restore its label
+        // so a later reset → re-collect shows the right verb.
+        if (eob_context === 'forge' && forgeBtn) {
+            forgeBtn.textContent = 'Generate Seed';
+            forgeBtn.disabled = true;
         }
 
     } catch (err) {
