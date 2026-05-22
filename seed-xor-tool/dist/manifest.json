@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-05-22T15:16:26.087Z",
+  "generatedAt": "2026-05-22T15:32:55.617Z",
   "algorithm": "sha256",
   "files": {
     "boot.html": {
-      "sha256": "df7cd5639dc02a6c3ff5c5dbabe15a6b61f65a02006d29637ed7a713b8d5bf17",
-      "bytes": 2819841
+      "sha256": "f978044156b9598f71be875d343c2154a7aa162544bae0066eb7a31036c0a4bd",
+      "bytes": 3008171
     }
   }
 }
