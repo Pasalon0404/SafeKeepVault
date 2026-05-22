@@ -6449,7 +6449,7 @@
                     <p style="font-size: 0.85rem; color: var(--skb-text-muted); margin: 0;">
                         Unlock the audit by either (a) entering the correct <strong>BIP-39 passphrase</strong> below,
                         (b) switching to a <strong>Temporary Seed</strong>, or (c) ticking
-                        <strong>Ignore Fingerprints (Force Sign)</strong> if you are certain the loaded seed is correct.
+                        <strong>Force Sign by Pubkey Match</strong> if you are certain the loaded seed is correct.
                     </p>
                 </div>
                 <div class="psbt-card" id="psbt-audit-card">
@@ -6538,8 +6538,8 @@
                     <div style="margin-top: 1rem;">
                         <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; font-size: 0.82rem; color: var(--skb-text-muted);">
                             <input type="checkbox" id="psbt-force-sign" onchange="_psbtUpdateAuditGate()" style="margin-top: 0.15rem; accent-color: var(--skb-primary);">
-                            <span><strong style="color: var(--skb-text);">Ignore Fingerprints (Force Sign)</strong><br>
-                            Try ALL derivation paths in the PSBT regardless of fingerprint match. Use this if you are certain the seed is correct but fingerprints don't align.</span>
+                            <span><strong style="color: var(--skb-text);">Force Sign by Pubkey Match</strong><br>
+                            Signs by deriving each path and matching pubkeys instead of fingerprints. Use this only when your seed is correct but the fingerprints genuinely don't match &mdash; e.g. a stripped-fingerprint multisig PSBT. Not needed for ordinary wildcard PSBTs (BlueWallet) &mdash; those sign automatically.</span>
                         </label>
                     </div>
                 </div>
@@ -19127,7 +19127,7 @@ function _psbtUpdateSignGate() {
         signBtn.style.cursor = 'not-allowed';
         banner.style.display = 'block';
         banner.innerHTML = 'SIGNING BLOCKED &mdash; change address hijack detected. ' +
-            'Tick <strong>Ignore Fingerprints (Force Sign)</strong> above to override at your own risk ' +
+            'Tick <strong>Force Sign by Pubkey Match</strong> above to override at your own risk ' +
             '(use only if you have manually verified every destination on your coordinator).';
     } else if (hijack && forceSign) {
         // Force-sign override of a hijack: do NOT silently allow.
@@ -19898,7 +19898,7 @@ function _psbtCheckFingerprints(tx) {
 //   * the active fingerprint matches a declared signer, OR
 //   * the PSBT contains a wildcard fingerprint (00000000), OR
 //   * the PSBT declares no fingerprints at all (nothing to match against), OR
-//   * the user has explicitly ticked "Ignore Fingerprints (Force Sign)".
+//   * the user has explicitly ticked "Force Sign by Pubkey Match".
 //
 // In every other case we show a small mismatch notice in place of the
 // audit and disable the Sign button. This keeps the user from being
@@ -20505,11 +20505,11 @@ async function psbtDoSign() {
                 hint = ' Multisig PSBT — none of the ' + maxEntriesPerInput +
                     ' cosigner fingerprints per input matched yours (' + myFingerprint + '). ' +
                     'Either this is a Diet PSBT with cosigner fingerprints stripped, or you are not ' +
-                    'a cosigner of this wallet. Try enabling "Ignore Fingerprints (Force Sign)" to ' +
+                    'a cosigner of this wallet. Try enabling "Force Sign by Pubkey Match" to ' +
                     'attempt pubkey-match against each quorum slot.';
             } else if (totalDerivEntries > 0 && matchedByFp === 0 && !forceSign) {
                 // -------- BRANCH 4: SINGLE-SIG FP MISMATCH --------
-                hint = ' Fingerprint mismatch — your seed\'s fingerprint (' + myFingerprint + ') didn\'t match any PSBT entry. Try enabling "Force Sign" or check your passphrase.';
+                hint = ' Fingerprint mismatch — your seed\'s fingerprint (' + myFingerprint + ') didn\'t match any PSBT entry. Try enabling "Force Sign by Pubkey Match" or check your passphrase.';
             } else if (signIdxCalls > 0) {
                 // -------- BRANCH 5: PUBKEY-SCRIPT MISMATCH --------
                 // signIdx ran but no sigs landed AND no pre-existing sigs.
@@ -20528,7 +20528,7 @@ async function psbtDoSign() {
                 // as a co-signer of this wallet."
                 hint = ` Transaction already has ${initialSigs} signature(s) from another co-signer, ` +
                     'but YOUR seed wasn\'t recognised on any input. Load the correct seed phrase ' +
-                    'for this wallet, double-check your passphrase, or enable "Ignore Fingerprints (Force Sign)" ' +
+                    'for this wallet, double-check your passphrase, or enable "Force Sign by Pubkey Match" ' +
                     'to attempt pubkey-match against each quorum slot.';
             } else {
                 // -------- BRANCH 7: NO DERIVATION DATA --------
