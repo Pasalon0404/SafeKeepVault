@@ -31,8 +31,10 @@ import {
   sumInputPrivateKeys, computeInputHash,
   computeEcdhSharedSecret, deriveOutputScript,
   deriveSilentPaymentOutputs, computeReceiverSharedSecret,
+  tweakTaprootPrivKey,
   _internal,
 } from './shared/silentpayments.js';
+import * as btc from '@scure/btc-signer';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -196,6 +198,25 @@ console.log('\n[5] BIP-341 even-Y parity for Taproot inputs');
   ok('single odd-Y taproot key: A shares x with plain but flips parity',
      bytesToHex(asTaproot.sumPubkey).slice(2) === bytesToHex(asPlain.sumPubkey).slice(2)
      && asTaproot.sumPubkey[0] !== asPlain.sumPubkey[0]);
+}
+
+// ---------------------------------------------------------------------------
+// 6. BIP-341 / BIP-86 taproot tweak cross-checked against @scure/btc-signer
+// ---------------------------------------------------------------------------
+console.log('\n[6] taproot key tweak vs @scure/btc-signer p2tr');
+{
+  for (const seedByte of [0x07, 0x42, 0x99]) {
+    const internal = hexToBytes(seedByte.toString(16).padStart(2, '0').repeat(32));
+    const internalXonly = G.multiply(modN(bytesToNumberBE(internal))).toBytes(true).slice(1);
+    // Our tweaked output key:
+    const dOut = tweakTaprootPrivKey(internal);
+    const ourOutKey = G.multiply(modN(bytesToNumberBE(dOut))).toBytes(true).slice(1);
+    // btc-signer's BIP-86 output (independent implementation):
+    const ref = btc.p2tr(internalXonly).script.slice(2); // drop 0x51 0x20
+    ok(`internal 0x${seedByte.toString(16)}: tweaked output x-only matches p2tr`,
+       bytesToHex(ourOutKey) === bytesToHex(ref),
+       `${bytesToHex(ourOutKey)} vs ${bytesToHex(ref)}`);
+  }
 }
 
 // ===========================================================================

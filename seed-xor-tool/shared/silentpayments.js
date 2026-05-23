@@ -403,6 +403,38 @@ export function deriveSilentPaymentOutputs(params) {
 }
 
 // ===========================================================================
+// BIP-341 / BIP-86 taproot key-path tweak
+// ===========================================================================
+/**
+ * Turn a derived *internal* private key into the on-chain Taproot key-path
+ * spending key. For BIP-86 single-key wallets the merkle root is empty, so
+ * the output key is  P_out = lift_even(P_int) + t*G  with
+ * t = tagged_hash("TapTweak", x(P_int_even) [|| merkleRoot]).
+ *
+ * The returned scalar corresponds to the x-only key embedded in the input's
+ * 5120... scriptPubKey, which is exactly what BIP-352 needs to feed into the
+ * input-key sum (with isTaproot:true, so the final even-Y negation is applied
+ * by sumInputPrivateKeys).
+ *
+ * @param {Uint8Array|string} internalPrivKey  32-byte BIP-86 internal key
+ * @param {Uint8Array|string|null} merkleRoot  optional 32-byte tap merkle root
+ * @returns {Uint8Array} 32-byte tweaked output private key
+ */
+export function tweakTaprootPrivKey(internalPrivKey, merkleRoot = null) {
+  let d = modN(bytesToNumberBE(asBytes(internalPrivKey)));
+  if (d === 0n) throw new Error('internal taproot key is zero');
+  // Lift internal key to even Y (BIP-341).
+  if (!G.multiply(d).hasEvenY()) d = N - d;
+  const xonly = G.multiply(d).toBytes(true).slice(1); // 32-byte x of even-Y P_int
+  const tweakMsg = merkleRoot ? concatBytes(xonly, asBytes(merkleRoot)) : xonly;
+  const t = modN(bytesToNumberBE(taggedHash('TapTweak', tweakMsg)));
+  if (t === 0n || t >= N) throw new Error('invalid taproot tweak');
+  const dOut = modN(d + t);
+  if (dOut === 0n) throw new Error('tweaked taproot key is zero');
+  return numberToBytesBE(dOut, 32);
+}
+
+// ===========================================================================
 // Receiver-side helpers (used for round-trip self-tests; full scanning is a
 // later phase). Mirrors the sender ECDH from the recipient's perspective.
 // ===========================================================================
@@ -437,6 +469,7 @@ if (typeof window !== 'undefined') {
     sumInputPrivateKeys, serializeOutpoint, smallestOutpoint,
     computeInputHash, computeEcdhSharedSecret, deriveOutputScript,
     deriveSilentPaymentOutputs, computeReceiverSharedSecret,
+    tweakTaprootPrivKey,
     _internal,
   };
 }

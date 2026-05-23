@@ -63,6 +63,10 @@ window.CBOR = CBOR;
 // qr-parser.js must load BEFORE boot.js so the inline scripts in
 // boot.html see window.QRParser at the moment they wire up scanners.
 import './shared/qr-parser.js';
+// silentpayments.js exposes window.SilentPayments for the PSBT Signer's
+// BIP-352 / BIP-375 output verification gate. Must load before boot.js so
+// the inline audit code sees it.
+import './shared/silentpayments.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
 

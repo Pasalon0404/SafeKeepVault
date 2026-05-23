@@ -3651,10 +3651,55 @@
       font-weight: 800;
       line-height: 1.45;
       word-break: break-all;
+      overflow-wrap: anywhere;
       color: var(--skb-text);
       padding: 0.75rem 0.85rem;
       background: var(--skb-bg-input);
       border: 1px solid var(--skb-border);
+      user-select: all;
+    }
+    /* Silent Payment (BIP-352) destination styling */
+    .psbt-verify-card--sp {
+      border-color: var(--skb-accent, #6c8cff);
+    }
+    .psbt-sp-badge {
+      display: inline-block;
+      margin-left: 0.4rem;
+      padding: 0.12rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.66rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #0b1020;
+      background: var(--skb-accent, #6c8cff);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .psbt-sp-resolved {
+      margin-top: 0.5rem;
+      padding: 0.5rem 0.6rem;
+      border-left: 3px solid var(--skb-accent, #6c8cff);
+      background: var(--skb-bg-input);
+      border-radius: var(--skb-radius-sm, 6px);
+    }
+    .psbt-sp-resolved__label {
+      display: block;
+      font-size: 0.66rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--skb-text-muted);
+      margin-bottom: 0.2rem;
+    }
+    .psbt-sp-resolved__addr {
+      display: block;
+      font-family: var(--skb-mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      word-break: break-all;
+      overflow-wrap: anywhere;
+      color: var(--skb-text);
       user-select: all;
     }
     .psbt-verify-card__row {
@@ -18235,6 +18280,189 @@ function _psbtVerifyMultisigChange(btcLib, masterKey, myFingerprint, msInfo, out
 }
 
 /**
+// ============================================================
+//  SILENT PAYMENTS (BIP-352 / BIP-375) OUTPUT VERIFICATION GATE
+//
+//  Phase 1 (single-signer): the signer controls every input, so it can
+//  independently re-derive each Silent Payment output and prove the on-chain
+//  Taproot scriptPubKey is the one the recipient's sp1... address actually
+//  produces. A malicious coordinator that swaps the real Taproot output for
+//  an attacker's address (while showing the victim's sp1... in the SP info
+//  field) is caught here and signing is hard-blocked.
+//
+//  SECURITY POSTURE: fail-closed. If an SP output is present but we cannot
+//  fully re-derive it with this seed (e.g. a foreign input we don't hold the
+//  key for — a multi-party / future-phase case), we BLOCK rather than warn.
+// ============================================================
+
+// Resolve the silent-payment HRP for the active network ('sp' mainnet,
+// 'tsp' testnet/signet, 'sprt' regtest — best-effort from the bech32 prefix).
+function _spHrpForNetwork() {
+    const b = (PSBT_NETWORK && PSBT_NETWORK.bech32) || 'bc';
+    if (b === 'bc') return 'sp';
+    if (b === 'bcrt') return 'sprt';
+    return 'tsp'; // tb (testnet/signet)
+}
+
+/**
+ * Derive the input private key this seed contributes to the BIP-352 input
+ * sum, for a single PSBT input. Returns { privKey:Uint8Array(32), isTaproot }
+ * ONLY when the reconstructed scriptPubKey byte-matches the input's actual
+ * scriptPubKey — i.e. when we have *proven* control of the input. Any other
+ * outcome (foreign input, missing/relative derivation, unsupported script
+ * type, script-path taproot) returns null so the caller fails closed.
+ *
+ * Supported (Phase 2): P2WPKH (0014), P2TR key-path (5120), P2PKH (76a914).
+ */
+function _psbtDeriveInputKeyForSP(btcLib, masterKey, myFingerprint, inp) {
+    try {
+        const SP = window.SilentPayments;
+        if (!SP || !masterKey) return null;
+        const script = (inp.witnessUtxo && inp.witnessUtxo.script)
+            ? inp.witnessUtxo.script
+            : null;
+        if (!script) return null; // no witnessUtxo → can't confirm script (fail closed)
+
+        let type = null;
+        if (script.length === 22 && script[0] === 0x00 && script[1] === 0x14) type = 'wpkh';
+        else if (script.length === 34 && script[0] === 0x51 && script[1] === 0x20) type = 'tr';
+        else if (script.length === 25 && script[0] === 0x76 && script[1] === 0xa9 &&
+                 script[2] === 0x14 && script[23] === 0x88 && script[24] === 0xac) type = 'pkh';
+        else return null; // unsupported input type for Phase 2
+
+        const entries = (type === 'tr')
+            ? _psbtGetDerivEntries(inp.tapBip32Derivation)
+            : _psbtGetDerivEntries(inp.bip32Derivation);
+        if (!entries.length) return null;
+
+        // Prefer entries whose fingerprint matches ours (or the wildcard);
+        // fall back to all entries (the script byte-match below is the final
+        // arbiter, so a wrong path simply fails to match and we move on).
+        const mine = entries.filter(e => {
+            const fp = _psbtNormalizeFp(e.fingerprint);
+            return fp === myFingerprint || fp === PSBT_WILDCARD_FP;
+        });
+        const tryList = mine.length ? mine : entries;
+
+        for (const e of tryList) {
+            if (!e.path || !e.path.length) continue;
+            let child;
+            try {
+                child = masterKey;
+                for (const component of e.path) child = child.deriveChild(component);
+            } catch (_) { continue; }
+            if (!child || !child.privateKey) continue;
+
+            if (type === 'tr') {
+                // Internal key → BIP-86 tweaked output key.
+                const dOut = SP.tweakTaprootPrivKey(child.privateKey);
+                const I = SP._internal;
+                const xonly = I.Point.BASE
+                    .multiply(I.modN(I.bytesToNumberBE(dOut)))
+                    .toBytes(true).slice(1);
+                const sc = new Uint8Array(34);
+                sc[0] = 0x51; sc[1] = 0x20; sc.set(xonly, 2);
+                if (_psbtScriptsEqual(sc, script)) return { privKey: dOut, isTaproot: true };
+            } else {
+                const expScript = _psbtExpectedScript(btcLib, child.publicKey, type);
+                if (expScript && _psbtScriptsEqual(expScript, script)) {
+                    return { privKey: child.privateKey, isTaproot: false };
+                }
+            }
+        }
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Verify every Silent Payment output in the PSBT against this seed.
+ *
+ * @returns one of:
+ *   { ok:false, fatal:true, reason }                     // block; can't verify
+ *   { ok:true, results: Map<outIdx, {verified, spAddress, taprootAddr,
+ *       expectedHex, actualHex, reason}> }
+ */
+function _psbtVerifySilentPayments(tx, masterKey, myFingerprint, spMap) {
+    const SP = window.SilentPayments;
+    if (!SP) return { ok: false, fatal: true, reason: 'Silent Payments module not loaded — cannot verify SP output.' };
+    if (!masterKey) return { ok: false, fatal: true, reason: 'No seed is loaded, so the Silent Payment output cannot be independently verified.' };
+    const btcLib = window.BtcMath && window.BtcMath.btcSigner;
+    const I = SP._internal;
+
+    // 1. Sum every input private key + collect outpoints.
+    const inputs = [];
+    const outpoints = [];
+    if (!tx.inputs || tx.inputs.length === 0) {
+        return { ok: false, fatal: true, reason: 'PSBT has no inputs to derive the Silent Payment shared secret from.' };
+    }
+    for (let i = 0; i < tx.inputs.length; i++) {
+        const inp = tx.inputs[i];
+        if (!inp.txid || inp.index === undefined || inp.index === null) {
+            return { ok: false, fatal: true, reason: 'Input ' + (i + 1) + ' is missing its outpoint — cannot compute the Silent Payment input hash.' };
+        }
+        outpoints.push({ txid: I.bytesToHex(inp.txid), vout: inp.index >>> 0 });
+        const k = _psbtDeriveInputKeyForSP(btcLib, masterKey, myFingerprint, inp);
+        if (!k) {
+            return {
+                ok: false, fatal: true,
+                reason: 'Could not re-derive the key for input ' + (i + 1) + ' from this seed. ' +
+                        'Every input must belong to this wallet to verify a Silent Payment output ' +
+                        '(single-signer only in this version). Signing is blocked.'
+            };
+        }
+        inputs.push(k);
+    }
+
+    let aSum, inputHashScalar;
+    try {
+        aSum = SP.sumInputPrivateKeys(inputs);
+        inputHashScalar = SP.computeInputHash(outpoints, aSum.sumPubkey).inputHashScalar;
+    } catch (e) {
+        return { ok: false, fatal: true, reason: 'Silent Payment shared-secret setup failed: ' + e.message };
+    }
+
+    // 2. Derive each SP output and byte-compare against the actual scriptPubKey.
+    const results = new Map();
+    const kByScan = new Map();
+    const sortedIdx = Array.from(spMap.keys()).sort((a, b) => a - b);
+    for (const outIdx of sortedIdx) {
+        const value = spMap.get(outIdx);
+        let info, expected, spAddress = '', taprootAddr = '';
+        try {
+            info = SP.parseSpOutInfo(value); // validates points; throws if malformed
+            spAddress = SP.encodeSilentPaymentAddress(info.scanKey, info.spendKey, _spHrpForNetwork());
+        } catch (e) {
+            results.set(outIdx, { verified: false, spAddress: '(malformed SP info)', taprootAddr: '', expectedHex: '', actualHex: '', reason: 'Malformed PSBT_OUT_SP_V0_INFO: ' + e.message });
+            continue;
+        }
+        const scanHex = I.bytesToHex(info.scanKey);
+        const k = kByScan.get(scanHex) || 0;
+        kByScan.set(scanHex, k + 1);
+        try {
+            const ss = SP.computeEcdhSharedSecret(inputHashScalar, aSum.aScalar, info.scanKey);
+            expected = SP.deriveOutputScript(ss, info.spendKey, k).scriptPubKey;
+        } catch (e) {
+            results.set(outIdx, { verified: false, spAddress, taprootAddr: '', expectedHex: '', actualHex: '', reason: 'SP derivation error: ' + e.message });
+            continue;
+        }
+        const actual = (tx.outputs[outIdx] && tx.outputs[outIdx].script) || null;
+        const verified = _psbtScriptsEqual(expected, actual);
+        try {
+            if (actual) taprootAddr = btcLib.Address(PSBT_NETWORK).encode(btcLib.OutScript.decode(actual));
+        } catch (_) {}
+        results.set(outIdx, {
+            verified, spAddress, taprootAddr,
+            expectedHex: I.bytesToHex(expected),
+            actualHex: actual ? I.bytesToHex(actual) : '(none)',
+            reason: verified ? null : 'Derived Taproot output does NOT match the scriptPubKey in this PSBT.'
+        });
+    }
+    return { ok: true, results };
+}
+
+/**
  * Audit all PSBT outputs.
  *
  * @param {Transaction} tx — parsed PSBT
@@ -18270,6 +18498,25 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
     // `unverifiedChangeDetected` to drive the soft-warning banner.
     const metadataMissingOutputs = [];
 
+    // ---- Silent Payments (BIP-352 / BIP-375) pre-pass ----
+    // Detect SP outputs straight off the wire and, if present, run the
+    // single-signer verification once. Per-output results are consumed in the
+    // output loop below; a fatal result blocks signing for every SP output.
+    let _spMap = null;
+    let _spVerify = null;
+    try {
+        if (typeof _psbtLoadedBytes !== 'undefined' && _psbtLoadedBytes) {
+            _spMap = _psbtSnapshotSpOutputs(_psbtLoadedBytes);
+            if (_spMap && _spMap.size > 0) {
+                _spVerify = _psbtVerifySilentPayments(tx, masterKey, myFingerprint, _spMap);
+            }
+        }
+    } catch (e) {
+        // Treat any unexpected failure as fatal (fail-closed) so SP outputs
+        // can never slip through unverified.
+        _spVerify = { ok: false, fatal: true, reason: 'Silent Payment verification crashed: ' + e.message };
+    }
+
     // Sum inputs
     if (tx.inputs) {
         tx.inputs.forEach(inp => {
@@ -18283,6 +18530,47 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
         tx.outputs.forEach((out, i) => {
             const amt = BigInt(out.amount);
             totalOut += amt;
+
+            // ---- Silent Payment output: handle here and skip normal logic ----
+            if (_spMap && _spMap.has(i)) {
+                if (!_spVerify || _spVerify.ok === false) {
+                    // Fail-closed: present but unverifiable → hard block.
+                    hijackOutputs.push(i);
+                    results.push({
+                        index: i, amount: amt,
+                        address: '(Silent Payment — unverified)',
+                        category: 'hijack', silentPayment: true,
+                        derivPath: null,
+                        auditDetail: 'SILENT PAYMENT BLOCKED: ' + (_spVerify ? _spVerify.reason : 'verification unavailable.')
+                    });
+                    return;
+                }
+                const r = _spVerify.results.get(i);
+                if (r && r.verified) {
+                    results.push({
+                        index: i, amount: amt,
+                        address: r.spAddress,
+                        category: 'destination', silentPayment: true,
+                        taprootAddr: r.taprootAddr,
+                        derivPath: null,
+                        auditDetail: 'Silent Payment output cryptographically verified: the on-chain Taproot script ' +
+                                     (r.taprootAddr ? '(' + r.taprootAddr + ') ' : '') +
+                                     'matches the address derived from this PSBT’s sp1 keys and your input keys.'
+                    });
+                } else {
+                    hijackOutputs.push(i);
+                    results.push({
+                        index: i, amount: amt,
+                        address: (r && r.spAddress) || '(Silent Payment)',
+                        category: 'hijack', silentPayment: true,
+                        taprootAddr: r ? r.taprootAddr : '',
+                        derivPath: null,
+                        auditDetail: 'SILENT PAYMENT HIJACK: ' + ((r && r.reason) || 'derived output does not match the PSBT scriptPubKey.') +
+                                     (r && r.taprootAddr ? ' Actual on-chain destination: ' + r.taprootAddr + '.' : '')
+                    });
+                }
+                return;
+            }
 
             // Decode address. Normalize the decoded string with .trim()
             // so that any leading/trailing whitespace introduced by the
@@ -18794,16 +19082,26 @@ function _psbtBuildReviewHtml(tx, auditResult) {
 
     // ---- HIJACK ALERT (top of review, impossible to miss) ----
     if (hijacked.length > 0) {
+        const _spHijack = hijacked.some(o => o.silentPayment);
+        const _alertTitle = _spHijack
+            ? 'CRITICAL ALERT: SILENT PAYMENT OUTPUT FAILED VERIFICATION'
+            : 'CRITICAL ALERT: CHANGE ADDRESS HIJACK DETECTED';
+        const _alertBody = _spHijack
+            ? 'A Silent Payment output could not be independently confirmed against your input keys, ' +
+              'or the derived Taproot script does <strong>not match</strong> the scriptPubKey in this PSBT. ' +
+              'The on-chain destination may differ from the sp1 address shown. ' +
+              '<strong>Signing has been blocked to protect your funds.</strong>'
+            : 'One or more outputs claim to be change (returning funds to your wallet) but the ' +
+              'derived public key produces a <strong>different locking script</strong> than what ' +
+              'the PSBT contains. This means the output address does NOT belong to your seed. ' +
+              '<strong>Signing this transaction may send your funds to an attacker.</strong>';
         outputsHtml += `
             <div class="psbt-hijack-alert" style="background: rgba(220,38,38,0.12); border: 2px solid var(--skb-danger); border-radius: var(--skb-radius); padding: 1rem; margin-bottom: 1rem;">
                 <div style="font-size: 1.2rem; font-weight: 700; color: var(--skb-danger); margin-bottom: 0.5rem;">
-                    CRITICAL ALERT: CHANGE ADDRESS HIJACK DETECTED
+                    ${_alertTitle}
                 </div>
                 <div style="font-size: 0.88rem; color: var(--skb-text); line-height: 1.5;">
-                    One or more outputs claim to be change (returning funds to your wallet) but the
-                    derived public key produces a <strong>different locking script</strong> than what
-                    the PSBT contains. This means the output address does NOT belong to your seed.
-                    <strong>Signing this transaction may send your funds to an attacker.</strong>
+                    ${_alertBody}
                 </div>
             </div>`;
     }
@@ -18828,10 +19126,21 @@ function _psbtBuildReviewHtml(tx, auditResult) {
             const checkId = 'psbt-verify-check-' + idx;
             const qrId = 'psbt-verify-qr-' + idx;
 
+            // Silent Payment destinations: show a badge so the user understands
+            // why the address is a long sp1... string, plus the cryptographically
+            // verified on-chain Taproot address it resolves to.
+            const spBadge = out.silentPayment
+                ? `<span class="psbt-sp-badge" title="BIP-352 Silent Payment">&#9670; SILENT PAYMENT &#10003; verified</span>`
+                : '';
+            const spResolved = (out.silentPayment && out.taprootAddr)
+                ? `<div class="psbt-sp-resolved"><span class="psbt-sp-resolved__label">Resolves to on-chain address (cryptographically verified)</span><span class="psbt-sp-resolved__addr">${_psbtEscape(out.taprootAddr)}</span></div>`
+                : '';
+
             outputsHtml += `
-                <div class="psbt-verify-card" id="${cardId}" data-dest-index="${idx}">
-                    <span class="psbt-verify-card__label">SENDING TO &mdash; Destination ${idx + 1} of ${destinations.length}</span>
+                <div class="psbt-verify-card${out.silentPayment ? ' psbt-verify-card--sp' : ''}" id="${cardId}" data-dest-index="${idx}">
+                    <span class="psbt-verify-card__label">SENDING TO &mdash; Destination ${idx + 1} of ${destinations.length} ${spBadge}</span>
                     <div class="psbt-verify-card__addr">${addr}</div>
+                    ${spResolved}
                     <div class="psbt-verify-card__row">
                         <div class="psbt-verify-card__col">
                             <div class="psbt-verify-card__stat">
@@ -19536,6 +19845,120 @@ function _psbtCountTxInputs(unsignedTxBytes) {
     if (!unsignedTxBytes || unsignedTxBytes.length < 5) return null;
     const r = _psbtReadVarint(unsignedTxBytes, 4);
     return r ? r.value : null;
+}
+
+// Count outputs in the PSBT_GLOBAL_UNSIGNED_TX blob. The unsigned tx is a
+// legacy (non-witness) serialization, so we can walk it linearly:
+//   version(4) | vin_count(varint) | [txid(32) vout(4) scriptSig(varint+bytes) seq(4)]... | vout_count(varint) | ...
+// We only need vout_count, which sits right after the input list.
+function _psbtCountTxOutputs(unsignedTxBytes) {
+    if (!unsignedTxBytes || unsignedTxBytes.length < 5) return null;
+    let off = 4; // skip version
+    const vin = _psbtReadVarint(unsignedTxBytes, off);
+    if (!vin) return null;
+    off = vin.next;
+    for (let i = 0; i < vin.value; i++) {
+        off += 36; // txid(32) + vout(4)
+        const sl = _psbtReadVarint(unsignedTxBytes, off);
+        if (!sl) return null;
+        off = sl.next + sl.value; // scriptSig length + bytes
+        off += 4; // sequence
+        if (off > unsignedTxBytes.length) return null;
+    }
+    const vout = _psbtReadVarint(unsignedTxBytes, off);
+    return vout ? vout.value : null;
+}
+
+// =============================================================================
+// PSBT_OUT_SP_V0_INFO (BIP-375, key type 0x09) BYTE-LEVEL EXTRACTION
+// =============================================================================
+// @scure/btc-signer 2.0.1 does not understand the Silent Payment output field,
+// so we read it straight off the wire — exactly mirroring the byte-walk in
+// _psbtSnapshotNonWitnessUtxos. Returns a Map<outputIndex, Uint8Array(value)>
+// where each value is the 67-byte  version(1)||B_scan(33)||B_spend(33)  blob,
+// or null on any parse failure / if no SP outputs are present.
+// =============================================================================
+function _psbtSnapshotSpOutputs(srcBytes) {
+    try {
+        if (!srcBytes || srcBytes.length < 5) return null;
+        if (srcBytes[0] !== 0x70 || srcBytes[1] !== 0x73 ||
+            srcBytes[2] !== 0x62 || srcBytes[3] !== 0x74 ||
+            srcBytes[4] !== 0xff) return null;
+
+        let off = 5;
+        let inputCount = null;
+        let unsignedTx = null;
+
+        // Walk global section until 0x00 terminator; capture the unsigned tx.
+        while (off < srcBytes.length) {
+            const klr = _psbtReadVarint(srcBytes, off);
+            if (!klr) return null;
+            off = klr.next;
+            if (klr.value === 0) break; // global terminator
+            const keyLen = klr.value;
+            const keyStart = off;
+            const keyType = srcBytes[keyStart];
+            off += keyLen;
+            const vlr = _psbtReadVarint(srcBytes, off);
+            if (!vlr) return null;
+            off = vlr.next;
+            const valStart = off;
+            const valEnd = valStart + vlr.value;
+            if (valEnd > srcBytes.length) return null;
+            if (keyType === 0x00 && keyLen === 1 && unsignedTx === null) {
+                unsignedTx = srcBytes.slice(valStart, valEnd);
+                inputCount = _psbtCountTxInputs(unsignedTx);
+            }
+            off = valEnd;
+        }
+        if (unsignedTx === null || inputCount === null || inputCount < 0) return null;
+        const outputCount = _psbtCountTxOutputs(unsignedTx);
+        if (outputCount === null || outputCount < 0) return null;
+
+        // Skip every input map (each terminated by 0x00).
+        for (let i = 0; i < inputCount; i++) {
+            while (off < srcBytes.length) {
+                const klr = _psbtReadVarint(srcBytes, off);
+                if (!klr) return null;
+                off = klr.next;
+                if (klr.value === 0) break; // input terminator
+                const keyLen = klr.value;
+                off += keyLen;
+                const vlr = _psbtReadVarint(srcBytes, off);
+                if (!vlr) return null;
+                off = vlr.next + vlr.value;
+                if (off > srcBytes.length) return null;
+            }
+        }
+
+        // Walk each output map, collecting key type 0x09 (PSBT_OUT_SP_V0_INFO).
+        const result = new Map();
+        for (let o = 0; o < outputCount; o++) {
+            while (off < srcBytes.length) {
+                const klr = _psbtReadVarint(srcBytes, off);
+                if (!klr) return null;
+                off = klr.next;
+                if (klr.value === 0) break; // output terminator
+                const keyLen = klr.value;
+                const keyStart = off;
+                const keyType = srcBytes[keyStart];
+                off += keyLen;
+                const vlr = _psbtReadVarint(srcBytes, off);
+                if (!vlr) return null;
+                off = vlr.next;
+                const valStart = off;
+                const valEnd = valStart + vlr.value;
+                if (valEnd > srcBytes.length) return null;
+                if (keyType === 0x09 && keyLen === 1) {
+                    result.set(o, srcBytes.slice(valStart, valEnd));
+                }
+                off = valEnd;
+            }
+        }
+        return result.size > 0 ? result : null;
+    } catch (e) {
+        return null;
+    }
 }
 
 // Snapshot raw nonWitnessUtxo blobs from a source PSBT, indexed by input.
