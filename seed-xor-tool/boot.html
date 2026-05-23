@@ -17573,7 +17573,13 @@ function _psbtDetectV2(bytes) {
 // Returns a fresh v0 PSBT Uint8Array, or null on any parse failure (caller
 // then surfaces a clear error and refuses the PSBT — never signs blind).
 // =============================================================================
-function downgradePSBTv2(srcBytes) {
+function downgradePSBTv2(srcBytes, spCtx) {
+    // spCtx (optional) = { masterKey, myFingerprint, btcLib } — required only if
+    // the PSBT contains an UNRESOLVED Silent Payment output (0x09 present, no
+    // 0x04 script). In that case the shim derives the Taproot script from this
+    // seed's input keys (BIP-352) and compiles it into the unsigned tx. The
+    // derivation IS the security gate: it throws on missing/foreign input keys.
+    //
     // Throws a descriptive Error on any failure so the caller can surface the
     // exact reason (e.g. a missing required field) instead of a generic message.
     if (!srcBytes || srcBytes.length < 5) throw new Error('empty or too-short PSBT');
@@ -17583,6 +17589,39 @@ function downgradePSBTv2(srcBytes) {
 
     const u32le = (n) => new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]);
     const readU32LE = (b) => (b.length >= 4) ? ((b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0) : null;
+    const u32leAt = (b, o) => ((b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0);
+
+    // Parse a PSBT_IN_WITNESS_UTXO (0x01) value -> scriptPubKey bytes.
+    //   value = amount(8 LE) || scriptLen(varint) || script
+    const parseWitnessUtxoScript = (val) => {
+        if (!val || val.length < 9) return null;
+        const sl = _psbtReadVarint(val, 8);
+        if (!sl) return null;
+        if (sl.next + sl.value > val.length) return null;
+        return val.slice(sl.next, sl.next + sl.value);
+    };
+    // Parse a BIP32_DERIVATION (0x06) value -> { fingerprint:Uint8Array(4), path:[u32...] }
+    const parseBip32Der = (val) => {
+        if (!val || val.length < 4 || (val.length - 4) % 4 !== 0) return null;
+        const fingerprint = val.slice(0, 4);
+        const path = [];
+        for (let o = 4; o + 4 <= val.length; o += 4) path.push(u32leAt(val, o));
+        return { fingerprint, path };
+    };
+    // Parse a TAP_BIP32_DERIVATION (0x16) value -> { fingerprint, path }
+    //   value = hashCount(compactSize) || hashes(32*N) || fingerprint(4) || path(u32*)
+    const parseTapBip32Der = (val) => {
+        if (!val) return null;
+        const hc = _psbtReadVarint(val, 0);
+        if (!hc) return null;
+        let o = hc.next + hc.value * 32;
+        if (o + 4 > val.length) return null;
+        const fingerprint = val.slice(o, o + 4);
+        o += 4;
+        const path = [];
+        for (; o + 4 <= val.length; o += 4) path.push(u32leAt(val, o));
+        return { fingerprint, path };
+    };
 
     let off = 5;
 
@@ -17635,6 +17674,8 @@ function downgradePSBTv2(srcBytes) {
     for (let i = 0; i < inputCount; i++) {
         const keep = [];
         let prevTxid = null, vout = null, sequence = 0xffffffff;
+        // Synthetic input object (btc-signer shape) for SP key derivation.
+        const synth = { witnessUtxo: null, bip32Derivation: [], tapBip32Derivation: [] };
         while (off < srcBytes.length) {
             const klr = _psbtReadVarint(srcBytes, off);
             if (!klr) throw new Error('truncated input ' + i + ' key varint');
@@ -17657,24 +17698,26 @@ function downgradePSBTv2(srcBytes) {
                 case 0x10: { const s = readU32LE(val); sequence = (s === null ? 0xffffffff : s); break; }
                 case 0x11: { const t = readU32LE(val); if (t !== null) maxTimeLock = (maxTimeLock === null ? t : Math.max(maxTimeLock, t)); break; }
                 case 0x12: { const h = readU32LE(val); if (h !== null) maxHeightLock = (maxHeightLock === null ? h : Math.max(maxHeightLock, h)); break; }
+                case 0x01: { const sc = parseWitnessUtxoScript(val); if (sc) synth.witnessUtxo = { script: sc }; keep.push({ key: keyBytes, value: val }); break; }
+                case 0x06: { const d = parseBip32Der(val); if (d) synth.bip32Derivation.push([keyBytes.slice(1), d]); keep.push({ key: keyBytes, value: val }); break; }
+                case 0x16: { const d = parseTapBip32Der(val); if (d) synth.tapBip32Derivation.push([keyBytes.slice(1), d]); keep.push({ key: keyBytes, value: val }); break; }
                 default: keep.push({ key: keyBytes, value: val });
             }
         }
         if (!prevTxid || prevTxid.length !== 32) throw new Error('input ' + i + ' missing/invalid PSBT_IN_PREVIOUS_TXID (0x0e)');
         if (vout === null) throw new Error('input ' + i + ' missing PSBT_IN_OUTPUT_INDEX (0x0f)');
-        inputMaps.push({ keep, prevTxid, vout, sequence });
+        inputMaps.push({ keep, prevTxid, vout, sequence, synth });
     }
 
     // ---- Parse output maps ----
-    // Required: AMOUNT (0x03), SCRIPT (0x04). NOTE: a Silent Payment output may
-    // legitimately omit 0x04 (the on-chain Taproot script is not known until the
-    // signer derives it). We surface that as a specific, actionable error rather
-    // than a silent failure — handling it requires computing+inserting the script
-    // (a separate phase), not just a downgrade.
+    // Required: AMOUNT (0x03). SCRIPT (0x04) is required for a normal output, but
+    // an UNRESOLVED Silent Payment output (PSBT_OUT_SP_V0_INFO 0x09 present)
+    // legitimately omits it — the signer must derive the Taproot script. We keep
+    // the 0x09 value so the derive-and-fill pass below can resolve it.
     const outputMaps = [];
     for (let o = 0; o < outputCount; o++) {
         const keep = [];
-        let amount = null, script = null, hasSpInfo = false;
+        let amount = null, script = null, spInfo = null;
         while (off < srcBytes.length) {
             const klr = _psbtReadVarint(srcBytes, off);
             if (!klr) throw new Error('truncated output ' + o + ' key varint');
@@ -17693,17 +17736,62 @@ function downgradePSBTv2(srcBytes) {
             off += vlr.value;
             switch (keyType) {
                 case 0x03: amount = val; break;       // 8-byte LE — copy as-is
-                case 0x04: script = val; break;
-                case 0x09: hasSpInfo = true; keep.push({ key: keyBytes, value: val }); break; // SP info — preserve
+                case 0x04: script = val; break;       // stripped from v0 map (lives in the tx)
+                case 0x09: spInfo = val; keep.push({ key: keyBytes, value: val }); break; // SP info — preserve
                 default: keep.push({ key: keyBytes, value: val }); // PRESERVES other unknowns
             }
         }
         if (!amount || amount.length !== 8) throw new Error('output ' + o + ' missing/invalid PSBT_OUT_AMOUNT (0x03)');
-        if (script === null) {
-            throw new Error('output ' + o + ' has no PSBT_OUT_SCRIPT (0x04)' +
-                (hasSpInfo ? ' — this is an unresolved Silent Payment output; the signer must derive and insert its Taproot script (separate phase), which the v0 downgrade alone cannot do' : ''));
+        if (script === null && !spInfo) throw new Error('output ' + o + ' has no PSBT_OUT_SCRIPT (0x04)');
+        outputMaps.push({ keep, amount, script, spInfo });
+    }
+
+    // ---- DERIVE-AND-FILL: resolve unresolved Silent Payment outputs ----
+    // For any output that carries PSBT_OUT_SP_V0_INFO (0x09) but no scriptPubKey,
+    // derive the final Taproot output (BIP-352) from THIS seed's input keys and
+    // compile it into the unsigned tx. The derivation is the security gate: it
+    // throws if we cannot prove control of every input. (Note: 0x04 is a v2-only
+    // field — adding it to a v0 output map makes btc-signer reject the PSBT, so
+    // the resolved script lives only in the unsigned tx. The downstream audit
+    // re-derives and confirms it, and renders the sp1 badge from the 0x09 field.)
+    const needsFill = outputMaps.some(om => om.script === null && om.spInfo);
+    const hasAnySp = outputMaps.some(om => !!om.spInfo);
+    if (hasAnySp) {
+        const SP = (typeof window !== 'undefined') ? window.SilentPayments : null;
+        if (needsFill) {
+            if (!SP) throw new Error('Silent Payments module not loaded — cannot derive the Silent Payment output');
+            if (!spCtx || !spCtx.masterKey) throw new Error('this PSBT contains an unresolved Silent Payment output, but no seed is loaded to derive it');
+            const I = SP._internal;
+            // Sum every input private key (proves control) + collect outpoints.
+            const sumInputs = [];
+            const outpoints = [];
+            for (let i = 0; i < inputMaps.length; i++) {
+                const im = inputMaps[i];
+                // prevTxid is INTERNAL byte order; the SP module wants display hex.
+                outpoints.push({ txid: I.bytesToHex(im.prevTxid.slice().reverse()), vout: im.vout });
+                const k = _psbtDeriveInputKeyForSP(spCtx.btcLib, spCtx.masterKey, spCtx.myFingerprint, im.synth);
+                if (!k) throw new Error('could not derive the private key for input ' + (i + 1) + ' from this seed; every input must belong to this wallet to spend to a Silent Payment (single-signer only)');
+                sumInputs.push(k);
+            }
+            const aSum = SP.sumInputPrivateKeys(sumInputs);
+            const inputHashScalar = SP.computeInputHash(outpoints, aSum.sumPubkey).inputHashScalar;
+            // k counter per scan key (BIP-352 groups outputs by B_scan, in order).
+            const kByScan = new Map();
+            for (const om of outputMaps) {
+                if (!om.spInfo) continue;
+                const info = SP.parseSpOutInfo(om.spInfo);
+                const scanHex = I.bytesToHex(info.scanKey);
+                const kIdx = kByScan.get(scanHex) || 0;
+                kByScan.set(scanHex, kIdx + 1);
+                if (om.script !== null) continue; // already resolved → leave for the verify gate
+                const ss = SP.computeEcdhSharedSecret(inputHashScalar, aSum.aScalar, info.scanKey);
+                om.script = SP.deriveOutputScript(ss, info.spendKey, kIdx).scriptPubKey;
+            }
         }
-        outputMaps.push({ keep, amount, script });
+    }
+    // Defensive: every output must now have a script to build the tx.
+    for (let o = 0; o < outputMaps.length; o++) {
+        if (outputMaps[o].script === null) throw new Error('output ' + o + ' still has no script after derive-and-fill');
     }
 
     // ---- Determine nLockTime (BIP-370) ----
@@ -17923,36 +18011,11 @@ async function _psbtIngestComplete(psbtBytes, filename) {
         const HDKeyLib = window.BtcMath?.HDKey;
         if (!btcLib) throw new Error('btc-signer not loaded. Rebuild with Vite.');
 
-        // ---- PSBT v2 (BIP-370) → v0 downgrade ----
-        // BIP-375 Silent Payment PSBTs are exported as v2. Our v0 audit /
-        // byte-walk machinery needs a GLOBAL_UNSIGNED_TX, so rebuild a v0
-        // PSBT in memory. The SP byte-walker reads _psbtLoadedBytes, so we
-        // reassign it to the downgraded bytes.
-        if (_psbtDetectV2(psbtBytes)) {
-            let _v0 = null;
-            try {
-                _v0 = downgradePSBTv2(psbtBytes);
-            } catch (e) {
-                const _why = (e && e.message) ? e.message : String(e);
-                console.error('[PSBT] v2→v0 downgrade failed:', _why);
-                psbtShowStatus(
-                    'This is a PSBT v2 (BIP-370) that could not be converted to the v0 ' +
-                    'format this signer needs. The file may be malformed or use v2 ' +
-                    'features beyond a standard Silent Payment send. Signing is blocked. ' +
-                    'Details: ' + _why,
-                    'error'
-                );
-                return;
-            }
-            console.log('[PSBT] Downgraded PSBT v2 → v0 (' + psbtBytes.length + ' → ' + _v0.length + ' bytes)');
-            psbtBytes = _v0;
-            _psbtLoadedBytes = _v0; // SP byte-walker + snapshots read this
-        }
-
-        const tx = btcLib.Transaction.fromPSBT(psbtBytes, { network: PSBT_NETWORK });
-        _psbtLastTx = tx;
-
-        // ---- Compute masterKey for audit (best-effort) ----
+        // ---- Compute masterKey (needed for SP derive-and-fill + audit) ----
+        // Derived BEFORE the v2 downgrade: a BIP-375 Silent Payment PSBT arrives
+        // with an UNRESOLVED output (PSBT_OUT_SP_V0_INFO but no scriptPubKey), and
+        // the downgrade shim must derive that output's Taproot script from this
+        // seed's input keys and compile it into the unsigned tx.
         let masterKey = null;
         let myFingerprint = '';
         if (bip39Lib && HDKeyLib) {
@@ -17968,10 +18031,9 @@ async function _psbtIngestComplete(psbtBytes, filename) {
                 if (mnemonic) {
                     const passphrase = document.getElementById('psbt-passphrase')?.value || '';
                     const seed = await bip39Lib.mnemonicToSeed(mnemonic, passphrase);
-                    // Post-await generation check: if another ingest
-                    // started while we were awaiting the seed derivation,
-                    // abort this one so its stale masterKey / audit can't
-                    // clobber the newer ingest's state.
+                    // Post-await generation check: if another ingest started while
+                    // we were awaiting the seed derivation, abort this one so its
+                    // stale masterKey / audit can't clobber the newer ingest.
                     if (myGeneration !== _psbtIngestGeneration) {
                         if (seed instanceof Uint8Array) seed.fill(0);
                         console.log('[PSBT-AUDIT] Aborting stale ingest generation', myGeneration, '— superseded by', _psbtIngestGeneration);
@@ -17986,6 +18048,37 @@ async function _psbtIngestComplete(psbtBytes, filename) {
                 console.log('[PSBT-AUDIT] Could not derive masterKey for audit:', e.message);
             }
         }
+
+        // ---- PSBT v2 (BIP-370) → v0 downgrade (with SP derive-and-fill) ----
+        // BIP-375 Silent Payment PSBTs are exported as v2 with an unresolved SP
+        // output. The shim rebuilds a v0 PSBT AND, when an output has
+        // PSBT_OUT_SP_V0_INFO (0x09) but no script (0x04), derives the Taproot
+        // script from our input keys and compiles it into the unsigned tx — the
+        // derivation IS the security gate (it throws on missing/foreign keys).
+        // The SP byte-walker reads _psbtLoadedBytes, so we reassign it.
+        if (_psbtDetectV2(psbtBytes)) {
+            let _v0 = null;
+            try {
+                _v0 = downgradePSBTv2(psbtBytes, { masterKey, myFingerprint, btcLib });
+            } catch (e) {
+                const _why = (e && e.message) ? e.message : String(e);
+                console.error('[PSBT] v2→v0 downgrade failed:', _why);
+                psbtShowStatus(
+                    '<strong>SIGNING BLOCKED:</strong> this PSBT v2 (BIP-370) could not be ' +
+                    'prepared for signing. For a Silent Payment this usually means the output ' +
+                    'could not be cryptographically derived from your seed (for example an input ' +
+                    'that is not yours). Details: ' + _why,
+                    'error'
+                );
+                return;
+            }
+            console.log('[PSBT] Downgraded PSBT v2 → v0 (' + psbtBytes.length + ' → ' + _v0.length + ' bytes)');
+            psbtBytes = _v0;
+            _psbtLoadedBytes = _v0; // SP byte-walker + snapshots read this
+        }
+
+        const tx = btcLib.Transaction.fromPSBT(psbtBytes, { network: PSBT_NETWORK });
+        _psbtLastTx = tx;
 
         // Final generation check before the synchronous audit. Any
         // ingest that started while we were deriving above has already
