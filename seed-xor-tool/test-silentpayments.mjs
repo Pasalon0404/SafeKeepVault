@@ -249,12 +249,27 @@ if (!vectorPath) {
       if (inputs.length === 0) continue; // no eligible inputs -> sender produces nothing
       vCases++;
 
+      // Recipients are objects ({address, ...}) in the official schema; allow
+      // bare strings or [string] too for forward-compat.
+      const recipients = given.recipients.map((r) =>
+        (typeof r === 'string' ? r : (r.address || (Array.isArray(r) ? r[0] : r))));
+
+      // Intermediate check: our summed input scalar a must equal the vector's
+      // input_private_key_sum (this independently exercises BIP-341 parity).
+      let sumNote = '';
+      if (expected.input_private_key_sum) {
+        const { aScalar } = sumInputPrivateKeys(inputs);
+        const ourSum = bytesToHex(_internal.numberToBytesBE(aScalar)).toLowerCase();
+        const wantSum = expected.input_private_key_sum.toLowerCase();
+        sumNote = (ourSum === wantSum) ? '  [a-sum ✓]' : `  [a-sum ✗ got ${ourSum}]`;
+      }
+
       let derived;
       try {
         derived = deriveSilentPaymentOutputs({
           inputPrivKeys: inputs,
           outpoints,
-          recipients: given.recipients.map((r) => (Array.isArray(r) ? r[0] : r)),
+          recipients,
         });
       } catch (e) {
         vFail++;
@@ -286,7 +301,7 @@ if (!vectorPath) {
 
       if (matched && got.length > 0) {
         vPass++;
-        console.log(`  ✓ ${tc.comment}  (${got.length} output(s) matched)`);
+        console.log(`  ✓ ${tc.comment}  (${got.length} output(s) matched)${sumNote}`);
       } else {
         vFail++;
         console.log(`  ✗ ${tc.comment}`);
