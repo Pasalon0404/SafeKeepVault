@@ -18907,6 +18907,199 @@ function _psbtDetectV2(bytes) {
     }
 }
 
+// =============================================================================
+// PSBT v2 (BIP-370) → v0 DOWNGRADE SHIM
+// =============================================================================
+// BIP-375 mandates PSBTv2, but every downstream code path in this signer — the
+// audit engine, the GLOBAL_XPUB / nonWitnessUtxo byte-splicers, and the Silent
+// Payment byte-walker — assumes a v0 PSBT with a GLOBAL_UNSIGNED_TX (0x00).
+// Rather than teach all of them v2, we rebuild a v0 PSBT in memory at ingest:
+//
+//   * Read the v2 globals: PSBT_GLOBAL_TX_VERSION (0x02),
+//     PSBT_GLOBAL_FALLBACK_LOCKTIME (0x03), INPUT_COUNT (0x04), OUTPUT_COUNT (0x05).
+//   * Per input: PSBT_IN_PREVIOUS_TXID (0x0e), PSBT_IN_OUTPUT_INDEX (0x0f),
+//     PSBT_IN_SEQUENCE (0x10, default 0xffffffff).
+//   * Per output: PSBT_OUT_AMOUNT (0x03), PSBT_OUT_SCRIPT (0x04).
+//   * Construct a legacy (non-witness) unsigned tx, inject it as global 0x00.
+//   * Strip the v2-only globals (0x02,0x03,0x04,0x05,0x06,0xfb) and every
+//     v2-only input/output positional field — but PRESERVE every other key,
+//     including the unknown PSBT_OUT_SP_V0_INFO (0x09) so the Phase-2 SP
+//     byte-walker still finds it.
+//
+// BYTE ORDER (critical): per BIP-370 / Bitcoin Core / Sparrow, the 0x0e
+// PSBT_IN_PREVIOUS_TXID is stored in INTERNAL (little-endian) byte order — the
+// same order used inside a serialized transaction — so it is copied DIRECTLY
+// into the unsigned tx with NO reversal. (Note: @scure/btc-signer's own v2
+// EXPORT writes this field in display order, which is why we hand-roll the
+// downgrade and validate the rebuilt unsigned tx against btc-signer's
+// authoritative v0 serialization rather than trusting its v2 output.)
+//
+// Returns a fresh v0 PSBT Uint8Array, or null on any parse failure (caller
+// then surfaces a clear error and refuses the PSBT — never signs blind).
+// =============================================================================
+function downgradePSBTv2(srcBytes) {
+    try {
+        if (!srcBytes || srcBytes.length < 5) return null;
+        if (srcBytes[0] !== 0x70 || srcBytes[1] !== 0x73 ||
+            srcBytes[2] !== 0x62 || srcBytes[3] !== 0x74 ||
+            srcBytes[4] !== 0xff) return null;
+
+        const u32le = (n) => new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]);
+        const readU32LE = (b) => (b.length >= 4) ? ((b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0) : null;
+
+        let off = 5;
+
+        // ---- Parse global map ----
+        let txVersion = null, fallbackLocktime = 0, inputCount = null, outputCount = null, psbtVersion = null;
+        const globalKeep = []; // {key:Uint8Array(type+keydata), value:Uint8Array}
+        while (off < srcBytes.length) {
+            const klr = _psbtReadVarint(srcBytes, off);
+            if (!klr) return null;
+            off = klr.next;
+            if (klr.value === 0) break; // global terminator
+            const keyLen = klr.value;
+            const keyStart = off;
+            const keyType = srcBytes[keyStart];
+            const keyBytes = srcBytes.slice(keyStart, keyStart + keyLen);
+            off += keyLen;
+            const vlr = _psbtReadVarint(srcBytes, off);
+            if (!vlr) return null;
+            off = vlr.next;
+            const val = srcBytes.slice(off, off + vlr.value);
+            if (off + vlr.value > srcBytes.length) return null;
+            off += vlr.value;
+            switch (keyType) {
+                case 0x02: txVersion = readU32LE(val); break;
+                case 0x03: { const v = readU32LE(val); fallbackLocktime = (v === null ? 0 : v); break; }
+                case 0x04: { const c = _psbtReadVarint(val, 0); inputCount = c ? c.value : null; break; }
+                case 0x05: { const c = _psbtReadVarint(val, 0); outputCount = c ? c.value : null; break; }
+                case 0x06: break;                 // PSBT_GLOBAL_TX_MODIFIABLE — drop
+                case 0xfb: psbtVersion = readU32LE(val); break;
+                default: globalKeep.push({ key: keyBytes, value: val }); // 0x01 xpub, 0xfc, unknowns
+            }
+        }
+        if (psbtVersion !== 2) return null;       // only ever downgrade a real v2
+        if (txVersion === null || inputCount === null || outputCount === null) return null;
+        if (inputCount < 0 || outputCount < 0) return null;
+
+        // ---- Parse input maps ----
+        const inputMaps = [];
+        for (let i = 0; i < inputCount; i++) {
+            const keep = [];
+            let prevTxid = null, vout = null, sequence = 0xffffffff;
+            while (off < srcBytes.length) {
+                const klr = _psbtReadVarint(srcBytes, off);
+                if (!klr) return null;
+                off = klr.next;
+                if (klr.value === 0) break; // input terminator
+                const keyLen = klr.value;
+                const keyStart = off;
+                const keyType = srcBytes[keyStart];
+                const keyBytes = srcBytes.slice(keyStart, keyStart + keyLen);
+                off += keyLen;
+                const vlr = _psbtReadVarint(srcBytes, off);
+                if (!vlr) return null;
+                off = vlr.next;
+                const val = srcBytes.slice(off, off + vlr.value);
+                if (off + vlr.value > srcBytes.length) return null;
+                off += vlr.value;
+                switch (keyType) {
+                    case 0x0e: prevTxid = val; break;     // INTERNAL order — copy as-is
+                    case 0x0f: vout = readU32LE(val); break;
+                    case 0x10: { const s = readU32LE(val); sequence = (s === null ? 0xffffffff : s); break; }
+                    case 0x11: case 0x12: break;          // v2 input locktimes — drop
+                    default: keep.push({ key: keyBytes, value: val });
+                }
+            }
+            if (!prevTxid || prevTxid.length !== 32 || vout === null) return null;
+            inputMaps.push({ keep, prevTxid, vout, sequence });
+        }
+
+        // ---- Parse output maps ----
+        const outputMaps = [];
+        for (let o = 0; o < outputCount; o++) {
+            const keep = [];
+            let amount = null, script = null;
+            while (off < srcBytes.length) {
+                const klr = _psbtReadVarint(srcBytes, off);
+                if (!klr) return null;
+                off = klr.next;
+                if (klr.value === 0) break; // output terminator
+                const keyLen = klr.value;
+                const keyStart = off;
+                const keyType = srcBytes[keyStart];
+                const keyBytes = srcBytes.slice(keyStart, keyStart + keyLen);
+                off += keyLen;
+                const vlr = _psbtReadVarint(srcBytes, off);
+                if (!vlr) return null;
+                off = vlr.next;
+                const val = srcBytes.slice(off, off + vlr.value);
+                if (off + vlr.value > srcBytes.length) return null;
+                off += vlr.value;
+                switch (keyType) {
+                    case 0x03: amount = val; break;       // 8-byte LE — copy as-is
+                    case 0x04: script = val; break;
+                    default: keep.push({ key: keyBytes, value: val }); // PRESERVES 0x09 (SP) + others
+                }
+            }
+            if (!amount || amount.length !== 8 || script === null) return null;
+            outputMaps.push({ keep, amount, script });
+        }
+
+        // ---- Build the legacy (non-witness) unsigned transaction ----
+        const parts = [];
+        parts.push(u32le(txVersion));
+        parts.push(_psbtWriteVarint(inputCount));
+        for (const im of inputMaps) {
+            parts.push(im.prevTxid);              // 32 bytes, internal order
+            parts.push(u32le(im.vout));
+            parts.push(new Uint8Array([0x00]));   // empty scriptSig (unsigned)
+            parts.push(u32le(im.sequence));
+        }
+        parts.push(_psbtWriteVarint(outputCount));
+        for (const om of outputMaps) {
+            parts.push(om.amount);                // 8 bytes LE
+            parts.push(_psbtWriteVarint(om.script.length));
+            parts.push(om.script);
+        }
+        parts.push(u32le(fallbackLocktime));
+
+        // ---- Re-emit a v0 PSBT ----
+        const out = [];
+        const emitKV = (keyBytes, value) => {
+            out.push(_psbtWriteVarint(keyBytes.length));
+            out.push(keyBytes);
+            out.push(_psbtWriteVarint(value.length));
+            out.push(value);
+        };
+        out.push(new Uint8Array([0x70, 0x73, 0x62, 0x74, 0xff])); // magic
+        // global: unsigned tx (0x00) first, then preserved globals (0x01 xpub, etc.)
+        let unsignedTxLen = 0; for (const p of parts) unsignedTxLen += p.length;
+        const unsignedTx = new Uint8Array(unsignedTxLen);
+        { let p = 0; for (const s of parts) { unsignedTx.set(s, p); p += s.length; } }
+        emitKV(new Uint8Array([0x00]), unsignedTx);
+        for (const g of globalKeep) emitKV(g.key, g.value);
+        out.push(new Uint8Array([0x00])); // global terminator
+        // inputs: kept keys only (v2 positional fields stripped) + terminator
+        for (const im of inputMaps) {
+            for (const kv of im.keep) emitKV(kv.key, kv.value);
+            out.push(new Uint8Array([0x00]));
+        }
+        // outputs: kept keys only (amount/script now in the tx) + terminator
+        for (const om of outputMaps) {
+            for (const kv of om.keep) emitKV(kv.key, kv.value);
+            out.push(new Uint8Array([0x00]));
+        }
+
+        let total = 0; for (const s of out) total += s.length;
+        const result = new Uint8Array(total);
+        let p = 0; for (const s of out) { result.set(s, p); p += s.length; }
+        return result;
+    } catch (e) {
+        return null;
+    }
+}
+
 
 // ---- INGEST COMPLETE → REVIEW ----
 
@@ -19065,14 +19258,25 @@ async function _psbtIngestComplete(psbtBytes, filename) {
         const HDKeyLib = window.BtcMath?.HDKey;
         if (!btcLib) throw new Error('btc-signer not loaded. Rebuild with Vite.');
 
-        // ---- PSBT v2 (BIP-370) Detection ----
+        // ---- PSBT v2 (BIP-370) → v0 downgrade ----
+        // BIP-375 Silent Payment PSBTs are exported as v2. Our v0 audit /
+        // byte-walk machinery needs a GLOBAL_UNSIGNED_TX, so rebuild a v0
+        // PSBT in memory. The SP byte-walker reads _psbtLoadedBytes, so we
+        // reassign it to the downgraded bytes.
         if (_psbtDetectV2(psbtBytes)) {
-            psbtShowStatus(
-                'PSBT v2 (BIP-370) is not yet supported by this signer. ' +
-                'Please export the transaction as PSBT v0 from your coordinator software.',
-                'error'
-            );
-            return;
+            const _v0 = downgradePSBTv2(psbtBytes);
+            if (!_v0) {
+                psbtShowStatus(
+                    'This is a PSBT v2 (BIP-370) that could not be converted to the v0 ' +
+                    'format this signer needs. The file may be malformed or use v2 ' +
+                    'features beyond a standard Silent Payment send. Signing is blocked.',
+                    'error'
+                );
+                return;
+            }
+            console.log('[PSBT] Downgraded PSBT v2 → v0 (' + psbtBytes.length + ' → ' + _v0.length + ' bytes)');
+            psbtBytes = _v0;
+            _psbtLoadedBytes = _v0; // SP byte-walker + snapshots read this
         }
 
         const tx = btcLib.Transaction.fromPSBT(psbtBytes, { network: PSBT_NETWORK });
