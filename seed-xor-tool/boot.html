@@ -17574,166 +17574,195 @@ function _psbtDetectV2(bytes) {
 // then surfaces a clear error and refuses the PSBT — never signs blind).
 // =============================================================================
 function downgradePSBTv2(srcBytes) {
-    try {
-        if (!srcBytes || srcBytes.length < 5) return null;
-        if (srcBytes[0] !== 0x70 || srcBytes[1] !== 0x73 ||
-            srcBytes[2] !== 0x62 || srcBytes[3] !== 0x74 ||
-            srcBytes[4] !== 0xff) return null;
+    // Throws a descriptive Error on any failure so the caller can surface the
+    // exact reason (e.g. a missing required field) instead of a generic message.
+    if (!srcBytes || srcBytes.length < 5) throw new Error('empty or too-short PSBT');
+    if (srcBytes[0] !== 0x70 || srcBytes[1] !== 0x73 ||
+        srcBytes[2] !== 0x62 || srcBytes[3] !== 0x74 ||
+        srcBytes[4] !== 0xff) throw new Error('bad PSBT magic');
 
-        const u32le = (n) => new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]);
-        const readU32LE = (b) => (b.length >= 4) ? ((b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0) : null;
+    const u32le = (n) => new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]);
+    const readU32LE = (b) => (b.length >= 4) ? ((b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0) : null;
 
-        let off = 5;
+    let off = 5;
 
-        // ---- Parse global map ----
-        let txVersion = null, fallbackLocktime = 0, inputCount = null, outputCount = null, psbtVersion = null;
-        const globalKeep = []; // {key:Uint8Array(type+keydata), value:Uint8Array}
+    // ---- Parse global map ----
+    // Required (BIP-370): TX_VERSION (0x02), INPUT_COUNT (0x04), OUTPUT_COUNT (0x05),
+    //   PSBT_GLOBAL_VERSION (0xfb).
+    // Optional: FALLBACK_LOCKTIME (0x03, default 0), TX_MODIFIABLE (0x06, ignored).
+    let txVersion = null, fallbackLocktime = null, inputCount = null, outputCount = null, psbtVersion = null;
+    const globalKeep = []; // {key:Uint8Array(type+keydata), value:Uint8Array}
+    while (off < srcBytes.length) {
+        const klr = _psbtReadVarint(srcBytes, off);
+        if (!klr) throw new Error('truncated global key varint');
+        off = klr.next;
+        if (klr.value === 0) break; // global terminator
+        const keyLen = klr.value;
+        const keyStart = off;
+        const keyType = srcBytes[keyStart];
+        const keyBytes = srcBytes.slice(keyStart, keyStart + keyLen);
+        off += keyLen;
+        const vlr = _psbtReadVarint(srcBytes, off);
+        if (!vlr) throw new Error('truncated global value varint');
+        off = vlr.next;
+        if (off + vlr.value > srcBytes.length) throw new Error('global value runs past end of PSBT');
+        const val = srcBytes.slice(off, off + vlr.value);
+        off += vlr.value;
+        switch (keyType) {
+            case 0x02: txVersion = readU32LE(val); break;
+            case 0x03: { const v = readU32LE(val); fallbackLocktime = (v === null ? 0 : v); break; }
+            case 0x04: { const c = _psbtReadVarint(val, 0); inputCount = c ? c.value : null; break; }
+            case 0x05: { const c = _psbtReadVarint(val, 0); outputCount = c ? c.value : null; break; }
+            case 0x06: break;                 // PSBT_GLOBAL_TX_MODIFIABLE — optional, drop
+            case 0xfb: psbtVersion = readU32LE(val); break;
+            default: globalKeep.push({ key: keyBytes, value: val }); // 0x01 xpub, 0xfc, unknowns
+        }
+    }
+    if (psbtVersion !== 2) throw new Error('PSBT_GLOBAL_VERSION (0xfb) is not 2 (got ' + psbtVersion + ')');
+    if (txVersion === null) throw new Error('missing required PSBT_GLOBAL_TX_VERSION (0x02)');
+    if (inputCount === null) throw new Error('missing required PSBT_GLOBAL_INPUT_COUNT (0x04)');
+    if (outputCount === null) throw new Error('missing required PSBT_GLOBAL_OUTPUT_COUNT (0x05)');
+    if (inputCount < 0 || outputCount < 0) throw new Error('negative input/output count');
+    // FALLBACK_LOCKTIME is optional → default 0x00000000.
+    if (fallbackLocktime === null) fallbackLocktime = 0;
+
+    // ---- Parse input maps ----
+    // Required: PREVIOUS_TXID (0x0e), OUTPUT_INDEX (0x0f).
+    // Optional: SEQUENCE (0x10, default 0xffffffff), REQUIRED_TIME_LOCKTIME (0x11),
+    //   REQUIRED_HEIGHT_LOCKTIME (0x12).
+    const inputMaps = [];
+    let maxTimeLock = null, maxHeightLock = null; // BIP-370 nLockTime computation
+    for (let i = 0; i < inputCount; i++) {
+        const keep = [];
+        let prevTxid = null, vout = null, sequence = 0xffffffff;
         while (off < srcBytes.length) {
             const klr = _psbtReadVarint(srcBytes, off);
-            if (!klr) return null;
+            if (!klr) throw new Error('truncated input ' + i + ' key varint');
             off = klr.next;
-            if (klr.value === 0) break; // global terminator
+            if (klr.value === 0) break; // input terminator
             const keyLen = klr.value;
             const keyStart = off;
             const keyType = srcBytes[keyStart];
             const keyBytes = srcBytes.slice(keyStart, keyStart + keyLen);
             off += keyLen;
             const vlr = _psbtReadVarint(srcBytes, off);
-            if (!vlr) return null;
+            if (!vlr) throw new Error('truncated input ' + i + ' value varint');
             off = vlr.next;
+            if (off + vlr.value > srcBytes.length) throw new Error('input ' + i + ' value runs past end of PSBT');
             const val = srcBytes.slice(off, off + vlr.value);
-            if (off + vlr.value > srcBytes.length) return null;
             off += vlr.value;
             switch (keyType) {
-                case 0x02: txVersion = readU32LE(val); break;
-                case 0x03: { const v = readU32LE(val); fallbackLocktime = (v === null ? 0 : v); break; }
-                case 0x04: { const c = _psbtReadVarint(val, 0); inputCount = c ? c.value : null; break; }
-                case 0x05: { const c = _psbtReadVarint(val, 0); outputCount = c ? c.value : null; break; }
-                case 0x06: break;                 // PSBT_GLOBAL_TX_MODIFIABLE — drop
-                case 0xfb: psbtVersion = readU32LE(val); break;
-                default: globalKeep.push({ key: keyBytes, value: val }); // 0x01 xpub, 0xfc, unknowns
+                case 0x0e: prevTxid = val; break;     // INTERNAL order — copy as-is
+                case 0x0f: vout = readU32LE(val); break;
+                case 0x10: { const s = readU32LE(val); sequence = (s === null ? 0xffffffff : s); break; }
+                case 0x11: { const t = readU32LE(val); if (t !== null) maxTimeLock = (maxTimeLock === null ? t : Math.max(maxTimeLock, t)); break; }
+                case 0x12: { const h = readU32LE(val); if (h !== null) maxHeightLock = (maxHeightLock === null ? h : Math.max(maxHeightLock, h)); break; }
+                default: keep.push({ key: keyBytes, value: val });
             }
         }
-        if (psbtVersion !== 2) return null;       // only ever downgrade a real v2
-        if (txVersion === null || inputCount === null || outputCount === null) return null;
-        if (inputCount < 0 || outputCount < 0) return null;
-
-        // ---- Parse input maps ----
-        const inputMaps = [];
-        for (let i = 0; i < inputCount; i++) {
-            const keep = [];
-            let prevTxid = null, vout = null, sequence = 0xffffffff;
-            while (off < srcBytes.length) {
-                const klr = _psbtReadVarint(srcBytes, off);
-                if (!klr) return null;
-                off = klr.next;
-                if (klr.value === 0) break; // input terminator
-                const keyLen = klr.value;
-                const keyStart = off;
-                const keyType = srcBytes[keyStart];
-                const keyBytes = srcBytes.slice(keyStart, keyStart + keyLen);
-                off += keyLen;
-                const vlr = _psbtReadVarint(srcBytes, off);
-                if (!vlr) return null;
-                off = vlr.next;
-                const val = srcBytes.slice(off, off + vlr.value);
-                if (off + vlr.value > srcBytes.length) return null;
-                off += vlr.value;
-                switch (keyType) {
-                    case 0x0e: prevTxid = val; break;     // INTERNAL order — copy as-is
-                    case 0x0f: vout = readU32LE(val); break;
-                    case 0x10: { const s = readU32LE(val); sequence = (s === null ? 0xffffffff : s); break; }
-                    case 0x11: case 0x12: break;          // v2 input locktimes — drop
-                    default: keep.push({ key: keyBytes, value: val });
-                }
-            }
-            if (!prevTxid || prevTxid.length !== 32 || vout === null) return null;
-            inputMaps.push({ keep, prevTxid, vout, sequence });
-        }
-
-        // ---- Parse output maps ----
-        const outputMaps = [];
-        for (let o = 0; o < outputCount; o++) {
-            const keep = [];
-            let amount = null, script = null;
-            while (off < srcBytes.length) {
-                const klr = _psbtReadVarint(srcBytes, off);
-                if (!klr) return null;
-                off = klr.next;
-                if (klr.value === 0) break; // output terminator
-                const keyLen = klr.value;
-                const keyStart = off;
-                const keyType = srcBytes[keyStart];
-                const keyBytes = srcBytes.slice(keyStart, keyStart + keyLen);
-                off += keyLen;
-                const vlr = _psbtReadVarint(srcBytes, off);
-                if (!vlr) return null;
-                off = vlr.next;
-                const val = srcBytes.slice(off, off + vlr.value);
-                if (off + vlr.value > srcBytes.length) return null;
-                off += vlr.value;
-                switch (keyType) {
-                    case 0x03: amount = val; break;       // 8-byte LE — copy as-is
-                    case 0x04: script = val; break;
-                    default: keep.push({ key: keyBytes, value: val }); // PRESERVES 0x09 (SP) + others
-                }
-            }
-            if (!amount || amount.length !== 8 || script === null) return null;
-            outputMaps.push({ keep, amount, script });
-        }
-
-        // ---- Build the legacy (non-witness) unsigned transaction ----
-        const parts = [];
-        parts.push(u32le(txVersion));
-        parts.push(_psbtWriteVarint(inputCount));
-        for (const im of inputMaps) {
-            parts.push(im.prevTxid);              // 32 bytes, internal order
-            parts.push(u32le(im.vout));
-            parts.push(new Uint8Array([0x00]));   // empty scriptSig (unsigned)
-            parts.push(u32le(im.sequence));
-        }
-        parts.push(_psbtWriteVarint(outputCount));
-        for (const om of outputMaps) {
-            parts.push(om.amount);                // 8 bytes LE
-            parts.push(_psbtWriteVarint(om.script.length));
-            parts.push(om.script);
-        }
-        parts.push(u32le(fallbackLocktime));
-
-        // ---- Re-emit a v0 PSBT ----
-        const out = [];
-        const emitKV = (keyBytes, value) => {
-            out.push(_psbtWriteVarint(keyBytes.length));
-            out.push(keyBytes);
-            out.push(_psbtWriteVarint(value.length));
-            out.push(value);
-        };
-        out.push(new Uint8Array([0x70, 0x73, 0x62, 0x74, 0xff])); // magic
-        // global: unsigned tx (0x00) first, then preserved globals (0x01 xpub, etc.)
-        let unsignedTxLen = 0; for (const p of parts) unsignedTxLen += p.length;
-        const unsignedTx = new Uint8Array(unsignedTxLen);
-        { let p = 0; for (const s of parts) { unsignedTx.set(s, p); p += s.length; } }
-        emitKV(new Uint8Array([0x00]), unsignedTx);
-        for (const g of globalKeep) emitKV(g.key, g.value);
-        out.push(new Uint8Array([0x00])); // global terminator
-        // inputs: kept keys only (v2 positional fields stripped) + terminator
-        for (const im of inputMaps) {
-            for (const kv of im.keep) emitKV(kv.key, kv.value);
-            out.push(new Uint8Array([0x00]));
-        }
-        // outputs: kept keys only (amount/script now in the tx) + terminator
-        for (const om of outputMaps) {
-            for (const kv of om.keep) emitKV(kv.key, kv.value);
-            out.push(new Uint8Array([0x00]));
-        }
-
-        let total = 0; for (const s of out) total += s.length;
-        const result = new Uint8Array(total);
-        let p = 0; for (const s of out) { result.set(s, p); p += s.length; }
-        return result;
-    } catch (e) {
-        return null;
+        if (!prevTxid || prevTxid.length !== 32) throw new Error('input ' + i + ' missing/invalid PSBT_IN_PREVIOUS_TXID (0x0e)');
+        if (vout === null) throw new Error('input ' + i + ' missing PSBT_IN_OUTPUT_INDEX (0x0f)');
+        inputMaps.push({ keep, prevTxid, vout, sequence });
     }
+
+    // ---- Parse output maps ----
+    // Required: AMOUNT (0x03), SCRIPT (0x04). NOTE: a Silent Payment output may
+    // legitimately omit 0x04 (the on-chain Taproot script is not known until the
+    // signer derives it). We surface that as a specific, actionable error rather
+    // than a silent failure — handling it requires computing+inserting the script
+    // (a separate phase), not just a downgrade.
+    const outputMaps = [];
+    for (let o = 0; o < outputCount; o++) {
+        const keep = [];
+        let amount = null, script = null, hasSpInfo = false;
+        while (off < srcBytes.length) {
+            const klr = _psbtReadVarint(srcBytes, off);
+            if (!klr) throw new Error('truncated output ' + o + ' key varint');
+            off = klr.next;
+            if (klr.value === 0) break; // output terminator
+            const keyLen = klr.value;
+            const keyStart = off;
+            const keyType = srcBytes[keyStart];
+            const keyBytes = srcBytes.slice(keyStart, keyStart + keyLen);
+            off += keyLen;
+            const vlr = _psbtReadVarint(srcBytes, off);
+            if (!vlr) throw new Error('truncated output ' + o + ' value varint');
+            off = vlr.next;
+            if (off + vlr.value > srcBytes.length) throw new Error('output ' + o + ' value runs past end of PSBT');
+            const val = srcBytes.slice(off, off + vlr.value);
+            off += vlr.value;
+            switch (keyType) {
+                case 0x03: amount = val; break;       // 8-byte LE — copy as-is
+                case 0x04: script = val; break;
+                case 0x09: hasSpInfo = true; keep.push({ key: keyBytes, value: val }); break; // SP info — preserve
+                default: keep.push({ key: keyBytes, value: val }); // PRESERVES other unknowns
+            }
+        }
+        if (!amount || amount.length !== 8) throw new Error('output ' + o + ' missing/invalid PSBT_OUT_AMOUNT (0x03)');
+        if (script === null) {
+            throw new Error('output ' + o + ' has no PSBT_OUT_SCRIPT (0x04)' +
+                (hasSpInfo ? ' — this is an unresolved Silent Payment output; the signer must derive and insert its Taproot script (separate phase), which the v0 downgrade alone cannot do' : ''));
+        }
+        outputMaps.push({ keep, amount, script });
+    }
+
+    // ---- Determine nLockTime (BIP-370) ----
+    // Height-based locktimes take precedence over time-based; if neither input
+    // requires a locktime, use the fallback (default 0).
+    let lockTime;
+    if (maxHeightLock !== null) lockTime = maxHeightLock;
+    else if (maxTimeLock !== null) lockTime = maxTimeLock;
+    else lockTime = fallbackLocktime;
+
+    // ---- Build the legacy (non-witness) unsigned transaction ----
+    const parts = [];
+    parts.push(u32le(txVersion));
+    parts.push(_psbtWriteVarint(inputCount));
+    for (const im of inputMaps) {
+        parts.push(im.prevTxid);              // 32 bytes, internal order
+        parts.push(u32le(im.vout));
+        parts.push(new Uint8Array([0x00]));   // empty scriptSig (unsigned)
+        parts.push(u32le(im.sequence));
+    }
+    parts.push(_psbtWriteVarint(outputCount));
+    for (const om of outputMaps) {
+        parts.push(om.amount);                // 8 bytes LE
+        parts.push(_psbtWriteVarint(om.script.length));
+        parts.push(om.script);
+    }
+    parts.push(u32le(lockTime));
+
+    // ---- Re-emit a v0 PSBT ----
+    const out = [];
+    const emitKV = (keyBytes, value) => {
+        out.push(_psbtWriteVarint(keyBytes.length));
+        out.push(keyBytes);
+        out.push(_psbtWriteVarint(value.length));
+        out.push(value);
+    };
+    out.push(new Uint8Array([0x70, 0x73, 0x62, 0x74, 0xff])); // magic
+    // global: unsigned tx (0x00) first, then preserved globals (0x01 xpub, etc.)
+    let unsignedTxLen = 0; for (const p of parts) unsignedTxLen += p.length;
+    const unsignedTx = new Uint8Array(unsignedTxLen);
+    { let p = 0; for (const s of parts) { unsignedTx.set(s, p); p += s.length; } }
+    emitKV(new Uint8Array([0x00]), unsignedTx);
+    for (const g of globalKeep) emitKV(g.key, g.value);
+    out.push(new Uint8Array([0x00])); // global terminator
+    // inputs: kept keys only (v2 positional fields stripped) + terminator
+    for (const im of inputMaps) {
+        for (const kv of im.keep) emitKV(kv.key, kv.value);
+        out.push(new Uint8Array([0x00]));
+    }
+    // outputs: kept keys only (amount/script now in the tx) + terminator
+    for (const om of outputMaps) {
+        for (const kv of om.keep) emitKV(kv.key, kv.value);
+        out.push(new Uint8Array([0x00]));
+    }
+
+    let total = 0; for (const s of out) total += s.length;
+    const result = new Uint8Array(total);
+    let p = 0; for (const s of out) { result.set(s, p); p += s.length; }
+    return result;
 }
 
 
@@ -17900,12 +17929,17 @@ async function _psbtIngestComplete(psbtBytes, filename) {
         // PSBT in memory. The SP byte-walker reads _psbtLoadedBytes, so we
         // reassign it to the downgraded bytes.
         if (_psbtDetectV2(psbtBytes)) {
-            const _v0 = downgradePSBTv2(psbtBytes);
-            if (!_v0) {
+            let _v0 = null;
+            try {
+                _v0 = downgradePSBTv2(psbtBytes);
+            } catch (e) {
+                const _why = (e && e.message) ? e.message : String(e);
+                console.error('[PSBT] v2→v0 downgrade failed:', _why);
                 psbtShowStatus(
                     'This is a PSBT v2 (BIP-370) that could not be converted to the v0 ' +
                     'format this signer needs. The file may be malformed or use v2 ' +
-                    'features beyond a standard Silent Payment send. Signing is blocked.',
+                    'features beyond a standard Silent Payment send. Signing is blocked. ' +
+                    'Details: ' + _why,
                     'error'
                 );
                 return;
