@@ -228,6 +228,47 @@ export function decodeSilentPaymentAddress(address) {
 }
 
 // ===========================================================================
+// BIP-392 Silent Payment WATCH KEY (spscan...) encode / decode
+// ===========================================================================
+// A silent-payment watch-only wallet needs the PRIVATE scan key (to detect
+// payments) plus the PUBLIC spend key (to derive output keys). They are bundled
+// into a Bech32m string with HRP "spscan".
+//   payload = b_scan(32 priv) || B_spend(33 compressed pub) = 65 bytes
+// A version word (0) is prepended before Bech32m, mirroring BIP-352 sp1
+// addresses — hence the "spscan1q..." form (q = version 0).
+/**
+ * @param {Uint8Array|string} scanPrivKey  32-byte private scan key (b_scan)
+ * @param {Uint8Array|string} spendPubKey  33-byte compressed public spend key (B_spend)
+ * @param {string} hrp                      'spscan' (mainnet); 'tspscan' etc. for test
+ * @returns {string} spscan1...
+ */
+export function encodeSpscan(scanPrivKey, spendPubKey, hrp = 'spscan') {
+  const sk = asBytes(scanPrivKey), pk = asBytes(spendPubKey);
+  if (sk.length !== 32) throw new Error('scan private key must be 32 bytes');
+  if (pk.length !== 33) throw new Error('spend public key must be 33-byte compressed');
+  Point.fromBytes(pk); // validate the spend key is a real curve point
+  const payload = concatBytes(sk, pk); // 65 bytes
+  return bech32m.encode(hrp, [0, ...bech32m.toWords(payload)], SP_BECH32M_LIMIT);
+}
+
+/**
+ * Decode an spscan... watch key back into its parts.
+ * @param {string} str  spscan1...
+ * @returns {{hrp:string, version:number, scanPrivKey:Uint8Array, spendPubKey:Uint8Array}}
+ */
+export function decodeSpscan(str) {
+  const { prefix, words } = bech32m.decode(str, SP_BECH32M_LIMIT);
+  const version = words[0];
+  if (version !== 0) throw new Error(`unsupported spscan version ${version}`);
+  const payload = bech32m.fromWords(words.slice(1));
+  if (payload.length !== 65) throw new Error(`spscan payload must be 65 bytes, got ${payload.length}`);
+  const scanPrivKey = payload.slice(0, 32);
+  const spendPubKey = payload.slice(32, 65);
+  Point.fromBytes(spendPubKey);
+  return { hrp: prefix, version, scanPrivKey, spendPubKey };
+}
+
+// ===========================================================================
 // 3. Sum eligible input private keys  (a = Σ a_i mod n), with BIP-341 parity
 // ===========================================================================
 /**
@@ -484,6 +525,7 @@ if (typeof window !== 'undefined') {
   window.SilentPayments = {
     parseSpOutInfo, buildSpOutInfo,
     encodeSilentPaymentAddress, decodeSilentPaymentAddress,
+    encodeSpscan, decodeSpscan,
     sumInputPrivateKeys, serializeOutpoint, smallestOutpoint,
     computeInputHash, computeEcdhSharedSecret, deriveOutputScript,
     deriveSilentPaymentOutputs, computeReceiverSharedSecret,

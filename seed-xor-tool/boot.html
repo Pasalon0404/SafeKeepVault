@@ -33438,6 +33438,37 @@ function _armBuildCanonicalColdcardJson(seedBytes, btcSigner, HDKey, accountNum,
         account: accountNum
     };
     out[picked.key] = buildSection(pathType in SECTION_BY_TYPE ? pathType : '84', picked.name);
+
+    // ---- BIP-352 / BIP-392 Silent Payment watch key (additive) ----
+    // SP watch wallets don't use an xpub tree: they need the PRIVATE scan key
+    // (m/352'/<coin>'/<account>'/1'/0) plus the PUBLIC spend key
+    // (m/352'/<coin>'/<account>'/0'/0), bundled into a Bech32m spscan… string.
+    // Purely additive: any failure (e.g. SP module not loaded) is swallowed so
+    // the core Coldcard JSON is never affected.
+    try {
+        var SP = (typeof window !== 'undefined') ? window.SilentPayments : null;
+        if (SP && typeof SP.encodeSpscan === 'function') {
+            var spAcct      = "m/352'/0'/" + accountNum + "'";
+            var spScanNode  = stdMaster.derive(spAcct + "/1'/0"); // scan: private
+            var spSpendNode = stdMaster.derive(spAcct + "/0'/0"); // spend: public
+            if (spScanNode && spScanNode.privateKey && spSpendNode && spSpendNode.publicKey) {
+                var spscanStr  = SP.encodeSpscan(spScanNode.privateKey, spSpendNode.publicKey);
+                var spFp       = fpHex(stdMaster).toLowerCase(); // descriptor origins are lowercase
+                var spBirthday = 840000; // recent block height (hardcoded for now)
+                out.bip352 = {
+                    deriv:      spAcct,
+                    descriptor: "sp([" + spFp + "/352'/0'/" + accountNum + "']" + spscanStr + ", " + spBirthday + ")",
+                    spscan:     spscanStr,
+                    path:       spAcct,
+                    birthday:   spBirthday,
+                    name:       "SafeKeep SP"
+                };
+            }
+        }
+    } catch (spErr) {
+        console.log('[ARM] bip352 SP export skipped: ' + (spErr && spErr.message ? spErr.message : spErr));
+    }
+
     return out;
 }
 

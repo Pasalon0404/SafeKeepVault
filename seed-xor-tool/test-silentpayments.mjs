@@ -28,6 +28,7 @@
 import {
   parseSpOutInfo, buildSpOutInfo,
   encodeSilentPaymentAddress, decodeSilentPaymentAddress,
+  encodeSpscan, decodeSpscan,
   sumInputPrivateKeys, computeInputHash,
   computeEcdhSharedSecret, deriveOutputScript,
   deriveSilentPaymentOutputs, computeReceiverSharedSecret,
@@ -234,6 +235,25 @@ console.log('\n[6] taproot key tweak vs @scure/btc-signer p2tr');
        bytesToHex(ourOutKey) === bytesToHex(ref),
        `${bytesToHex(ourOutKey)} vs ${bytesToHex(ref)}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 7. BIP-392 spscan watch-key encode/decode round-trip
+// ---------------------------------------------------------------------------
+console.log('\n[7] spscan watch-key (BIP-392) encode/decode');
+{
+  const scanPriv = hexToBytes('0a'.repeat(32));               // b_scan (private)
+  const spendPub = G.multiply(0x0bn).toBytes(true);           // B_spend (public, 33B)
+  const s = encodeSpscan(scanPriv, spendPub, 'spscan');
+  ok('starts with spscan1q (version word 0)', s.startsWith('spscan1q'), s.slice(0, 10));
+  const d = decodeSpscan(s);
+  ok('scan priv key round-trips', eqHex(d.scanPrivKey, scanPriv));
+  ok('spend pub key round-trips', eqHex(d.spendPubKey, spendPub));
+  ok('version 0', d.version === 0);
+  ok('hrp spscan', d.hrp === 'spscan');
+  // payload is 65 bytes (32 + 33)
+  ok('rejects non-32 scan key', (() => { try { encodeSpscan(hexToBytes('00'.repeat(31)), spendPub); return false; } catch { return true; } })());
+  ok('rejects non-33 spend key', (() => { try { encodeSpscan(scanPriv, hexToBytes('02' + '00'.repeat(31))); return false; } catch { return true; } })());
 }
 
 // ===========================================================================
