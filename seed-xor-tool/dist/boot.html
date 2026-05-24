@@ -21655,6 +21655,117 @@ function _psbtSnapshotSpOutputs(srcBytes) {
     }
 }
 
+// =============================================================================
+// STRIP SILENT-PAYMENT OUTPUT FIELDS BEFORE EXPORT
+// =============================================================================
+// We preserve PSBT_OUT_SP_V0_INFO (0x09) — and any SP label field
+// PSBT_OUT_SP_V0_LABEL (0x0a) — through the v2→v0 downgrade so the audit UI can
+// render the sp1 badge. But those keys are v2-EXCLUSIVE: a strict v0 parser
+// (Sparrow) rejects the signed PSBT with "PSBT_OUT_SP_V0_INFO is not allowed in
+// PSBTv0". This pass walks the output maps of the FINAL exported bytes and
+// deletes every 0x09 / 0x0a kv pair. It operates only on the export payload,
+// never on _psbtLoadedBytes (which the on-screen audit already consumed).
+// Do-no-harm: returns the input unchanged on any parse error or if nothing was
+// stripped.
+function _psbtStripSpOutputFields(srcBytes) {
+    try {
+        if (!srcBytes || srcBytes.length < 5) return srcBytes;
+        if (srcBytes[0] !== 0x70 || srcBytes[1] !== 0x73 ||
+            srcBytes[2] !== 0x62 || srcBytes[3] !== 0x74 ||
+            srcBytes[4] !== 0xff) return srcBytes;
+
+        let off = 5;
+        let inputCount = null;
+        let unsignedTx = null;
+
+        // Walk global section to the terminator; capture the unsigned tx.
+        while (off < srcBytes.length) {
+            const klr = _psbtReadVarint(srcBytes, off);
+            if (!klr) return srcBytes;
+            off = klr.next;
+            if (klr.value === 0) break; // global terminator
+            const keyLen = klr.value;
+            const keyStart = off;
+            const keyType = srcBytes[keyStart];
+            off += keyLen;
+            const vlr = _psbtReadVarint(srcBytes, off);
+            if (!vlr) return srcBytes;
+            off = vlr.next;
+            const valEnd = off + vlr.value;
+            if (valEnd > srcBytes.length) return srcBytes;
+            if (keyType === 0x00 && keyLen === 1 && unsignedTx === null) {
+                unsignedTx = srcBytes.slice(off, valEnd);
+                inputCount = _psbtCountTxInputs(unsignedTx);
+            }
+            off = valEnd;
+        }
+        if (unsignedTx === null || inputCount === null || inputCount < 0) return srcBytes;
+        const outputCount = _psbtCountTxOutputs(unsignedTx);
+        if (outputCount === null || outputCount < 0) return srcBytes;
+
+        // Skip every input map (each terminated by 0x00).
+        for (let i = 0; i < inputCount; i++) {
+            while (off < srcBytes.length) {
+                const klr = _psbtReadVarint(srcBytes, off);
+                if (!klr) return srcBytes;
+                off = klr.next;
+                if (klr.value === 0) break; // input terminator
+                const keyLen = klr.value;
+                off += keyLen;
+                const vlr = _psbtReadVarint(srcBytes, off);
+                if (!vlr) return srcBytes;
+                off = vlr.next + vlr.value;
+                if (off > srcBytes.length) return srcBytes;
+            }
+        }
+
+        // Everything up to the start of the outputs section is copied verbatim.
+        const segments = [srcBytes.slice(0, off)];
+        let removed = 0;
+
+        // Walk each output map, copying every kv pair EXCEPT 0x09 / 0x0a.
+        for (let o = 0; o < outputCount; o++) {
+            while (off < srcBytes.length) {
+                const kvStart = off;
+                const klr = _psbtReadVarint(srcBytes, off);
+                if (!klr) return srcBytes;
+                off = klr.next;
+                if (klr.value === 0) { // output terminator — keep it
+                    segments.push(new Uint8Array([0x00]));
+                    break;
+                }
+                const keyLen = klr.value;
+                const keyStart = off;
+                const keyType = srcBytes[keyStart];
+                off += keyLen;
+                const vlr = _psbtReadVarint(srcBytes, off);
+                if (!vlr) return srcBytes;
+                off = vlr.next;
+                const valEnd = off + vlr.value;
+                if (valEnd > srcBytes.length) return srcBytes;
+                off = valEnd;
+                if (keyType === 0x09 || keyType === 0x0a) {
+                    removed++; // drop this kv pair
+                } else {
+                    segments.push(srcBytes.slice(kvStart, valEnd));
+                }
+            }
+        }
+
+        // Copy any trailing bytes after the outputs section (defensive).
+        if (off < srcBytes.length) segments.push(srcBytes.slice(off));
+
+        if (removed === 0) return srcBytes; // nothing stripped — no-op
+
+        let total = 0; for (const s of segments) total += s.length;
+        const out = new Uint8Array(total);
+        let p = 0; for (const s of segments) { out.set(s, p); p += s.length; }
+        return out;
+    } catch (e) {
+        return srcBytes; // do-no-harm: keep the original on any failure
+    }
+}
+
 // Snapshot raw nonWitnessUtxo blobs from a source PSBT, indexed by input.
 // Returns a Map<inputIdx, Uint8Array> on success, or null if anything
 // goes wrong (bad magic, truncated stream, missing input count).
@@ -22892,6 +23003,22 @@ async function psbtDoSign() {
             }
         } catch (injectErr) {
             console.log(`[PSBT] PSBT_GLOBAL_XPUB re-injection caught error (using library output unchanged): ${injectErr.message}`);
+        }
+
+        // ---- STRIP SILENT-PAYMENT OUTPUT FIELDS (v2-only) ----
+        // The downgrade kept PSBT_OUT_SP_V0_INFO (0x09) / _LABEL (0x0a) for the
+        // audit UI, but a strict v0 parser (Sparrow) rejects them in the exported
+        // PSBT. Delete them from the export payload only. Operates on
+        // _psbtSignedBytes, never on _psbtLoadedBytes (the UI already consumed it).
+        // Do-no-harm: returns the input unchanged if there is nothing to strip.
+        try {
+            const stripped = _psbtStripSpOutputFields(_psbtSignedBytes);
+            if (stripped && stripped.length > 0 && stripped !== _psbtSignedBytes) {
+                console.log(`[PSBT] [OK] Stripped Silent Payment output field(s) for v0 export (${_psbtSignedBytes.length} → ${stripped.length} bytes)`);
+                _psbtSignedBytes = stripped;
+            }
+        } catch (stripErr) {
+            console.log(`[PSBT] SP field strip caught error (using output unchanged): ${stripErr.message}`);
         }
 
         // Paranoid wipe: zero the seed buffer
