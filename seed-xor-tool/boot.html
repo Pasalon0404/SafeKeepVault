@@ -18626,14 +18626,8 @@ function _psbtVerifyMultisigChange(btcLib, masterKey, myFingerprint, msInfo, out
 //  key for — a multi-party / future-phase case), we BLOCK rather than warn.
 // ============================================================
 
-// Resolve the silent-payment HRP for the active network ('sp' mainnet,
-// 'tsp' testnet/signet, 'sprt' regtest — best-effort from the bech32 prefix).
-function _spHrpForNetwork() {
-    const b = (PSBT_NETWORK && PSBT_NETWORK.bech32) || 'bc';
-    if (b === 'bc') return 'sp';
-    if (b === 'bcrt') return 'sprt';
-    return 'tsp'; // tb (testnet/signet)
-}
+// (The silent-payment HRP is resolved inline inside _psbtVerifySilentPayments
+// as a local const, so it cannot be affected by inline-script minification.)
 
 /**
  * Derive the input private key this seed contributes to the BIP-352 input
@@ -18755,6 +18749,11 @@ function _psbtVerifySilentPayments(tx, masterKey, myFingerprint, spMap) {
     }
 
     // 2. Derive each SP output and byte-compare against the actual scriptPubKey.
+    // Silent-payment HRP for the active network ('sp' mainnet, 'tsp'
+    // testnet/signet, 'sprt' regtest), computed inline as a local const so it
+    // cannot be affected by inline-script minification of top-level helpers.
+    const _spHrp = (PSBT_NETWORK && PSBT_NETWORK.bech32 === 'bc') ? 'sp'
+        : (PSBT_NETWORK && PSBT_NETWORK.bech32 === 'bcrt') ? 'sprt' : 'tsp';
     const results = new Map();
     const kByScan = new Map();
     const sortedIdx = Array.from(spMap.keys()).sort((a, b) => a - b);
@@ -18763,7 +18762,7 @@ function _psbtVerifySilentPayments(tx, masterKey, myFingerprint, spMap) {
         let info, expected, spAddress = '', taprootAddr = '';
         try {
             info = SP.parseSpOutInfo(value); // validates points; throws if malformed
-            spAddress = SP.encodeSilentPaymentAddress(info.scanKey, info.spendKey, _spHrpForNetwork());
+            spAddress = SP.encodeSilentPaymentAddress(info.scanKey, info.spendKey, _spHrp);
         } catch (e) {
             results.set(outIdx, { verified: false, spAddress: '(malformed SP info)', taprootAddr: '', expectedHex: '', actualHex: '', reason: 'Malformed PSBT_OUT_SP_V0_INFO: ' + e.message });
             continue;
