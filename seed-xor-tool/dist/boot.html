@@ -21741,10 +21741,36 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes) {
     }
     if (sigsByInput.size === 0) throw new Error('no signatures (0x02/0x13/0x14) found in signed v0');
 
+    // Extract the resolved output scriptPubKeys from the v0 unsigned tx. These
+    // are exactly what our signatures committed to (Sparrow rebuilds the sighash
+    // from the output script, so the v2 SP output MUST carry this exact script).
+    //   legacy tx: version(4) | vin(varint) | [txid(32) vout(4) scriptSig(varint+bytes) seq(4)]... | vout(varint) | [amount(8) scriptLen(varint) script]... | locktime(4)
+    const _v0OutScripts = (function (txBytes) {
+        if (!txBytes) return null;
+        let p = 4; // skip version
+        const vin = _psbtReadVarint(txBytes, p); if (!vin) return null; p = vin.next;
+        for (let k = 0; k < vin.value; k++) {
+            p += 36; // txid + vout
+            const sl = _psbtReadVarint(txBytes, p); if (!sl) return null; p = sl.next + sl.value + 4; // scriptSig + sequence
+            if (p > txBytes.length) return null;
+        }
+        const vout = _psbtReadVarint(txBytes, p); if (!vout) return null; p = vout.next;
+        const scripts = [];
+        for (let k = 0; k < vout.value; k++) {
+            p += 8; // amount
+            const sl = _psbtReadVarint(txBytes, p); if (!sl) return null; p = sl.next;
+            if (p + sl.value > txBytes.length) return null;
+            scripts.push(txBytes.slice(p, p + sl.value));
+            p += sl.value;
+        }
+        return scripts;
+    })(v0Unsigned);
+
     // ---- 2. Splice the sigs into the original v2 input maps ----
-    // v2 input count comes from PSBT_GLOBAL_INPUT_COUNT (0x04).
+    // v2 input/output counts come from PSBT_GLOBAL_INPUT_COUNT (0x04) / OUTPUT_COUNT (0x05).
     off = 5;
     let v2InputCount = null;
+    let v2OutputCount = null;
     while (off < originalV2Bytes.length) {
         const klr = _psbtReadVarint(originalV2Bytes, off);
         if (!klr) throw new Error('original v2: truncated global key');
@@ -21762,9 +21788,14 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes) {
             const c = _psbtReadVarint(originalV2Bytes, valStart); // value is a compact size
             v2InputCount = c ? c.value : null;
         }
+        if (keyType === 0x05 && v2OutputCount === null) {
+            const c = _psbtReadVarint(originalV2Bytes, valStart);
+            v2OutputCount = c ? c.value : null;
+        }
         off = valEnd;
     }
     if (v2InputCount === null || v2InputCount < 0) throw new Error('original v2: missing PSBT_GLOBAL_INPUT_COUNT (0x04)');
+    if (v2OutputCount === null || v2OutputCount < 0) throw new Error('original v2: missing PSBT_GLOBAL_OUTPUT_COUNT (0x05)');
 
     // off now points at the first v2 input map; copy header+global verbatim.
     const segments = [originalV2Bytes.slice(0, off)];
@@ -21803,8 +21834,57 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes) {
         segments.push(new Uint8Array([0x00]));
         off = termOff + 1;
     }
-    // Copy the remainder (output section + anything after) verbatim.
-    segments.push(originalV2Bytes.slice(off));
+
+    // ---- 3. Walk the v2 OUTPUT maps; resolve unresolved SP outputs ----
+    // An output carrying PSBT_OUT_SP_V0_INFO (0x09) but no PSBT_OUT_SCRIPT (0x04)
+    // is an unresolved Silent Payment output. Inject the derived Taproot script
+    // (from the v0 unsigned tx at the same index) as 0x04 so Sparrow's sighash
+    // matches the signature we merged. 0x04 is legal in v2.
+    let scriptsInjected = 0;
+    for (let o = 0; o < v2OutputCount; o++) {
+        const mapStart = off;
+        let cur = off;
+        let termOff = -1;
+        let has09 = false, has04 = false;
+        while (cur < originalV2Bytes.length) {
+            const klr = _psbtReadVarint(originalV2Bytes, cur);
+            if (!klr) throw new Error('original v2: truncated output ' + o + ' key');
+            const afterKeyLen = klr.next;
+            if (klr.value === 0) { termOff = cur; break; }
+            const keyLen = klr.value;
+            const keyType = originalV2Bytes[afterKeyLen];
+            if (keyType === 0x09) has09 = true;
+            if (keyType === 0x04) has04 = true;
+            const vlr = _psbtReadVarint(originalV2Bytes, afterKeyLen + keyLen);
+            if (!vlr) throw new Error('original v2: truncated output ' + o + ' value');
+            const valEnd2 = vlr.next + vlr.value;
+            if (valEnd2 > originalV2Bytes.length) throw new Error('original v2: output value overruns');
+            cur = valEnd2;
+        }
+        if (termOff < 0) throw new Error('original v2: output ' + o + ' has no map terminator');
+
+        // Copy the output map body (up to, not including, the terminator).
+        segments.push(originalV2Bytes.slice(mapStart, termOff));
+
+        if (has09 && !has04) {
+            // Unresolved SP output — must inject the derived scriptPubKey.
+            if (!_v0OutScripts || !_v0OutScripts[o] || _v0OutScripts[o].length === 0) {
+                throw new Error('cannot resolve Silent Payment output ' + o + ': derived script unavailable');
+            }
+            const sc = _v0OutScripts[o];
+            // 0x04 PSBT_OUT_SCRIPT: keylen=1, keytype=0x04, vallen=varint, val=script
+            segments.push(new Uint8Array([0x01, 0x04]));
+            segments.push(_psbtWriteVarint(sc.length));
+            segments.push(sc);
+            scriptsInjected++;
+        }
+        // Re-add the map terminator.
+        segments.push(new Uint8Array([0x00]));
+        off = termOff + 1;
+    }
+
+    // Copy any trailing bytes after the output section (defensive).
+    if (off < originalV2Bytes.length) segments.push(originalV2Bytes.slice(off));
 
     if (injectedTotal === 0) throw new Error('no signatures were injected (already present, or input/index mismatch)');
 
