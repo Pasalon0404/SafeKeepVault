@@ -16277,9 +16277,12 @@ function bip85_clearAll() {
 // ============================================================
 
 // ---- PSBT Signer State ----
-let _psbtLoadedBytes = null;     // Raw PSBT Uint8Array
+let _psbtLoadedBytes = null;     // Raw PSBT Uint8Array (post-downgrade for v2 SP)
 let _psbtLoadedFilename = '';    // Original filename
 let _psbtSignedBytes = null;     // Signed PSBT bytes
+let _psbtOriginalV2Bytes = null; // Original PSBT v2 envelope (BIP-375 SP), saved
+                                 // before downgrade so signatures can be merged
+                                 // back into it for export (Sparrow needs v2).
 let _psbtRawTxHex = null;       // Finalized raw tx hex (null if not fully signed)
 let _psbtKeySource = 'vault';    // 'vault' or 'temp'
 let _psbtTempSeed = null;        // Temporary mnemonic string (will be wiped)
@@ -17984,6 +17987,7 @@ async function _psbtIngestComplete(psbtBytes, filename) {
     const myGeneration = ++_psbtIngestGeneration;
     _psbtLastAuditResult = null;
     _psbtLastTx = null;
+    _psbtOriginalV2Bytes = null; // cleared every ingest; set only for v2 PSBTs
     _psbtDietAcknowledged = false;
     if (_psbtCachedPsbtFps && typeof _psbtCachedPsbtFps.clear === 'function') {
         _psbtCachedPsbtFps.clear();
@@ -18057,6 +18061,9 @@ async function _psbtIngestComplete(psbtBytes, filename) {
         // derivation IS the security gate (it throws on missing/foreign keys).
         // The SP byte-walker reads _psbtLoadedBytes, so we reassign it.
         if (_psbtDetectV2(psbtBytes)) {
+            // Preserve the original v2 envelope so signatures can be merged back
+            // into it for export (BIP-375 mandates v2 for SP; Sparrow rejects v0).
+            _psbtOriginalV2Bytes = psbtBytes.slice();
             let _v0 = null;
             try {
                 _v0 = downgradePSBTv2(psbtBytes, { masterKey, myFingerprint, btcLib });
@@ -20292,114 +20299,155 @@ function _psbtSnapshotSpOutputs(srcBytes) {
 }
 
 // =============================================================================
-// STRIP SILENT-PAYMENT OUTPUT FIELDS BEFORE EXPORT
+// MERGE SIGNATURES FROM THE SIGNED v0 BACK INTO THE ORIGINAL v2 ENVELOPE
 // =============================================================================
-// We preserve PSBT_OUT_SP_V0_INFO (0x09) — and any SP label field
-// PSBT_OUT_SP_V0_LABEL (0x0a) — through the v2→v0 downgrade so the audit UI can
-// render the sp1 badge. But those keys are v2-EXCLUSIVE: a strict v0 parser
-// (Sparrow) rejects the signed PSBT with "PSBT_OUT_SP_V0_INFO is not allowed in
-// PSBTv0". This pass walks the output maps of the FINAL exported bytes and
-// deletes every 0x09 / 0x0a kv pair. It operates only on the export payload,
-// never on _psbtLoadedBytes (which the on-screen audit already consumed).
-// Do-no-harm: returns the input unchanged on any parse error or if nothing was
-// stripped.
-function _psbtStripSpOutputFields(srcBytes) {
-    try {
-        if (!srcBytes || srcBytes.length < 5) return srcBytes;
-        if (srcBytes[0] !== 0x70 || srcBytes[1] !== 0x73 ||
-            srcBytes[2] !== 0x62 || srcBytes[3] !== 0x74 ||
-            srcBytes[4] !== 0xff) return srcBytes;
+// BIP-375 mandates PSBTv2 for Silent Payment transactions; Sparrow refuses to
+// merge signatures from a v0 PSBT. We sign the downgraded v0, then lift the
+// freshly-produced signature fields out of it and splice them into the saved
+// original v2 envelope (which legally retains the 0x09/0x0a SP fields), so the
+// exported payload is a valid v2 PSBT carrying our signatures.
+//
+// Signature fields lifted, per input:
+//   PSBT_IN_PARTIAL_SIG    (0x02)  ECDSA partial sig     (key = pubkey)
+//   PSBT_IN_TAP_KEY_SIG    (0x13)  Taproot key-path sig  (keyless)
+//   PSBT_IN_TAP_SCRIPT_SIG (0x14)  Taproot script-path   (key = xonly||leafhash)
+//
+// signedV0Bytes MUST be the SIGNED-but-NOT-finalized PSBT (finalize() replaces
+// partial sigs with final scriptSig/witness). Input order is identical between
+// the v0 and the v2 (the downgrade preserves it), so input index i maps 1:1.
+// Throws on any structural problem so the caller can FAIL CLOSED rather than
+// export a PSBT that Sparrow will silently reject.
+function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes) {
+    const SIG_TYPES = { 0x02: true, 0x13: true, 0x14: true };
+    const _hex = (u) => { let s = ''; for (let i = 0; i < u.length; i++) s += u[i].toString(16).padStart(2, '0'); return s; };
+    const _magicOK = (b) => b && b.length >= 5 && b[0] === 0x70 && b[1] === 0x73 && b[2] === 0x62 && b[3] === 0x74 && b[4] === 0xff;
+    if (!_magicOK(signedV0Bytes)) throw new Error('signed v0: bad PSBT magic');
+    if (!_magicOK(originalV2Bytes)) throw new Error('original v2: bad PSBT magic');
 
-        let off = 5;
-        let inputCount = null;
-        let unsignedTx = null;
+    // ---- 1. Extract signature kv pairs per input from the signed v0 ----
+    // v0 input count comes from the GLOBAL_UNSIGNED_TX (0x00) record.
+    let off = 5;
+    let v0Unsigned = null, v0InputCount = null;
+    while (off < signedV0Bytes.length) {
+        const klr = _psbtReadVarint(signedV0Bytes, off);
+        if (!klr) throw new Error('signed v0: truncated global key');
+        off = klr.next;
+        if (klr.value === 0) break; // global terminator
+        const keyLen = klr.value;
+        const keyType = signedV0Bytes[off];
+        off += keyLen;
+        const vlr = _psbtReadVarint(signedV0Bytes, off);
+        if (!vlr) throw new Error('signed v0: truncated global value');
+        off = vlr.next;
+        const valEnd = off + vlr.value;
+        if (valEnd > signedV0Bytes.length) throw new Error('signed v0: global value overruns');
+        if (keyType === 0x00 && keyLen === 1 && v0Unsigned === null) {
+            v0Unsigned = signedV0Bytes.slice(off, valEnd);
+            v0InputCount = _psbtCountTxInputs(v0Unsigned);
+        }
+        off = valEnd;
+    }
+    if (v0InputCount === null || v0InputCount < 0) throw new Error('signed v0: missing input count');
 
-        // Walk global section to the terminator; capture the unsigned tx.
-        while (off < srcBytes.length) {
-            const klr = _psbtReadVarint(srcBytes, off);
-            if (!klr) return srcBytes;
+    const sigsByInput = new Map(); // inputIdx -> [{type, keyData, kvBytes}]
+    for (let i = 0; i < v0InputCount; i++) {
+        const sigs = [];
+        while (off < signedV0Bytes.length) {
+            const kvStart = off;
+            const klr = _psbtReadVarint(signedV0Bytes, off);
+            if (!klr) throw new Error('signed v0: truncated input ' + i + ' key');
             off = klr.next;
-            if (klr.value === 0) break; // global terminator
+            if (klr.value === 0) break; // input terminator
             const keyLen = klr.value;
             const keyStart = off;
-            const keyType = srcBytes[keyStart];
+            const keyType = signedV0Bytes[keyStart];
+            const keyData = signedV0Bytes.slice(keyStart + 1, keyStart + keyLen);
             off += keyLen;
-            const vlr = _psbtReadVarint(srcBytes, off);
-            if (!vlr) return srcBytes;
+            const vlr = _psbtReadVarint(signedV0Bytes, off);
+            if (!vlr) throw new Error('signed v0: truncated input ' + i + ' value');
             off = vlr.next;
             const valEnd = off + vlr.value;
-            if (valEnd > srcBytes.length) return srcBytes;
-            if (keyType === 0x00 && keyLen === 1 && unsignedTx === null) {
-                unsignedTx = srcBytes.slice(off, valEnd);
-                inputCount = _psbtCountTxInputs(unsignedTx);
-            }
+            if (valEnd > signedV0Bytes.length) throw new Error('signed v0: input value overruns');
             off = valEnd;
-        }
-        if (unsignedTx === null || inputCount === null || inputCount < 0) return srcBytes;
-        const outputCount = _psbtCountTxOutputs(unsignedTx);
-        if (outputCount === null || outputCount < 0) return srcBytes;
-
-        // Skip every input map (each terminated by 0x00).
-        for (let i = 0; i < inputCount; i++) {
-            while (off < srcBytes.length) {
-                const klr = _psbtReadVarint(srcBytes, off);
-                if (!klr) return srcBytes;
-                off = klr.next;
-                if (klr.value === 0) break; // input terminator
-                const keyLen = klr.value;
-                off += keyLen;
-                const vlr = _psbtReadVarint(srcBytes, off);
-                if (!vlr) return srcBytes;
-                off = vlr.next + vlr.value;
-                if (off > srcBytes.length) return srcBytes;
+            if (SIG_TYPES[keyType]) {
+                sigs.push({ type: keyType, keyData, kvBytes: signedV0Bytes.slice(kvStart, valEnd) });
             }
         }
-
-        // Everything up to the start of the outputs section is copied verbatim.
-        const segments = [srcBytes.slice(0, off)];
-        let removed = 0;
-
-        // Walk each output map, copying every kv pair EXCEPT 0x09 / 0x0a.
-        for (let o = 0; o < outputCount; o++) {
-            while (off < srcBytes.length) {
-                const kvStart = off;
-                const klr = _psbtReadVarint(srcBytes, off);
-                if (!klr) return srcBytes;
-                off = klr.next;
-                if (klr.value === 0) { // output terminator — keep it
-                    segments.push(new Uint8Array([0x00]));
-                    break;
-                }
-                const keyLen = klr.value;
-                const keyStart = off;
-                const keyType = srcBytes[keyStart];
-                off += keyLen;
-                const vlr = _psbtReadVarint(srcBytes, off);
-                if (!vlr) return srcBytes;
-                off = vlr.next;
-                const valEnd = off + vlr.value;
-                if (valEnd > srcBytes.length) return srcBytes;
-                off = valEnd;
-                if (keyType === 0x09 || keyType === 0x0a) {
-                    removed++; // drop this kv pair
-                } else {
-                    segments.push(srcBytes.slice(kvStart, valEnd));
-                }
-            }
-        }
-
-        // Copy any trailing bytes after the outputs section (defensive).
-        if (off < srcBytes.length) segments.push(srcBytes.slice(off));
-
-        if (removed === 0) return srcBytes; // nothing stripped — no-op
-
-        let total = 0; for (const s of segments) total += s.length;
-        const out = new Uint8Array(total);
-        let p = 0; for (const s of segments) { out.set(s, p); p += s.length; }
-        return out;
-    } catch (e) {
-        return srcBytes; // do-no-harm: keep the original on any failure
+        if (sigs.length) sigsByInput.set(i, sigs);
     }
+    if (sigsByInput.size === 0) throw new Error('no signatures (0x02/0x13/0x14) found in signed v0');
+
+    // ---- 2. Splice the sigs into the original v2 input maps ----
+    // v2 input count comes from PSBT_GLOBAL_INPUT_COUNT (0x04).
+    off = 5;
+    let v2InputCount = null;
+    while (off < originalV2Bytes.length) {
+        const klr = _psbtReadVarint(originalV2Bytes, off);
+        if (!klr) throw new Error('original v2: truncated global key');
+        off = klr.next;
+        if (klr.value === 0) break; // global terminator
+        const keyLen = klr.value;
+        const keyType = originalV2Bytes[off];
+        off += keyLen;
+        const vlr = _psbtReadVarint(originalV2Bytes, off);
+        if (!vlr) throw new Error('original v2: truncated global value');
+        const valStart = vlr.next;
+        const valEnd = valStart + vlr.value;
+        if (valEnd > originalV2Bytes.length) throw new Error('original v2: global value overruns');
+        if (keyType === 0x04 && v2InputCount === null) {
+            const c = _psbtReadVarint(originalV2Bytes, valStart); // value is a compact size
+            v2InputCount = c ? c.value : null;
+        }
+        off = valEnd;
+    }
+    if (v2InputCount === null || v2InputCount < 0) throw new Error('original v2: missing PSBT_GLOBAL_INPUT_COUNT (0x04)');
+
+    // off now points at the first v2 input map; copy header+global verbatim.
+    const segments = [originalV2Bytes.slice(0, off)];
+    let injectedTotal = 0;
+    for (let i = 0; i < v2InputCount; i++) {
+        const mapStart = off;
+        let cur = off;
+        let termOff = -1;
+        const existing = {};
+        while (cur < originalV2Bytes.length) {
+            const klr = _psbtReadVarint(originalV2Bytes, cur);
+            if (!klr) throw new Error('original v2: truncated input ' + i + ' key');
+            const afterKeyLen = klr.next;
+            if (klr.value === 0) { termOff = cur; break; }
+            const keyLen = klr.value;
+            const keyType = originalV2Bytes[afterKeyLen];
+            const keyData = originalV2Bytes.slice(afterKeyLen + 1, afterKeyLen + keyLen);
+            const vlr = _psbtReadVarint(originalV2Bytes, afterKeyLen + keyLen);
+            if (!vlr) throw new Error('original v2: truncated input ' + i + ' value');
+            const valEnd2 = vlr.next + vlr.value;
+            if (valEnd2 > originalV2Bytes.length) throw new Error('original v2: input value overruns');
+            if (SIG_TYPES[keyType]) existing[keyType + ':' + _hex(keyData)] = true;
+            cur = valEnd2;
+        }
+        if (termOff < 0) throw new Error('original v2: input ' + i + ' has no map terminator');
+
+        // Copy the input map body (up to, not including, the terminator).
+        segments.push(originalV2Bytes.slice(mapStart, termOff));
+        // Append our sigs that aren't already present.
+        const sigs = sigsByInput.get(i) || [];
+        for (const s of sigs) {
+            const id = s.type + ':' + _hex(s.keyData);
+            if (!existing[id]) { segments.push(s.kvBytes); injectedTotal++; }
+        }
+        // Re-add the map terminator.
+        segments.push(new Uint8Array([0x00]));
+        off = termOff + 1;
+    }
+    // Copy the remainder (output section + anything after) verbatim.
+    segments.push(originalV2Bytes.slice(off));
+
+    if (injectedTotal === 0) throw new Error('no signatures were injected (already present, or input/index mismatch)');
+
+    let total = 0; for (const s of segments) total += s.length;
+    const out = new Uint8Array(total);
+    let p = 0; for (const s of segments) { out.set(s, p); p += s.length; }
+    return out;
 }
 
 // Snapshot raw nonWitnessUtxo blobs from a source PSBT, indexed by input.
@@ -21522,6 +21570,17 @@ async function psbtDoSign() {
             console.log(`[PSBT] Witness context: patched ${witnessPatched} inputs`);
         }
 
+        // ---- CAPTURE SIGNED (NOT-YET-FINALIZED) PSBT FOR v2 MERGE ----
+        // finalize() below replaces the partial-sig fields (0x02/0x13/0x14) with
+        // final scriptSig/witness, so for the BIP-375 v2 export path we snapshot
+        // the signed PSBT here, while the partial sigs are still present.
+        let _signedV0ForMerge = null;
+        try {
+            _signedV0ForMerge = tx.toPSBT();
+        } catch (e) {
+            console.log('[PSBT] Could not snapshot pre-finalize PSBT for v2 merge:', e.message);
+        }
+
         // ---- FINALIZATION ----
         // Try per-input finalization first for better diagnostics, then
         // fall back to bulk finalize() if per-input isn't available.
@@ -21641,20 +21700,30 @@ async function psbtDoSign() {
             console.log(`[PSBT] PSBT_GLOBAL_XPUB re-injection caught error (using library output unchanged): ${injectErr.message}`);
         }
 
-        // ---- STRIP SILENT-PAYMENT OUTPUT FIELDS (v2-only) ----
-        // The downgrade kept PSBT_OUT_SP_V0_INFO (0x09) / _LABEL (0x0a) for the
-        // audit UI, but a strict v0 parser (Sparrow) rejects them in the exported
-        // PSBT. Delete them from the export payload only. Operates on
-        // _psbtSignedBytes, never on _psbtLoadedBytes (the UI already consumed it).
-        // Do-no-harm: returns the input unchanged if there is nothing to strip.
-        try {
-            const stripped = _psbtStripSpOutputFields(_psbtSignedBytes);
-            if (stripped && stripped.length > 0 && stripped !== _psbtSignedBytes) {
-                console.log(`[PSBT] [OK] Stripped Silent Payment output field(s) for v0 export (${_psbtSignedBytes.length} → ${stripped.length} bytes)`);
-                _psbtSignedBytes = stripped;
+        // ---- v2 EXPORT: merge signatures back into the original v2 envelope ----
+        // BIP-375 mandates PSBTv2 for Silent Payment transactions; Sparrow refuses
+        // to merge signatures from a v0 PSBT. When this PSBT arrived as v2 we
+        // downgraded it to sign, so now lift our signatures out of the signed v0
+        // and splice them into the saved original v2 envelope (which legally keeps
+        // the 0x09/0x0a SP fields) and export THAT. Fail closed: on any error we
+        // surface it and do NOT hand back the v0 (which Sparrow would reject).
+        if (_psbtOriginalV2Bytes) {
+            try {
+                if (!_signedV0ForMerge) throw new Error('pre-finalize signed PSBT was not captured');
+                const mergedV2 = _psbtMergeSignaturesIntoV2(_signedV0ForMerge, _psbtOriginalV2Bytes);
+                if (!mergedV2 || mergedV2.length === 0) throw new Error('merge produced empty output');
+                _psbtSignedBytes = mergedV2;
+                _psbtRawTxHex = null; // a not-yet-finalized v2 cannot extract a broadcastable raw tx
+                console.log(`[PSBT] [OK] Merged signatures into original v2 envelope for export (${mergedV2.length} bytes)`);
+            } catch (mergeErr) {
+                console.error('[PSBT] v2 signature merge failed:', mergeErr.message);
+                psbtShowStatus(
+                    '<strong>EXPORT BLOCKED:</strong> the transaction was signed, but its signatures ' +
+                    'could not be repackaged into the required PSBT v2 envelope for Silent Payments. ' +
+                    'Do NOT use this export. Details: ' + mergeErr.message,
+                    'error'
+                );
             }
-        } catch (stripErr) {
-            console.log(`[PSBT] SP field strip caught error (using output unchanged): ${stripErr.message}`);
         }
 
         // Paranoid wipe: zero the seed buffer
