@@ -49,8 +49,12 @@ const N = Point.Fn.ORDER;          // group order n
 // decode call must pass an explicit limit or @scure/base throws.
 const SP_BECH32M_LIMIT = 1023;
 
-// PSBT_OUT_SP_V0_INFO value is exactly 67 bytes: 1 version + 33 + 33.
-const SP_V0_INFO_LEN = 67;
+// PSBT_OUT_SP_V0_INFO value layout. The canonical BIP-375 form (as emitted by
+// Sparrow) is 66 bytes: B_scan(33) || B_spend(33) — the silent-payment version
+// is encoded in the key-type name ("V0"), not the value. Some earlier drafts
+// prepended a 1-byte version → 67 bytes; we accept both.
+const SP_V0_INFO_LEN = 66;       // canonical: no version byte
+const SP_V0_INFO_LEN_VER = 67;   // legacy: 1-byte version prefix
 
 // ---------------------------------------------------------------------------
 // Byte / scalar helpers
@@ -133,35 +137,49 @@ function taggedHash(tag, ...parts) {
 // 1. Parse PSBT_OUT_SP_V0_INFO (BIP-375, key type 0x09)
 // ===========================================================================
 /**
- * Parse the 67-byte PSBT_OUT_SP_V0_INFO value into the recipient's two keys.
+ * Parse a PSBT_OUT_SP_V0_INFO value into the recipient's two keys.
  *
- * Value layout: version(1 byte, must be 0x00) || B_scan(33) || B_spend(33).
+ * Accepts both real-world layouts:
+ *   - 66 bytes (canonical, Sparrow): B_scan(33) || B_spend(33)         [no version byte]
+ *   - 67 bytes (legacy draft):       version(1) || B_scan(33) || B_spend(33)
  *
- * @param {Uint8Array|string} value  raw 67-byte value (or hex)
+ * @param {Uint8Array|string} value  raw 66- or 67-byte value (or hex)
  * @returns {{version:number, scanKey:Uint8Array, spendKey:Uint8Array}}
  */
 export function parseSpOutInfo(value) {
   const v = asBytes(value);
-  if (v.length !== SP_V0_INFO_LEN) {
-    throw new Error(`PSBT_OUT_SP_V0_INFO must be ${SP_V0_INFO_LEN} bytes, got ${v.length}`);
+  let off, version;
+  if (v.length === SP_V0_INFO_LEN) {            // 66 — no version byte
+    off = 0;
+    version = 0;
+  } else if (v.length === SP_V0_INFO_LEN_VER) { // 67 — legacy version prefix
+    off = 1;
+    version = v[0];
+    if (version !== 0x00) {
+      throw new Error(`unsupported Silent Payment version 0x${version.toString(16)} (only v0 supported)`);
+    }
+  } else {
+    throw new Error(`PSBT_OUT_SP_V0_INFO must be ${SP_V0_INFO_LEN} or ${SP_V0_INFO_LEN_VER} bytes, got ${v.length}`);
   }
-  const version = v[0];
-  if (version !== 0x00) {
-    throw new Error(`unsupported Silent Payment version 0x${version.toString(16)} (only v0 supported)`);
-  }
-  const scanKey = v.slice(1, 34);
-  const spendKey = v.slice(34, 67);
+  const scanKey = v.slice(off, off + 33);
+  const spendKey = v.slice(off + 33, off + 66);
   // Validate both are points on the curve (throws if not).
   Point.fromBytes(scanKey);
   Point.fromBytes(spendKey);
   return { version, scanKey, spendKey };
 }
 
-/** Inverse of parseSpOutInfo — build the 67-byte value for embedding in a PSBT. */
-export function buildSpOutInfo(scanKey, spendKey, version = 0) {
+/**
+ * Inverse of parseSpOutInfo. Builds the canonical 66-byte value
+ * (B_scan || B_spend). Pass includeVersion:true for the legacy 67-byte form.
+ */
+export function buildSpOutInfo(scanKey, spendKey, opts) {
   const s = asBytes(scanKey), p = asBytes(spendKey);
   if (s.length !== 33 || p.length !== 33) throw new Error('scan/spend keys must be 33-byte compressed');
-  return concatBytes(new Uint8Array([version & 0xff]), s, p);
+  if (opts && opts.includeVersion) {
+    return concatBytes(new Uint8Array([(opts.version | 0) & 0xff]), s, p);
+  }
+  return concatBytes(s, p);
 }
 
 // ===========================================================================

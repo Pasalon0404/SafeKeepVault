@@ -93,19 +93,36 @@ console.log('\n[1] sp1 address bech32m round-trip');
 // ---------------------------------------------------------------------------
 // 2. PSBT_OUT_SP_V0_INFO (0x09) parse/build round-trip
 // ---------------------------------------------------------------------------
-console.log('\n[2] PSBT_OUT_SP_V0_INFO (0x09) parse/build');
+console.log('\n[2] PSBT_OUT_SP_V0_INFO (0x09) parse/build — 66-byte canonical + 67-byte legacy');
 {
   const Bscan = pubOf(hexToBytes('33'.repeat(32)));
   const Bspend = pubOf(hexToBytes('44'.repeat(32)));
-  const value = buildSpOutInfo(Bscan, Bspend, 0);
-  ok('value is 67 bytes', value.length === 67, String(value.length));
-  ok('version byte is 0x00', value[0] === 0x00);
-  const parsed = parseSpOutInfo(value);
-  ok('parsed scan key matches', eqHex(parsed.scanKey, Bscan));
-  ok('parsed spend key matches', eqHex(parsed.spendKey, Bspend));
-  let threw = false;
-  try { parseSpOutInfo(value.slice(0, 66)); } catch { threw = true; }
-  ok('rejects wrong-length value', threw);
+
+  // Canonical 66-byte form (Sparrow): B_scan || B_spend, no version byte.
+  const value66 = buildSpOutInfo(Bscan, Bspend);
+  ok('canonical value is 66 bytes', value66.length === 66, String(value66.length));
+  const p66 = parseSpOutInfo(value66);
+  ok('66: scan key matches', eqHex(p66.scanKey, Bscan));
+  ok('66: spend key matches', eqHex(p66.spendKey, Bspend));
+  ok('66: version defaults to 0', p66.version === 0);
+
+  // Legacy 67-byte form: version(0x00) || B_scan || B_spend.
+  const value67 = buildSpOutInfo(Bscan, Bspend, { includeVersion: true, version: 0 });
+  ok('legacy value is 67 bytes', value67.length === 67, String(value67.length));
+  ok('legacy first byte is version 0x00', value67[0] === 0x00);
+  const p67 = parseSpOutInfo(value67);
+  ok('67: scan key matches', eqHex(p67.scanKey, Bscan));
+  ok('67: spend key matches', eqHex(p67.spendKey, Bspend));
+
+  // Both forms must yield identical keys.
+  ok('66 and 67 decode to the same keys', eqHex(p66.scanKey, p67.scanKey) && eqHex(p66.spendKey, p67.spendKey));
+
+  // Wrong lengths still rejected.
+  let threw65 = false, threw68 = false;
+  try { parseSpOutInfo(value66.slice(0, 65)); } catch { threw65 = true; }
+  try { parseSpOutInfo(new Uint8Array(68)); } catch { threw68 = true; }
+  ok('rejects 65-byte value', threw65);
+  ok('rejects 68-byte value', threw68);
 }
 
 // ---------------------------------------------------------------------------
