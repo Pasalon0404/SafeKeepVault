@@ -29,6 +29,7 @@ import {
   parseSpOutInfo, buildSpOutInfo,
   encodeSilentPaymentAddress, decodeSilentPaymentAddress,
   encodeSpscan, decodeSpscan,
+  spInputScalar, computeInputEcdhShare, generateDleqProof, verifyDleqProof,
   sumInputPrivateKeys, computeInputHash,
   computeEcdhSharedSecret, deriveOutputScript,
   deriveSilentPaymentOutputs, computeReceiverSharedSecret,
@@ -254,6 +255,49 @@ console.log('\n[7] spscan watch-key (BIP-392) encode/decode');
   // payload is 65 bytes (32 + 33)
   ok('rejects non-32 scan key', (() => { try { encodeSpscan(hexToBytes('00'.repeat(31)), spendPub); return false; } catch { return true; } })());
   ok('rejects non-33 spend key', (() => { try { encodeSpscan(scanPriv, hexToBytes('02' + '00'.repeat(31))); return false; } catch { return true; } })());
+}
+
+// ---------------------------------------------------------------------------
+// 8. BIP-375 per-input ECDH share + BIP-374 DLEQ proof
+// ---------------------------------------------------------------------------
+console.log('\n[8] ECDH share + DLEQ proof (BIP-375 / BIP-374)');
+{
+  const { Point, G, N, modN, bytesToNumberBE } = _internal;
+  const bScan = hexToBytes('0a'.repeat(32));
+  const Bscan = G.multiply(bytesToNumberBE(bScan)).toBytes(true);
+
+  // Two eligible inputs (one P2WPKH-style, one Taproot with parity).
+  const ins = [
+    { priv: hexToBytes('aa'.repeat(31) + '01'), tap: false },
+    { priv: hexToBytes('bb'.repeat(31) + '02'), tap: true },
+  ];
+  const scalars = ins.map(i => spInputScalar(i.priv, i.tap));
+  const shares  = ins.map((i, n) => computeInputEcdhShare(scalars[n], Bscan));
+
+  // DLEQ self-roundtrip: each proof verifies against A_i=a_i·G, B_scan, C_i=share.
+  let allVerify = true, allTamperFail = true;
+  ins.forEach((i, n) => {
+    const A = G.multiply(scalars[n]).toBytes(true);
+    const proof = generateDleqProof(scalars[n], Bscan);
+    if (proof.length !== 64) allVerify = false;
+    if (!verifyDleqProof(A, Bscan, shares[n], proof)) allVerify = false;
+    // tamper: flip a byte → must fail
+    const bad = proof.slice(); bad[10] ^= 0xff;
+    if (verifyDleqProof(A, Bscan, shares[n], bad)) allTamperFail = false;
+    // wrong share → must fail
+    if (verifyDleqProof(A, Bscan, shares[(n + 1) % ins.length], proof)) allTamperFail = false;
+  });
+  ok('every DLEQ proof is 64 bytes and self-verifies', allVerify);
+  ok('tampered proof / wrong share fail verification', allTamperFail);
+
+  // ECDH-share-sum reconstruction (spec-INDEPENDENT correctness of the shares):
+  // (Σ share_i) · input_hash  ==  computeEcdhSharedSecret(input_hash, Σ a_i, B_scan)
+  const sumPt = shares.map(s => Point.fromBytes(s)).reduce((acc, p) => acc ? acc.add(p) : p, null);
+  const inputHashScalar = 0x1234567890abcdefn % N; // arbitrary nonzero scalar
+  const lhs = sumPt.multiply(modN(inputHashScalar)).toBytes(true);
+  const aSum = modN(scalars.reduce((a, b) => modN(a + b), 0n));
+  const rhs = computeEcdhSharedSecret(inputHashScalar, aSum, Bscan);
+  ok('Σ(ECDH shares)·input_hash reconstructs the BIP-352 shared secret', eqHex(lhs, rhs));
 }
 
 // ===========================================================================

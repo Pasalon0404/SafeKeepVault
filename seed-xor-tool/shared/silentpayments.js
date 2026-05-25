@@ -511,6 +511,98 @@ export function computeReceiverSharedSecret(inputHashScalar, scanPrivKey, sumPub
   return A.multiply(scalar).toBytes(true);
 }
 
+// ===========================================================================
+// BIP-375 multi-party proofs: per-input ECDH share + BIP-374 DLEQ proof
+// ===========================================================================
+// For each eligible input, BIP-375 requires a PSBT_IN_SP_ECDH_SHARE and a
+// PSBT_IN_SP_DLEQ so a coordinator can assemble the shared secret without any
+// single party holding every input key:
+//   share_i  = a_i · B_scan                       (per input, per recipient scan key)
+//   Σ share_i = (Σ a_i) · B_scan = a · B_scan ; the coordinator then multiplies
+//   by input_hash to obtain the full BIP-352 ECDH secret.
+// The DLEQ proves log_G(a_i·G) == log_{B_scan}(share_i) (same a_i) without
+// revealing a_i, so the share can be trusted.
+//
+// a_i is the SP-adjusted input scalar (BIP-341 even-Y negation for Taproot).
+
+/** SP-adjusted input scalar: parity-negate for Taproot so it matches the x-only key. */
+export function spInputScalar(privKey, isTaproot) {
+  let s = modN(bytesToNumberBE(asBytes(privKey)));
+  if (s === 0n) throw new Error('input private key is zero');
+  if (isTaproot && !G.multiply(s).hasEvenY()) s = N - s;
+  return s;
+}
+
+/** Per-input ECDH share = inputScalar · B_scan (33-byte compressed). */
+export function computeInputEcdhShare(inputScalar, scanPub) {
+  const s = (typeof inputScalar === 'bigint') ? modN(inputScalar) : modN(bytesToNumberBE(asBytes(inputScalar)));
+  if (s === 0n) throw new Error('input scalar is zero');
+  return Point.fromBytes(asBytes(scanPub)).multiply(s).toBytes(true);
+}
+
+function xorBytes(a, b) {
+  const n = Math.min(a.length, b.length);
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) out[i] = a[i] ^ b[i];
+  return out;
+}
+
+/**
+ * BIP-374 discrete-log-equality proof that A=a·G and C=a·B share the scalar a.
+ *
+ * !! IMPORTANT — UNVERIFIED AGAINST OFFICIAL BIP-374 VECTORS. This follows
+ * BIP-374's standard Fiat–Shamir structure (nonce → R1=k·G, R2=k·B →
+ * e = challenge(...) → s = k + e·a, proof = e‖s, 64 bytes), but the exact
+ * tagged-hash labels, point-serialization, and field ordering below were
+ * reconstructed from memory (could not reach the spec this session). The
+ * pairing generateDleqProof/verifyDleqProof is internally consistent, but
+ * validate against official BIP-374 test vectors before trusting it.
+ *
+ * @param {bigint|Uint8Array|string} scalar  a (the input scalar)
+ * @param {Uint8Array|string} scanPub        B (the recipient scan pubkey, 33B)
+ * @param {Uint8Array|string} [auxRand]      32 bytes; defaults to zero (deterministic)
+ * @returns {Uint8Array} 64-byte proof (e ‖ s)
+ */
+export function generateDleqProof(scalar, scanPub, auxRand) {
+  const a = (typeof scalar === 'bigint') ? modN(scalar) : modN(bytesToNumberBE(asBytes(scalar)));
+  if (a === 0n) throw new Error('DLEQ scalar is zero');
+  const Bp = Point.fromBytes(asBytes(scanPub));
+  const Bbytes = Bp.toBytes(true);
+  const A = G.multiply(a).toBytes(true);
+  const C = Bp.multiply(a).toBytes(true);
+  const r = auxRand ? asBytes(auxRand) : new Uint8Array(32);
+  const t = xorBytes(numberToBytesBE(a, 32), taggedHash('BIP0374/aux', r));
+  let k = modN(bytesToNumberBE(taggedHash('BIP0374/nonce', t, A, C)));
+  if (k === 0n) throw new Error('DLEQ nonce is zero');
+  const R1 = G.multiply(k).toBytes(true);
+  const R2 = Bp.multiply(k).toBytes(true);
+  const e = modN(bytesToNumberBE(taggedHash('BIP0374/challenge', A, Bbytes, C, R1, R2)));
+  if (e === 0n) throw new Error('DLEQ challenge is zero');
+  const s = modN(k + e * a);
+  return concatBytes(numberToBytesBE(e, 32), numberToBytesBE(s, 32));
+}
+
+/** Verify a BIP-374 DLEQ proof (same construction caveat as generateDleqProof). */
+export function verifyDleqProof(Apub, scanPub, Cpub, proof) {
+  try {
+    const pr = asBytes(proof);
+    if (pr.length !== 64) return false;
+    const e = modN(bytesToNumberBE(pr.slice(0, 32)));
+    const s = modN(bytesToNumberBE(pr.slice(32, 64)));
+    if (e === 0n || s === 0n) return false;
+    const A = Point.fromBytes(asBytes(Apub));
+    const Bp = Point.fromBytes(asBytes(scanPub));
+    const C = Point.fromBytes(asBytes(Cpub));
+    // R1 = s·G − e·A ; R2 = s·B − e·C
+    const R1 = G.multiply(s).add(A.multiply(e).negate()).toBytes(true);
+    const R2 = Bp.multiply(s).add(C.multiply(e).negate()).toBytes(true);
+    const e2 = modN(bytesToNumberBE(taggedHash('BIP0374/challenge', A.toBytes(true), Bp.toBytes(true), C.toBytes(true), R1, R2)));
+    return e2 === e;
+  } catch (_) {
+    return false;
+  }
+}
+
 // Expose low-level utilities for tests / advanced callers.
 export const _internal = {
   Point, G, N, taggedHash, concatBytes, bytesToHex, hexToBytes,
@@ -530,6 +622,7 @@ if (typeof window !== 'undefined') {
     computeInputHash, computeEcdhSharedSecret, deriveOutputScript,
     deriveSilentPaymentOutputs, computeReceiverSharedSecret,
     tweakTaprootPrivKey,
+    spInputScalar, computeInputEcdhShare, generateDleqProof, verifyDleqProof,
     _internal,
   };
 }
