@@ -16283,6 +16283,13 @@ let _psbtSignedBytes = null;     // Signed PSBT bytes
 let _psbtOriginalV2Bytes = null; // Original PSBT v2 envelope (BIP-375 SP), saved
                                  // before downgrade so signatures can be merged
                                  // back into it for export (Sparrow needs v2).
+let _psbtSpInputProofs = null;   // In-memory BIP-375 per-input proofs (0x1d ECDH
+                                 // share + 0x1e DLEQ) computed during the v2→v0
+                                 // downgrade. Stashed here as ready-to-splice kv
+                                 // records so the v2 merge injects them directly,
+                                 // independent of whether the bytes survive a
+                                 // btc-signer round-trip. Array<inputIdx ->
+                                 // [{type, keyData, kvBytes}]>. Reset every ingest.
 let _psbtRawTxHex = null;       // Finalized raw tx hex (null if not fully signed)
 let _psbtKeySource = 'vault';    // 'vault' or 'temp'
 let _psbtTempSeed = null;        // Temporary mnemonic string (will be wiped)
@@ -17798,22 +17805,61 @@ function downgradePSBTv2(srcBytes, spCtx) {
             // Sparrow's coordinator rules require every eligible input to carry a
             // PSBT_IN_SP_ECDH_SHARE (0x1d) and PSBT_IN_SP_DLEQ (0x1e) per recipient
             // scan key. share_i = a_i·B_scan ; the DLEQ proves the share uses the
-            // same a_i as the input pubkey. Written into the v0 input maps now so
-            // they survive signing and the v2 merge ports them to the export.
-            if (typeof SP.computeInputEcdhShare === 'function' && typeof SP.generateDleqProof === 'function') {
-                for (let i = 0; i < inputMaps.length; i++) {
-                    const aI = SP.spInputScalar(sumInputs[i].privKey, sumInputs[i].isTaproot);
-                    for (const scanKey of uniqScan.values()) {
-                        const share = SP.computeInputEcdhShare(aI, scanKey);            // 33-byte point
-                        const proof = SP.generateDleqProof(aI, scanKey);                // 64-byte DLEQ
-                        // keydata = the 33-byte recipient scan key for both fields.
-                        const ecdhKey = new Uint8Array(1 + scanKey.length); ecdhKey[0] = 0x1d; ecdhKey.set(scanKey, 1);
-                        const dleqKey = new Uint8Array(1 + scanKey.length); dleqKey[0] = 0x1e; dleqKey.set(scanKey, 1);
-                        inputMaps[i].keep.push({ key: ecdhKey, value: share });
-                        inputMaps[i].keep.push({ key: dleqKey, value: proof });
-                    }
+            // same a_i as the input pubkey. We do TWO things with each proof:
+            //   (a) push it into the v0 input map (visible to any v0 consumer), AND
+            //   (b) stash a ready-to-splice kv record in the module global
+            //       _psbtSpInputProofs. The v2 export merge injects from the stash,
+            //       NOT from the re-parsed bytes — btc-signer's signIdx() strips
+            //       unknown input fields and a byte re-walk is fragile, so the
+            //       in-memory stash is the reliable carrier into the v2 envelope.
+            //
+            // Fail LOUD if the proof generators are missing (stale build). Silently
+            // omitting them is exactly what produced Sparrow's rejection:
+            // "Eligible input ... must provide PSBT_IN_SP_ECDH_SHARE and ...".
+            if (typeof SP.computeInputEcdhShare !== 'function' ||
+                typeof SP.generateDleqProof   !== 'function' ||
+                typeof SP.spInputScalar       !== 'function') {
+                console.error('[PSBT] BIP-375 proof generators missing from the SilentPayments module ' +
+                    '(computeInputEcdhShare / generateDleqProof / spInputScalar). This is almost certainly ' +
+                    'a STALE BUILD — rebuild with `node build-offline.mjs`. Refusing to emit a Silent ' +
+                    'Payment PSBT that Sparrow would reject for missing 0x1d/0x1e.');
+                throw new Error('BIP-375 proof generation unavailable (stale build?): the Silent Payments ' +
+                    'module is missing computeInputEcdhShare/generateDleqProof/spInputScalar. Rebuild required.');
+            }
+            // Serialize a single <keylen><key><vallen><value> PSBT kv record.
+            const _kvBytes = (key, value) => {
+                const kl = _psbtWriteVarint(key.length);
+                const vl = _psbtWriteVarint(value.length);
+                const b = new Uint8Array(kl.length + key.length + vl.length + value.length);
+                let p = 0;
+                b.set(kl, p); p += kl.length;
+                b.set(key, p); p += key.length;
+                b.set(vl, p); p += vl.length;
+                b.set(value, p); p += value.length;
+                return b;
+            };
+            const _stash = inputMaps.map(() => []);
+            let _proofFieldsWritten = 0;
+            for (let i = 0; i < inputMaps.length; i++) {
+                const aI = SP.spInputScalar(sumInputs[i].privKey, sumInputs[i].isTaproot);
+                for (const scanKey of uniqScan.values()) {
+                    const share = SP.computeInputEcdhShare(aI, scanKey);            // 33-byte point
+                    const proof = SP.generateDleqProof(aI, scanKey);                // 64-byte DLEQ
+                    // keydata = the 33-byte recipient scan key for both fields.
+                    const ecdhKey = new Uint8Array(1 + scanKey.length); ecdhKey[0] = 0x1d; ecdhKey.set(scanKey, 1);
+                    const dleqKey = new Uint8Array(1 + scanKey.length); dleqKey[0] = 0x1e; dleqKey.set(scanKey, 1);
+                    inputMaps[i].keep.push({ key: ecdhKey, value: share });
+                    inputMaps[i].keep.push({ key: dleqKey, value: proof });
+                    // (b) stash ready-to-splice kv records for the v2 merge.
+                    _stash[i].push({ type: 0x1d, keyData: scanKey, kvBytes: _kvBytes(ecdhKey, share) });
+                    _stash[i].push({ type: 0x1e, keyData: scanKey, kvBytes: _kvBytes(dleqKey, proof) });
+                    _proofFieldsWritten += 2;
                 }
             }
+            _psbtSpInputProofs = _stash;
+            console.log('[PSBT] downgrade: wrote ' + _proofFieldsWritten + ' BIP-375 proof field(s) ' +
+                '(0x1d/0x1e) across ' + inputMaps.length + ' input(s) for ' + uniqScan.size + ' scan key(s); ' +
+                'stashed in _psbtSpInputProofs for the v2 merge.');
         }
     }
     // Defensive: every output must now have a script to build the tx.
@@ -18012,6 +18058,7 @@ async function _psbtIngestComplete(psbtBytes, filename) {
     _psbtLastAuditResult = null;
     _psbtLastTx = null;
     _psbtOriginalV2Bytes = null; // cleared every ingest; set only for v2 PSBTs
+    _psbtSpInputProofs = null;   // cleared every ingest; set by downgrade for SP v2
     _psbtDietAcknowledged = false;
     if (_psbtCachedPsbtFps && typeof _psbtCachedPsbtFps.clear === 'function') {
         _psbtCachedPsbtFps.clear();
@@ -20416,13 +20463,28 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes, proofSrcByte
     const v0Unsigned = _sigEx.unsigned;
     if (sigsByInput.size === 0) throw new Error('no signatures (0x02/0x13/0x14) found in signed v0');
 
-    // SP proofs (0x1d/0x1e) come from the pre-sign downgraded v0 (proofSrcBytes),
-    // since signIdx strips them from the signed v0. Optional/do-no-harm: if not
-    // supplied or absent, we simply port no proofs (older non-SP flows).
+    // SP proofs (0x1d/0x1e): PREFER the in-memory stash that downgradePSBTv2 built
+    // (_psbtSpInputProofs). It holds ready-to-splice {type, keyData, kvBytes}
+    // records and is immune to btc-signer's signIdx() stripping unknown fields and
+    // to any byte re-walk fragility. Fall back to extracting from proofSrcBytes
+    // (the pre-sign downgraded v0) only when the stash is unavailable — e.g. a
+    // non-SP flow or an unexpected state reset.
     let proofsByInput = new Map();
-    if (proofSrcBytes && _magicOK(proofSrcBytes)) {
-        proofsByInput = _extractV0InputFields(proofSrcBytes, PROOF_TYPES, 'proof-src v0').byInput;
+    let proofSource = 'none';
+    if (typeof _psbtSpInputProofs !== 'undefined' && Array.isArray(_psbtSpInputProofs)) {
+        for (let i = 0; i < _psbtSpInputProofs.length; i++) {
+            const arr = _psbtSpInputProofs[i];
+            if (arr && arr.length) proofsByInput.set(i, arr.slice());
+        }
+        if (proofsByInput.size > 0) proofSource = 'stash';
     }
+    if (proofsByInput.size === 0 && proofSrcBytes && _magicOK(proofSrcBytes)) {
+        proofsByInput = _extractV0InputFields(proofSrcBytes, PROOF_TYPES, 'proof-src v0').byInput;
+        if (proofsByInput.size > 0) proofSource = 'bytes';
+    }
+    let _proofFieldCount = 0; proofsByInput.forEach(a => { _proofFieldCount += a.length; });
+    console.log('[PSBT] v2 merge: ' + _proofFieldCount + ' BIP-375 proof field(s) (0x1d/0x1e) across ' +
+        proofsByInput.size + ' input(s) available to inject (source: ' + proofSource + ').');
 
     // Extract the resolved output scriptPubKeys from the v0 unsigned tx. These
     // are exactly what our signatures committed to (Sparrow rebuilds the sighash
@@ -20483,6 +20545,7 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes, proofSrcByte
     // off now points at the first v2 input map; copy header+global verbatim.
     const segments = [originalV2Bytes.slice(0, off)];
     let injectedTotal = 0;
+    let proofsInjected = 0;
     for (let i = 0; i < v2InputCount; i++) {
         const mapStart = off;
         let cur = off;
@@ -20511,7 +20574,11 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes, proofSrcByte
         const toAdd = (sigsByInput.get(i) || []).concat(proofsByInput.get(i) || []);
         for (const s of toAdd) {
             const id = s.type + ':' + _hex(s.keyData);
-            if (!existing[id]) { segments.push(s.kvBytes); injectedTotal++; }
+            if (!existing[id]) {
+                segments.push(s.kvBytes);
+                injectedTotal++;
+                if (PROOF_TYPES[s.type]) proofsInjected++;
+            }
         }
         // Re-add the map terminator.
         segments.push(new Uint8Array([0x00]));
@@ -20569,7 +20636,20 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes, proofSrcByte
     // Copy any trailing bytes after the output section (defensive).
     if (off < originalV2Bytes.length) segments.push(originalV2Bytes.slice(off));
 
+    console.log('[PSBT] v2 merge: injected ' + injectedTotal + ' input field(s) total (' +
+        proofsInjected + ' BIP-375 proof field(s)), resolved ' + scriptsInjected + ' SP output script(s).');
+
     if (injectedTotal === 0) throw new Error('no signatures were injected (already present, or input/index mismatch)');
+
+    // Fail closed for Silent Payments: if we resolved an SP output script (0x04)
+    // but ported zero 0x1d/0x1e proof fields, Sparrow will reject the export with
+    // "Eligible input ... must provide PSBT_IN_SP_ECDH_SHARE and PSBT_IN_SP_DLEQ".
+    // Surface that here rather than handing back a PSBT we know is invalid.
+    if (scriptsInjected > 0 && proofsInjected === 0) {
+        throw new Error('Silent Payment export is missing the required per-input ECDH share (0x1d) and ' +
+            'DLEQ (0x1e) proofs. The proof stash was empty — this is almost certainly a stale build ' +
+            '(rebuild with `node build-offline.mjs`).');
+    }
 
     let total = 0; for (const s of segments) total += s.length;
     const out = new Uint8Array(total);
