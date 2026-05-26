@@ -262,9 +262,31 @@ console.log('\n[7] spscan watch-key (BIP-392) encode/decode');
 // ---------------------------------------------------------------------------
 console.log('\n[8] ECDH share + DLEQ proof (BIP-375 / BIP-374)');
 {
-  const { Point, G, N, modN, bytesToNumberBE } = _internal;
+  const { Point, G, N, modN, bytesToNumberBE, taggedHash } = _internal;
   const bScan = hexToBytes('0a'.repeat(32));
   const Bscan = G.multiply(bytesToNumberBE(bScan)).toBytes(true);
+  const G_BYTES = G.toBytes(true);
+
+  // Independent, spec-literal BIP-374 VerifyProof(A,B,C,proof,G) — written from
+  // the spec text, NOT reusing silentpayments' verify, so it cross-checks our
+  // generator. `withG` toggles whether cbytes(G) is in the challenge preimage:
+  // the fixed proof must be ACCEPTED with G and REJECTED without it.
+  function dleqVerifyRef(Ab, Bb, Cb, proof, withG) {
+    try {
+      const e = bytesToNumberBE(proof.slice(0, 32));
+      const s = bytesToNumberBE(proof.slice(32, 64));
+      if (s >= N) return false;
+      const A = Point.fromBytes(Ab), B = Point.fromBytes(Bb), C = Point.fromBytes(Cb);
+      const eMod = modN(e);
+      const R1 = G.multiply(s).add(A.multiply(eMod).negate());
+      const R2 = B.multiply(s).add(C.multiply(eMod).negate());
+      const parts = withG
+        ? [A.toBytes(true), B.toBytes(true), C.toBytes(true), G_BYTES, R1.toBytes(true), R2.toBytes(true)]
+        : [A.toBytes(true), B.toBytes(true), C.toBytes(true),          R1.toBytes(true), R2.toBytes(true)];
+      const e2 = bytesToNumberBE(taggedHash('BIP0374/challenge', ...parts));
+      return e2 === e;
+    } catch (_) { return false; }
+  }
 
   // Two eligible inputs (one P2WPKH-style, one Taproot with parity).
   const ins = [
@@ -274,13 +296,22 @@ console.log('\n[8] ECDH share + DLEQ proof (BIP-375 / BIP-374)');
   const scalars = ins.map(i => spInputScalar(i.priv, i.tap));
   const shares  = ins.map((i, n) => computeInputEcdhShare(scalars[n], Bscan));
 
+  // ECDH share must be a 33-byte COMPRESSED point (BIP-375 / BIP-374 cbytes),
+  // never a 32-byte x-only key.
+  ok('every ECDH share is 33-byte compressed (0x02/0x03 prefix)',
+     shares.every(s => s.length === 33 && (s[0] === 0x02 || s[0] === 0x03)));
+
   // DLEQ self-roundtrip: each proof verifies against A_i=a_i·G, B_scan, C_i=share.
-  let allVerify = true, allTamperFail = true;
+  let allVerify = true, allTamperFail = true, refAccepts = true, noGRejects = true;
   ins.forEach((i, n) => {
     const A = G.multiply(scalars[n]).toBytes(true);
     const proof = generateDleqProof(scalars[n], Bscan);
     if (proof.length !== 64) allVerify = false;
     if (!verifyDleqProof(A, Bscan, shares[n], proof)) allVerify = false;
+    // independent spec-literal verifier (with cbytes(G)) must ACCEPT
+    if (!dleqVerifyRef(A, Bscan, shares[n], proof, true)) refAccepts = false;
+    // the pre-fix challenge (NO cbytes(G)) must REJECT — proves G is load-bearing
+    if (dleqVerifyRef(A, Bscan, shares[n], proof, false)) noGRejects = false;
     // tamper: flip a byte → must fail
     const bad = proof.slice(); bad[10] ^= 0xff;
     if (verifyDleqProof(A, Bscan, shares[n], bad)) allTamperFail = false;
@@ -288,6 +319,8 @@ console.log('\n[8] ECDH share + DLEQ proof (BIP-375 / BIP-374)');
     if (verifyDleqProof(A, Bscan, shares[(n + 1) % ins.length], proof)) allTamperFail = false;
   });
   ok('every DLEQ proof is 64 bytes and self-verifies', allVerify);
+  ok('independent spec-literal verifier accepts the proof (cbytes(G) included)', refAccepts);
+  ok('proof is REJECTED when cbytes(G) omitted (regression guard for the bug)', noGRejects);
   ok('tampered proof / wrong share fail verification', allTamperFail);
 
   // ECDH-share-sum reconstruction (spec-INDEPENDENT correctness of the shares):

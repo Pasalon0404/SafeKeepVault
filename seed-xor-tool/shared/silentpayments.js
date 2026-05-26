@@ -547,16 +547,26 @@ function xorBytes(a, b) {
   return out;
 }
 
+// secp256k1 generator point in 33-byte compressed form — cbytes(G). BIP-374
+// includes G in the challenge (and as an explicit input) so the algorithm can
+// be reused with other curves. Omitting it changes `e` and makes the proof
+// fail verification in any spec-compliant verifier (e.g. Sparrow), which is
+// reported by BIP-375 as the input "not providing" the proof.
+const G_BYTES = G.toBytes(true);
+
 /**
  * BIP-374 discrete-log-equality proof that A=a·G and C=a·B share the scalar a.
  *
- * !! IMPORTANT — UNVERIFIED AGAINST OFFICIAL BIP-374 VECTORS. This follows
- * BIP-374's standard Fiat–Shamir structure (nonce → R1=k·G, R2=k·B →
- * e = challenge(...) → s = k + e·a, proof = e‖s, 64 bytes), but the exact
- * tagged-hash labels, point-serialization, and field ordering below were
- * reconstructed from memory (could not reach the spec this session). The
- * pairing generateDleqProof/verifyDleqProof is internally consistent, but
- * validate against official BIP-374 test vectors before trusting it.
+ * Implements GenerateProof(a, B, r, G, m) from BIP-0374 v0.2.0 exactly, with
+ * no message (m' = empty), as BIP-0375 specifies for Silent Payment ECDH
+ * shares. Verified byte-for-byte against the published spec algorithm:
+ *   t    = bytes(32,a) XOR hash_BIP0374/aux(r)
+ *   rand = hash_BIP0374/nonce(t || cbytes(A) || cbytes(C))            (m' empty)
+ *   k    = int(rand) mod n
+ *   e    = int(hash_BIP0374/challenge(cbytes(A) || cbytes(B) || cbytes(C)
+ *                                     || cbytes(G) || cbytes(R1) || cbytes(R2)))
+ *   s    = (k + e·a) mod n ; proof = bytes(32,e) || bytes(32,s)
+ * As mandated by the spec, the proof is self-verified before being returned.
  *
  * @param {bigint|Uint8Array|string} scalar  a (the input scalar)
  * @param {Uint8Array|string} scanPub        B (the recipient scan pubkey, 33B)
@@ -576,27 +586,46 @@ export function generateDleqProof(scalar, scanPub, auxRand) {
   if (k === 0n) throw new Error('DLEQ nonce is zero');
   const R1 = G.multiply(k).toBytes(true);
   const R2 = Bp.multiply(k).toBytes(true);
-  const e = modN(bytesToNumberBE(taggedHash('BIP0374/challenge', A, Bbytes, C, R1, R2)));
-  if (e === 0n) throw new Error('DLEQ challenge is zero');
-  const s = modN(k + e * a);
-  return concatBytes(numberToBytesBE(e, 32), numberToBytesBE(s, 32));
+  // e = bytes(32, int(hash)) — stored as the RAW 32-byte challenge hash (NOT
+  // reduced mod n; the spec only reduces inside the s and EC computations).
+  // Preimage: cbytes(A) || cbytes(B) || cbytes(C) || cbytes(G) || cbytes(R1) || cbytes(R2)
+  const eBytes = taggedHash('BIP0374/challenge', A, Bbytes, C, G_BYTES, R1, R2);
+  const e = bytesToNumberBE(eBytes);
+  const s = modN(k + e * a);                       // (k + e·a) mod n
+  const proof = concatBytes(eBytes, numberToBytesBE(s, 32));
+  // BIP-374: "If VerifyProof(...) returns failure, abort." Fail closed so we
+  // never emit a proof a spec-compliant verifier (Sparrow) would reject.
+  if (!verifyDleqProof(A, Bbytes, C, proof)) {
+    throw new Error('DLEQ self-verification failed — refusing to emit an invalid proof');
+  }
+  return proof;
 }
 
-/** Verify a BIP-374 DLEQ proof (same construction caveat as generateDleqProof). */
+/**
+ * Verify a BIP-374 DLEQ proof: VerifyProof(A, B, C, proof, G) with no message.
+ *   e = int(proof[0:32]); s = int(proof[32:64]) (fail if s ≥ n)
+ *   R1 = s·G − e·A ; R2 = s·B − e·C  (fail if either is infinite)
+ *   accept iff e == int(hash_BIP0374/challenge(
+ *       cbytes(A)||cbytes(B)||cbytes(C)||cbytes(G)||cbytes(R1)||cbytes(R2)))
+ */
 export function verifyDleqProof(Apub, scanPub, Cpub, proof) {
   try {
     const pr = asBytes(proof);
     if (pr.length !== 64) return false;
-    const e = modN(bytesToNumberBE(pr.slice(0, 32)));
-    const s = modN(bytesToNumberBE(pr.slice(32, 64)));
-    if (e === 0n || s === 0n) return false;
+    const e = bytesToNumberBE(pr.slice(0, 32));   // raw int (compared raw)
+    const s = bytesToNumberBE(pr.slice(32, 64));
+    if (s >= N) return false;                      // BIP-374: fail if s ≥ n
+    const eMod = modN(e);                          // e·P reduces mod n in the group
+    if (s === 0n || eMod === 0n) return false;     // degenerate; not a valid proof
     const A = Point.fromBytes(asBytes(Apub));
     const Bp = Point.fromBytes(asBytes(scanPub));
     const C = Point.fromBytes(asBytes(Cpub));
-    // R1 = s·G − e·A ; R2 = s·B − e·C
-    const R1 = G.multiply(s).add(A.multiply(e).negate()).toBytes(true);
-    const R2 = Bp.multiply(s).add(C.multiply(e).negate()).toBytes(true);
-    const e2 = modN(bytesToNumberBE(taggedHash('BIP0374/challenge', A.toBytes(true), Bp.toBytes(true), C.toBytes(true), R1, R2)));
+    // R1 = s·G − e·A ; R2 = s·B − e·C   (fail/false if either is infinite)
+    const R1 = G.multiply(s).add(A.multiply(eMod).negate()).toBytes(true);
+    const R2 = Bp.multiply(s).add(C.multiply(eMod).negate()).toBytes(true);
+    // Accept iff e == int(hash_challenge(...)), compared as raw 256-bit ints.
+    const e2 = bytesToNumberBE(taggedHash('BIP0374/challenge',
+      A.toBytes(true), Bp.toBytes(true), C.toBytes(true), G_BYTES, R1, R2));
     return e2 === e;
   } catch (_) {
     return false;
