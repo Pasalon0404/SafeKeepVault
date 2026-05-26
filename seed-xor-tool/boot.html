@@ -17826,6 +17826,21 @@ function downgradePSBTv2(srcBytes, spCtx) {
                 throw new Error('BIP-375 proof generation unavailable (stale build?): the Silent Payments ' +
                     'module is missing computeInputEcdhShare/generateDleqProof/spInputScalar. Rebuild required.');
             }
+            // Build-freshness canary: run the OFFICIAL BIP-375 DLEQ known-answer
+            // through the live verifier. PASS => the cbytes(G) challenge fix is
+            // present in THIS build; FAIL => a stale build whose proofs Sparrow
+            // will reject as "must provide PSBT_IN_SP_ECDH_SHARE and ...".
+            if (typeof SP.selfTestDleqOfficialVector === 'function') {
+                const dleqOK = SP.selfTestDleqOfficialVector();
+                console.log('[PSBT] DLEQ official BIP-375 known-answer self-test: ' +
+                    (dleqOK ? 'PASS (cbytes(G) fix is live)' :
+                              'FAIL — STALE BUILD: this build omits the cbytes(G) fix, so Sparrow ' +
+                              'will reject the proofs. Pull latest + `node build-offline.mjs`.'));
+                if (!dleqOK) {
+                    throw new Error('DLEQ known-answer self-test FAILED — this build predates the BIP-374 ' +
+                        'cbytes(G) fix and would emit proofs Sparrow rejects. Rebuild from latest source.');
+                }
+            }
             // Serialize a single <keylen><key><vallen><value> PSBT kv record.
             const _kvBytes = (key, value) => {
                 const kl = _psbtWriteVarint(key.length);

@@ -632,6 +632,25 @@ export function verifyDleqProof(Apub, scanPub, Cpub, proof) {
   }
 }
 
+/**
+ * Runtime canary: verify the OFFICIAL BIP-375 per-input known-answer (input 0
+ * from bip-0375/bip375_test_vectors.json) with the live verifier. Returns true
+ * iff our challenge construction — including cbytes(G) — matches the spec. A
+ * bundled build that predates the cbytes(G) fix returns FALSE here, which is
+ * exactly the condition that makes Sparrow reject the proof. Use it to detect
+ * a stale build at runtime instead of guessing.
+ */
+export function selfTestDleqOfficialVector() {
+  try {
+    const A = hexToBytes('02c817bb7521afc35ea96f3bfb270e6eb50ddffa5560627b961fec00f2996508bf');
+    const B = hexToBytes('027a487fc19fb769877b8742d6ea18118f3c4e72b1ea8c6de602a7ad4a41dbe068');
+    const C = hexToBytes('03eca4ff11b728e2e0f60ce6222943a6ff55b9d95f627bf9a99d084bc872d50a5b');
+    const P = hexToBytes('8a13b3985545f72bd6e89714aeb909b3e354a842a9bb8b56cd0eded21df8a199'
+                       + '598b31228a49e0bd7e95ce1053f7c5b28acb543a68707600e3ce89822ee32021');
+    return verifyDleqProof(A, B, C, P) === true;
+  } catch (_) { return false; }
+}
+
 // Expose low-level utilities for tests / advanced callers.
 export const _internal = {
   Point, G, N, taggedHash, concatBytes, bytesToHex, hexToBytes,
@@ -652,6 +671,7 @@ if (typeof window !== 'undefined') {
     deriveSilentPaymentOutputs, computeReceiverSharedSecret,
     tweakTaprootPrivKey,
     spInputScalar, computeInputEcdhShare, generateDleqProof, verifyDleqProof,
+    selfTestDleqOfficialVector,
     _internal,
   };
 }
