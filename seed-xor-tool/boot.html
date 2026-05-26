@@ -16290,6 +16290,12 @@ let _psbtSpInputProofs = null;   // In-memory BIP-375 per-input proofs (0x1d ECD
                                  // independent of whether the bytes survive a
                                  // btc-signer round-trip. Array<inputIdx ->
                                  // [{type, keyData, kvBytes}]>. Reset every ingest.
+let _psbtSpGlobalProofs = null;  // BIP-375 GLOBAL ECDH share (0x07) + DLEQ (0x08),
+                                 // computed from the SUMMED input key when this
+                                 // signer holds every eligible input (single-signer
+                                 // => spec SHOULD use the global share). Array of
+                                 // {type, keyData, kvBytes} injected into the v2
+                                 // GLOBAL map by the merge. Reset every ingest.
 let _psbtRawTxHex = null;       // Finalized raw tx hex (null if not fully signed)
 let _psbtKeySource = 'vault';    // 'vault' or 'temp'
 let _psbtTempSeed = null;        // Temporary mnemonic string (will be wiped)
@@ -17875,6 +17881,31 @@ function downgradePSBTv2(srcBytes, spCtx) {
             console.log('[PSBT] downgrade: wrote ' + _proofFieldsWritten + ' BIP-375 proof field(s) ' +
                 '(0x1d/0x1e) across ' + inputMaps.length + ' input(s) for ' + uniqScan.size + ' scan key(s); ' +
                 'stashed in _psbtSpInputProofs for the v2 merge.');
+
+            // ---- BIP-375 GLOBAL ECDH share + DLEQ (0x07 / 0x08) ----
+            // This signer holds the private key for EVERY eligible input (single-
+            // signer), so per BIP-375 it SHOULD emit a GLOBAL share rather than only
+            // per-input shares: "If the Signer has the private keys for all eligible
+            // inputs, the Signer should generate a global ECDH share." Sparrow's
+            // hardware-signer verification path expects the global share for a single
+            // signer. Computed from the SUMMED key:
+            //   an    = Σ aᵢ  (BIP-352 sum, parity-adjusted; == aSum.aScalar)
+            //   share = an · B_scan            (no input_hash — that's applied later)
+            //   proof = GenerateProof(an, B_scan) ; its A = an·G = Σ(input pubkeys)
+            // Validated against the official "single-signer using global ECDH share"
+            // BIP-375 vector. Lives in the v2 GLOBAL map, keyed by the scan key.
+            const _gstash = [];
+            for (const scanKey of uniqScan.values()) {
+                const gShare = SP.computeInputEcdhShare(aSum.aScalar, scanKey); // an·B_scan (33B)
+                const gProof = SP.generateDleqProof(aSum.aScalar, scanKey);     // 64B DLEQ, A = an·G
+                const gEcdhKey = new Uint8Array(1 + scanKey.length); gEcdhKey[0] = 0x07; gEcdhKey.set(scanKey, 1);
+                const gDleqKey = new Uint8Array(1 + scanKey.length); gDleqKey[0] = 0x08; gDleqKey.set(scanKey, 1);
+                _gstash.push({ type: 0x07, keyData: scanKey, kvBytes: _kvBytes(gEcdhKey, gShare) });
+                _gstash.push({ type: 0x08, keyData: scanKey, kvBytes: _kvBytes(gDleqKey, gProof) });
+            }
+            _psbtSpGlobalProofs = _gstash;
+            console.log('[PSBT] downgrade: wrote ' + _gstash.length + ' BIP-375 GLOBAL proof field(s) ' +
+                '(0x07/0x08) for ' + uniqScan.size + ' scan key(s); stashed in _psbtSpGlobalProofs.');
         }
     }
     // Defensive: every output must now have a script to build the tx.
@@ -18074,6 +18105,7 @@ async function _psbtIngestComplete(psbtBytes, filename) {
     _psbtLastTx = null;
     _psbtOriginalV2Bytes = null; // cleared every ingest; set only for v2 PSBTs
     _psbtSpInputProofs = null;   // cleared every ingest; set by downgrade for SP v2
+    _psbtSpGlobalProofs = null;  // cleared every ingest; set by downgrade for SP v2
     _psbtDietAcknowledged = false;
     if (_psbtCachedPsbtFps && typeof _psbtCachedPsbtFps.clear === 'function') {
         _psbtCachedPsbtFps.clear();
@@ -20531,6 +20563,7 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes, proofSrcByte
     let off = 5;
     let v2InputCount = null;
     let v2OutputCount = null;
+    const existingGlobals = {};
     while (off < originalV2Bytes.length) {
         const klr = _psbtReadVarint(originalV2Bytes, off);
         if (!klr) throw new Error('original v2: truncated global key');
@@ -20538,7 +20571,9 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes, proofSrcByte
         if (klr.value === 0) break; // global terminator
         const keyLen = klr.value;
         const keyType = originalV2Bytes[off];
+        const gKeyData = originalV2Bytes.slice(off + 1, off + keyLen);
         off += keyLen;
+        if (keyType === 0x07 || keyType === 0x08) existingGlobals[keyType + ':' + _hex(gKeyData)] = true;
         const vlr = _psbtReadVarint(originalV2Bytes, off);
         if (!vlr) throw new Error('original v2: truncated global value');
         const valStart = vlr.next;
@@ -20557,8 +20592,22 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes, proofSrcByte
     if (v2InputCount === null || v2InputCount < 0) throw new Error('original v2: missing PSBT_GLOBAL_INPUT_COUNT (0x04)');
     if (v2OutputCount === null || v2OutputCount < 0) throw new Error('original v2: missing PSBT_GLOBAL_OUTPUT_COUNT (0x05)');
 
-    // off now points at the first v2 input map; copy header+global verbatim.
-    const segments = [originalV2Bytes.slice(0, off)];
+    // off points just past the global 0x00 terminator (terminator byte at off-1).
+    // Inject BIP-375 GLOBAL SP fields (0x07 ECDH share / 0x08 DLEQ) BEFORE the
+    // terminator, then re-add it. A single-signer holding every eligible input
+    // key SHOULD emit the global share per BIP-375, and Sparrow's signer flow
+    // expects it for a single signer.
+    const globalTermPos = off - 1;
+    const segments = [originalV2Bytes.slice(0, globalTermPos)];
+    let globalsInjected = 0;
+    if (typeof _psbtSpGlobalProofs !== 'undefined' && Array.isArray(_psbtSpGlobalProofs)) {
+        for (const g of _psbtSpGlobalProofs) {
+            if (!existingGlobals[g.type + ':' + _hex(g.keyData)]) { segments.push(g.kvBytes); globalsInjected++; }
+        }
+    }
+    segments.push(new Uint8Array([0x00])); // re-add the global-map terminator
+    console.log('[PSBT] v2 merge: injected ' + globalsInjected +
+        ' BIP-375 GLOBAL proof field(s) (0x07/0x08) into the global map.');
     let injectedTotal = 0;
     let proofsInjected = 0;
     for (let i = 0; i < v2InputCount; i++) {
@@ -20652,18 +20701,21 @@ function _psbtMergeSignaturesIntoV2(signedV0Bytes, originalV2Bytes, proofSrcByte
     if (off < originalV2Bytes.length) segments.push(originalV2Bytes.slice(off));
 
     console.log('[PSBT] v2 merge: injected ' + injectedTotal + ' input field(s) total (' +
-        proofsInjected + ' BIP-375 proof field(s)), resolved ' + scriptsInjected + ' SP output script(s).');
+        proofsInjected + ' per-input proof field(s)), ' + globalsInjected + ' global proof field(s), resolved ' +
+        scriptsInjected + ' SP output script(s).');
 
     if (injectedTotal === 0) throw new Error('no signatures were injected (already present, or input/index mismatch)');
 
     // Fail closed for Silent Payments: if we resolved an SP output script (0x04)
-    // but ported zero 0x1d/0x1e proof fields, Sparrow will reject the export with
-    // "Eligible input ... must provide PSBT_IN_SP_ECDH_SHARE and PSBT_IN_SP_DLEQ".
-    // Surface that here rather than handing back a PSBT we know is invalid.
-    if (scriptsInjected > 0 && proofsInjected === 0) {
-        throw new Error('Silent Payment export is missing the required per-input ECDH share (0x1d) and ' +
-            'DLEQ (0x1e) proofs. The proof stash was empty — this is almost certainly a stale build ' +
-            '(rebuild with `node build-offline.mjs`).');
+    // but ported NO ECDH-share proofs at all — neither per-input (0x1d/0x1e) nor
+    // global (0x07/0x08) — Sparrow will reject the export with "Eligible input ...
+    // must provide PSBT_IN_SP_ECDH_SHARE and PSBT_IN_SP_DLEQ". Surface that here
+    // rather than handing back a PSBT we know is invalid. (Either coverage form
+    // satisfies BIP-375, so only fail when BOTH are absent.)
+    if (scriptsInjected > 0 && proofsInjected === 0 && globalsInjected === 0) {
+        throw new Error('Silent Payment export is missing the required ECDH share + DLEQ proofs ' +
+            '(neither global 0x07/0x08 nor per-input 0x1d/0x1e were injected). The proof stash was ' +
+            'empty — this is almost certainly a stale build (rebuild with `node build-offline.mjs`).');
     }
 
     let total = 0; for (const s of segments) total += s.length;

@@ -49,6 +49,7 @@ const fnMerge        = extractTopLevelFn(src, 'function _psbtMergeSignaturesInto
 // it via closure exactly like it reads the module global on the live page.
 const harnessSrc = `
   let _psbtSpInputProofs = null;
+  let _psbtSpGlobalProofs = null;
   ${fnReadVarint}
   ${fnWriteVarint}
   ${fnCountInputs}
@@ -56,12 +57,13 @@ const harnessSrc = `
   return {
     merge: _psbtMergeSignaturesIntoV2,
     setStash: (s) => { _psbtSpInputProofs = s; },
+    setGlobalStash: (s) => { _psbtSpGlobalProofs = s; },
     getStash: () => _psbtSpInputProofs,
     _writeVarint: _psbtWriteVarint,
   };
 `;
 const harness = new Function(harnessSrc)();
-const { merge, setStash, _writeVarint } = harness;
+const { merge, setStash, setGlobalStash, _writeVarint } = harness;
 
 // ---------------------------------------------------------------------------
 // 2. Tiny PSBT byte builders.
@@ -163,6 +165,15 @@ function buildStash() {
     { type: 0x1e, keyData: scanKey, kvBytes: kv(0x1e, scanKey, dleqProof) },
   ]];
 }
+// GLOBAL stash (0x07 ECDH share / 0x08 DLEQ), keyed by scan key, for the v2 global map
+const gShare = bytes(33, 0x88); gShare[0] = 0x02;
+const gProof = bytes(64, 0x99);
+function buildGlobalStash() {
+  return [
+    { type: 0x07, keyData: scanKey, kvBytes: kv(0x07, scanKey, gShare) },
+    { type: 0x08, keyData: scanKey, kvBytes: kv(0x08, scanKey, gProof) },
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // 4. Assertions over a merged v2 — walk it and find the fields.
@@ -181,14 +192,18 @@ function readVarintJS(buf, off) { // independent reader for the test
 function analyzeV2(b) {
   if (!(b[0] === 0x70 && b[4] === 0xff)) throw new Error('bad magic');
   let o = 5, inCount = null, outCount = null;
+  const globals = {}; // keyType -> [keydata hex...]
   // globals
   while (o < b.length) {
     const k = readVarintJS(b, o); o = k.next;
     if (k.value === 0) break;
-    const keyType = b[o]; o += k.value;
+    const keyType = b[o];
+    const keyData = b.slice(o + 1, o + k.value);
+    o += k.value;
     const v = readVarintJS(b, o); o = v.next; const ve = o + v.value;
     if (keyType === 0x04) inCount = readVarintJS(b, o).value;
     if (keyType === 0x05) outCount = readVarintJS(b, o).value;
+    (globals[keyType] = globals[keyType] || []).push(hex(keyData));
     o = ve;
   }
   const inputs = [];
@@ -219,7 +234,7 @@ function analyzeV2(b) {
     }
     outputs.push(rec);
   }
-  return { inCount, outCount, inputs, outputs };
+  return { inCount, outCount, inputs, outputs, globals };
 }
 
 // ---------------------------------------------------------------------------
@@ -233,8 +248,9 @@ function check(name, cond) {
 
 const scanHex = hex(scanKey);
 
-console.log('\n=== A) STASH PATH (primary) ===');
+console.log('\n=== A) STASH PATH (primary): per-input + GLOBAL ===');
 setStash(buildStash());
+setGlobalStash(buildGlobalStash());
 const mergedA = merge(signedV0, originalV2, /* proofSrcBytes */ null);
 const a = analyzeV2(mergedA);
 check('input 0 carries 0x1d (ECDH share)', !!(a.inputs[0][0x1d]));
@@ -242,11 +258,18 @@ check('input 0 carries 0x1e (DLEQ)',       !!(a.inputs[0][0x1e]));
 check('0x1d keyed by recipient scan key',  a.inputs[0][0x1d] && a.inputs[0][0x1d].includes(scanHex));
 check('0x1e keyed by recipient scan key',  a.inputs[0][0x1e] && a.inputs[0][0x1e].includes(scanHex));
 check('input 0 still carries its 0x02 sig', !!(a.inputs[0][0x02]));
+check('GLOBAL 0x07 ECDH share in global map', !!(a.globals[0x07]));
+check('GLOBAL 0x08 DLEQ in global map',       !!(a.globals[0x08]));
+check('0x07 keyed by recipient scan key',  a.globals[0x07] && a.globals[0x07].includes(scanHex));
+check('0x08 keyed by recipient scan key',  a.globals[0x08] && a.globals[0x08].includes(scanHex));
+check('global map still has 0x04 INPUT_COUNT', !!(a.globals[0x04]));
+check('global map still has 0xfb PSBT_VERSION', !!(a.globals[0xfb]));
 check('SP output (idx 1) now has 0x04',     a.outputs[1].types[0x04] === true);
 check('SP output (idx 1) keeps 0x09',       a.outputs[1].types[0x09] === true);
 
-console.log('\n=== B) BYTES FALLBACK (stash empty, proofs from proofSrcBytes) ===');
+console.log('\n=== B) BYTES FALLBACK (per-input stash empty, proofs from proofSrcBytes) ===');
 setStash(null);
+setGlobalStash(null);
 const mergedB = merge(signedV0, originalV2, /* proofSrcBytes */ proofSrcV0);
 const bAnalysis = analyzeV2(mergedB);
 check('input 0 carries 0x1d from bytes', !!(bAnalysis.inputs[0][0x1d]));
@@ -255,23 +278,36 @@ check('0x1d keyed by scan key (bytes)',  bAnalysis.inputs[0][0x1d] && bAnalysis.
 
 console.log('\n=== C) FAIL-CLOSED (SP output, but NO proofs anywhere) ===');
 setStash(null);
+setGlobalStash(null);
 let threw = false, msg = '';
 try {
-  merge(signedV0, originalV2, /* proofSrcBytes */ signedV0); // signedV0 has no 0x1d/0x1e
+  merge(signedV0, originalV2, /* proofSrcBytes */ signedV0); // signedV0 has no proofs
 } catch (e) { threw = true; msg = e.message; }
-check('merge throws when SP proofs are absent', threw);
-check('error names the missing ECDH/DLEQ proofs', /ECDH share|DLEQ|0x1d|0x1e/i.test(msg));
+check('merge throws when ALL SP proofs are absent', threw);
+check('error names the missing ECDH/DLEQ proofs', /ECDH share|DLEQ|0x1d|0x1e|0x07|0x08/i.test(msg));
 
-console.log('\n=== D) STASH SURVIVES A SIMULATED SIGN STRIP ===');
+console.log('\n=== D) PER-INPUT STASH SURVIVES A SIMULATED SIGN STRIP ===');
 // Real-flow regression: even if the signed v0 lost the proofs (signIdx strips
 // unknown fields) AND proofSrcBytes also lacks them, the stash still delivers.
 setStash(buildStash());
+setGlobalStash(null);
 const mergedD = merge(signedV0, originalV2, /* proofSrcBytes */ signedV0); // proofSrc stripped
 const d = analyzeV2(mergedD);
 check('stash injects 0x1d despite stripped proofSrc', !!(d.inputs[0][0x1d]));
 check('stash injects 0x1e despite stripped proofSrc', !!(d.inputs[0][0x1e]));
 
+console.log('\n=== E) GLOBAL-ONLY satisfies coverage (no per-input) ===');
+setStash(null);
+setGlobalStash(buildGlobalStash());
+let eThrew = false;
+let mergedE = null;
+try { mergedE = merge(signedV0, originalV2, /* proofSrcBytes */ null); } catch (e) { eThrew = true; }
+check('global-only merge does NOT fail closed', !eThrew && !!mergedE);
+const e2 = mergedE ? analyzeV2(mergedE) : { globals: {}, inputs: [{}] };
+check('global 0x07/0x08 present', !!(e2.globals[0x07]) && !!(e2.globals[0x08]));
+check('no per-input 0x1d when global-only', !(e2.inputs[0][0x1d]));
+
 console.log('\n--------------------------------------------------');
 console.log(`RESULT: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
-console.log('All byte-plumbing checks passed: the exported v2 physically carries 0x1d/0x1e.');
+console.log('All byte-plumbing checks passed: exported v2 carries per-input 0x1d/0x1e AND global 0x07/0x08.');
