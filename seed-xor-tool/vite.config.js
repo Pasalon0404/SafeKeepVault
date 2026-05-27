@@ -62,14 +62,11 @@ export default defineConfig({
         boot: resolve(__dirname, 'boot.html'),
 
         // Secondary standalone tool pages — these still exist on
-        // disk and are opened directly for isolated tool demos at
-        // http://localhost:5173/<path>/ during dev iteration.
-        //
-        // EXCEPTION: descriptor/index.html is now ALSO a shipped
-        // artifact — build-offline.mjs compiles it to a standalone
-        // dist/descriptor.html (the Silent Payment / BIP-392 Output
-        // Descriptor tool, kept out of boot.html for the RAM-only
-        // seed-loading security model). The rest remain dev-only.
+        // disk and are occasionally opened directly for isolated
+        // tool demos. They are NOT part of the shipped kiosk build
+        // (build-offline.mjs only compiles boot.html), but keeping
+        // them in the dev input list lets developers load them at
+        // http://localhost:5173/<path>/ during iteration.
         //
         // If any of these are deleted in future, remove the
         // matching line here or the dev server will refuse to start.

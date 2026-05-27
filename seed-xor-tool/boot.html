@@ -8907,6 +8907,7 @@
                                 <option value="86">Taproot (BIP-86) — bc1p...</option>
                                 <option value="49">Nested SegWit (BIP-49) — 3...</option>
                                 <option value="44">Legacy (BIP-44) — 1...</option>
+                                <option value="352">Silent Payment (BIP-352) — sp1q...</option>
                             </select>
                         </div>
                         <div>
@@ -32474,15 +32475,16 @@ function arm_enforceCompatibility() {
     // <option> leaves the <select> showing that option as the value
     // even though it's nominally unselectable, so we must clear the
     // selection first.
-    if (dvSel.value === '86' && wtSel.value === 'multi') {
+    // Taproot (BIP-86) and Silent Payment (BIP-352) are single-signer only.
+    if ((dvSel.value === '86' || dvSel.value === '352') && wtSel.value === 'multi') {
         wtSel.value = 'single';
     }
 
     // Step 2 — paint the disabled bits.
     //
-    // Multi-Sig option: disabled iff Address Type is Taproot (BIP-86).
-    // For every other Address Type (BIP-84 / BIP-49 / BIP-44) the
-    // Multi-Sig option is freely selectable.
+    // Multi-Sig option: disabled iff Address Type is Taproot (BIP-86) or
+    // Silent Payment (BIP-352). For BIP-84 / BIP-49 / BIP-44 the Multi-Sig
+    // option is freely selectable.
     //
     // BIP-32 Watch-Only JSON option: NEVER disabled by this validator.
     // The Specter workflow needs `multi × electrum_json` to be a
@@ -32491,7 +32493,7 @@ function arm_enforceCompatibility() {
     // cached DOM. (Setting to `false` is a no-op on a fresh DOM but
     // a real side-effect on a hot-reloaded one — useful during dev.)
     const multiOpt = wtSel.querySelector('option[value="multi"]');
-    if (multiOpt) multiOpt.disabled = (dvSel.value === '86');
+    if (multiOpt) multiOpt.disabled = (dvSel.value === '86' || dvSel.value === '352');
 
     const electrumOpt = kfSel.querySelector('option[value="electrum_json"]');
     if (electrumOpt) electrumOpt.disabled = false;
@@ -33079,6 +33081,16 @@ async function arm_deriveWallet() {
         const walletType = document.getElementById('arm-wallet-type').value;
         const keyFormat = document.getElementById('arm-key-format').value;
 
+        // ---- Silent Payment (BIP-352 / BIP-392) ----
+        // A wholly different output type: a single static sp1q address plus a
+        // BIP-392 sp() watch-only descriptor — not an HD chain. Handle it in a
+        // dedicated path and return, bypassing the xpub / JSON / sequential-
+        // address machinery below.
+        if (pathType === '352') {
+            await arm_deriveSilentPayment(mnemonic, passphrase, xpubEl, pathEl, addrBody);
+            return;
+        }
+
         // SLIP-132 version bytes for different address types
         const slip132Single = {
             '84': { private: 0x04b2430c, public: 0x04b24746 }, // zpub
@@ -33493,6 +33505,84 @@ async function arm_deriveWallet() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Silent Payment (BIP-352 / BIP-392) derivation for the Output Descriptor tool.
+// ---------------------------------------------------------------------------
+// Produces a watch-only export for Sparrow / BIP-392-aware coordinators:
+//
+//   descriptor: sp([<masterfp>/352h/0h/0h]spscan1q...)#<checksum>
+//   address:    sp1q...  (single static silent payment address, BIP-352)
+//
+// where spscan1q... (BIP-392) encodes the PRIVATE scan key b_scan
+// (m/352'/0'/0'/1'/0) and the PUBLIC spend key B_spend (m/352'/0'/0'/0'/0).
+// Unlike HD wallets there is no sequential receive chain — one static address
+// is shown for verification against the coordinator. Validated against the
+// official BIP-352 receiving vector (see test-descriptor-sp.mjs).
+async function arm_deriveSilentPayment(mnemonic, passphrase, xpubEl, pathEl, addrBody) {
+    const { bip39, HDKey } = window.BtcMath;
+    const SP = window.SilentPayments;
+    if (!SP) throw new Error('Silent Payments module not loaded');
+
+    const seedBytes = await bip39.mnemonicToSeed(mnemonic, passphrase || '');
+    // Standard BIP-32 version bytes so the fingerprint and origin are canonical.
+    const root = HDKey.fromMasterSeed(seedBytes, { private: 0x0488ade4, public: 0x0488b21e });
+    const derivedFP = (root.fingerprint >>> 0).toString(16).padStart(8, '0').toLowerCase();
+
+    // BIP-352 key derivation
+    const scanNode  = root.derive("m/352'/0'/0'/1'/0"); // scan key
+    const spendNode = root.derive("m/352'/0'/0'/0'/0"); // spend key
+    if (!scanNode.privateKey) throw new Error('Could not derive the Silent Payment scan key from this seed');
+    const bScan  = scanNode.privateKey;   // 32-byte private scan key
+    const Bscan  = scanNode.publicKey;    // 33-byte compressed public scan key
+    const Bspend = spendNode.publicKey;   // 33-byte compressed public spend key
+
+    // sp1q... static address + spscan1q... watch key + sp() descriptor (checksummed)
+    const spAddress  = SP.encodeSilentPaymentAddress(Bscan, Bspend);
+    const spscan     = SP.encodeSpscan(bScan, Bspend);
+    const body       = `sp([${derivedFP}/352h/0h/0h]${spscan})`;
+    const descriptor = `${body}#${desc_checksum(body)}`;
+
+    // Fingerprint displays (mirror the standard arm_deriveWallet logic).
+    const session = window.SeedSession?.get();
+    const baseFP = _armOverrideMnemonic ? derivedFP : (session?.fingerprint || derivedFP);
+    const fpEl = document.getElementById('arm-fingerprint');
+    const ppFpPanel = document.getElementById('arm-pp-fingerprint');
+    if (fpEl) fpEl.textContent = baseFP;
+    if (passphrase) {
+        if (ppFpPanel) {
+            ppFpPanel.style.display = 'block';
+            document.getElementById('arm-base-fp').textContent = baseFP;
+            document.getElementById('arm-pp-fp').textContent = derivedFP;
+        }
+    } else if (ppFpPanel) {
+        ppFpPanel.style.display = 'none';
+    }
+
+    pathEl.textContent = "m/352'/0'/0'";
+    xpubEl.textContent = descriptor;
+    xpubEl.style.color = '';
+
+    // Address verification override: ONE static sp1q address (no m/0/i chain).
+    addrBody.innerHTML = '';
+    const row = document.createElement('tr');
+    row.innerHTML = '<td style="white-space: nowrap;">sp1q</td>' +
+                    '<td style="word-break: break-all;">' + spAddress + '</td>';
+    addrBody.appendChild(row);
+
+    // Stash for the Download/QR buttons (which otherwise dispatch by key format).
+    _armSpExport = { descriptor: descriptor, address: spAddress, spscan: spscan, fingerprint: derivedFP.toUpperCase() };
+
+    // Refresh an open QR with the descriptor payload.
+    if (typeof _armXpubQRVisible !== 'undefined' && _armXpubQRVisible) {
+        const canvas = document.getElementById('arm-xpub-qr-canvas');
+        if (canvas && window.QRCode) {
+            try { await QRCode.toCanvas(canvas, descriptor, { width: 280, margin: 2, color: { dark: '#000000', light: '#ffffff' } }); } catch (_) {}
+        }
+    }
+}
+let _armSpExport = null;
+
+
 // Copy the live <pre> block contents to the clipboard.
 //
 // "xpub" is a historical name — this button copies WHATEVER the user is
@@ -33904,6 +33994,23 @@ async function arm_downloadActiveExport() {
     // below is made off this single live read of `<select#arm-key-format>`.
     const keyFormatEl = document.getElementById('arm-key-format');
     const keyFormat   = keyFormatEl ? keyFormatEl.value : 'coldcard_json';
+
+    // Silent Payment (BIP-352 / BIP-392): the JSON builders below derive HD
+    // xpubs and don't apply. Download the sp() descriptor + sp1q address as a
+    // plain text file instead.
+    const _armDvSel = document.getElementById('arm-derivation');
+    if (_armDvSel && _armDvSel.value === '352') {
+        if (!_armSpExport || !_armSpExport.descriptor) {
+            showStatus('Generate the Silent Payment descriptor first.', 'error');
+            return;
+        }
+        const spTxt =
+            '# Silent Payment (BIP-352 / BIP-392) watch-only descriptor\n' +
+            _armSpExport.descriptor + '\n\n' +
+            '# Silent Payment address (static):\n' +
+            _armSpExport.address + '\n';
+        return _armSaveExportToTransfer('SafeKeep-SilentPayment-Descriptor.txt', spTxt);
+    }
 
     // Explicit dispatch switch — one named branch per Key Format option,
     // so the routing is unambiguous and a future format addition is a
