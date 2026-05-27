@@ -11,6 +11,9 @@ import { URDecoder } from "@ngraveio/bc-ur";
 // Shared modules (bundled by Vite into this tool's standalone HTML)
 import '../shared/seed-manager.js';
 import '../shared/seed-session.js';
+// Silent Payments (BIP-352/BIP-392): exposes window.SilentPayments for the
+// Output Descriptor builder's sp() / sp1q generation.
+import '../shared/silentpayments.js';
 
 // Expose them to the window so your HTML can use them
 window.BtcMath = {

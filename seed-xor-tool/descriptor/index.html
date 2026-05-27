@@ -213,6 +213,7 @@
           <option value="86">Taproot (BIP86 / bc1p)</option>
           <option value="49">Nested SegWit (BIP49 / 3...)</option>
           <option value="44">Legacy (BIP44 / 1...)</option>
+          <option value="352">Silent Payment (BIP352 / sp1q)</option>
         </select>
       </div>
     </div>
@@ -303,7 +304,7 @@
         </div>
 
         <div>
-          <div class="skb-data-label" style="margin-bottom: 6px;">Address Verification (first 5 receive)</div>
+          <div class="skb-data-label" style="margin-bottom: 6px;" id="address-verify-label">Address Verification (first 5 receive)</div>
           <table class="skb-table" id="address-table">
             <thead><tr><th>Path</th><th>Address</th></tr></thead>
             <tbody id="address-output"></tbody>
@@ -654,16 +655,28 @@ async function updateCosignerFingerprint(index) {
 // 6. CORE UI STATE
 // =========================================================
 function updateUIState() {
-    const walletType = document.getElementById('wallet-type').value;
-    const scriptType = document.getElementById('script-type').value;
+    const scriptSelect = document.getElementById('script-type');
+    const walletSelect = document.getElementById('wallet-type');
+    const scriptType = scriptSelect.value;
     const multisigConfig = document.getElementById('multisig-config');
     const seedContainer = document.getElementById('seed-inputs-container');
     const seedLength = parseInt(document.querySelector('input[name="seedLength"]:checked').value);
 
+    // Silent Payment (BIP-352) is single-signer only: force single-sig and
+    // disable the multi-signature option while SP is selected.
+    const isSP = scriptType === '352';
+    const multiWalletOption = walletSelect.querySelector('option[value="multi"]');
+    if (isSP) {
+        if (walletSelect.value === 'multi') walletSelect.value = 'single';
+        if (multiWalletOption) multiWalletOption.disabled = true;
+    } else if (multiWalletOption) {
+        multiWalletOption.disabled = false;
+    }
+
+    const walletType = walletSelect.value;
     const isMulti = walletType === 'multi';
 
     // Taproot not available for multisig (no wallet support yet)
-    const scriptSelect = document.getElementById('script-type');
     const taprootOption = scriptSelect.querySelector('option[value="86"]');
     if (isMulti) {
         taprootOption.disabled = true;
@@ -679,7 +692,9 @@ function updateUIState() {
     // Derivation path
     const coinType = "0'";
     let derivationPath = "";
-    if (isMulti) {
+    if (isSP) {
+        derivationPath = "m/352'/0'/0'"; // BIP-352 account level (scan: .../1'/0, spend: .../0'/0)
+    } else if (isMulti) {
         let scriptIndicator = "2'"; // native segwit
         if (activeScriptType === '49') scriptIndicator = "1'";
         else if (activeScriptType === '44') scriptIndicator = "0'";
@@ -879,6 +894,15 @@ async function generateDescriptor() {
 
         const walletType = document.getElementById('wallet-type').value;
         const scriptType = document.getElementById('script-type').value;
+
+        // Silent Payment (BIP-352 / BIP-392) is a wholly different output type:
+        // a single static sp1q address + an sp(...) descriptor, not an HD chain
+        // of sequential addresses. Handle it in a dedicated branch and return.
+        if (scriptType === '352') {
+            await generateSilentPaymentDescriptor();
+            return;
+        }
+
         const isMulti = walletType === 'multi';
         const mReq = isMulti ? parseInt(document.getElementById('m-required').value) : 1;
         const derivationPath = document.getElementById('derivation-path').textContent;
@@ -1054,6 +1078,8 @@ async function generateDescriptor() {
         printRef.innerHTML = refHtml;
 
         // Generate addresses
+        const verifyLabel = document.getElementById('address-verify-label');
+        if (verifyLabel) verifyLabel.textContent = 'Address Verification (first 5 receive)';
         let addressHTML = "";
         for (let i = 0; i < 5; i++) {
             try {
@@ -1134,6 +1160,126 @@ async function generateDescriptor() {
 
 
 // =========================================================
+// 9b. SILENT PAYMENT (BIP-352 / BIP-392) DESCRIPTOR
+// =========================================================
+// Builds a watch-only Silent Payment descriptor for Sparrow and other
+// BIP-392-aware coordinators:
+//
+//   sp([<masterfp>/352h/0h/0h]spscan1q...)#<checksum>
+//
+// where spscan1q... is the Bech32m watch key from BIP-392 encoding the PRIVATE
+// scan key b_scan (m/352'/0'/0'/1'/0) and the PUBLIC spend key B_spend
+// (m/352'/0'/0'/0'/0). The single static receive address is the sp1q... silent
+// payment address encoding B_scan || B_spend (BIP-352). Unlike HD wallets there
+// is no sequential address chain — one static address is shown for verification.
+async function generateSilentPaymentDescriptor() {
+    const { bip39, HDKey } = window.BtcMath;
+    const SP = window.SilentPayments;
+    const outputText = document.getElementById('descriptor-text');
+    const addressOutput = document.getElementById('address-output');
+    const verifyLabel = document.getElementById('address-verify-label');
+
+    if (!SP) throw new Error('Silent Payments module not loaded.');
+
+    // Silent Payments need the PRIVATE scan key, which cannot come from an xpub.
+    const xpubArea = document.getElementById('xpub-area-0');
+    if (xpubArea && xpubArea.classList.contains('active')) {
+        throw new Error('Silent Payment export needs the seed phrase — the private scan key cannot be derived from an xpub.');
+    }
+
+    const grid = document.querySelector('.skb-seed-grid[data-block-index="0"]');
+    const wordInputs = grid.querySelectorAll('.word-input');
+    const words = Array.from(wordInputs).map(inp => inp.value.trim().toLowerCase());
+    if (words.some(w => w === '')) throw new Error('Seed phrase is incomplete.');
+
+    const passphrase = document.getElementById('passphrase-0').value.trim();
+    const mnemonic = words.join(' ');
+
+    const seedBytes = await bip39.mnemonicToSeed(mnemonic, passphrase);
+    const root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+    const fingerprint = (root.fingerprint >>> 0).toString(16).padStart(8, '0');
+
+    // BIP-352 key derivation
+    const scanNode  = root.derive("m/352'/0'/0'/1'/0"); // scan key
+    const spendNode = root.derive("m/352'/0'/0'/0'/0"); // spend key
+    if (!scanNode.privateKey) throw new Error('Could not derive the Silent Payment scan key from this seed.');
+    const bScan  = scanNode.privateKey;   // 32-byte private scan key
+    const Bscan  = scanNode.publicKey;    // 33-byte compressed public scan key
+    const Bspend = spendNode.publicKey;   // 33-byte compressed public spend key
+
+    // sp1q... static receive address (BIP-352)
+    const spAddress = SP.encodeSilentPaymentAddress(Bscan, Bspend);
+    // spscan1q... watch key (BIP-392) + sp() descriptor with BIP-380 checksum
+    const spscan = SP.encodeSpscan(bScan, Bspend);
+    const descriptorBody = `sp([${fingerprint}/352h/0h/0h]${spscan})`;
+    const checksum = descriptorChecksum(descriptorBody);
+    const finalDescriptor = `${descriptorBody}#${checksum}`;
+
+    outputText.textContent = finalDescriptor;
+
+    currentWalletData = {
+        name: 'SafeKeep Silent Payment',
+        descriptor: finalDescriptor,
+        policyType: 'single',
+        scriptType: 'sp',
+        quorum: { m: 1, n: 1 },
+        derivationPath: "m/352'/0'/0'",
+        keystores: [{
+            type: 'readonly',
+            source: 'bip39',
+            derivation: "m/352'/0'/0'",
+            masterFingerprint: fingerprint.toUpperCase(),
+            silentPayment: {
+                address: spAddress,
+                spscan: spscan,
+                scanPath: "m/352'/0'/0'/1'/0",
+                spendPath: "m/352'/0'/0'/0'/0"
+            }
+        }],
+        network: 'mainnet'
+    };
+
+    // Pre-render the print QR (same as the standard flow)
+    const printCanvas = document.getElementById('print-qr-canvas');
+    window.QRCode.toCanvas(printCanvas, finalDescriptor, {
+        width: 400,
+        errorCorrectionLevel: 'L',
+        color: { dark: '#000000', light: '#ffffff' }
+    });
+
+    // Print backup reference
+    const printRef = document.getElementById('print-backup-ref');
+    printRef.innerHTML =
+        '<div style="margin: 16px 0; padding: 12px; border: 1px solid #ccc; border-radius: 6px;">' +
+        '<div style="font-weight: 700; margin-bottom: 8px; text-transform: uppercase; font-size: 0.85rem;">Backup Reference — Silent Payment</div>' +
+        `<div style="margin-bottom: 6px;"><strong>Fingerprint:</strong> <span style="font-family: monospace;">${fingerprint.toUpperCase()}</span></div>` +
+        `<div style="margin-bottom: 6px;"><strong>Address:</strong> <span style="font-family: monospace; word-break: break-all;">${spAddress}</span></div>` +
+        (passphrase ? `<div><strong>Passphrase:</strong> <span style="font-family: monospace;">${passphrase}</span></div>` : '') +
+        '</div>';
+
+    // Address Verification Override: Silent Payments use ONE static sp1q
+    // address (no sequential m/0/i chain). Show it for verification against
+    // the coordinator.
+    if (verifyLabel) verifyLabel.textContent = 'Silent Payment Address (static — verify against coordinator)';
+    addressOutput.innerHTML =
+        `<tr><td style="color: var(--skb-text-muted);">sp1q</td>` +
+        `<td style="word-break: break-all;">${spAddress}</td></tr>`;
+
+    // Update active session
+    if (window.SeedSession) {
+        window.SeedSession.set({
+            mnemonic: mnemonic,
+            fingerprint: fingerprint.toUpperCase(),
+            passphrase: passphrase,
+            wordCount: words.length,
+            keyFormat: 'slip132',
+            addressType: '352'
+        });
+    }
+}
+
+
+// =========================================================
 // 10. COPY / SAVE / QR / PRINT
 // =========================================================
 window.copyDescriptor = function() {
@@ -1176,41 +1322,55 @@ window.saveDescriptorToFile = async function() {
         return;
     }
 
-    // Build standard Bitcoin Core / Sparrow output descriptor text file
-    // The BIP389 combined descriptor uses <0;1>/* (what we generate)
-    // Bitcoin Core needs separate receive (/0/*) and change (/1/*) descriptors
-
-    // Strip existing checksum to get the body
-    const combinedBody = currentWalletData.descriptor.replace(/#[a-z0-9]+$/, '');
-
     // Convert to h-notation (Bitcoin Core standard) before computing checksums
     function toH(s) { return s.replace(/'/g, 'h'); }
 
-    const combinedH = toH(combinedBody);
-    const combinedDesc = `${combinedH}#${descriptorChecksum(combinedH)}`;
+    let fileContent, suggestedName;
 
-    // Receive: replace <0;1>/* with 0/*
-    const receiveH = combinedH.replace(/<0;1>\/\*/g, '0/*');
-    const receiveDesc = `${receiveH}#${descriptorChecksum(receiveH)}`;
+    if (currentWalletData.scriptType === 'sp') {
+        // Silent Payment (BIP-352 / BIP-392): a single static descriptor — there
+        // are no receive/change chains, so no BIP389 / Bitcoin Core split.
+        const ks = currentWalletData.keystores && currentWalletData.keystores[0];
+        const sp = ks && ks.silentPayment;
+        const lines = [
+            `# Silent Payment (BIP-352 / BIP-392) watch-only descriptor:`,
+            currentWalletData.descriptor,
+            ``
+        ];
+        if (sp && sp.address) lines.push(`# Silent Payment address (static):`, sp.address, ``);
+        fileContent = lines.join('\n');
+        suggestedName = `${currentWalletData.name.replace(/\s+/g, '-')}_Descriptor.txt`;
+    } else {
+        // Build standard Bitcoin Core / Sparrow output descriptor text file.
+        // The BIP389 combined descriptor uses <0;1>/* (what we generate);
+        // Bitcoin Core needs separate receive (/0/*) and change (/1/*) descriptors.
+        const combinedBody = currentWalletData.descriptor.replace(/#[a-z0-9]+$/, '');
+        const combinedH = toH(combinedBody);
+        const combinedDesc = `${combinedH}#${descriptorChecksum(combinedH)}`;
 
-    // Change: replace <0;1>/* with 1/*
-    const changeH = combinedH.replace(/<0;1>\/\*/g, '1/*');
-    const changeDesc = `${changeH}#${descriptorChecksum(changeH)}`;
+        // Receive: replace <0;1>/* with 0/*
+        const receiveH = combinedH.replace(/<0;1>\/\*/g, '0/*');
+        const receiveDesc = `${receiveH}#${descriptorChecksum(receiveH)}`;
 
-    const fileLines = [
-        `# Receive and change descriptor (BIP389):`,
-        combinedDesc,
-        ``,
-        ``,
-        `# Receive descriptor (Bitcoin Core):`,
-        receiveDesc,
-        ``,
-        `# Change descriptor (Bitcoin Core):`,
-        changeDesc,
-        ``
-    ];
-    const fileContent = fileLines.join('\n');
-    const suggestedName = `${currentWalletData.name.replace(/\s+/g, '-')}_Descriptor.txt`;
+        // Change: replace <0;1>/* with 1/*
+        const changeH = combinedH.replace(/<0;1>\/\*/g, '1/*');
+        const changeDesc = `${changeH}#${descriptorChecksum(changeH)}`;
+
+        const fileLines = [
+            `# Receive and change descriptor (BIP389):`,
+            combinedDesc,
+            ``,
+            ``,
+            `# Receive descriptor (Bitcoin Core):`,
+            receiveDesc,
+            ``,
+            `# Change descriptor (Bitcoin Core):`,
+            changeDesc,
+            ``
+        ];
+        fileContent = fileLines.join('\n');
+        suggestedName = `${currentWalletData.name.replace(/\s+/g, '-')}_Descriptor.txt`;
+    }
 
     if (window.showSaveFilePicker) {
         try {
