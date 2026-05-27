@@ -3,23 +3,29 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, rmdirSync } from 'fs';
 import { createHash } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// SafeKeep OS ships a single self-contained entry point.
-// boot.html is the entire app — Vite inlines all scripts, styles,
-// and assets via viteSingleFile(). The legacy per-tool pages and
-// index.html landing page were removed during the OS pivot.
+// SafeKeep OS ships a self-contained boot.html (the entire app — Vite inlines
+// all scripts, styles, and assets via viteSingleFile()). The Silent Payment
+// (BIP-352/BIP-392) Output Descriptor tool ships as a SECONDARY standalone
+// single-file page (dist/descriptor.html): its RAM-only seed-loading security
+// model can't live inside boot.html, so it is built as its own entry point.
+//
+// `input` is the source HTML; `out` is the final flat filename under dist/.
+// Vite mirrors the source path (descriptor/index.html -> dist/descriptor/
+// index.html), so any nested entry is promoted to dist/<out> after the build.
 const pages = [
-    'boot.html'
+    { input: 'boot.html',             out: 'boot.html' },
+    { input: 'descriptor/index.html', out: 'descriptor.html' },
 ];
 
 async function buildOfflineSuite() {
     for (let i = 0; i < pages.length; i++) {
-        console.log(`\n🔨 Building standalone file: ${pages[i]}`);
-        
+        console.log(`\n🔨 Building standalone file: ${pages[i].input} → dist/${pages[i].out}`);
+
         // We run a mini Vite build for each individual file
         await build({
             configFile: false, // Bypass standard config
@@ -33,11 +39,29 @@ async function buildOfflineSuite() {
                 // they inject fetch() calls that break on file:// (USB boot drive)
                 modulePreload: false,
                 rollupOptions: {
-                    input: resolve(__dirname, pages[i]),
+                    input: resolve(__dirname, pages[i].input),
                 }
             }
         });
     }
+
+    // Promote any nested entry output to a flat standalone file. Vite mirrors
+    // the input's path relative to root, so `descriptor/index.html` lands at
+    // `dist/descriptor/index.html`; move it to `dist/descriptor.html` and drop
+    // the now-empty subdirectory.
+    const distRoot = resolve(__dirname, 'dist');
+    for (const page of pages) {
+        if (page.input === page.out) continue; // top-level entry — already flat
+        const nested = join(distRoot, page.input); // e.g. dist/descriptor/index.html
+        const flat   = join(distRoot, page.out);   // e.g. dist/descriptor.html
+        if (existsSync(nested)) {
+            renameSync(nested, flat);
+            const subdir = join(distRoot, page.input.split('/')[0]);
+            try { rmdirSync(subdir); } catch (_) { /* non-empty / already gone */ }
+            console.log(`📄 Promoted ${page.input} → dist/${page.out}`);
+        }
+    }
+
     console.log('\n✅ All tools successfully compiled into standalone offline HTML files!');
 
     // ------------------------------------------------------------------
@@ -134,8 +158,10 @@ async function buildOfflineSuite() {
     // (it's what Chromium loads). If other files become security-
     // critical (e.g. a preload script), add them to the ATTESTED list.
     // ------------------------------------------------------------------
-    const ATTESTED = ['boot.html'];
     const distDir = resolve(__dirname, 'dist');
+    const ATTESTED = ['boot.html'];
+    // Attest the standalone Silent Payment descriptor tool too, when present.
+    if (existsSync(join(distDir, 'descriptor.html'))) ATTESTED.push('descriptor.html');
     const manifest = {
         schemaVersion: 1,
         generatedAt: new Date().toISOString(),
