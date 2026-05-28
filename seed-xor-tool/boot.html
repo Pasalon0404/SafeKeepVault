@@ -17786,7 +17786,12 @@ function downgradePSBTv2(srcBytes, spCtx) {
                 const im = inputMaps[i];
                 // prevTxid is INTERNAL byte order; the SP module wants display hex.
                 outpoints.push({ txid: I.bytesToHex(im.prevTxid.slice().reverse()), vout: im.vout });
-                const k = _psbtDeriveInputKeyForSP(spCtx.btcLib, spCtx.masterKey, spCtx.myFingerprint, im.synth);
+                // SP -> SP: an SP input has no bip32/tap derivation entries, only
+                // the proprietary 0x1f / 0x20 fields. Recover its tweaked spending
+                // key (d = b_spend + t_k) first; the standard BIP-32 matcher is
+                // only used for ordinary inputs.
+                let k = _psbtTryRecoverSpInputKey(spCtx.masterKey, im);
+                if (!k) k = _psbtDeriveInputKeyForSP(spCtx.btcLib, spCtx.masterKey, spCtx.myFingerprint, im.synth);
                 if (!k) throw new Error('could not derive the private key for input ' + (i + 1) + ' from this seed; every input must belong to this wallet to spend to a Silent Payment (single-signer only)');
                 sumInputs.push(k);
             }
@@ -18765,6 +18770,94 @@ function _psbtVerifyMultisigChange(btcLib, masterKey, myFingerprint, msInfo, out
  *
  * Supported (Phase 2): P2WPKH (0014), P2TR key-path (5120), P2PKH (76a914).
  */
+/**
+ * Recover the SP-tweaked spending key of a Silent Payment INPUT (P2TR keyed by
+ * B_spend + t_k·G, signalled with the proprietary 0x1f / 0x20 PSBT input
+ * fields). Used when a transaction has BOTH an SP input AND an SP output
+ * ("SP → SP"): the standard matcher in _psbtDeriveInputKeyForSP only looks at
+ * bip32 / tap derivation entries, but an SP input has neither — only the
+ * proprietary fields — so without this helper the BIP-352 input-key sum can't
+ * include the SP input and the derive-and-fill aborts.
+ *
+ * Accepts both source shapes the rest of the signer uses:
+ *   • downgradePSBTv2 "synth"  : src.synth.witnessUtxo.script + src.keep[]
+ *     where each kv has { key:Uint8Array (prefixed by the keytype byte), value }.
+ *   • btc-signer parsed input  : src.witnessUtxo.script + src.unknown[]
+ *     where each entry is [ {type, key}, value ].
+ *
+ * Returns { privKey:32B, isTaproot:true } on success, null otherwise. The
+ * isTaproot flag makes SP.sumInputPrivateKeys apply BIP-341 parity exactly as
+ * for a normal taproot input. Validated end-to-end in test-sp-to-sp.mjs.
+ */
+function _psbtTryRecoverSpInputKey(masterKey, src) {
+    if (!src) return null;
+    const SP = window.SilentPayments;
+    if (!SP || !SP._internal) return null;
+    const I = SP._internal;
+
+    let script = null;
+    let propIter = null;
+    if (src.synth && src.synth.witnessUtxo) {
+        script = src.synth.witnessUtxo.script;
+        propIter = (src.keep || []).map(kv => ({
+            type: kv.key && kv.key.length ? kv.key[0] : -1,
+            key:  kv.key && kv.key.length > 1 ? kv.key.slice(1) : new Uint8Array(0),
+            val:  kv.value,
+        }));
+    } else if (src.witnessUtxo) {
+        script = src.witnessUtxo.script;
+        propIter = (src.unknown || []).map(pair => ({
+            type: pair && pair[0] && typeof pair[0].type === 'number' ? pair[0].type : -1,
+            key:  pair && pair[0] && pair[0].key ? pair[0].key : new Uint8Array(0),
+            val:  pair ? pair[1] : null,
+        }));
+    } else {
+        return null;
+    }
+    if (!script || script.length !== 34 || script[0] !== 0x51 || script[1] !== 0x20) return null;
+
+    let baseSpendPub = null, fpPath = null, tweak = null;
+    for (const pf of propIter) {
+        if (pf.type === 0x1f) { baseSpendPub = pf.key; fpPath = pf.val; }
+        else if (pf.type === 0x20) { tweak = pf.val; }
+    }
+    if (!fpPath || !tweak) return null;
+    if (tweak.length !== 32) return null;
+    if (fpPath.length < 4 || (fpPath.length - 4) % 4 !== 0) return null;
+
+    // big-endian fp in the 0x1f value; 0x00000000 = wildcard
+    const entryFp = ((fpPath[0] << 24) | (fpPath[1] << 16) | (fpPath[2] << 8) | fpPath[3]) >>> 0;
+    const myFpNum = (masterKey.fingerprint >>> 0);
+    if (entryFp !== myFpNum && entryFp !== 0x00000000) return null;
+
+    // little-endian uint32 path components after the 4-byte fp
+    const path = [];
+    for (let o = 4; o + 4 <= fpPath.length; o += 4) {
+        path.push(((fpPath[o]) | (fpPath[o+1] << 8) | (fpPath[o+2] << 16) | (fpPath[o+3] << 24)) >>> 0);
+    }
+    let child = masterKey;
+    try { for (const c of path) child = child.deriveChild(c); }
+    catch (_) { return null; }
+    if (!child.privateKey) return null;
+    // Sanity-check derived pubkey vs the 0x1f base spend pubkey.
+    if (baseSpendPub && baseSpendPub.length === 33) {
+        const dp = child.publicKey;
+        let same = dp.length === baseSpendPub.length;
+        if (same) for (let i = 0; i < dp.length; i++) if (dp[i] !== baseSpendPub[i]) { same = false; break; }
+        if (!same) return null;
+    }
+
+    // d = (b_spend + t_k) mod n  (no extra BIP-341 taptweak)
+    const d = I.modN(I.bytesToNumberBE(child.privateKey) + I.bytesToNumberBE(tweak));
+    if (d === 0n) return null;
+    const dBytes = I.numberToBytesBE(d, 32);
+    // Confirm d·G matches the input's P2TR output key — fail closed otherwise.
+    const dXonly = I.G.multiply(d).toBytes(true).slice(1);
+    const outXonly = script.slice(2, 34);
+    for (let i = 0; i < 32; i++) if (dXonly[i] !== outXonly[i]) return null;
+    return { privKey: dBytes, isTaproot: true };
+}
+
 function _psbtDeriveInputKeyForSP(btcLib, masterKey, myFingerprint, inp) {
     try {
         const SP = window.SilentPayments;
@@ -18854,7 +18947,11 @@ function _psbtVerifySilentPayments(tx, masterKey, myFingerprint, spMap) {
             return { ok: false, fatal: true, reason: 'Input ' + (i + 1) + ' is missing its outpoint — cannot compute the Silent Payment input hash.' };
         }
         outpoints.push({ txid: I.bytesToHex(inp.txid), vout: inp.index >>> 0 });
-        const k = _psbtDeriveInputKeyForSP(btcLib, masterKey, myFingerprint, inp);
+        // SP -> SP: an SP input carries the proprietary 0x1f/0x20 fields (no
+        // standard derivation). Recover its tweaked spending key first; fall
+        // through to the regular BIP-32 matcher for ordinary inputs.
+        let k = _psbtTryRecoverSpInputKey(masterKey, inp);
+        if (!k) k = _psbtDeriveInputKeyForSP(btcLib, masterKey, myFingerprint, inp);
         if (!k) {
             return {
                 ok: false, fatal: true,
