@@ -8553,7 +8553,7 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.27b</span>
+                        <span class="version" id="dash-version">v1.28b</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -11041,6 +11041,7 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                                 <option value="86">Taproot (BIP-86) — bc1p...</option>
                                 <option value="49">Nested SegWit (BIP-49) — 3...</option>
                                 <option value="44">Legacy (BIP-44) — 1...</option>
+                                <option value="352">Silent Payment (BIP-352) — sp1q...</option>
                             </select>
                         </div>
                         <div>
@@ -22809,6 +22810,20 @@ async function psbtDoSign() {
                     console.log(`[PSBT] First entry: fp=${fpHex} pathLen=${f.path?.length} match=${fpHex === myFingerprint}`);
                 }
 
+                // Silent Payment spend: a P2TR input carrying Sparrow's proprietary
+                // 0x1f/0x20 tweak fields. The standard BIP-32 matcher below can't
+                // derive its tweaked key (b_spend + t_k), so handle it first.
+                try {
+                    if (_psbtTrySignSilentPaymentInput(tx, idx, masterKey, myFingerprint)) {
+                        signIdxCalls++;
+                        matchedByFp++;
+                        console.log(`[PSBT] [OK] Silent Payment key-path signed input ${idx}`);
+                        return; // next input
+                    }
+                } catch (spErr) {
+                    console.log(`[PSBT] SP-spend sign(input ${idx}) error: ${spErr.message}`);
+                }
+
                 // Try HDKey-based signIdx (handles bip32Derivation matching internally)
                 try {
                     const signed = tx.signIdx(masterKey, idx);
@@ -23405,6 +23420,104 @@ function _psbtCountSigs(tx) {
         if (inp.finalScriptSig?.length > 0) count++;
     });
     return count;
+}
+
+// ===========================================================================
+// SILENT PAYMENT SPEND — sign a P2TR input whose key is B_spend + t_k·G
+// ===========================================================================
+// Sparrow signals a Silent Payment input to spend with two proprietary PSBT
+// input fields (confirmed via diagnostic capture of a real Sparrow SP spend):
+//   0x1f : key = 33-byte base spend pubkey B_spend ; value = fp(4, big-endian)
+//          || derivation path (one little-endian uint32 per level)
+//   0x20 : value = 32-byte scalar tweak t_k
+// The spending key is d = (b_spend + t_k) mod n — the BIP-352 tweak t_k plays
+// the role a BIP-341 taptweak plays for an ordinary taproot key-path spend, so
+// d·G is the taproot OUTPUT key directly (no extra tweak). We derive b_spend
+// along the path, form d, confirm d·G is the output key, then produce a BIP-340
+// key-path Schnorr signature over the BIP-341 sighash and set PSBT_IN_TAP_KEY_SIG.
+// btc-signer's signIdx can't do this (it requires tapInternalKey and re-applies
+// a taptweak), so we sign directly. Validated end-to-end in test-sp-spend.mjs.
+//
+// Returns true if it signed this input; false if the input is not a Silent
+// Payment input for this seed. Throws only on an internal/crypto error.
+function _psbtTrySignSilentPaymentInput(tx, idx, masterKey, myFingerprint) {
+    const inp = tx.inputs[idx];
+    const script = inp && inp.witnessUtxo && inp.witnessUtxo.script;
+    // must be a P2TR key-path output: OP_1 (0x51) PUSH32 (0x20) <32-byte x-only>
+    if (!script || script.length !== 34 || script[0] !== 0x51 || script[1] !== 0x20) return false;
+    const unk = inp.unknown;
+    if (!Array.isArray(unk) || !unk.length) return false;
+
+    // btc-signer parses unknown fields as [ {type, key}, value ] tuples.
+    let baseSpendPub = null, fpPath = null, tweak = null;
+    for (const pair of unk) {
+        const k = pair && pair[0];
+        const v = pair && pair[1];
+        if (!k || typeof k.type !== 'number') continue;
+        if (k.type === 0x1f) { baseSpendPub = k.key; fpPath = v; }
+        else if (k.type === 0x20) { tweak = v; }
+    }
+    if (!fpPath || !tweak) return false; // not a Silent Payment input
+    if (tweak.length !== 32) { console.log(`[PSBT] SP input ${idx}: tweak (0x20) is ${tweak.length}B, expected 32`); return false; }
+    if (fpPath.length < 4 || (fpPath.length - 4) % 4 !== 0) { console.log(`[PSBT] SP input ${idx}: malformed fp/path (0x1f) len=${fpPath.length}`); return false; }
+
+    const SP = window.SilentPayments;
+    const schnorr = window.BtcMath && window.BtcMath.schnorr;
+    if (!SP || !SP._internal || !schnorr) throw new Error('Silent Payments / schnorr unavailable for SP spend');
+    const I = SP._internal;
+
+    // Fingerprint gate (big-endian fp in the 0x1f value; 00000000 = wildcard).
+    const entryFp = ((fpPath[0] << 24) | (fpPath[1] << 16) | (fpPath[2] << 8) | fpPath[3]) >>> 0;
+    const myFpNum = (masterKey.fingerprint >>> 0);
+    if (entryFp !== myFpNum && entryFp !== 0x00000000) {
+        console.log(`[PSBT] SP input ${idx}: fp ${entryFp.toString(16).padStart(8, '0')} != mine ${myFpNum.toString(16).padStart(8, '0')} — not ours`);
+        return false;
+    }
+
+    // Parse the little-endian uint32 path components after the 4-byte fp.
+    const path = [];
+    for (let o = 4; o + 4 <= fpPath.length; o += 4) {
+        path.push(((fpPath[o]) | (fpPath[o + 1] << 8) | (fpPath[o + 2] << 16) | (fpPath[o + 3] << 24)) >>> 0);
+    }
+
+    // Derive the base spend private key b_spend.
+    let child = masterKey;
+    try { for (const c of path) child = child.deriveChild(c); }
+    catch (e) { console.log(`[PSBT] SP input ${idx}: derive failed: ${e.message}`); return false; }
+    if (!child.privateKey) { console.log(`[PSBT] SP input ${idx}: no private key after derivation`); return false; }
+    // Sanity: derived pubkey must equal the field-0x1f base spend pubkey.
+    if (baseSpendPub && baseSpendPub.length === 33) {
+        const dp = child.publicKey;
+        let same = dp.length === baseSpendPub.length;
+        if (same) for (let i = 0; i < dp.length; i++) if (dp[i] !== baseSpendPub[i]) { same = false; break; }
+        if (!same) { console.log(`[PSBT] SP input ${idx}: derived pubkey != base spend pubkey (0x1f) — not ours`); return false; }
+    }
+
+    // d = (b_spend + t_k) mod n
+    const d = I.modN(I.bytesToNumberBE(child.privateKey) + I.bytesToNumberBE(tweak));
+    if (d === 0n) { console.log(`[PSBT] SP input ${idx}: tweaked key is zero`); return false; }
+    const dBytes = I.numberToBytesBE(d, 32);
+
+    // Confirm d·G is the taproot output key BEFORE signing (fail closed).
+    const dXonly = I.G.multiply(d).toBytes(true).slice(1);
+    const outXonly = script.slice(2, 34);
+    let keyOK = dXonly.length === outXonly.length;
+    if (keyOK) for (let i = 0; i < dXonly.length; i++) if (dXonly[i] !== outXonly[i]) { keyOK = false; break; }
+    if (!keyOK) { console.log(`[PSBT] SP input ${idx}: tweaked key does not match output key — refusing to sign`); return false; }
+
+    // BIP-341 key-path sighash, then BIP-340 Schnorr signature (NO extra taptweak).
+    const sighashType = (inp.sighashType !== undefined && inp.sighashType !== null) ? inp.sighashType : 0x00; // DEFAULT
+    const prevOutScript = tx.inputs.map(i => i.witnessUtxo && i.witnessUtxo.script);
+    const amount = tx.inputs.map(i => i.witnessUtxo && i.witnessUtxo.amount);
+    if (prevOutScript.some(s => !s) || amount.some(a => a === undefined || a === null)) {
+        throw new Error('SP spend needs witnessUtxo (script + amount) on every input for the taproot sighash');
+    }
+    const hash = tx.preimageWitnessV1(idx, prevOutScript, sighashType, amount);
+    const sig64 = schnorr.sign(hash, dBytes);
+    let tapKeySig = sig64;
+    if (sighashType !== 0x00) { tapKeySig = new Uint8Array(65); tapKeySig.set(sig64, 0); tapKeySig[64] = sighashType; }
+    tx.updateInput(idx, { tapKeySig: tapKeySig }, true);
+    return true;
 }
 
 function _psbtFormatPath(path) {
@@ -33838,15 +33951,16 @@ function arm_enforceCompatibility() {
     // <option> leaves the <select> showing that option as the value
     // even though it's nominally unselectable, so we must clear the
     // selection first.
-    if (dvSel.value === '86' && wtSel.value === 'multi') {
+    // Taproot (BIP-86) and Silent Payment (BIP-352) are single-signer only.
+    if ((dvSel.value === '86' || dvSel.value === '352') && wtSel.value === 'multi') {
         wtSel.value = 'single';
     }
 
     // Step 2 — paint the disabled bits.
     //
-    // Multi-Sig option: disabled iff Address Type is Taproot (BIP-86).
-    // For every other Address Type (BIP-84 / BIP-49 / BIP-44) the
-    // Multi-Sig option is freely selectable.
+    // Multi-Sig option: disabled iff Address Type is Taproot (BIP-86) or
+    // Silent Payment (BIP-352). For BIP-84 / BIP-49 / BIP-44 the Multi-Sig
+    // option is freely selectable.
     //
     // BIP-32 Watch-Only JSON option: NEVER disabled by this validator.
     // The Specter workflow needs `multi × electrum_json` to be a
@@ -33855,7 +33969,7 @@ function arm_enforceCompatibility() {
     // cached DOM. (Setting to `false` is a no-op on a fresh DOM but
     // a real side-effect on a hot-reloaded one — useful during dev.)
     const multiOpt = wtSel.querySelector('option[value="multi"]');
-    if (multiOpt) multiOpt.disabled = (dvSel.value === '86');
+    if (multiOpt) multiOpt.disabled = (dvSel.value === '86' || dvSel.value === '352');
 
     const electrumOpt = kfSel.querySelector('option[value="electrum_json"]');
     if (electrumOpt) electrumOpt.disabled = false;
@@ -34443,6 +34557,16 @@ async function arm_deriveWallet() {
         const walletType = document.getElementById('arm-wallet-type').value;
         const keyFormat = document.getElementById('arm-key-format').value;
 
+        // ---- Silent Payment (BIP-352 / BIP-392) ----
+        // A wholly different output type: a single static sp1q address plus a
+        // BIP-392 sp() watch-only descriptor — not an HD chain. Handle it in a
+        // dedicated path and return, bypassing the xpub / JSON / sequential-
+        // address machinery below.
+        if (pathType === '352') {
+            await arm_deriveSilentPayment(mnemonic, passphrase, xpubEl, pathEl, addrBody);
+            return;
+        }
+
         // SLIP-132 version bytes for different address types
         const slip132Single = {
             '84': { private: 0x04b2430c, public: 0x04b24746 }, // zpub
@@ -34857,6 +34981,84 @@ async function arm_deriveWallet() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Silent Payment (BIP-352 / BIP-392) derivation for the Output Descriptor tool.
+// ---------------------------------------------------------------------------
+// Produces a watch-only export for Sparrow / BIP-392-aware coordinators:
+//
+//   descriptor: sp([<masterfp>/352h/0h/0h]spscan1q...)#<checksum>
+//   address:    sp1q...  (single static silent payment address, BIP-352)
+//
+// where spscan1q... (BIP-392) encodes the PRIVATE scan key b_scan
+// (m/352'/0'/0'/1'/0) and the PUBLIC spend key B_spend (m/352'/0'/0'/0'/0).
+// Unlike HD wallets there is no sequential receive chain — one static address
+// is shown for verification against the coordinator. Validated against the
+// official BIP-352 receiving vector (see test-descriptor-sp.mjs).
+async function arm_deriveSilentPayment(mnemonic, passphrase, xpubEl, pathEl, addrBody) {
+    const { bip39, HDKey } = window.BtcMath;
+    const SP = window.SilentPayments;
+    if (!SP) throw new Error('Silent Payments module not loaded');
+
+    const seedBytes = await bip39.mnemonicToSeed(mnemonic, passphrase || '');
+    // Standard BIP-32 version bytes so the fingerprint and origin are canonical.
+    const root = HDKey.fromMasterSeed(seedBytes, { private: 0x0488ade4, public: 0x0488b21e });
+    const derivedFP = (root.fingerprint >>> 0).toString(16).padStart(8, '0').toLowerCase();
+
+    // BIP-352 key derivation
+    const scanNode  = root.derive("m/352'/0'/0'/1'/0"); // scan key
+    const spendNode = root.derive("m/352'/0'/0'/0'/0"); // spend key
+    if (!scanNode.privateKey) throw new Error('Could not derive the Silent Payment scan key from this seed');
+    const bScan  = scanNode.privateKey;   // 32-byte private scan key
+    const Bscan  = scanNode.publicKey;    // 33-byte compressed public scan key
+    const Bspend = spendNode.publicKey;   // 33-byte compressed public spend key
+
+    // sp1q... static address + spscan1q... watch key + sp() descriptor (checksummed)
+    const spAddress  = SP.encodeSilentPaymentAddress(Bscan, Bspend);
+    const spscan     = SP.encodeSpscan(bScan, Bspend);
+    const body       = `sp([${derivedFP}/352h/0h/0h]${spscan})`;
+    const descriptor = `${body}#${desc_checksum(body)}`;
+
+    // Fingerprint displays (mirror the standard arm_deriveWallet logic).
+    const session = window.SeedSession?.get();
+    const baseFP = _armOverrideMnemonic ? derivedFP : (session?.fingerprint || derivedFP);
+    const fpEl = document.getElementById('arm-fingerprint');
+    const ppFpPanel = document.getElementById('arm-pp-fingerprint');
+    if (fpEl) fpEl.textContent = baseFP;
+    if (passphrase) {
+        if (ppFpPanel) {
+            ppFpPanel.style.display = 'block';
+            document.getElementById('arm-base-fp').textContent = baseFP;
+            document.getElementById('arm-pp-fp').textContent = derivedFP;
+        }
+    } else if (ppFpPanel) {
+        ppFpPanel.style.display = 'none';
+    }
+
+    pathEl.textContent = "m/352'/0'/0'";
+    xpubEl.textContent = descriptor;
+    xpubEl.style.color = '';
+
+    // Address verification override: ONE static sp1q address (no m/0/i chain).
+    addrBody.innerHTML = '';
+    const row = document.createElement('tr');
+    row.innerHTML = '<td style="white-space: nowrap;">sp1q</td>' +
+                    '<td style="word-break: break-all;">' + spAddress + '</td>';
+    addrBody.appendChild(row);
+
+    // Stash for the Download/QR buttons (which otherwise dispatch by key format).
+    _armSpExport = { descriptor: descriptor, address: spAddress, spscan: spscan, fingerprint: derivedFP.toUpperCase() };
+
+    // Refresh an open QR with the descriptor payload.
+    if (typeof _armXpubQRVisible !== 'undefined' && _armXpubQRVisible) {
+        const canvas = document.getElementById('arm-xpub-qr-canvas');
+        if (canvas && window.QRCode) {
+            try { await QRCode.toCanvas(canvas, descriptor, { width: 280, margin: 2, color: { dark: '#000000', light: '#ffffff' } }); } catch (_) {}
+        }
+    }
+}
+let _armSpExport = null;
+
+
 // Copy the live <pre> block contents to the clipboard.
 //
 // "xpub" is a historical name — this button copies WHATEVER the user is
@@ -35268,6 +35470,23 @@ async function arm_downloadActiveExport() {
     // below is made off this single live read of `<select#arm-key-format>`.
     const keyFormatEl = document.getElementById('arm-key-format');
     const keyFormat   = keyFormatEl ? keyFormatEl.value : 'coldcard_json';
+
+    // Silent Payment (BIP-352 / BIP-392): the JSON builders below derive HD
+    // xpubs and don't apply. Download the sp() descriptor + sp1q address as a
+    // plain text file instead.
+    const _armDvSel = document.getElementById('arm-derivation');
+    if (_armDvSel && _armDvSel.value === '352') {
+        if (!_armSpExport || !_armSpExport.descriptor) {
+            showStatus('Generate the Silent Payment descriptor first.', 'error');
+            return;
+        }
+        const spTxt =
+            '# Silent Payment (BIP-352 / BIP-392) watch-only descriptor\n' +
+            _armSpExport.descriptor + '\n\n' +
+            '# Silent Payment address (static):\n' +
+            _armSpExport.address + '\n';
+        return _armSaveExportToTransfer('SafeKeep-SilentPayment-Descriptor.txt', spTxt);
+    }
 
     // Explicit dispatch switch — one named branch per Key Format option,
     // so the routing is unambiguous and a future format addition is a

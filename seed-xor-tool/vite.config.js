@@ -72,7 +72,8 @@ export default defineConfig({
         // matching line here or the dev server will refuse to start.
         architecture: resolve(__dirname, 'architecture/index.html'),
         bip85:        resolve(__dirname, 'bip85/index.html'),
-        descriptor:   resolve(__dirname, 'descriptor/index.html'),
+        // (descriptor/ removed — the Silent Payment Output Descriptor tool is
+        //  now integrated into boot.html's arm_ family, not a standalone page.)
         dice:         resolve(__dirname, 'dice/index.html'),
         entropyTool:  resolve(__dirname, 'entropy-tool/index.html'),
         passphrase:   resolve(__dirname, 'passphrase/index.html'),
