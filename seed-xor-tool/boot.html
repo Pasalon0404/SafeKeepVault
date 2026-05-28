@@ -21446,6 +21446,20 @@ async function psbtDoSign() {
                     console.log(`[PSBT] First entry: fp=${fpHex} pathLen=${f.path?.length} match=${fpHex === myFingerprint}`);
                 }
 
+                // Silent Payment spend: a P2TR input carrying Sparrow's proprietary
+                // 0x1f/0x20 tweak fields. The standard BIP-32 matcher below can't
+                // derive its tweaked key (b_spend + t_k), so handle it first.
+                try {
+                    if (_psbtTrySignSilentPaymentInput(tx, idx, masterKey, myFingerprint)) {
+                        signIdxCalls++;
+                        matchedByFp++;
+                        console.log(`[PSBT] [OK] Silent Payment key-path signed input ${idx}`);
+                        return; // next input
+                    }
+                } catch (spErr) {
+                    console.log(`[PSBT] SP-spend sign(input ${idx}) error: ${spErr.message}`);
+                }
+
                 // Try HDKey-based signIdx (handles bip32Derivation matching internally)
                 try {
                     const signed = tx.signIdx(masterKey, idx);
@@ -21631,28 +21645,6 @@ async function psbtDoSign() {
         console.log(`[PSBT] FP matches: ${matchedByFp}/${totalDerivEntries} entries`);
 
         if (added === 0) {
-            // ----------------------------------------------------------------
-            // SP-SPEND DIAGNOSTIC DUMP (logging only). No signatures landed —
-            // dump exactly what the coordinator sent so we can see how a Silent
-            // Payment P2TR input (output key B_spend + t_k·G) is signalled, and
-            // whether our v2→v0 downgrade strips the taproot fields. Compare the
-            // ORIGINAL (Sparrow) bytes against the POST-DOWNGRADE bytes the
-            // signer actually parsed.
-            // ----------------------------------------------------------------
-            try {
-                console.error('[PSBT-DIAG] ===== NO SIGNATURES ADDED — dumping input fields for diagnosis =====');
-                _psbtDumpParsedTaproot(tx, 'signer view');
-                _psbtDumpRawInputFields(_psbtLoadedBytes, 'POST-DOWNGRADE (parsed by signer)');
-                if (_psbtOriginalV2Bytes) {
-                    _psbtDumpRawInputFields(_psbtOriginalV2Bytes, 'ORIGINAL v2 (as Sparrow sent it)');
-                } else {
-                    console.log('[PSBT-DIAG] (no _psbtOriginalV2Bytes — PSBT was not detected as v2, so POST-DOWNGRADE bytes ARE the original)');
-                }
-                console.error('[PSBT-DIAG] ===== END DUMP — paste these [PSBT-DIAG] lines back for analysis =====');
-            } catch (_diagErr) {
-                console.log('[PSBT-DIAG] diagnostic dump failed: ' + _diagErr.message);
-            }
-
             // Detect multisig: any input has 2+ bip32Derivation entries
             // (each entry corresponds to one cosigner's view of that input).
             let hasMultisigInput = false;
@@ -22067,94 +22059,101 @@ function _psbtCountSigs(tx) {
 }
 
 // ===========================================================================
-// SILENT PAYMENT SPEND DIAGNOSTICS (logging only — no signing logic)
+// SILENT PAYMENT SPEND — sign a P2TR input whose key is B_spend + t_k·G
 // ===========================================================================
-// Spending FROM a Silent Payment wallet means signing a P2TR key-path input
-// whose output key is B_spend + t_k·G (BIP-352). Our normal BIP-32 matcher
-// can't find it, so signing fails with "No signatures added." These two
-// dumpers expose EXACTLY what the coordinator (Sparrow) put on the wire so we
-// can see how the SP tweak is signalled — TAP_BIP32_DERIVATION (0x16),
-// TAP_INTERNAL_KEY (0x17), TAP_MERKLE_ROOT (0x18), or a PROPRIETARY (0xfc)
-// tweak field — and whether our v2→v0 downgrade strips any of it.
+// Sparrow signals a Silent Payment input to spend with two proprietary PSBT
+// input fields (confirmed via diagnostic capture of a real Sparrow SP spend):
+//   0x1f : key = 33-byte base spend pubkey B_spend ; value = fp(4, big-endian)
+//          || derivation path (one little-endian uint32 per level)
+//   0x20 : value = 32-byte scalar tweak t_k
+// The spending key is d = (b_spend + t_k) mod n — the BIP-352 tweak t_k plays
+// the role a BIP-341 taptweak plays for an ordinary taproot key-path spend, so
+// d·G is the taproot OUTPUT key directly (no extra tweak). We derive b_spend
+// along the path, form d, confirm d·G is the output key, then produce a BIP-340
+// key-path Schnorr signature over the BIP-341 sighash and set PSBT_IN_TAP_KEY_SIG.
+// btc-signer's signIdx can't do this (it requires tapInternalKey and re-applies
+// a taptweak), so we sign directly. Validated end-to-end in test-sp-spend.mjs.
+//
+// Returns true if it signed this input; false if the input is not a Silent
+// Payment input for this seed. Throws only on an internal/crypto error.
+function _psbtTrySignSilentPaymentInput(tx, idx, masterKey, myFingerprint) {
+    const inp = tx.inputs[idx];
+    const script = inp && inp.witnessUtxo && inp.witnessUtxo.script;
+    // must be a P2TR key-path output: OP_1 (0x51) PUSH32 (0x20) <32-byte x-only>
+    if (!script || script.length !== 34 || script[0] !== 0x51 || script[1] !== 0x20) return false;
+    const unk = inp.unknown;
+    if (!Array.isArray(unk) || !unk.length) return false;
 
-// Walk a PSBT's raw input maps and log every kv (keytype, keydata, value).
-// Taproot (0x13–0x18), MuSig2 (0x1a–0x1c), SP (0x1d/0x1e) and PROPRIETARY
-// (0xfc) values are logged in FULL hex (they're the fields we care about);
-// other long values are truncated.
-function _psbtDumpRawInputFields(rawBytes, label) {
-    try {
-        if (!rawBytes || rawBytes.length < 5) { console.log(`[PSBT-DIAG] ${label}: no bytes`); return; }
-        const IN_TYPES = {
-            0x00: 'NON_WITNESS_UTXO', 0x01: 'WITNESS_UTXO', 0x02: 'PARTIAL_SIG', 0x03: 'SIGHASH_TYPE',
-            0x04: 'REDEEM_SCRIPT', 0x05: 'WITNESS_SCRIPT', 0x06: 'BIP32_DERIVATION', 0x07: 'FINAL_SCRIPTSIG',
-            0x08: 'FINAL_SCRIPTWITNESS', 0x0a: 'RIPEMD160', 0x0b: 'SHA256', 0x0c: 'HASH160', 0x0d: 'HASH256',
-            0x0e: 'PREVIOUS_TXID', 0x0f: 'OUTPUT_INDEX', 0x10: 'SEQUENCE',
-            0x11: 'REQUIRED_TIME_LOCKTIME', 0x12: 'REQUIRED_HEIGHT_LOCKTIME',
-            0x13: 'TAP_KEY_SIG', 0x14: 'TAP_SCRIPT_SIG', 0x15: 'TAP_LEAF_SCRIPT', 0x16: 'TAP_BIP32_DERIVATION',
-            0x17: 'TAP_INTERNAL_KEY', 0x18: 'TAP_MERKLE_ROOT',
-            0x1a: 'MUSIG2_PARTICIPANT_PUBKEYS', 0x1b: 'MUSIG2_PUB_NONCE', 0x1c: 'MUSIG2_PARTIAL_SIG',
-            0x1d: 'SP_ECDH_SHARE', 0x1e: 'SP_DLEQ', 0xfc: 'PROPRIETARY'
-        };
-        const hx = (u) => Array.from(u).map(b => b.toString(16).padStart(2, '0')).join('');
-        let o = 5, inCount = null;
-        // walk globals to find the input count (v0 unsigned-tx 0x00 or v2 0x04)
-        while (o < rawBytes.length) {
-            const k = _psbtReadVarint(rawBytes, o); if (!k) return; o = k.next;
-            if (k.value === 0) break;
-            const kt = rawBytes[o]; o += k.value;
-            const v = _psbtReadVarint(rawBytes, o); if (!v) return; const vs = v.next; o = vs + v.value;
-            if (kt === 0x00 && inCount === null) inCount = _psbtCountTxInputs(rawBytes.slice(vs, vs + v.value));
-            if (kt === 0x04 && inCount === null) { const c = _psbtReadVarint(rawBytes, vs); inCount = c ? c.value : null; }
-        }
-        if (inCount === null || inCount < 0) { console.log(`[PSBT-DIAG] ${label}: could not determine input count`); return; }
-        console.log(`[PSBT-DIAG] ===== ${label} — ${inCount} input(s), ${rawBytes.length} bytes =====`);
-        for (let i = 0; i < inCount && o < rawBytes.length; i++) {
-            console.log(`[PSBT-DIAG] ${label} · input ${i}:`);
-            let fieldCount = 0;
-            while (o < rawBytes.length) {
-                const k = _psbtReadVarint(rawBytes, o); if (!k) return; o = k.next;
-                if (k.value === 0) break; // input map terminator
-                const kt = rawBytes[o];
-                const kd = rawBytes.slice(o + 1, o + k.value);
-                o += k.value;
-                const v = _psbtReadVarint(rawBytes, o); if (!v) return; o = v.next;
-                const val = rawBytes.slice(o, o + v.value); o += v.value;
-                fieldCount++;
-                const name = IN_TYPES[kt] || ('UNKNOWN_0x' + kt.toString(16).padStart(2, '0'));
-                const interesting = (kt >= 0x13 && kt <= 0x18) || (kt >= 0x1a && kt <= 0x1e) || kt === 0xfc;
-                const valShown = (val.length <= 96 || interesting) ? hx(val) : hx(val.slice(0, 96)) + `…(+${val.length - 96}B)`;
-                console.log(`[PSBT-DIAG]   0x${kt.toString(16).padStart(2, '0')} ${name}  keydata=${hx(kd) || '(none)'}  vallen=${val.length}  val=${valShown}`);
-            }
-            if (fieldCount === 0) console.log(`[PSBT-DIAG]   (no fields)`);
-        }
-    } catch (e) {
-        console.log(`[PSBT-DIAG] ${label}: dump error — ${e.message}`);
+    // btc-signer parses unknown fields as [ {type, key}, value ] tuples.
+    let baseSpendPub = null, fpPath = null, tweak = null;
+    for (const pair of unk) {
+        const k = pair && pair[0];
+        const v = pair && pair[1];
+        if (!k || typeof k.type !== 'number') continue;
+        if (k.type === 0x1f) { baseSpendPub = k.key; fpPath = v; }
+        else if (k.type === 0x20) { tweak = v; }
     }
-}
+    if (!fpPath || !tweak) return false; // not a Silent Payment input
+    if (tweak.length !== 32) { console.log(`[PSBT] SP input ${idx}: tweak (0x20) is ${tweak.length}B, expected 32`); return false; }
+    if (fpPath.length < 4 || (fpPath.length - 4) % 4 !== 0) { console.log(`[PSBT] SP input ${idx}: malformed fp/path (0x1f) len=${fpPath.length}`); return false; }
 
-// Log what @scure/btc-signer actually PARSED for each input: the scriptPubKey
-// (to confirm P2TR), the taproot key/derivation fields, and bip32 entries.
-function _psbtDumpParsedTaproot(tx, label) {
-    try {
-        const hx = (u) => (u && u.length !== undefined) ? Array.from(u).map(b => b.toString(16).padStart(2, '0')).join('') : '(none)';
-        const reviver = (k, v) => (v instanceof Uint8Array) ? hx(v) : (typeof v === 'bigint' ? v.toString() : v);
-        console.log(`[PSBT-DIAG] ===== ${label} — parsed by btc-signer (${tx.inputs.length} input(s)) =====`);
-        tx.inputs.forEach((inp, i) => {
-            const spk = inp.witnessUtxo && inp.witnessUtxo.script ? inp.witnessUtxo.script : null;
-            const isP2TR = spk && spk.length === 34 && spk[0] === 0x51 && spk[1] === 0x20;
-            console.log(`[PSBT-DIAG] parsed · input ${i}: scriptPubKey=${spk ? hx(spk) : '(none)'}${isP2TR ? '  ← P2TR' : ''}`);
-            console.log(`[PSBT-DIAG]   tapInternalKey=${hx(inp.tapInternalKey)}  tapMerkleRoot=${hx(inp.tapMerkleRoot)}  tapKeySig=${inp.tapKeySig ? 'present' : 'none'}`);
-            const b32 = inp.bip32Derivation ? (inp.bip32Derivation.length ?? inp.bip32Derivation.size ?? 0) : 0;
-            const tb32 = inp.tapBip32Derivation ? (inp.tapBip32Derivation.length ?? inp.tapBip32Derivation.size ?? 0) : 0;
-            console.log(`[PSBT-DIAG]   bip32Derivation=${b32}  tapBip32Derivation=${tb32}`);
-            try { console.log(`[PSBT-DIAG]   tapBip32 raw=${JSON.stringify(inp.tapBip32Derivation, reviver)}`); } catch (_) {}
-            // surface any unknown/proprietary fields btc-signer preserved
-            if (inp.unknown) { try { console.log(`[PSBT-DIAG]   unknown=${JSON.stringify(inp.unknown, reviver)}`); } catch (_) {} }
-            if (inp.proprietary) { try { console.log(`[PSBT-DIAG]   proprietary=${JSON.stringify(inp.proprietary, reviver)}`); } catch (_) {} }
-        });
-    } catch (e) {
-        console.log(`[PSBT-DIAG] ${label}: parsed dump error — ${e.message}`);
+    const SP = window.SilentPayments;
+    const schnorr = window.BtcMath && window.BtcMath.schnorr;
+    if (!SP || !SP._internal || !schnorr) throw new Error('Silent Payments / schnorr unavailable for SP spend');
+    const I = SP._internal;
+
+    // Fingerprint gate (big-endian fp in the 0x1f value; 00000000 = wildcard).
+    const entryFp = ((fpPath[0] << 24) | (fpPath[1] << 16) | (fpPath[2] << 8) | fpPath[3]) >>> 0;
+    const myFpNum = (masterKey.fingerprint >>> 0);
+    if (entryFp !== myFpNum && entryFp !== 0x00000000) {
+        console.log(`[PSBT] SP input ${idx}: fp ${entryFp.toString(16).padStart(8, '0')} != mine ${myFpNum.toString(16).padStart(8, '0')} — not ours`);
+        return false;
     }
+
+    // Parse the little-endian uint32 path components after the 4-byte fp.
+    const path = [];
+    for (let o = 4; o + 4 <= fpPath.length; o += 4) {
+        path.push(((fpPath[o]) | (fpPath[o + 1] << 8) | (fpPath[o + 2] << 16) | (fpPath[o + 3] << 24)) >>> 0);
+    }
+
+    // Derive the base spend private key b_spend.
+    let child = masterKey;
+    try { for (const c of path) child = child.deriveChild(c); }
+    catch (e) { console.log(`[PSBT] SP input ${idx}: derive failed: ${e.message}`); return false; }
+    if (!child.privateKey) { console.log(`[PSBT] SP input ${idx}: no private key after derivation`); return false; }
+    // Sanity: derived pubkey must equal the field-0x1f base spend pubkey.
+    if (baseSpendPub && baseSpendPub.length === 33) {
+        const dp = child.publicKey;
+        let same = dp.length === baseSpendPub.length;
+        if (same) for (let i = 0; i < dp.length; i++) if (dp[i] !== baseSpendPub[i]) { same = false; break; }
+        if (!same) { console.log(`[PSBT] SP input ${idx}: derived pubkey != base spend pubkey (0x1f) — not ours`); return false; }
+    }
+
+    // d = (b_spend + t_k) mod n
+    const d = I.modN(I.bytesToNumberBE(child.privateKey) + I.bytesToNumberBE(tweak));
+    if (d === 0n) { console.log(`[PSBT] SP input ${idx}: tweaked key is zero`); return false; }
+    const dBytes = I.numberToBytesBE(d, 32);
+
+    // Confirm d·G is the taproot output key BEFORE signing (fail closed).
+    const dXonly = I.G.multiply(d).toBytes(true).slice(1);
+    const outXonly = script.slice(2, 34);
+    let keyOK = dXonly.length === outXonly.length;
+    if (keyOK) for (let i = 0; i < dXonly.length; i++) if (dXonly[i] !== outXonly[i]) { keyOK = false; break; }
+    if (!keyOK) { console.log(`[PSBT] SP input ${idx}: tweaked key does not match output key — refusing to sign`); return false; }
+
+    // BIP-341 key-path sighash, then BIP-340 Schnorr signature (NO extra taptweak).
+    const sighashType = (inp.sighashType !== undefined && inp.sighashType !== null) ? inp.sighashType : 0x00; // DEFAULT
+    const prevOutScript = tx.inputs.map(i => i.witnessUtxo && i.witnessUtxo.script);
+    const amount = tx.inputs.map(i => i.witnessUtxo && i.witnessUtxo.amount);
+    if (prevOutScript.some(s => !s) || amount.some(a => a === undefined || a === null)) {
+        throw new Error('SP spend needs witnessUtxo (script + amount) on every input for the taproot sighash');
+    }
+    const hash = tx.preimageWitnessV1(idx, prevOutScript, sighashType, amount);
+    const sig64 = schnorr.sign(hash, dBytes);
+    let tapKeySig = sig64;
+    if (sighashType !== 0x00) { tapKeySig = new Uint8Array(65); tapKeySig.set(sig64, 0); tapKeySig[64] = sighashType; }
+    tx.updateInput(idx, { tapKeySig: tapKeySig }, true);
+    return true;
 }
 
 function _psbtFormatPath(path) {
