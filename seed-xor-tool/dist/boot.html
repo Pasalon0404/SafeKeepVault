@@ -19150,8 +19150,22 @@ function downgradePSBTv2(srcBytes, spCtx) {
                 const im = inputMaps[i];
                 // prevTxid is INTERNAL byte order; the SP module wants display hex.
                 outpoints.push({ txid: I.bytesToHex(im.prevTxid.slice().reverse()), vout: im.vout });
-                const k = _psbtDeriveInputKeyForSP(spCtx.btcLib, spCtx.masterKey, spCtx.myFingerprint, im.synth);
-                if (!k) throw new Error('could not derive the private key for input ' + (i + 1) + ' from this seed; every input must belong to this wallet to spend to a Silent Payment (single-signer only)');
+                // SP -> SP: an SP input has no bip32/tap derivation entries, only
+                // the proprietary 0x1f / 0x20 fields. Recover its tweaked spending
+                // key (d = b_spend + t_k) first; the standard BIP-32 matcher is
+                // only used for ordinary inputs.
+                let k = _psbtTryRecoverSpInputKey(spCtx.masterKey, im, i);
+                if (!k) {
+                    k = _psbtDeriveInputKeyForSP(spCtx.btcLib, spCtx.masterKey, spCtx.myFingerprint, im.synth);
+                    if (!k) console.log('[PSBT] Standard BIP-32 derive input ' + (i + 1) + ': returned null (no matching bip32/tap entry, or derived key did not match scriptPubKey) — input is not ours');
+                }
+                if (!k) {
+                    const summary = _psbtSummarizeInputForDiag(im);
+                    throw new Error('could not derive the private key for input ' + (i + 1) +
+                        ' from this seed. Input shape: ' + summary + '. ' +
+                        'Every input must belong to this wallet to spend to a Silent Payment (single-signer only). ' +
+                        'See the [PSBT] console lines above for the per-check failure reason.');
+                }
                 sumInputs.push(k);
             }
             const aSum = SP.sumInputPrivateKeys(sumInputs);
@@ -20129,6 +20143,153 @@ function _psbtVerifyMultisigChange(btcLib, masterKey, myFingerprint, msInfo, out
  *
  * Supported (Phase 2): P2WPKH (0014), P2TR key-path (5120), P2PKH (76a914).
  */
+/**
+ * Recover the SP-tweaked spending key of a Silent Payment INPUT (P2TR keyed by
+ * B_spend + t_k·G, signalled with the proprietary 0x1f / 0x20 PSBT input
+ * fields). Used when a transaction has BOTH an SP input AND an SP output
+ * ("SP → SP"): the standard matcher in _psbtDeriveInputKeyForSP only looks at
+ * bip32 / tap derivation entries, but an SP input has neither — only the
+ * proprietary fields — so without this helper the BIP-352 input-key sum can't
+ * include the SP input and the derive-and-fill aborts.
+ *
+ * Accepts both source shapes the rest of the signer uses:
+ *   • downgradePSBTv2 "synth"  : src.synth.witnessUtxo.script + src.keep[]
+ *     where each kv has { key:Uint8Array (prefixed by the keytype byte), value }.
+ *   • btc-signer parsed input  : src.witnessUtxo.script + src.unknown[]
+ *     where each entry is [ {type, key}, value ].
+ *
+ * Returns { privKey:32B, isTaproot:true } on success, null otherwise. The
+ * isTaproot flag makes SP.sumInputPrivateKeys apply BIP-341 parity exactly as
+ * for a normal taproot input. Validated end-to-end in test-sp-to-sp.mjs.
+ */
+function _psbtTryRecoverSpInputKey(masterKey, src, idx) {
+    // Each non-success path console.logs a specific reason so a failed run can
+    // be diagnosed at a glance (which check killed it for which input). Return
+    // shape is unchanged: { privKey, isTaproot:true } on success, null on miss.
+    const tag = '[PSBT] SP-recover input ' + (((typeof idx === 'number') ? idx : -1) + 1) + ':';
+    if (!src) { console.log(tag, 'src null'); return null; }
+    const SP = window.SilentPayments;
+    if (!SP || !SP._internal) { console.log(tag, 'SilentPayments module unavailable'); return null; }
+    const I = SP._internal;
+
+    let script = null;
+    let propIter = null;
+    let propSource = '?';
+    if (src.synth && src.synth.witnessUtxo) {
+        script = src.synth.witnessUtxo.script;
+        propIter = (src.keep || []).map(kv => ({
+            type: kv.key && kv.key.length ? kv.key[0] : -1,
+            key:  kv.key && kv.key.length > 1 ? kv.key.slice(1) : new Uint8Array(0),
+            val:  kv.value,
+        }));
+        propSource = 'synth.keep[' + (src.keep || []).length + ']';
+    } else if (src.witnessUtxo) {
+        script = src.witnessUtxo.script;
+        propIter = (src.unknown || []).map(pair => ({
+            type: pair && pair[0] && typeof pair[0].type === 'number' ? pair[0].type : -1,
+            key:  pair && pair[0] && pair[0].key ? pair[0].key : new Uint8Array(0),
+            val:  pair ? pair[1] : null,
+        }));
+        propSource = 'parsed.unknown[' + (src.unknown || []).length + ']';
+    } else {
+        console.log(tag, 'no witnessUtxo on src (need synth.witnessUtxo or witnessUtxo)');
+        return null;
+    }
+    if (!script) { console.log(tag, 'witnessUtxo.script missing'); return null; }
+    if (script.length !== 34 || script[0] !== 0x51 || script[1] !== 0x20) {
+        console.log(tag, 'not a P2TR scriptPubKey (length=' + script.length + ', first byte=0x' + script[0].toString(16) + ') — not an SP input');
+        return null;
+    }
+
+    let baseSpendPub = null, fpPath = null, tweak = null;
+    for (const pf of propIter) {
+        if (pf.type === 0x1f) { baseSpendPub = pf.key; fpPath = pf.val; }
+        else if (pf.type === 0x20) { tweak = pf.val; }
+    }
+    if (!fpPath && !tweak) {
+        console.log(tag, 'no SP proprietary fields in ' + propSource + ' (0x1f and 0x20 both absent) — not an SP input');
+        return null;
+    }
+    if (!fpPath) { console.log(tag, '0x20 tweak present but 0x1f (base spend pubkey + fp/path) missing — malformed SP input'); return null; }
+    if (!tweak)  { console.log(tag, '0x1f base spend pubkey present but 0x20 tweak missing — malformed SP input');   return null; }
+    if (tweak.length !== 32) { console.log(tag, '0x20 tweak length ' + tweak.length + ' bytes, expected 32'); return null; }
+    if (fpPath.length < 4 || (fpPath.length - 4) % 4 !== 0) {
+        console.log(tag, '0x1f value length ' + fpPath.length + ' is not 4 (fp) + N*4 (LE path) — malformed');
+        return null;
+    }
+
+    // big-endian fp in the 0x1f value; 0x00000000 = wildcard
+    const entryFp = ((fpPath[0] << 24) | (fpPath[1] << 16) | (fpPath[2] << 8) | fpPath[3]) >>> 0;
+    const myFpNum = (masterKey.fingerprint >>> 0);
+    if (entryFp !== myFpNum && entryFp !== 0x00000000) {
+        console.log(tag, 'fp 0x' + entryFp.toString(16).padStart(8, '0') + ' != mine 0x' + myFpNum.toString(16).padStart(8, '0') + ' (and not wildcard) — input belongs to a different seed');
+        return null;
+    }
+
+    // little-endian uint32 path components after the 4-byte fp
+    const path = [];
+    for (let o = 4; o + 4 <= fpPath.length; o += 4) {
+        path.push(((fpPath[o]) | (fpPath[o+1] << 8) | (fpPath[o+2] << 16) | (fpPath[o+3] << 24)) >>> 0);
+    }
+    let child = masterKey;
+    try { for (const c of path) child = child.deriveChild(c); }
+    catch (e) { console.log(tag, 'BIP-32 derivation along the 0x1f path failed: ' + (e && e.message)); return null; }
+    if (!child.privateKey) { console.log(tag, 'derived child has no private key (xpub-only seed?)'); return null; }
+    // Sanity-check derived pubkey vs the 0x1f base spend pubkey.
+    if (baseSpendPub && baseSpendPub.length === 33) {
+        const dp = child.publicKey;
+        let same = dp.length === baseSpendPub.length;
+        if (same) for (let i = 0; i < dp.length; i++) if (dp[i] !== baseSpendPub[i]) { same = false; break; }
+        if (!same) { console.log(tag, 'derived pubkey != 0x1f base spend pubkey — the fp matched but the path leads to a different child (probably a sibling SP wallet under the same seed)'); return null; }
+    } else if (baseSpendPub) {
+        console.log(tag, '0x1f base spend pubkey is ' + baseSpendPub.length + ' bytes, expected 33 — skipping sanity check');
+    }
+
+    // d = (b_spend + t_k) mod n  (no extra BIP-341 taptweak)
+    const d = I.modN(I.bytesToNumberBE(child.privateKey) + I.bytesToNumberBE(tweak));
+    if (d === 0n) { console.log(tag, '(b_spend + t_k) mod n == 0 — refusing to sign with the zero key'); return null; }
+    const dBytes = I.numberToBytesBE(d, 32);
+    // Confirm d·G matches the input's P2TR output key — fail closed otherwise.
+    const dXonly = I.G.multiply(d).toBytes(true).slice(1);
+    const outXonly = script.slice(2, 34);
+    for (let i = 0; i < 32; i++) if (dXonly[i] !== outXonly[i]) {
+        console.log(tag, 'd*G x-only does not match the P2TR output key — tweak or base key mismatch (input cannot be spent by this seed)');
+        return null;
+    }
+    return { privKey: dBytes, isTaproot: true };
+}
+
+// One-line summary of an input's shape for the "could not derive" diagnostic.
+// Accepts either a downgrade synth wrapper ({ synth, keep, ... }) or a
+// btc-signer parsed input. Shows script type, derivation-entry counts, and
+// the set of keytypes present (so you can see e.g. whether 0x1f/0x20 made it
+// through, or whether the input is just standard P2WPKH with bip32).
+function _psbtSummarizeInputForDiag(src) {
+    if (!src) return '(null input)';
+    const synth = src.synth || src;
+    const script = synth.witnessUtxo && synth.witnessUtxo.script;
+    let scriptType;
+    if (!script) scriptType = 'NO_WITNESS_UTXO';
+    else if (script.length === 22 && script[0] === 0x00 && script[1] === 0x14) scriptType = 'P2WPKH';
+    else if (script.length === 34 && script[0] === 0x51 && script[1] === 0x20) scriptType = 'P2TR';
+    else if (script.length === 25 && script[0] === 0x76 && script[1] === 0xa9) scriptType = 'P2PKH';
+    else if (script.length === 23 && script[0] === 0xa9) scriptType = 'P2SH';
+    else if (script.length === 34 && script[0] === 0x00 && script[1] === 0x20) scriptType = 'P2WSH';
+    else scriptType = 'unknown(len=' + script.length + ',first=0x' + script[0].toString(16) + ')';
+
+    const b32 = (synth.bip32Derivation || []).length;
+    const tb32 = (synth.tapBip32Derivation || []).length;
+    let keepTypes;
+    if (Array.isArray(src.keep)) {
+        keepTypes = src.keep.map(kv => '0x' + (kv.key && kv.key.length ? kv.key[0].toString(16).padStart(2, '0') : '??')).join(',');
+    } else if (Array.isArray(src.unknown)) {
+        keepTypes = src.unknown.map(pair => '0x' + (pair && pair[0] && typeof pair[0].type === 'number' ? pair[0].type.toString(16).padStart(2, '0') : '??')).join(',');
+    } else {
+        keepTypes = '(no keep/unknown array)';
+    }
+    return scriptType + ', bip32=' + b32 + ', tapBip32=' + tb32 + ', proprietary=[' + (keepTypes || '(none)') + ']';
+}
+
 function _psbtDeriveInputKeyForSP(btcLib, masterKey, myFingerprint, inp) {
     try {
         const SP = window.SilentPayments;
@@ -20218,13 +20379,23 @@ function _psbtVerifySilentPayments(tx, masterKey, myFingerprint, spMap) {
             return { ok: false, fatal: true, reason: 'Input ' + (i + 1) + ' is missing its outpoint — cannot compute the Silent Payment input hash.' };
         }
         outpoints.push({ txid: I.bytesToHex(inp.txid), vout: inp.index >>> 0 });
-        const k = _psbtDeriveInputKeyForSP(btcLib, masterKey, myFingerprint, inp);
+        // SP -> SP: an SP input carries the proprietary 0x1f/0x20 fields (no
+        // standard derivation). Recover its tweaked spending key first; fall
+        // through to the regular BIP-32 matcher for ordinary inputs.
+        let k = _psbtTryRecoverSpInputKey(masterKey, inp, i);
         if (!k) {
+            k = _psbtDeriveInputKeyForSP(btcLib, masterKey, myFingerprint, inp);
+            if (!k) console.log('[PSBT] Standard BIP-32 derive input ' + (i + 1) + ' (verify): returned null — input is not ours');
+        }
+        if (!k) {
+            const summary = _psbtSummarizeInputForDiag(inp);
             return {
                 ok: false, fatal: true,
                 reason: 'Could not re-derive the key for input ' + (i + 1) + ' from this seed. ' +
+                        'Input shape: ' + summary + '. ' +
                         'Every input must belong to this wallet to verify a Silent Payment output ' +
-                        '(single-signer only in this version). Signing is blocked.'
+                        '(single-signer only in this version). Signing is blocked. ' +
+                        'See the [PSBT] console lines above for the per-check failure reason.'
             };
         }
         inputs.push(k);
