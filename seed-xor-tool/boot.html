@@ -8635,6 +8635,7 @@
                         <option value="Taproot (P2TR)">Taproot (P2TR)</option>
                         <option value="Nested Segwit (P2SH-P2WPKH)">Nested Segwit (P2SH-P2WPKH)</option>
                         <option value="Legacy (P2PKH)">Legacy (P2PKH)</option>
+                        <option value="Silent Payment (sp1q)">Silent Payment (sp1q)</option>
                     </select>
                 </div>
 
@@ -32174,6 +32175,7 @@ function _wrecParseDescriptor(s) {
     else if (/^\s*tr\s*\(/i.test(d))         { out.script = 'Taproot (P2TR)'; }
     else if (/^\s*sh\s*\(\s*wpkh\s*\(/i.test(d)) { out.script = 'Nested Segwit (P2SH-P2WPKH)'; }
     else if (/^\s*pkh\s*\(/i.test(d))        { out.script = 'Legacy (P2PKH)'; }
+    else if (/^\s*sp\s*\(/i.test(d))         { out.script = 'Silent Payment (sp1q)'; }
     out.msM = 1;
     out.msN = 1;
     return out;
@@ -32230,26 +32232,37 @@ function wrec_pullDescriptor() {
     var ta = document.getElementById('wrec-descriptor');
     if (ta) ta.value = d;
 
-    // ── First Receiving Address (m/0/0) ──
-    // Scrape the first row of the Descriptor tool's verified-address
-    // list (#desc-address-list) — desc_generateSingle / desc_generateMulti
-    // populate it with five entries formatted as "m/0/0  bc1q…",
-    // "m/0/1  bc1q…", … . The text content of the first child div
-    // therefore reads "m/0/0  <address>"; we strip the path prefix and
-    // any leading whitespace to leave the bare address. This pull-time
-    // scrape avoids re-running the cryptographic derivation pipeline,
-    // and also captures whatever address the live tool just rendered
-    // so the printed record is exactly what the tool just verified.
+    // ── First Receiving Address ──
+    // Scrape the first row of the Descriptor tool's verified-address list
+    // (#desc-address-list). For ordinary HD wallets desc_generateSingle /
+    // desc_generateMulti populate it with rows formatted as "m/0/0  bc1q…",
+    // so we strip the m/0/0 path prefix and any leading whitespace to leave
+    // the bare address. For a Silent Payment wallet there's no HD chain —
+    // the SP branch renders a single row formatted as "sp1q  sp1q…<address>"
+    // (a literal "sp1q" label followed by the actual sp1q address). The
+    // m/0/0 strip leaves the label in place, which produced the
+    // "sp1q sp1qq06ze…" glitch with the duplicated prefix. Detect the SP
+    // case via the descriptor's sp( prefix and instead pick the longest
+    // sp1q-prefixed token from the row — that's the real address.
     var firstAddr = '';
+    var isSpDesc = /^\s*sp\s*\(/i.test(d);
     try {
         var addrList = document.getElementById('desc-address-list');
         if (addrList) {
             var firstRow = addrList.querySelector('div');
             if (firstRow) {
                 var raw = (firstRow.textContent || '').trim();
-                // Strip leading "m/0/0" path prefix (with surrounding
-                // whitespace) — what's left is the bare address.
-                firstAddr = raw.replace(/^m\/0\/0\s*/, '').trim();
+                if (isSpDesc) {
+                    // textContent flattens "<span>sp1q</span>&nbsp;…<span>sp1q…</span>"
+                    // into "sp1q  sp1q…address"; split on whitespace (incl.
+                    // from &nbsp;) and keep the longest sp1q-prefixed token.
+                    var tokens = raw.split(/\s+/).filter(function (t) { return /^sp1q/i.test(t); });
+                    firstAddr = tokens.reduce(function (a, b) { return b.length > a.length ? b : a; }, '');
+                } else {
+                    // Strip leading "m/0/0" path prefix (with surrounding
+                    // whitespace) — what's left is the bare address.
+                    firstAddr = raw.replace(/^m\/0\/0\s*/, '').trim();
+                }
             }
         }
     } catch (_) { firstAddr = ''; }
