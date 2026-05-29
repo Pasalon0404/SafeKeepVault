@@ -26946,10 +26946,14 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
         var spDescriptor = spBody + '#' + spChecksum;
         desc_state.currentDescriptor = spDescriptor;
         document.getElementById('desc-descriptor-text').textContent = spDescriptor;
-        // Address verification override: ONE static sp1q address (no m/0/i chain).
+        // Address verification override: ONE static sp1q address (no m/0/i
+        // chain, so there's no path/index label — the row is just the bare
+        // address. Earlier versions prefixed an "sp1q" path-style marker that
+        // visually duplicated the address's own bech32m prefix ("sp1q sp1q…")
+        // and leaked into Wallet Record's first-address pull. Render the
+        // address only.
         document.getElementById('desc-address-list').innerHTML =
-            '<div style="margin-bottom: 0.3rem;"><span style="color: var(--skb-text-muted);">sp1q</span> &nbsp; ' +
-            '<span style="word-break: break-all;">' + spAddress + '</span></div>';
+            '<div style="margin-bottom: 0.3rem; word-break: break-all;">' + spAddress + '</div>';
         document.getElementById('desc-output').style.display = 'block';
         document.getElementById('desc-qr-wrap').style.display = 'none';
         document.getElementById('desc-qr-toggle-btn').textContent = 'Show QR';
