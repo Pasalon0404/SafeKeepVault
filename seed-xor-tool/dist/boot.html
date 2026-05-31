@@ -8963,19 +8963,9 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                 <div style="font-size: 0.78rem; color: var(--skb-text-muted); margin-top: 0.25rem;">The Passphrase Library is running in RAM only. Passphrases cannot be saved to the encrypted vault.</div>
             </div>
 
-            <!-- ---- Two-Panel Layout (Archive + Workspace) ---- -->
-            <div style="display: grid; grid-template-columns: 240px 1fr; gap: 1rem; align-items: start;">
+            <!-- ---- Stacked Layout: Workspace + Generator (full width), Archive below ---- -->
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
 
-                <!-- ======== Left Panel: Archive ======== -->
-                <div class="skb-card">
-                    <div style="font-size: 0.85rem; font-weight: 700; color: var(--skb-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">Archive</div>
-                    <div id="cipher-archive-list">
-                        <div style="font-size: 0.8rem; color: var(--skb-text-dim); padding: 1rem 0; text-align: center;">No saved passphrases</div>
-                    </div>
-                </div>
-
-                <!-- ======== Right Panel ======== -->
-                <div>
                     <!-- ======== WORKSPACE (primary view) ======== -->
                     <div class="skb-card" style="margin-bottom: 1rem;">
                         <div style="font-size: 0.85rem; font-weight: 700; color: var(--skb-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">Workspace</div>
@@ -9128,8 +9118,15 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                         </div>
                     </div>
 
-                </div><!-- /Right Panel -->
-            </div><!-- /Two-Panel Grid -->
+
+                <!-- ======== Archive (relocated below Generator, full width) ======== -->
+                <div class="skb-card">
+                    <div style="font-size: 0.85rem; font-weight: 700; color: var(--skb-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">Archive</div>
+                    <div id="cipher-archive-list">
+                        <div style="font-size: 0.8rem; color: var(--skb-text-dim); padding: 1rem 0; text-align: center;">No saved passphrases</div>
+                    </div>
+                </div>
+            </div><!-- /Stacked Layout -->
 
             <!-- ---- Hidden Print Area ---- -->
             <div id="pp-print-area" style="display: none;">
@@ -10461,18 +10458,8 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                 <div style="font-size: 0.75rem; color: #8b5cf6; opacity: 0.8; margin-top: 0.15rem;">Encrypted Notes is running in RAM only. Notes cannot be saved to the encrypted vault. Use the editor as a temporary scratchpad.</div>
             </div>
 
-            <!-- Two-column layout: Archive + Editor -->
-            <div style="display: grid; grid-template-columns: 240px 1fr; gap: 1rem; align-items: start;">
-
-                <!-- THE ARCHIVE — saved note list -->
-                <div class="skb-card" style="padding: 0.75rem;">
-                    <div style="margin-bottom: 0.75rem;">
-                        <h3 style="margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Archive</h3>
-                    </div>
-                    <div id="codex-archive-list" style="max-height: 360px; overflow-y: auto;">
-                        <div style="font-size: 0.8rem; color: var(--skb-text-dim); padding: 1rem 0; text-align: center;">No saved notes</div>
-                    </div>
-                </div>
+            <!-- Stacked layout: Editor (full width) on top, Archive directly below -->
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
 
                 <!-- THE EDITOR -->
                 <div class="skb-card" style="padding: 0.75rem;">
@@ -10549,11 +10536,16 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                     </div>
                 </div>
 
-            </div>
+                <!-- THE ARCHIVE — saved note list (relocated directly below the editor) -->
+                <div class="skb-card" style="padding: 0.75rem;">
+                    <div style="margin-bottom: 0.75rem;">
+                        <h3 style="margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Archive</h3>
+                    </div>
+                    <div id="codex-archive-list" style="max-height: 360px; overflow-y: auto;">
+                        <div style="font-size: 0.8rem; color: var(--skb-text-dim); padding: 1rem 0; text-align: center;">No saved notes</div>
+                    </div>
+                </div>
 
-            <!-- Reset Tool -->
-            <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--skb-border);">
-                <button type="button" class="skb-btn" style="width: 100%; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; font-size: 0.82rem; padding: 0.6rem;" onclick="codex_clearAll()">Reset Tool — Clear Editor</button>
             </div>
         </div>
 
@@ -11408,7 +11400,7 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
             <button type="button" class="skb-btn skb-btn--primary" id="s39-generate-btn" style="width: 100%; padding: 0.75rem; font-size: 1rem; font-weight: 700;" onclick="s39_generateShares()">
                 Generate Shamir Shares
             </button>
-            <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; border-color: var(--skb-text-muted); color: var(--skb-text-muted);" onclick="s39_cancel()">
+            <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; padding: 0.75rem; font-size: 1rem; border-color: var(--skb-text-muted); color: var(--skb-text-muted);" onclick="s39_cancel()">
                 Cancel — Return to Dashboard
             </button>
         </div>
@@ -11627,7 +11619,7 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
         <!-- ---- Raw scan log ---- -->
         <div class="skb-card" style="padding: 0.9rem;">
             <h3 style="margin: 0 0 0.6rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Raw Scanned Payloads</h3>
-            <textarea id="tfa-raw-output" readonly spellcheck="false" placeholder="Raw QR payloads will appear here, one per line…" style="width: 100%; min-height: 120px; resize: vertical; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.78rem; line-height: 1.5; white-space: pre; overflow-wrap: normal; overflow-x: auto;"></textarea>
+            <textarea id="tfa-raw-output" readonly spellcheck="false" placeholder="Raw QR payloads will appear here, one per line…" style="width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120px; resize: vertical; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.78rem; line-height: 1.5; white-space: pre; overflow-wrap: normal; overflow-x: auto;"></textarea>
         </div>
 
         <!-- Print-to-paper render target (hidden on screen; shown only in
