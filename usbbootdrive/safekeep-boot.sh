@@ -443,6 +443,16 @@ launch_browser() {
         sudo chown "$(whoami)" "$VAULT_MOUNT/seeds"
         sudo chmod 700 "$VAULT_MOUNT/seeds"
 
+        # Provision the 2FA Backup directory at boot, exactly like codex/ and
+        # passphrases/ are created below (and seeds/ above). The whole session —
+        # boot script, File Router daemon, and Chromium — runs as root, so
+        # ownership is irrelevant; what matters is that the directory EXISTS
+        # before the daemon tries to mv into it. The daemon's own lazy mkdir is
+        # belt-and-braces, but creating it here guarantees presence on first save.
+        # chmod 700 keeps the secrets dir as tight as seeds/.
+        mkdir -p "$VAULT_MOUNT/twofa"
+        chmod 700 "$VAULT_MOUNT/twofa"
+
         # ── Write the Vault Sentinel ──
         # This file proves to the browser that the REAL LUKS partition is mounted,
         # not a tmpfs/overlayfs ghost directory. The sentinel contains the dm-crypt
@@ -875,7 +885,7 @@ POLICYEOF
                 #    Uses sudo + explicit verification. If any deletion fails,
                 #    Phase 2 LUKS destruction covers it — without keyslots the
                 #    data is cryptographically unrecoverable.
-                for dir in codex passphrases settings; do
+                for dir in codex passphrases twofa settings; do
                     VAULT_SUBDIR="$VAULT_MOUNT/$dir"
                     if [ -d "$VAULT_SUBDIR" ]; then
                         echo "SafeKeep Wipe Watcher: rm -rf $VAULT_SUBDIR ..."
@@ -1146,6 +1156,7 @@ except Exception as e:
     # Routed:  /media/.safekeep-vault/codex/ (vault storage)
     CODEX_DIR="$VAULT_MOUNT/codex"
     PASSPHRASE_DIR="$VAULT_MOUNT/passphrases"
+    TWOFA_DIR="$VAULT_MOUNT/twofa"
 
     (
         while true; do
@@ -1220,6 +1231,77 @@ except Exception as e:
                     ROUTED_FILES=$((ROUTED_FILES + 1))
                 fi
             done
+
+            # ── Route 2FA backup from seeds/ → twofa/ ──
+            # Tool 16 (2FA Backup) saves a SINGLE aggregate file via
+            # _silentDownload. We identify it by CONTENT — the marker key
+            # "safekeep-2fa-backup" — over a *.json glob, exactly like the
+            # passphrase router above, NOT by a hard-coded filename.
+            #
+            # Why content-over-filename matters: Chromium's download manager
+            # uniquifies a download whose target name already exists in the
+            # DownloadDirectory, writing "2fa-backup (1).json", "(2)", etc.
+            # That happens whenever a save's read-back races this daemon and
+            # the user clicks Save again before the prior file is routed. An
+            # exact-filename match silently orphans those suffixed copies in
+            # seeds/ — the bug this replaces.
+            #
+            # Each save is a full superset of prior 2FA state, so when several
+            # marker-bearing files are present we keep the NEWEST (by mtime)
+            # and consolidate it to the canonical twofa/2fa-backup.json,
+            # deleting the older duplicates. mtime selection (not glob/alpha
+            # order) is required: Chromium names the FIRST, oldest download
+            # "2fa-backup.json", which would sort LAST alphabetically and
+            # wrongly win a naive ordering.
+            TWOFA_NEWEST=""
+            for JSON_FILE in "$SEED_DIR"/*.json; do
+                [ -f "$JSON_FILE" ] || continue
+                grep -q '"safekeep-2fa-backup"' "$JSON_FILE" 2>/dev/null || continue
+                if [ -z "$TWOFA_NEWEST" ] || [ "$JSON_FILE" -nt "$TWOFA_NEWEST" ]; then
+                    TWOFA_NEWEST="$JSON_FILE"
+                fi
+            done
+            if [ -n "$TWOFA_NEWEST" ]; then
+                # ── Verbose debug (lands in /tmp/safekeep-boot.log) ──
+                # All these echoes go to the daemon's stdout, which the boot
+                # wrapper (chroot-setup.sh) already redirects to
+                # /tmp/safekeep-boot.log — no separate file, no $HOME dependency
+                # (the session runs as root with a minimal env). Captures the
+                # exact environment + real exit codes of mkdir/mv so any
+                # hardware failure point is unambiguous. Read it on the box with:
+                #   grep '2FA-ROUTER' /tmp/safekeep-boot.log
+                echo "2FA-ROUTER: ===== route attempt $(date '+%Y-%m-%d %H:%M:%S') ====="
+                echo "2FA-ROUTER: user=$(id -un) uid=$(id -u)"
+                echo "2FA-ROUTER: VAULT_MOUNT $(ls -ld "$VAULT_MOUNT" 2>&1)"
+                echo "2FA-ROUTER: SEED_DIR    $(ls -ld "$SEED_DIR" 2>&1)"
+                echo "2FA-ROUTER: TWOFA_DIR   $(ls -ld "$TWOFA_DIR" 2>&1)"
+                echo "2FA-ROUTER: candidate   $TWOFA_NEWEST"
+
+                # Belt-and-braces: the dir is provisioned at boot, but recreate
+                # defensively. Errors go to stdout (the boot log), not /dev/null.
+                mkdir -p "$TWOFA_DIR"
+                echo "2FA-ROUTER: mkdir exit=$?"
+
+                # Purge older marker-bearing duplicates left by Chromium suffixing.
+                for JSON_FILE in "$SEED_DIR"/*.json; do
+                    [ -f "$JSON_FILE" ] || continue
+                    [ "$JSON_FILE" = "$TWOFA_NEWEST" ] && continue
+                    grep -q '"safekeep-2fa-backup"' "$JSON_FILE" 2>/dev/null || continue
+                    rm -f "$JSON_FILE" 2>/dev/null
+                    echo "2FA-ROUTER: purged duplicate $(basename "$JSON_FILE")"
+                done
+
+                mv -f "$TWOFA_NEWEST" "$TWOFA_DIR/2fa-backup.json"
+                MV_RC=$?
+                echo "2FA-ROUTER: mv exit=$MV_RC"
+                if [ "$MV_RC" -eq 0 ]; then
+                    echo "2FA-ROUTER: OK -> $(ls -l "$TWOFA_DIR/2fa-backup.json" 2>&1)"
+                    echo "File Router: routed $(basename "$TWOFA_NEWEST") → twofa/2fa-backup.json"
+                    ROUTED_FILES=$((ROUTED_FILES + 1))
+                else
+                    echo "2FA-ROUTER: FAILED (mv rc=$MV_RC) — file remains in seeds/"
+                fi
+            fi
 
             # ── Regenerate index files after routing ──
             # The browser reads .codex-index.json and .passphrase-index.json
@@ -1690,7 +1772,7 @@ except Exception as e:
 
                 # Log what the archive actually contains (including dotfiles)
                 echo "Restore Watcher: archive contents at PROBE_ROOT (including dotfiles):"
-                for VDIR in codex passphrases settings seeds; do
+                for VDIR in codex passphrases twofa settings seeds; do
                     if [ -d "$PROBE_ROOT/$VDIR" ]; then
                         echo "  $VDIR/: $(ls -la "$PROBE_ROOT/$VDIR/" 2>/dev/null | grep -c '^-') files"
                         ls -la "$PROBE_ROOT/$VDIR/" 2>/dev/null | head -10
@@ -1700,12 +1782,12 @@ except Exception as e:
                 COMMIT_EXIT=0
                 if [ "$COMMIT_MODE" = "overwrite" ]; then
                     echo "Restore Watcher: OVERWRITE — wiping vault dirs then copying..."
-                    sudo rm -rf "$VAULT_MOUNT/codex" "$VAULT_MOUNT/settings" "$VAULT_MOUNT/passphrases" "$VAULT_MOUNT/seeds"
+                    sudo rm -rf "$VAULT_MOUNT/codex" "$VAULT_MOUNT/settings" "$VAULT_MOUNT/passphrases" "$VAULT_MOUNT/twofa" "$VAULT_MOUNT/seeds"
                 fi
 
                 # Copy each vault subdirectory individually with /. syntax
                 # to force inclusion of ALL files including dotfiles
-                for VDIR in codex passphrases settings seeds; do
+                for VDIR in codex passphrases twofa settings seeds; do
                     if [ -d "$PROBE_ROOT/$VDIR" ]; then
                         sudo mkdir -p "$VAULT_MOUNT/$VDIR"
                         sudo cp -a "$PROBE_ROOT/$VDIR/." "$VAULT_MOUNT/$VDIR/" 2>&1 || COMMIT_EXIT=$?
@@ -1728,7 +1810,7 @@ except Exception as e:
 
                 # Post-copy verification: explicitly check dotfiles survived
                 echo "Restore Watcher: post-copy dotfile verification:"
-                for VDIR in codex passphrases settings seeds; do
+                for VDIR in codex passphrases twofa settings seeds; do
                     if [ -d "$VAULT_MOUNT/$VDIR" ]; then
                         DOTCOUNT=$(ls -la "$VAULT_MOUNT/$VDIR/" 2>/dev/null | grep '^\-.*\.' | grep -c '^\-')
                         echo "  $VDIR/: $(ls -la "$VAULT_MOUNT/$VDIR/" 2>/dev/null)"

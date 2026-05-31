@@ -166,7 +166,7 @@ const SafeKeepOS = (() => {
 
     // Hydrate in-memory stores from LUKS disk indexes.
     // These run in parallel since they're independent reads.
-    await Promise.all([_hydrateCodex(), _hydratePassphrases()]);
+    await Promise.all([_hydrateCodex(), _hydratePassphrases(), _hydrateTwofa()]);
 
     // Fast path: already in sessionStorage from a previous tool navigation
     const existing = window.SeedSession?.get();
@@ -1242,6 +1242,7 @@ const SafeKeepOS = (() => {
     codex:    `${VAULT_ROOT}/codex`,
     settings: `${VAULT_ROOT}/settings`,
     cipher:   `${VAULT_ROOT}/passphrases`,
+    twofa:    `${VAULT_ROOT}/twofa`,
     seed:     `${VAULT_ROOT}/seeds`
   };
 
@@ -2070,6 +2071,136 @@ const SafeKeepOS = (() => {
 
 
   // =============================================
+  //  2FA / Authenticator Backup (Tool 16)
+  // =============================================
+  //
+  // Unlike Codex (one .html per note) and Cipher (one .json per passphrase),
+  // 2FA accounts live in a SINGLE aggregate file, 2fa-backup.json, so the
+  // whole set is appended/updated atomically. The file carries a marker key
+  // ("type":"safekeep-2fa-backup") that the File Router in safekeep-boot.sh
+  // uses to route it from seeds/ → twofa/ (same content-inspection trick the
+  // passphrase router uses to spot "passphrase").
+  const TWOFA_DIR    = '/media/.safekeep-vault/twofa';
+  const TWOFA_URL    = `file://${TWOFA_DIR}`;
+  const TWOFA_FILE   = '2fa-backup.json';
+  const TWOFA_MARKER = 'safekeep-2fa-backup';
+  const _twofaStore  = new Map();   // identity key → sanitized account record
+
+  function _twofaKey(a) {
+    return [(a.issuer || ''), (a.account || ''), (a.secret || '')].join('\u0000');
+  }
+
+  // Persist only the canonical fields — never transient UI flags (committed,
+  // source, etc.).
+  function _twofaSanitize(a) {
+    return {
+      otpType:   a.otpType || 'TOTP',
+      issuer:    a.issuer || '',
+      account:   a.account || '',
+      secret:    a.secret || '',
+      digits:    a.digits || 6,
+      algorithm: a.algorithm || 'SHA1',
+      counter:   (a.counter == null) ? null : a.counter
+    };
+  }
+
+  function _twofaReadDisk(data) {
+    if (data && Array.isArray(data.accounts)) {
+      for (const a of data.accounts) _twofaStore.set(_twofaKey(a), _twofaSanitize(a));
+      return true;
+    }
+    return false;
+  }
+
+  // Boot-time hydration — mirrors _hydrateCodex / _hydratePassphrases.
+  async function _hydrateTwofa() {
+    if (!isBootDrive()) return;
+    try {
+      const resp = await fetch(`${TWOFA_URL}/${TWOFA_FILE}`, { cache: 'no-store' });
+      if (resp.ok) {
+        _twofaReadDisk(await resp.json());
+        console.log(`SafeKeepOS: hydrated ${_twofaStore.size} 2FA account(s) from disk`);
+      }
+    } catch (e) {
+      console.warn('SafeKeepOS: 2FA hydration failed (empty vault is normal)', e.message);
+    }
+  }
+
+  /**
+   * Save (append/update) a batch of 2FA accounts to the vault.
+   * Accounts already present (by issuer+account+secret identity) are no-ops;
+   * genuinely new ones are appended. The full set is rewritten as one file.
+   *
+   * @param {Array<object>} accounts
+   * @returns {{ saved: boolean, added?: number, total?: number, error?: string, warning?: string }}
+   */
+  async function save2fa(accounts) {
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      return { saved: false, error: 'No accounts to save.' };
+    }
+    // Pre-flight: never write if the LUKS vault isn't genuinely mounted.
+    if (isBootDrive() && !(await _isVaultMounted())) {
+      return { saved: false, error: 'LUKS vault is not mounted. Cannot save — data would be lost on reboot.' };
+    }
+
+    let added = 0;
+    for (const a of accounts) {
+      const k = _twofaKey(a);
+      if (!_twofaStore.has(k)) added++;
+      _twofaStore.set(k, _twofaSanitize(a));
+    }
+
+    const all = Array.from(_twofaStore.values());
+
+    if (isBootDrive()) {
+      const payload = JSON.stringify({
+        type: TWOFA_MARKER,
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        accounts: all
+      });
+      _silentDownload(TWOFA_FILE, payload);
+
+      // Read-back verification. The host File Router polls on a ~2s cycle
+      // (plus per-cycle index regeneration), so a single fetch fired right
+      // after the download races the daemon and yields a false negative.
+      // Poll the canonical path for up to ~9s before giving up.
+      const deadline = Date.now() + 9000;
+      while (Date.now() < deadline) {
+        await _sleep(700);
+        try {
+          const resp = await fetch(`${TWOFA_URL}/${TWOFA_FILE}`, { cache: 'no-store' });
+          if (resp.ok) return { saved: true, added, total: all.length };
+        } catch (e) { /* not routed yet — keep polling */ }
+      }
+
+      console.warn('SafeKeepOS/2FA: write triggered but on-disk confirmation timed out.');
+      return { saved: true, added, total: all.length, warning: 'on-disk confirmation timed out — re-open the tool to verify the accounts persisted' };
+    }
+
+    // Demo mode — in-memory only.
+    return { saved: true, added, total: all.length };
+  }
+
+  /**
+   * Load all persisted 2FA accounts (disk on boot drive, else in-memory).
+   * @returns {{ accounts: Array<object> }}
+   */
+  async function load2fa() {
+    if (isBootDrive()) {
+      try {
+        const resp = await fetch(`${TWOFA_URL}/${TWOFA_FILE}`, { cache: 'no-store' });
+        if (resp.ok) {
+          _twofaStore.clear();
+          _twofaReadDisk(await resp.json());
+        }
+      } catch (e) { /* fall through to in-memory */ }
+    }
+    return { accounts: Array.from(_twofaStore.values()) };
+  }
+
+
+  // =============================================
   //  PUBLIC API
   // =============================================
 
@@ -2117,6 +2248,11 @@ const SafeKeepOS = (() => {
     loadPassphrase,
     deletePassphrase,
     PASSPHRASE_DIR,
+
+    // 2FA / Authenticator Backup (Tool 16)
+    save2fa,
+    load2fa,
+    TWOFA_DIR,
 
     // Reliquary — Encrypted Backup / Restore
     createReliquary,

@@ -5061,6 +5061,7 @@
       #sqr-print-area,
       #desc-print-area,
       #pp-print-area,
+      #tfa-print-area,
       #bip85-print-area {
         display: none !important;
       }
@@ -5246,6 +5247,19 @@
       body.printing-bip85 #state-bip85 > .skb-card,
       body.printing-bip85 #state-bip85 > button { display: none !important; }
 
+      /* --- 2FA Backup (Tool 16) --- */
+      body.printing-twofa #state-2fa {
+        display: block !important; position: static !important;
+        height: auto !important; overflow: visible !important;
+        margin: 0 !important; padding: 0 !important;
+        visibility: visible !important;
+      }
+      /* Hide every on-screen sibling (hero, scan card, table card, raw-log
+         card, QR modal) — only #tfa-print-area survives. */
+      body.printing-twofa #state-2fa > .tool-hero,
+      body.printing-twofa #state-2fa > .skb-card,
+      body.printing-twofa #state-2fa > #tfa-qr-modal { display: none !important; }
+
       /* =============================================================
          PART 3: PRINT AREA NORMALIZATION
          Force all print areas to block layout with word wrapping.
@@ -5255,6 +5269,7 @@
       #desc-print-area,
       #sqr-print-area,
       #pp-print-area,
+      #tfa-print-area,
       #bip85-print-area {
         display: block !important;
         position: static !important;
@@ -5264,6 +5279,34 @@
         word-wrap: break-word !important;
         word-break: break-all !important;
         white-space: normal !important;
+      }
+
+      /* --- 2FA Backup print styling --- */
+      body.printing-twofa #tfa-print-area { padding: 1.5rem 2rem !important; color: #000 !important; }
+      body.printing-twofa #tfa-print-area * { color: #000 !important; }
+      body.printing-twofa .tfa-print-title { text-align: center; font-size: 1.3rem; margin: 0 0 0.25rem; }
+      body.printing-twofa .tfa-print-meta { text-align: center; font-size: 0.8rem; margin: 0 0 1.25rem; }
+      body.printing-twofa .tfa-print-card {
+        border: 1px solid #999 !important;
+        padding: 0.85rem 1rem !important;
+        margin: 0 0 0.9rem !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        display: grid !important;
+        grid-template-columns: 1fr 150px !important;
+        gap: 0.75rem !important;
+        align-items: center !important;
+      }
+      body.printing-twofa .tfa-print-field { font-size: 0.82rem !important; line-height: 1.7 !important; }
+      body.printing-twofa .tfa-print-label { font-weight: bold !important; }
+      body.printing-twofa .tfa-print-secret {
+        font-family: monospace !important; font-size: 0.9rem !important;
+        word-break: break-all !important; letter-spacing: 0.05em !important;
+      }
+      body.printing-twofa .tfa-print-card canvas {
+        width: 150px !important; height: 150px !important;
+        max-width: 150px !important; object-fit: contain;
+        justify-self: end !important;
       }
 
       /* --- Descriptor print area fine-tuning --- */
@@ -6154,7 +6197,7 @@
                             onclick="dash_toggleAdvanced(this)">
                         <span class="dash-advanced-label-col">
                             <span class="dash-advanced-label">Advanced Tools</span>
-                            <span class="dash-advanced-sublabel">12 specialist tools &mdash; click to expand</span>
+                            <span class="dash-advanced-sublabel">13 specialist tools &mdash; click to expand</span>
                         </span>
                         <span class="dash-advanced-chevron" aria-hidden="true">&#x25BE;</span>
                     </button>
@@ -6298,6 +6341,20 @@
                                 </span>
                                 <span class="dash-tool-chevron">&#x203A;</span>
                             </button>
+                            <!-- 13. 2FA Backup (Tool 16) — scan & back up authenticator (TOTP) secrets -->
+                            <button type="button" class="dash-tool-card" onclick="showState('state-2fa'); if (typeof tfa_init === 'function') tfa_init();" style="text-align: left; cursor: pointer;">
+                                <span class="dash-tool-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 3 4 6v5c0 4.4 3.1 7.9 8 9 4.9-1.1 8-4.6 8-9V6l-8-3Z"/>
+                                        <path d="M9 12l2 2 4-4"/>
+                                    </svg>
+                                </span>
+                                <span class="dash-tool-label">
+                                    <span class="dash-tool-name">2FA Backup</span>
+                                    <span class="dash-tool-subtitle">Scan and archive authenticator (TOTP) secrets</span>
+                                </span>
+                                <span class="dash-tool-chevron">&#x203A;</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -6419,7 +6476,7 @@
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.28b</span>
+                        <span class="version" id="dash-version">v1.29b</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -8419,6 +8476,15 @@
                         </div>
                     </label>
 
+                    <!-- 2FA Backup -->
+                    <label class="rlq-check-item" id="rlq-item-twofa" style="display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.75rem; margin-bottom: 0.35rem; cursor: pointer;">
+                        <input type="checkbox" id="rlq-chk-twofa" value="twofa" onchange="rlq_onCheck()">
+                        <div>
+                            <div style="font-size: 0.85rem; font-weight: 600;">2FA Backup</div>
+                            <div style="font-size: 0.72rem; color: var(--skb-text-dim);">Authenticator (TOTP) secrets saved in 2FA Backup</div>
+                        </div>
+                    </label>
+
                     <!--
                       Seed (critical — gated by "Type Yes" confirmation modal).
 
@@ -9352,6 +9418,89 @@
         <div class="archive-summary" id="archive-summary" style="display: none; margin-top: 0.75rem;">
             <span style="font-family: var(--skb-mono); font-size: 0.72rem; color: var(--skb-text-muted); letter-spacing: 0.1em;" id="archive-file-count"></span>
         </div>
+    </div>
+
+    <!-- ============================================================
+         Tool 16 — 2FA / Authenticator Backup  (tfa_ family)
+         PHASE 1 SCAFFOLDING: scan QR → capture RAW payload only.
+         Decoding of otpauth:// and otpauth-migration:// is deferred
+         (see tfa_classify / the placeholder results table).
+         ============================================================ -->
+    <div id="state-2fa">
+        <div class="tool-hero">
+            <h2 class="tool-hero-title">2FA<span>Backup</span></h2>
+            <p class="tool-hero-subtitle">Authenticator Vault</p>
+            <p class="tool-hero-desc">Scan your authenticator QR codes to back up TOTP secrets inside the encrypted vault. Supports standard <code>otpauth://</code> URIs and Google Authenticator's <code>otpauth-migration://</code> batch export. Captured secrets are shown for visual verification before you save them.</p>
+            <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>This USB only</span></p>
+        </div>
+
+        <!-- ---- Scan controls ---- -->
+        <div class="skb-card" style="padding: 0.9rem; margin-bottom: 1rem;">
+            <h3 style="margin: 0 0 0.6rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Scan</h3>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="skb-btn" onclick="tfa_startScan()">Start Camera Scan</button>
+                <button type="button" class="skb-btn" onclick="tfa_stopScan()" style="border-color: var(--skb-danger); color: var(--skb-danger);">Stop Scan</button>
+                <button type="button" class="skb-btn btn-secondary" onclick="tfa_init()">Clear</button>
+            </div>
+
+            <!-- Camera scanner (hidden until activated) -->
+            <div id="tfa-camera-wrap" style="display: none; margin-top: 0.9rem;">
+                <div id="tfa-camera-reader" style="max-width: 400px; margin: 0 auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;"></div>
+            </div>
+            <div id="tfa-scan-status" style="margin-top: 0.6rem; font-family: var(--skb-mono); font-size: 0.78rem; color: var(--skb-text-muted);">Idle — camera off.</div>
+        </div>
+
+        <!-- ---- Parsed results + vault persistence ---- -->
+        <div class="skb-card" style="padding: 0.9rem; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+                <h3 style="margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Captured Accounts</h3>
+                <!-- Vault commit-state badge -->
+                <span id="tfa-vault-state" style="font-family: var(--skb-mono); font-size: 0.7rem; padding: 0.15rem 0.5rem; border: 1px solid var(--skb-border); color: var(--skb-text-dim); letter-spacing: 0.05em;">vault: empty</span>
+                <span style="flex: 1;"></span>
+                <button type="button" id="tfa-print-btn" class="skb-btn btn-secondary" onclick="tfa_print()">Print to Paper</button>
+                <button type="button" id="tfa-save-btn" class="skb-btn" onclick="tfa_save()" disabled style="opacity: 0.55;">Save to Vault</button>
+            </div>
+            <div style="overflow-x: auto;">
+                <table id="tfa-results-table" style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+                    <thead>
+                        <tr style="text-align: left; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.7rem;">
+                            <th style="padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--skb-border);">Type</th>
+                            <th style="padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--skb-border);">Issuer</th>
+                            <th style="padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--skb-border);">Account</th>
+                            <th style="padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--skb-border);">Secret (base32)</th>
+                            <th style="padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--skb-border); text-align: right;">Restore</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tfa-results-body">
+                        <tr><td colspan="5" style="padding: 1rem 0.6rem; text-align: center; color: var(--skb-text-dim);">No accounts captured yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin: 0.6rem 0 0; font-size: 0.72rem; color: var(--skb-text-dim);">A solid dot marks accounts not yet committed to the encrypted vault; a check marks saved ones. Secrets are shown in RFC&nbsp;4648 base32. Use <strong>Show QR</strong> to re-import an account onto a new device.</p>
+        </div>
+
+        <!-- ---- Restoration QR modal ---- -->
+        <div id="tfa-qr-modal" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.75); align-items: center; justify-content: center;">
+            <div class="skb-card" style="max-width: 360px; width: 90%; padding: 1.1rem; text-align: center;">
+                <h3 id="tfa-qr-title" style="margin: 0 0 0.25rem; font-size: 0.95rem; color: var(--skb-text);">Account</h3>
+                <p id="tfa-qr-sub" style="margin: 0 0 0.85rem; font-size: 0.75rem; color: var(--skb-text-muted); word-break: break-all;"></p>
+                <canvas id="tfa-qr-canvas" style="background: #fff; padding: 8px; border-radius: var(--skb-radius-sm);"></canvas>
+                <p style="margin: 0.85rem 0 0; font-size: 0.68rem; color: var(--skb-text-dim);">Scan with an authenticator app to restore this account. The secret leaves the vault as a QR only while this dialog is open.</p>
+                <button type="button" class="skb-btn" onclick="tfa_closeQR()" style="margin-top: 0.85rem;">Close</button>
+            </div>
+        </div>
+
+        <!-- ---- Raw scan log ---- -->
+        <div class="skb-card" style="padding: 0.9rem;">
+            <h3 style="margin: 0 0 0.6rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Raw Scanned Payloads</h3>
+            <textarea id="tfa-raw-output" readonly spellcheck="false" placeholder="Raw QR payloads will appear here, one per line…" style="width: 100%; min-height: 120px; resize: vertical; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.78rem; line-height: 1.5; white-space: pre; overflow-wrap: normal; overflow-x: auto;"></textarea>
+        </div>
+
+        <!-- Print-to-paper render target (hidden on screen; shown only in
+             @media print under body.printing-twofa). Populated by tfa_print().
+             MUST stay a direct child of #state-2fa so the print whitelist
+             rules apply. -->
+        <div id="tfa-print-area" style="background: #fff;"></div>
     </div>
 
     </div><!-- /.boot-content -->
@@ -16332,7 +16481,7 @@ var _toolScreens = [
     'state-psbt-signer', 'state-passphrase', 'state-seedxor', 'state-bip85',
     'state-descriptor', 'state-seedqr', 'state-entropy', 'state-transfer',
     'state-securenote', 'state-designer', 'state-armory', 'state-authenticator',
-    'state-slip39', 'state-reliquary', 'state-archive'
+    'state-slip39', 'state-reliquary', 'state-archive', 'state-2fa'
 ];
 
 function showState(stateId) {
@@ -16364,6 +16513,7 @@ function showState(stateId) {
     if (typeof sqr_cleanup === 'function') sqr_cleanup();
     if (typeof xfr_cleanup === 'function') xfr_cleanup();
     if (typeof eob_cleanup === 'function' && stateId !== 'state-entropy') eob_cleanup();
+    if (typeof tfa_cleanup === 'function') tfa_cleanup();
 
     // Wipe sensitive DOM remnants from the tool we're leaving,
     // but PRESERVE the 4 persistent tool states (Shard, Covenant, Forge, Lineage)
@@ -30676,6 +30826,7 @@ async function rlq_export() {
     if (document.getElementById('rlq-chk-codex').checked) selections.push('codex');
     if (document.getElementById('rlq-chk-settings').checked) selections.push('settings');
     if (document.getElementById('rlq-chk-cipher').checked) selections.push('cipher');
+    if (document.getElementById('rlq-chk-twofa') && document.getElementById('rlq-chk-twofa').checked) selections.push('twofa');
     if (document.getElementById('rlq-chk-seed').checked && _rlqSeedConfirmed) selections.push('seed');
 
     if (selections.length === 0) {
@@ -30999,6 +31150,8 @@ function rlq_init() {
     document.getElementById('rlq-chk-codex').checked = false;
     document.getElementById('rlq-chk-settings').checked = false;
     document.getElementById('rlq-chk-cipher').checked = false;
+    var twofaChk = document.getElementById('rlq-chk-twofa');
+    if (twofaChk) twofaChk.checked = false;
     var seedChk = document.getElementById('rlq-chk-seed');
     // Bug-fix (Task #40): the seed checkbox MUST NOT carry `disabled`.
     // macOS/WebKit + Chromium both render disabled checkboxes by stripping
@@ -38162,6 +38315,399 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch (e) { /* swallow */ }
     }, 3000);
 });
+
+/* ============================================================
+ * Tool 16 — 2FA / Authenticator Backup  (tfa_ family)
+ * ------------------------------------------------------------
+ * PHASE 1 SCAFFOLDING ONLY.
+ *
+ * What this does today:
+ *   - Hooks the shared SKScanner camera engine + the universal
+ *     window.QRParser (shared/qr-parser.js).
+ *   - Captures the RAW decoded payload of every scanned QR,
+ *     de-duplicates repeat frames (jsQR fires per-frame), echoes
+ *     each payload to the console and a read-only textarea, and
+ *     drops a placeholder row into the results table classified
+ *     by payload type.
+ *
+ * What it deliberately does NOT do yet:
+ *   - Decode otpauth:// URIs into Issuer/Account/Secret.
+ *   - Decode the otpauth-migration:// base64 protobuf batch.
+ *   - Persist anything to the encrypted partition.
+ * Those land in Phase 2 once the decoder strategy is approved.
+ * ============================================================ */
+var _tfaScanner = null;            // active SKScanner instance (or null)
+var _tfaSeen = Object.create(null); // dedupe set: raw payload -> true
+var _tfaPayloads = [];             // captured raw strings, in scan order
+var _tfaAccounts = [];             // decoded account objects, in capture order
+var _tfaAcctSeen = Object.create(null); // dedupe set: account identity key
+var _tfaDirty = false;             // true when uncommitted accounts exist
+var _tfaSaving = false;            // re-entry lock for tfa_save
+
+/** Identity key for an account (delegates to the shared parser). */
+function tfa_key(a) {
+    if (window.TwoFA && typeof window.TwoFA.accountKey === 'function') return window.TwoFA.accountKey(a);
+    return [(a.issuer || ''), (a.account || ''), (a.secret || '')].join(' ');
+}
+
+/**
+ * Reset + (re)load the tool. Pulls any accounts already persisted in the
+ * vault so the table reflects committed state on entry. Async, but callers
+ * (dashboard onclick) don't need to await it.
+ */
+async function tfa_init() {
+    tfa_stopScan();
+    _tfaSeen = Object.create(null);
+    _tfaAcctSeen = Object.create(null);
+    _tfaPayloads = [];
+    _tfaAccounts = [];
+    _tfaDirty = false;
+    tfa_renderRaw();
+
+    // Load previously-saved accounts (marked committed) so the user sees
+    // what's already in the vault and what state they're in.
+    try {
+        if (window.SafeKeepOS && typeof window.SafeKeepOS.load2fa === 'function') {
+            var res = await window.SafeKeepOS.load2fa();
+            var saved = (res && res.accounts) ? res.accounts : [];
+            for (var i = 0; i < saved.length; i++) {
+                var a = saved[i];
+                a.committed = true;
+                _tfaAccounts.push(a);
+                _tfaAcctSeen[tfa_key(a)] = true;
+            }
+        }
+    } catch (_) { /* empty vault / demo mode — fine */ }
+
+    tfa_renderTable();
+    tfa_renderVaultState();
+    tfa_setStatus('Idle — camera off.');
+}
+
+function tfa_setStatus(msg, kind) {
+    var el = document.getElementById('tfa-scan-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = (kind === 'error') ? 'var(--skb-danger)' : 'var(--skb-text-muted)';
+}
+
+/** Begin a live camera scan using the shared SKScanner engine. */
+async function tfa_startScan() {
+    if (!window.SKScanner || !window.jsQR) {
+        tfa_setStatus('Camera library not loaded. Rebuild with Vite.', 'error');
+        return;
+    }
+    var wrap = document.getElementById('tfa-camera-wrap');
+    if (wrap) wrap.style.display = 'block';
+    tfa_setStatus('Awaiting QR code…');
+    try {
+        if (_tfaScanner) { try { _tfaScanner.stop(); } catch (_) {} _tfaScanner = null; }
+        _tfaScanner = SKScanner.create('tfa-camera-reader');
+        await _tfaScanner.start({ fps: 10 }, function (text, binaryData) {
+            tfa_onScan(text, binaryData);
+        });
+    } catch (err) {
+        tfa_setStatus('Camera error: ' + (err && err.message ? err.message : err), 'error');
+        if (wrap) wrap.style.display = 'none';
+    }
+}
+
+/** Stop the camera and hide the viewfinder. Safe to call when idle. */
+function tfa_stopScan() {
+    if (_tfaScanner) { try { _tfaScanner.stop(); } catch (_) {} _tfaScanner = null; }
+    var wrap = document.getElementById('tfa-camera-wrap');
+    if (wrap) wrap.style.display = 'none';
+    if (_tfaPayloads.length) {
+        tfa_setStatus('Scanner stopped — ' + _tfaPayloads.length + ' payload(s) captured.');
+    }
+}
+
+/** Called by showState() when navigating away — kills the camera LED. */
+function tfa_cleanup() {
+    tfa_stopScan();
+}
+
+/** HTML-escape scanned text before injecting into the results table. */
+function tfa_esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** Classifier — delegates to window.TwoFA, with a regex fallback. */
+function tfa_classify(raw) {
+    if (window.TwoFA && typeof window.TwoFA.classify === 'function') return window.TwoFA.classify(raw);
+    if (/^otpauth-migration:\/\//i.test(raw)) return 'migration';
+    if (/^otpauth:\/\//i.test(raw)) return 'otpauth';
+    return 'unknown';
+}
+
+/**
+ * Per-frame scan callback. Captures the raw payload, then decodes it via
+ * window.TwoFA (otpauth:// single URI or otpauth-migration:// batch protobuf)
+ * and merges the resulting account(s) into the Captured Accounts table.
+ */
+function tfa_onScan(text, binaryData) {
+    var raw = window.QRParser ? window.QRParser.parseQRScan(text, binaryData) : text;
+    raw = (raw == null) ? '' : String(raw);
+    if (!raw) return;
+
+    // jsQR re-fires on every decoded frame; ignore payloads we've seen.
+    if (_tfaSeen[raw]) return;
+    _tfaSeen[raw] = true;
+    _tfaPayloads.push(raw);
+    try { console.log('[tfa] payload #' + _tfaPayloads.length + ':', raw); } catch (_) {}
+    tfa_renderRaw();
+
+    // Decode + merge accounts.
+    if (!window.TwoFA || typeof window.TwoFA.parseQrPayload !== 'function') {
+        tfa_setStatus('Decoder not loaded (window.TwoFA missing). Rebuild with Vite.', 'error');
+        tfa_renderTable();
+        return;
+    }
+    var result = window.TwoFA.parseQrPayload(raw);
+    if (result.kind === 'unknown') {
+        tfa_setStatus('Scanned a non-2FA QR (' + _tfaPayloads.length + ' raw payload(s)). Ignored.', 'error');
+        return;
+    }
+    if (result.error) {
+        tfa_setStatus('Decode error on ' + result.kind + ' payload: ' + result.error, 'error');
+        tfa_renderTable();
+        return;
+    }
+    var added = 0;
+    for (var i = 0; i < result.accounts.length; i++) {
+        var a = result.accounts[i];
+        var key = tfa_key(a);
+        if (_tfaAcctSeen[key]) continue;       // dedupe across overlapping scans
+        _tfaAcctSeen[key] = true;
+        a.committed = false;                    // newly scanned -> not yet in vault
+        _tfaAccounts.push(a);
+        added++;
+    }
+    if (added > 0) _tfaDirty = true;
+    tfa_renderTable();
+    tfa_renderVaultState();
+    tfa_setStatus(_tfaAccounts.length + ' account(s) captured' +
+        (added === 0 ? ' — no new accounts in that scan.' : '') + ' — keep scanning, Save, or Stop.');
+}
+
+/**
+ * Persist all captured accounts to the encrypted vault via SafeKeepOS.
+ * Appends/updates — accounts already saved are no-ops on the OS side.
+ */
+async function tfa_save() {
+    if (_tfaSaving) return;
+    if (!_tfaAccounts.length) { tfa_setStatus('Nothing to save.', 'error'); return; }
+    if (!window.SafeKeepOS || typeof window.SafeKeepOS.save2fa !== 'function') {
+        tfa_setStatus('Vault storage API unavailable (SafeKeepOS missing).', 'error');
+        return;
+    }
+    _tfaSaving = true;
+    var btn = document.getElementById('tfa-save-btn');
+    var orig = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; btn.style.opacity = '0.55'; }
+    try {
+        var res = await window.SafeKeepOS.save2fa(_tfaAccounts.map(tfa_stripFlags));
+        if (res && res.saved) {
+            for (var i = 0; i < _tfaAccounts.length; i++) _tfaAccounts[i].committed = true;
+            _tfaDirty = false;
+            tfa_renderTable();
+            var msg = 'Saved to vault - ' + (res.total != null ? res.total : _tfaAccounts.length) + ' account(s) total';
+            if (res.warning) msg += ' (' + res.warning + ')';
+            tfa_setStatus(msg + '.', res.warning ? 'error' : 'ok');
+        } else {
+            tfa_setStatus('Save failed: ' + ((res && res.error) || 'unknown error'), 'error');
+        }
+    } catch (err) {
+        tfa_setStatus('Save error: ' + (err && err.message ? err.message : err), 'error');
+    } finally {
+        _tfaSaving = false;
+        if (btn) { btn.textContent = orig; btn.style.opacity = ''; }
+        tfa_renderVaultState();   // re-evaluates Save button enabled state
+    }
+}
+
+/** Strip transient UI flags before handing accounts to the OS layer. */
+function tfa_stripFlags(a) {
+    return {
+        otpType: a.otpType, issuer: a.issuer, account: a.account,
+        secret: a.secret, digits: a.digits, algorithm: a.algorithm, counter: a.counter
+    };
+}
+
+/** Update the commit-state badge + Save button enabled state. */
+function tfa_renderVaultState() {
+    var badge = document.getElementById('tfa-vault-state');
+    var btn = document.getElementById('tfa-save-btn');
+    var total = _tfaAccounts.length, uncommitted = 0;
+    for (var i = 0; i < total; i++) if (!_tfaAccounts[i].committed) uncommitted++;
+
+    if (badge) {
+        if (total === 0) {
+            badge.textContent = 'vault: empty';
+            badge.style.color = 'var(--skb-text-dim)';
+            badge.style.borderColor = 'var(--skb-border)';
+        } else if (uncommitted > 0) {
+            badge.textContent = '● ' + uncommitted + ' unsaved';
+            badge.style.color = 'var(--skb-primary)';
+            badge.style.borderColor = 'var(--skb-primary)';
+        } else {
+            badge.textContent = '✓ saved (' + total + ')';
+            badge.style.color = 'var(--skb-text-muted)';
+            badge.style.borderColor = 'var(--skb-border)';
+        }
+    }
+    if (btn) {
+        var enable = uncommitted > 0 && !_tfaSaving;
+        btn.disabled = !enable;
+        btn.style.opacity = enable ? '' : '0.55';
+    }
+}
+
+/** Render a restoration QR for one account via the shared QR library. */
+function tfa_showQR(index) {
+    var a = _tfaAccounts[index];
+    if (!a) return;
+    if (!window.TwoFA || typeof window.TwoFA.buildOtpauthUri !== 'function') {
+        tfa_setStatus('QR builder unavailable (window.TwoFA missing).', 'error');
+        return;
+    }
+    if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
+        tfa_setStatus('QR library not loaded. Rebuild with Vite.', 'error');
+        return;
+    }
+    var uri = window.TwoFA.buildOtpauthUri(a);
+    var modal = document.getElementById('tfa-qr-modal');
+    var title = document.getElementById('tfa-qr-title');
+    var sub = document.getElementById('tfa-qr-sub');
+    var canvas = document.getElementById('tfa-qr-canvas');
+    if (title) title.textContent = (a.issuer ? a.issuer + ' - ' : '') + (a.account || a.otpType);
+    if (sub) sub.textContent = a.otpType + ' · ' + (a.digits || 6) + ' digits · ' + (a.algorithm || 'SHA1');
+    try {
+        window.QRCode.toCanvas(canvas, uri, {
+            width: 240, margin: 1, color: { dark: '#000000', light: '#ffffff' },
+            errorCorrectionLevel: 'M'
+        });
+    } catch (e) {
+        tfa_setStatus('QR render failed: ' + (e && e.message ? e.message : e), 'error');
+        return;
+    }
+    if (modal) modal.style.display = 'flex';
+}
+
+/** Close the restoration QR modal and clear the rendered secret. */
+function tfa_closeQR() {
+    var modal = document.getElementById('tfa-qr-modal');
+    if (modal) modal.style.display = 'none';
+    var canvas = document.getElementById('tfa-qr-canvas');
+    if (canvas && canvas.getContext) {
+        try { canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); } catch (_) {}
+    }
+}
+
+/**
+ * Build a printer-friendly paper backup of all COMMITTED accounts and open
+ * the browser print dialog. Each account prints Issuer, Account, Type/params,
+ * the base32 Secret, and a scannable otpauth:// QR. The print area is wiped
+ * after printing so the secrets don't linger in the DOM. Matches the Wallet
+ * Record tool's JS-assisted print philosophy (body.printing-* + @media print).
+ */
+function tfa_print() {
+    var committed = _tfaAccounts.filter(function (a) { return a.committed; });
+    if (!committed.length) {
+        tfa_setStatus('Nothing committed to print yet — save accounts to the vault first.', 'error');
+        return;
+    }
+    if (!window.TwoFA || typeof window.TwoFA.buildOtpauthUri !== 'function' ||
+        !window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
+        tfa_setStatus('Print prerequisites unavailable (TwoFA / QR library).', 'error');
+        return;
+    }
+    var area = document.getElementById('tfa-print-area');
+    if (!area) return;
+
+    var dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    var html = '<h2 class="tfa-print-title">2FA / Authenticator Backup</h2>' +
+               '<p class="tfa-print-meta">' + committed.length + ' account(s) &middot; ' + tfa_esc(dateStr) + '</p>';
+    for (var i = 0; i < committed.length; i++) {
+        var a = committed[i];
+        html +=
+            '<div class="tfa-print-card">' +
+              '<div class="tfa-print-field">' +
+                '<div><span class="tfa-print-label">Issuer:</span> ' + (a.issuer ? tfa_esc(a.issuer) : '&mdash;') + '</div>' +
+                '<div><span class="tfa-print-label">Account:</span> ' + (a.account ? tfa_esc(a.account) : '&mdash;') + '</div>' +
+                '<div><span class="tfa-print-label">Type:</span> ' + tfa_esc(a.otpType) + ' &middot; ' + (a.digits || 6) + ' digits &middot; ' + tfa_esc(a.algorithm || 'SHA1') + '</div>' +
+                '<div class="tfa-print-secret"><span class="tfa-print-label">Secret:</span> ' + tfa_esc(a.secret) + '</div>' +
+              '</div>' +
+              '<canvas id="tfa-print-qr-' + i + '"></canvas>' +
+            '</div>';
+    }
+    area.innerHTML = html;
+
+    // Render the otpauth QR into each card's canvas (synchronous).
+    for (var j = 0; j < committed.length; j++) {
+        var canvas = document.getElementById('tfa-print-qr-' + j);
+        if (!canvas) continue;
+        try {
+            window.QRCode.toCanvas(canvas, window.TwoFA.buildOtpauthUri(committed[j]), {
+                width: 150, margin: 1, color: { dark: '#000000', light: '#ffffff' },
+                errorCorrectionLevel: 'M'
+            });
+        } catch (e) { console.error('[tfa] print QR render failed for account', j, e); }
+    }
+
+    area.style.display = 'block';
+    document.body.classList.add('printing-twofa');
+    // Brief delay lets the canvases paint before the print compositor snapshots.
+    setTimeout(function () {
+        window.print();
+        // Defer cleanup so Chromium captures the CSS state with the class on
+        // <body>; then wipe the printed secrets out of the DOM.
+        setTimeout(function () {
+            document.body.classList.remove('printing-twofa');
+            area.style.display = 'none';
+            area.innerHTML = '';
+        }, 500);
+    }, 60);
+}
+
+/** Dump all captured raw payloads into the read-only textarea. */
+function tfa_renderRaw() {
+    var ta = document.getElementById('tfa-raw-output');
+    if (ta) ta.value = _tfaPayloads.join('\n');
+}
+
+/** Render the decoded accounts into the Captured Accounts table. */
+function tfa_renderTable() {
+    var body = document.getElementById('tfa-results-body');
+    if (!body) return;
+    if (!_tfaAccounts.length) {
+        body.innerHTML = '<tr><td colspan="5" style="padding: 1rem 0.6rem; text-align: center; color: var(--skb-text-dim);">No accounts captured yet.</td></tr>';
+        return;
+    }
+    var cell = 'padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--skb-border);';
+    var rows = '';
+    for (var i = 0; i < _tfaAccounts.length; i++) {
+        var a = _tfaAccounts[i];
+        var dim = '<span style="color: var(--skb-text-dim);">—</span>';
+        // Commit-state glyph: ✓ = in vault, ● = unsaved (orange).
+        var dot = a.committed
+            ? '<span title="Saved to vault" style="color: var(--skb-text-muted);">✓</span> '
+            : '<span title="Not yet saved" style="color: var(--skb-primary);">●</span> ';
+        rows +=
+            '<tr>' +
+            '<td style="' + cell + ' font-family: var(--skb-mono); white-space: nowrap;">' + dot + tfa_esc(a.otpType) + '</td>' +
+            '<td style="' + cell + '">' + (a.issuer ? tfa_esc(a.issuer) : dim) + '</td>' +
+            '<td style="' + cell + '">' + (a.account ? tfa_esc(a.account) : dim) + '</td>' +
+            '<td style="' + cell + ' font-family: var(--skb-mono); word-break: break-all;">' + (a.secret ? tfa_esc(a.secret) : dim) + '</td>' +
+            '<td style="' + cell + ' text-align: right; white-space: nowrap;">' +
+                '<button type="button" class="skb-btn" style="padding: 0.2rem 0.6rem; font-size: 0.72rem;" onclick="tfa_showQR(' + i + ')">Show QR</button>' +
+            '</td>' +
+            '</tr>';
+    }
+    body.innerHTML = rows;
+}
 </script>
 
 <!-- ---- Vault Lock Overlay ---- -->

@@ -67,6 +67,10 @@ import './shared/qr-parser.js';
 // BIP-352 / BIP-375 output verification gate. Must load before boot.js so
 // the inline audit code sees it.
 import './shared/silentpayments.js';
+// twofa-parser.js exposes window.TwoFA for the 2FA Backup tool (Tool 16) —
+// otpauth:// and otpauth-migration:// (base64 protobuf) decoding. Pure,
+// dependency-free; must load before boot.js so inline scanner code sees it.
+import './shared/twofa-parser.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
 
