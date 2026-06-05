@@ -5940,6 +5940,17 @@
                         Fingerprint: <strong id="backup-fingerprint">--------</strong>
                     </div>
 
+                    <!-- Hybrid-entropy indicator: shown by transitionToBackup() ONLY when
+                         the seed came from the hardened 1-click path (generateHardenedEntropy).
+                         Hidden for manual Forge / BYOE generation. -->
+                    <div id="backup-entropy-badge" title="Seed hardened using browser cryptography mixed with environmental hardware timing and pointer jitter." style="display: none; align-items: center; justify-content: center; gap: 0.5rem; margin: 0 0 1rem; padding: 0.4rem 0.85rem; border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); background: rgba(247, 147, 26, 0.08); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em; color: var(--skb-primary); cursor: help;">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;">
+                            <path d="M12 3 4 6v5c0 4.4 3.1 7.9 8 9 4.9-1.1 8-4.6 8-9V6l-8-3Z"/>
+                            <path d="M9 12l2 2 4-4"/>
+                        </svg>
+                        <span>Hybrid Entropy Applied</span>
+                    </div>
+
                     <div class="backup-word-grid" id="backup-word-grid">
                         <!-- Filled by JS -->
                     </div>
@@ -8094,6 +8105,17 @@
             <div id="eob-forge-result" style="display: none;">
                 <div class="skb-card" style="margin-top: 1.5rem;">
                     <div style="font-size: 0.85rem; font-weight: 700; color: var(--skb-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">Generated Entropy Result</div>
+
+                    <!-- Hybrid-entropy indicator: toggled by _eobFinalizeEntropy() ONLY when
+                         the seed came from the hardened 1-click path (_eobEntropyMode==='hardened').
+                         Hidden the moment a manual Forge generation re-renders this area. -->
+                    <div id="eob-entropy-badge" title="Seed hardened using browser cryptography mixed with environmental hardware timing and pointer jitter." style="display: none; align-items: center; justify-content: center; gap: 0.5rem; margin: 0 0 1rem; padding: 0.4rem 0.85rem; border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); background: rgba(247, 147, 26, 0.08); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em; color: var(--skb-primary); cursor: help;">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;">
+                            <path d="M12 3 4 6v5c0 4.4 3.1 7.9 8 9 4.9-1.1 8-4.6 8-9V6l-8-3Z"/>
+                            <path d="M9 12l2 2 4-4"/>
+                        </svg>
+                        <span>Hybrid Entropy Applied</span>
+                    </div>
 
                     <div style="margin-bottom: 1rem;">
                         <div style="font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Raw Hex</div>
@@ -12125,6 +12147,14 @@ function transitionToBackup(seedData) {
     // Populate fingerprint
     document.getElementById('backup-fingerprint').textContent = seedData.fingerprint || '--------';
 
+    // Hybrid-entropy badge: show ONLY when this seed came from the hardened
+    // 1-click path (entropyMode === 'hardened'). Hidden for manual Forge, BYOE,
+    // and every other flow — set explicitly each entry so it never goes stale.
+    var _entBadge = document.getElementById('backup-entropy-badge');
+    if (_entBadge) {
+        _entBadge.style.display = (seedData && seedData.entropyMode === 'hardened') ? 'flex' : 'none';
+    }
+
     // Populate word grid
     const words = seedData.mnemonic.trim().split(/\s+/);
     const grid = document.getElementById('backup-word-grid');
@@ -14892,6 +14922,12 @@ function _installAmnesiaGatekeeper() {
                 mnemonic = btc.bip39.entropyToMnemonic(_mixed, btc.wordlist);
                 _sysBytes.fill(0);
                 _mixed.fill(0);
+            } else if (typeof window.generateHardenedEntropy === 'function') {
+                // Hardened CSPRNG path (1-click): salt a full CSPRNG draw with
+                // background noise via SHA-256 — never weaker than the CSPRNG.
+                var _hardened = await window.generateHardenedEntropy(_byteLen);
+                mnemonic = btc.bip39.entropyToMnemonic(_hardened, btc.wordlist);
+                _hardened.fill(0);
             } else {
                 mnemonic = btc.bip39.generateMnemonic(btc.wordlist, _strength);
             }
@@ -15781,6 +15817,12 @@ async function _ephemeralGenerateAndCommit(strength, userEntropyBytes) {
         mnemonic = btc.bip39.entropyToMnemonic(_mixed, btc.wordlist);
         _sysBytes.fill(0);
         _mixed.fill(0);
+    } else if (typeof window.generateHardenedEntropy === 'function') {
+        // Hardened CSPRNG path (1-click): salt a full CSPRNG draw with
+        // background noise via SHA-256 — never weaker than the CSPRNG.
+        var _hardened = await window.generateHardenedEntropy(_byteLen);
+        mnemonic = btc.bip39.entropyToMnemonic(_hardened, btc.wordlist);
+        _hardened.fill(0);
     } else {
         mnemonic = btc.bip39.generateMnemonic(btc.wordlist, _strength);
     }
@@ -36691,6 +36733,9 @@ async function _eobFinalizeEntropy(entropy) {
 
         _seedIsNew = true;
         _pendingBackupSeed = result;
+        // Tag how the entropy was produced so the backup screen can show the
+        // "Hybrid Entropy Applied" badge only for the hardened 1-click path.
+        try { if (result) result.entropyMode = _eobEntropyMode; } catch (_) {}
         // Clear the full-screen wizard class — backup screen and dashboard
         // render with normal layout.
         document.body.classList.remove('onboarding-forge');
@@ -36724,6 +36769,16 @@ async function _eobFinalizeEntropy(entropy) {
             '</div>';
     }
     document.getElementById('eob-result-words').innerHTML = gridHtml;
+
+    // Hybrid-entropy badge: show ONLY for the hardened 1-click path. This runs
+    // on EVERY dashboard finalize (easy AND manual Forge), so a subsequent
+    // manual generation re-renders the area and hides the badge — enforcing
+    // mutual exclusion with the manual entropy tools.
+    var _eobBadge = document.getElementById('eob-entropy-badge');
+    if (_eobBadge) {
+        _eobBadge.style.display = (_eobEntropyMode === 'hardened') ? 'flex' : 'none';
+    }
+
     document.getElementById('eob-forge-result').style.display = 'block';
     showStatus('Seed generated! Review your results below.', 'success');
     return true;
@@ -36744,8 +36799,20 @@ async function eob_generateSecureSeed() {
     try {
         // 16 bytes for 128-bit (12-word), 32 bytes for 256-bit (24-word).
         var entropyLength = _targetEntropyBits === 128 ? 16 : 32;
-        var entropy = new Uint8Array(entropyLength);
-        window.crypto.getRandomValues(entropy);
+        // Hardened 1-click entropy: a full CSPRNG draw salted with background
+        // noise (timing + pointer + viewport) via SHA-256. Provably never
+        // weaker than the raw CSPRNG draw (see shared/entropy-harden.js).
+        // Falls back to a plain CSPRNG draw if the wrapper isn't loaded — in
+        // which case the "Hybrid Entropy" badge is NOT shown (mode stays plain).
+        var entropy;
+        if (typeof window.generateHardenedEntropy === 'function') {
+            entropy = await window.generateHardenedEntropy(entropyLength);
+            _eobEntropyMode = 'hardened';
+        } else {
+            entropy = new Uint8Array(entropyLength);
+            window.crypto.getRandomValues(entropy);
+            _eobEntropyMode = 'plain';
+        }
 
         await _eobFinalizeEntropy(entropy);
         // Whether finalize committed (onboarding → navigated to backup) or
@@ -36762,9 +36829,15 @@ async function eob_generateSecureSeed() {
 
 // --- Finalization: Forge Seed (context-aware) ---
 var _eobForging = false;
+// Tracks how the entropy for the in-flight generation was produced, so the
+// backup screen can show the "Hybrid Entropy Applied" badge ONLY for the
+// hardened 1-click path. Set explicitly by each generator before finalize;
+// default 'manual' so no other path can accidentally inherit a stale value.
+var _eobEntropyMode = 'manual';
 
 async function eob_forgeSeed() {
     if (_eobEstimatedBits < _targetEntropyBits) return;
+    _eobEntropyMode = 'manual';   // manual Forge path — never shows the hybrid badge
     if (_eobForging) return;
     _eobForging = true;
 

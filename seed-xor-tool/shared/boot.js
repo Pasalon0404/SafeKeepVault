@@ -36,6 +36,11 @@
  *   - BtcMath (window.BtcMath) for BIP-39 generation/validation and fingerprint
  */
 
+// Implicit-entropy hardening for the CSPRNG-only ("1-click") seed path.
+// Mixes a full CSPRNG draw with background-noise salt via SHA-256; can never
+// weaken the CSPRNG base (see shared/entropy-harden.js for the rationale).
+import { generateHardenedEntropy } from './entropy-harden.js';
+
 const SafeKeepOS = (() => {
 
   // ---- The One True Path ----
@@ -268,8 +273,13 @@ const SafeKeepOS = (() => {
       systemBytes.fill(0);
       mixed.fill(0);
     } else {
-      // --- Legacy path: system CSPRNG only ---
-      mnemonic = bip39.generateMnemonic(wordlist, strength);
+      // --- Hardened CSPRNG path (1-click) ---
+      // No user-supplied entropy: instead of trusting generateMnemonic's raw
+      // getRandomValues draw, salt a full CSPRNG draw with background noise
+      // via SHA-256. Provably >= CSPRNG strength (see entropy-harden.js).
+      const hardened = await generateHardenedEntropy(byteLen);
+      mnemonic = bip39.entropyToMnemonic(hardened, wordlist);
+      hardened.fill(0);
     }
 
     const fingerprint = await _computeFingerprint(mnemonic);

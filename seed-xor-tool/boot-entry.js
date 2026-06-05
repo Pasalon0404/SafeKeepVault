@@ -71,6 +71,10 @@ import './shared/silentpayments.js';
 // otpauth:// and otpauth-migration:// (base64 protobuf) decoding. Pure,
 // dependency-free; must load before boot.js so inline scanner code sees it.
 import './shared/twofa-parser.js';
+// entropy-harden.js exposes window.generateHardenedEntropy (+ a passive pointer
+// tracker) for the inline amnesia/ephemeral seed paths in boot.html. Imported
+// before boot.js so the global is present when those paths run.
+import './shared/entropy-harden.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
 
