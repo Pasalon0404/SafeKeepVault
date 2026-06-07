@@ -30874,16 +30874,18 @@ async function codex_print() {
     if (!savedTs) savedTs = 'Unsaved — current session';
     var dateStr = new Date().toLocaleString();
 
-    // Multi-part QR. Notes can exceed a single QR's capacity, so split the
-    // plaintext into ~1800-char chunks (comfortably under a v40 byte-mode QR's
-    // ~2953-byte ceiling, with EC level L for max density) and render one QR
-    // per chunk. The chunks are sequential slices of the raw text, so scanning
-    // the parts in order and concatenating reproduces the note exactly — the
-    // captions carry the order. Capped at MAX_PARTS; beyond that we fall back
-    // to text-only to avoid an absurdly long printout. Each toCanvas is awaited
+    // Multi-part QR. The chunk size is driven by SCANNABILITY, not raw QR
+    // capacity: at the printed 1.8in size, QR density depends only on payload
+    // length, and a ~1800-char payload produces a v30+ QR whose modules are too
+    // tiny for a phone camera. ~300 chars keeps each QR around version 11
+    // (61x61 modules ≈ 0.75 mm/module at 1.8in) — comfortably scannable. Notes
+    // are split into sequential ~300-char slices, one QR each; scanning the
+    // parts in order and concatenating reproduces the note exactly (the captions
+    // carry the order). Capped at MAX_PARTS; beyond that we fall back to
+    // text-only to avoid an absurdly long printout. Each toCanvas is awaited
     // (yielding to the event loop between parts) so the UI never freezes.
-    var CODEX_QR_CHUNK = 1800;
-    var CODEX_QR_MAX_PARTS = 10;
+    var CODEX_QR_CHUNK = 300;
+    var CODEX_QR_MAX_PARTS = 16;
     var qrBlockHtml = '';
     var _chunks = [];
     for (var _ci = 0; _ci < plaintext.length; _ci += CODEX_QR_CHUNK) {
@@ -30913,13 +30915,17 @@ async function codex_print() {
             qrBlockHtml = '<div class="note" style="text-align:center;">(Note content could not be encoded as QR codes &mdash; transcribe the text above.)</div>';
         } else {
             var _total = _parts.length;
+            var _framesHtml = '';
             for (var _pi = 0; _pi < _total; _pi++) {
                 var _cap = (_total > 1)
                     ? 'Note Content QR Payload (Part ' + (_pi + 1) + ' of ' + _total + ')'
                     : 'Note Content QR Payload';
-                qrBlockHtml += '<div class="qrframe"><img class="qrimg" src="' + _parts[_pi] + '" alt="Note QR part ' + (_pi + 1) + '">' +
+                _framesHtml += '<div class="qrframe"><img class="qrimg" src="' + _parts[_pi] + '" alt="Note QR part ' + (_pi + 1) + '">' +
                                '<div class="qrcap">' + _cap + '</div></div>';
             }
+            // Flow the parts in a centered wrap so several scannable QRs sit a
+            // few per row instead of one long vertical column.
+            qrBlockHtml = '<div class="qrwrap">' + _framesHtml + '</div>';
         }
     }
 
@@ -30946,9 +30952,10 @@ async function codex_print() {
         '  .kv .k { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #888; }' +
         '  .kv .val { font-size: 11pt; font-weight: 700; }' +
         '  .content { font-family: "Courier New", Courier, monospace; font-size: 10pt; line-height: 1.5; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word; }' +
-        '  .qrframe { text-align: center; margin: 0.35rem auto 0.45rem; padding: 0.16in; border: 2px solid #000; border-radius: 4px; background: #fff; width: -moz-fit-content; width: fit-content; page-break-inside: avoid; break-inside: avoid; }' +
+        '  .qrwrap { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 0.3rem; margin: 0.35rem 0 0.45rem; }' +
+        '  .qrframe { text-align: center; margin: 0.2rem; padding: 0.14in; border: 2px solid #000; border-radius: 4px; background: #fff; width: -moz-fit-content; width: fit-content; page-break-inside: avoid; break-inside: avoid; }' +
         '  .qrimg { width: 1.8in; height: 1.8in; display: block; margin: 0 auto; }' +
-        '  .qrcap { font-size: 10pt; font-weight: 700; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }' +
+        '  .qrcap { font-size: 9pt; font-weight: 700; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }' +
         '  .ftr { margin-top: 0.5rem; padding-top: 0.3rem; border-top: 1px solid #ccc; display: flex; justify-content: space-between; font-size: 7.5pt; color: #555; font-family: "Courier New", Courier, monospace; }' +
         '  @media print { .noprint { display: none !important; } .page { padding: 0.4in 0.5in; } }' +
         '</style></head><body>' +
