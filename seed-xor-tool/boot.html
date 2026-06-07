@@ -5062,6 +5062,7 @@
       #desc-print-area,
       #pp-print-area,
       #tfa-print-area,
+      #arm-print-doc,
       #bip85-print-area {
         display: none !important;
       }
@@ -5324,28 +5325,85 @@
         line-height: 1.8 !important; word-break: break-all !important;
       }
 
-      /* --- Armory print styling --- */
-      body.printing-armory #state-armory .arm-print-only { display: block !important; }
-      body.printing-armory .arm-print-checksum { display: block !important; }
-      body.printing-armory .arm-xpub-val { color: #000; border-color: #999; background: #f5f5f5; }
-      body.printing-armory .arm-addr-table td { color: #000; }
-      body.printing-armory .arm-fingerprint { color: #000; border-color: #999; background: #f5f5f5; }
-      body.printing-armory .arm-path-display { color: #000; border-color: #999; background: #f5f5f5; }
-      body.printing-armory .arm-print-header { text-align: center; margin-bottom: 1rem; }
-      body.printing-armory .arm-print-header h2 { font-size: 1.3rem; color: #000; }
-      body.printing-armory #arm-passphrase { color: #000 !important; -webkit-text-fill-color: #000 !important; background: #f5f5f5 !important; border-color: #999 !important; }
-      /* QR code respects its UI visibility — no static print-only duplicate.
-         Both width AND height are pinned to enforce a 1:1 aspect ratio;
-         without this, the print compositor stretches the canvas vertically. */
-      body.printing-armory #arm-xpub-qr { display: block; text-align: center; margin: 0.75rem 0; }
-      body.printing-armory #arm-xpub-qr canvas { width: 400px !important; height: 400px !important; max-width: 60vw !important; object-fit: contain; }
-      /* Task #130: neutralize the on-screen .arm-xpub-qr-resizer during
-         print. Drop the fixed 320×320 box, the overflow:hidden clip, the
-         dashed border, and the corner-grip ::after — let the wrapper hug
-         the print-forced 400×400 canvas inside it. */
-      body.printing-armory #arm-xpub-qr .arm-xpub-qr-resizer { width: auto !important; height: auto !important; min-width: 0 !important; min-height: 0 !important; max-width: none !important; max-height: none !important; resize: none !important; overflow: visible !important; border: none !important; padding: 0 !important; }
-      body.printing-armory #arm-xpub-qr .arm-xpub-qr-resizer::after { display: none !important; }
-      body.printing-armory .arm-checksum-box { font-family: var(--skb-mono); font-size: 1.2rem; font-weight: 700; padding: 0.6rem 1rem; border: 2px solid #000; border-radius: 4px; display: inline-block; text-transform: uppercase; letter-spacing: 0.05em; }
+      /* --- Seed Management (Armory) cold-storage print document ---
+         The live tool UI is hidden entirely; only the structured artifact in
+         #arm-print-doc (built by arm_print/_armBuildPrintDoc) renders. */
+      body.printing-armory #arm-content { display: none !important; }
+      body.printing-armory #arm-print-doc {
+        display: block !important;
+        color: #000 !important;
+        font-size: 11pt;
+        line-height: 1.5;
+      }
+      body.printing-armory #arm-print-doc * { color: #000 !important; }
+
+      .arm-pd-head { text-align: center; margin: 0 0 0.6rem; }
+      .arm-pd-head h2 { font-size: 18pt; margin: 0 0 0.2rem; letter-spacing: 0.02em; }
+      .arm-pd-fp-line { font-size: 10pt; }
+      .arm-pd-fp-line strong { font-family: "Courier New", Courier, monospace; }
+
+      /* Isolation boxes around the critical payloads */
+      .arm-pd-box {
+        border: 1px solid #ccc;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 0.6rem 0.85rem;
+        margin: 0 0 0.7rem;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      .arm-pd-box-label {
+        font-size: 9pt; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.08em; color: #444 !important;
+        margin-bottom: 0.45rem; padding-bottom: 0.25rem; border-bottom: 1px solid #ddd;
+      }
+      .arm-pd-note { font-size: 8pt; color: #666 !important; margin-top: 0.45rem; font-style: italic; }
+
+      /* Master seed — monospace numbered grid */
+      .arm-pd-seed { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem 0.9rem; }
+      .arm-pd-word { font-family: "Courier New", Courier, monospace; font-size: 11pt; white-space: nowrap; }
+      .arm-pd-word-num { display: inline-block; width: 1.7em; text-align: right; margin-right: 0.45em; font-size: 9pt; color: #888 !important; }
+
+      /* Passphrase explicit checkbox state */
+      .arm-pd-pp-state { display: flex; gap: 1.75rem; font-size: 10.5pt; }
+      .arm-pd-check { font-family: "Courier New", Courier, monospace; }
+      .arm-pd-pp-val {
+        font-family: "Courier New", Courier, monospace; font-size: 11pt; word-break: break-all;
+        margin-top: 0.45rem; padding: 0.35rem 0.5rem; background: #fff; border: 1px solid #ddd; border-radius: 3px;
+      }
+
+      /* Extended public key (chunked, monospace) */
+      .arm-pd-path-line { font-size: 9pt; margin-bottom: 0.35rem; }
+      .arm-pd-path-line span { font-family: "Courier New", Courier, monospace; }
+      .arm-pd-xpub { font-family: "Courier New", Courier, monospace; font-size: 10pt; line-height: 1.7; word-break: break-all; letter-spacing: 0.03em; }
+
+      /* QR framing: solid border, generous quiet-zone padding, bold caption */
+      .arm-pd-qr-frame {
+        text-align: center; margin: 0.5rem auto 0.85rem; padding: 0.3in;
+        border: 2px solid #000; border-radius: 4px; background: #fff; width: fit-content;
+        page-break-inside: avoid; break-inside: avoid;
+      }
+      .arm-pd-qr-frame canvas { width: 2.3in !important; height: 2.3in !important; display: block; margin: 0 auto; }
+      .arm-pd-qr-caption { font-size: 11pt; font-weight: 700; margin-top: 0.35rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+      /* Receive addresses (chunked, monospace) */
+      .arm-pd-addr-row { font-size: 9.5pt; margin-bottom: 0.22rem; display: flex; gap: 0.55rem; }
+      .arm-pd-addr-idx { color: #888 !important; min-width: 1.4em; text-align: right; }
+      .arm-pd-addr-val { font-family: "Courier New", Courier, monospace; word-break: break-all; letter-spacing: 0.03em; }
+
+      /* Dashed fold line with centred label */
+      .arm-pd-fold { border-top: 1px dashed #999; text-align: center; margin: 1rem 0; height: 0; }
+      .arm-pd-fold span {
+        position: relative; top: -0.65em; background: #fff; padding: 0 0.65rem;
+        font-size: 7.5pt; color: #999 !important; text-transform: uppercase; letter-spacing: 0.1em;
+      }
+
+      /* Print footer (title + generation date) */
+      .arm-pd-footer {
+        margin-top: 1.1rem; padding-top: 0.45rem; border-top: 1px solid #ccc;
+        display: flex; justify-content: space-between; font-size: 8pt; color: #555 !important;
+      }
+      .arm-pd-footer span { font-family: "Courier New", Courier, monospace; }
 
       /* --- SeedQR blank grid print area fine-tuning --- */
       body.printing-seedqr #sqr-print-area { text-align: center; padding: 1in 0 0 !important; }
@@ -6487,7 +6545,7 @@
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.29b</span>
+                        <span class="version" id="dash-version">v1.30b</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -9085,6 +9143,60 @@
                         onclick="arm_print()">
                     Print PDF
                 </button>
+            </div>
+
+            <!-- ===== Cold-storage print document =====================================
+                 Hidden on screen; revealed only under @media print (body.printing-armory).
+                 Populated by arm_print() → _armBuildPrintDoc() from the LIVE tool state,
+                 so the on-screen UI, Copy, Show-QR, and export handlers are never touched.
+                 Sibling of #arm-content (which is hidden during print). -->
+            <div id="arm-print-doc" class="arm-print-only" aria-hidden="true">
+                <div class="arm-pd-head">
+                    <h2>SafeKeep Cold Storage Backup</h2>
+                    <div class="arm-pd-fp-line">Master Key Fingerprint: <strong id="arm-pd-fp">--------</strong></div>
+                </div>
+
+                <!-- Master Seed -->
+                <div class="arm-pd-box">
+                    <div class="arm-pd-box-label">Master Seed &mdash; BIP-39 Recovery Words</div>
+                    <div class="arm-pd-seed" id="arm-pd-seed"></div>
+                    <div class="arm-pd-note">Anyone who reads these words controls the funds. Keep this sheet offline; never photograph it or type it into a networked device.</div>
+                </div>
+
+                <!-- Passphrase -->
+                <div class="arm-pd-box">
+                    <div class="arm-pd-box-label">BIP-39 Passphrase (25th word)</div>
+                    <div class="arm-pd-pp-state" id="arm-pd-pp-state"></div>
+                    <div class="arm-pd-pp-val" id="arm-pd-pp-val" style="display: none;"></div>
+                </div>
+
+                <!-- Fold line: everything ABOVE folds inward (secret side hidden) -->
+                <div class="arm-pd-fold"><span>fold here &mdash; keep secret side facing inward</span></div>
+
+                <!-- Extended Public Key -->
+                <div class="arm-pd-box">
+                    <div class="arm-pd-box-label">Extended Public Key (watch-only)</div>
+                    <div class="arm-pd-path-line">Derivation path: <span id="arm-pd-path"></span></div>
+                    <div class="arm-pd-xpub" id="arm-pd-xpub"></div>
+                </div>
+
+                <!-- QR framing -->
+                <div class="arm-pd-qr-frame" id="arm-pd-qr-frame">
+                    <canvas id="arm-pd-qr-canvas"></canvas>
+                    <div class="arm-pd-qr-caption">Extended Public Key (zpub)</div>
+                </div>
+
+                <!-- Receive addresses -->
+                <div class="arm-pd-box">
+                    <div class="arm-pd-box-label">First Receive Addresses</div>
+                    <div class="arm-pd-addrs" id="arm-pd-addrs"></div>
+                </div>
+
+                <!-- Footer -->
+                <div class="arm-pd-footer">
+                    <span>SafeKeep Cold Storage Backup</span>
+                    <span id="arm-pd-date"></span>
+                </div>
             </div>
         </div>
 
@@ -35314,11 +35426,102 @@ async function arm_toggleXpubQR() {
     }
 }
 
-function arm_print() {
-    // Set document title for print filename
+// Visually group a cryptographic string into 4-character chunks separated by
+// a single space (e.g. "bc1qpray..." -> "bc1q pray ..."). DISPLAY ONLY — the
+// caller passes a copy, so the underlying payload (used for Copy / QR / export)
+// is never mutated. Whitespace in the input is stripped first so re-chunking
+// is idempotent.
+function _armChunk4(s) {
+    s = String(s == null ? '' : s).replace(/\s+/g, '');
+    return s.replace(/(.{4})/g, '$1 ').trim();
+}
+
+// Minimal HTML escape for text pulled from the live DOM before re-injection.
+function _armEsc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Populate the cold-storage print document (#arm-print-doc) from the LIVE tool
+// state. Reads only rendered values, so it always reflects exactly what the
+// Armory computed (incl. passphrase-derived xpub / manual seeds). Re-renders
+// the zpub QR onto a dedicated print canvas so the on-screen QR widget is
+// untouched. Returns a Promise (QR render is async).
+async function _armBuildPrintDoc(fp) {
+    var $ = function (id) { return document.getElementById(id); };
+
+    // Fingerprint
+    if ($('arm-pd-fp')) $('arm-pd-fp').textContent = fp || '--------';
+
+    // Master seed words — read the rendered grid (display-only source).
+    var cells = document.querySelectorAll('#arm-seed-grid .bip85-out-word');
+    var seedHtml = '';
+    for (var i = 0; i < cells.length; i++) {
+        seedHtml += '<span class="arm-pd-word"><span class="arm-pd-word-num">' + (i + 1) + '</span>' +
+                    _armEsc(cells[i].textContent.trim()) + '</span>';
+    }
+    if ($('arm-pd-seed')) $('arm-pd-seed').innerHTML = seedHtml || '<em>No seed loaded.</em>';
+
+    // Passphrase — explicit checkbox state (filled vs empty), value only if used.
+    var ppEl = $('arm-passphrase');
+    var pp = (ppEl && ppEl.value) ? ppEl.value : '';
+    var used = pp.length > 0;
+    if ($('arm-pd-pp-state')) {
+        $('arm-pd-pp-state').innerHTML =
+            '<span class="arm-pd-check">' + (used ? '&#9744;' : '&#9745;') + ' No Passphrase Used</span>' +
+            '<span class="arm-pd-check">' + (used ? '&#9745;' : '&#9744;') + ' Passphrase Required</span>';
+    }
+    var ppVal = $('arm-pd-pp-val');
+    if (ppVal) {
+        ppVal.style.display = used ? 'block' : 'none';
+        ppVal.textContent = used ? pp : '';
+    }
+
+    // Derivation path + extended public key (chunked).
+    if ($('arm-pd-path')) $('arm-pd-path').textContent = (($('arm-path') || {}).textContent || '').trim();
+    var xpub = (($('arm-xpub') || {}).textContent || '').trim();
+    if ($('arm-pd-xpub')) $('arm-pd-xpub').textContent = _armChunk4(xpub);
+
+    // Receive addresses (chunked) from the live table.
+    var rows = document.querySelectorAll('#arm-addr-body tr');
+    var addrHtml = '';
+    for (var r = 0; r < rows.length; r++) {
+        var tds = rows[r].querySelectorAll('td');
+        if (tds.length < 2) continue;
+        addrHtml += '<div class="arm-pd-addr-row">' +
+                    '<span class="arm-pd-addr-idx">' + _armEsc(tds[0].textContent.trim()) + '</span>' +
+                    '<span class="arm-pd-addr-val">' + _armEsc(_armChunk4(tds[1].textContent.trim())) + '</span>' +
+                    '</div>';
+    }
+    if ($('arm-pd-addrs')) $('arm-pd-addrs').innerHTML = addrHtml || '<em>No addresses.</em>';
+
+    // Generation date for the footer.
+    if ($('arm-pd-date')) $('arm-pd-date').textContent = new Date().toLocaleString();
+
+    // QR — re-render the xpub onto the print canvas (skip if payload invalid
+    // or the QR library / canvas is unavailable).
+    var frame = $('arm-pd-qr-frame');
+    var canvas = $('arm-pd-qr-canvas');
+    var canQR = xpub && xpub.indexOf('Calculating') !== 0 && window.QRCode &&
+                typeof window.QRCode.toCanvas === 'function' && canvas;
+    if (frame) frame.style.display = canQR ? 'block' : 'none';
+    if (canQR) {
+        try {
+            await window.QRCode.toCanvas(canvas, xpub, {
+                width: 320, margin: 2, color: { dark: '#000000', light: '#ffffff' },
+                errorCorrectionLevel: 'M'
+            });
+        } catch (e) {
+            if (frame) frame.style.display = 'none';
+        }
+    }
+}
+
+async function arm_print() {
+    // Set document title for the print filename. Use the passphrase-derived
+    // fingerprint when a passphrase is active so the sheet matches the exports.
     const origTitle = document.title;
-    // Use the passphrase-derived fingerprint when a passphrase is active,
-    // so the printed sheet matches the export files (Coldcard JSON, Electrum, etc.).
     var ppFpEl = document.getElementById('arm-pp-fp');
     var ppActive = ppFpEl && ppFpEl.parentElement && ppFpEl.parentElement.style.display !== 'none'
                    && ppFpEl.textContent && ppFpEl.textContent !== '--------';
@@ -35327,9 +35530,16 @@ function arm_print() {
         : (document.getElementById('arm-fingerprint').textContent || '');
     document.title = fp + ' - SafeKeep Cold Storage Backup';
 
-    // Passphrase prints as-is: if the user toggled "Show" (type=text),
-    // the cleartext prints. If hidden (type=password), redaction dots
-    // print. The high-contrast print CSS ensures both are readable.
+    // Build the structured cold-storage document (and render its QR) BEFORE
+    // adding the print class, so the compositor snapshots a fully-populated doc.
+    try {
+        await _armBuildPrintDoc(fp);
+    } catch (err) {
+        showStatus('Could not build the backup document: ' + (err && err.message ? err.message : err), 'error');
+        document.title = origTitle;
+        return;
+    }
+
     document.body.classList.add('printing-armory');
 
     function _doPrint() {
