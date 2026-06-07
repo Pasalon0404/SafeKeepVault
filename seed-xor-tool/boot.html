@@ -30874,24 +30874,54 @@ async function codex_print() {
     if (!savedTs) savedTs = 'Unsaved — current session';
     var dateStr = new Date().toLocaleString();
 
-    // QR of the full plaintext. Notes can be long, so use the highest-capacity
-    // EC level and gracefully omit the QR (with a caption) if the text exceeds
-    // QR v40 capacity rather than failing the whole print.
-    var qrDataUrl = '';
-    try {
-        if (plaintext.trim() && window.QRCode && window.QRCode.toCanvas) {
-            var _qc = document.createElement('canvas');
-            await window.QRCode.toCanvas(_qc, plaintext, {
-                width: 360, margin: 2, errorCorrectionLevel: 'L',
-                color: { dark: '#000000', light: '#ffffff' }
-            });
-            qrDataUrl = _qc.toDataURL('image/png');
+    // Multi-part QR. Notes can exceed a single QR's capacity, so split the
+    // plaintext into ~1800-char chunks (comfortably under a v40 byte-mode QR's
+    // ~2953-byte ceiling, with EC level L for max density) and render one QR
+    // per chunk. The chunks are sequential slices of the raw text, so scanning
+    // the parts in order and concatenating reproduces the note exactly — the
+    // captions carry the order. Capped at MAX_PARTS; beyond that we fall back
+    // to text-only to avoid an absurdly long printout. Each toCanvas is awaited
+    // (yielding to the event loop between parts) so the UI never freezes.
+    var CODEX_QR_CHUNK = 1800;
+    var CODEX_QR_MAX_PARTS = 10;
+    var qrBlockHtml = '';
+    var _chunks = [];
+    for (var _ci = 0; _ci < plaintext.length; _ci += CODEX_QR_CHUNK) {
+        _chunks.push(plaintext.slice(_ci, _ci + CODEX_QR_CHUNK));
+    }
+    var _qrReady = plaintext.trim() && window.QRCode && typeof window.QRCode.toCanvas === 'function';
+    if (!_qrReady || _chunks.length === 0) {
+        qrBlockHtml = '';
+    } else if (_chunks.length > CODEX_QR_MAX_PARTS) {
+        qrBlockHtml = '<div class="note" style="text-align:center;">(Note is ' + plaintext.length +
+            ' characters &mdash; too long to encode as QR codes (&gt; ' + CODEX_QR_MAX_PARTS +
+            ' parts). Transcribe the text above.)</div>';
+    } else {
+        var _parts = [];
+        var _qrFailed = false;
+        for (var _qi = 0; _qi < _chunks.length; _qi++) {
+            try {
+                var _qc = document.createElement('canvas');
+                await window.QRCode.toCanvas(_qc, _chunks[_qi], {
+                    width: 360, margin: 2, errorCorrectionLevel: 'L',
+                    color: { dark: '#000000', light: '#ffffff' }
+                });
+                _parts.push(_qc.toDataURL('image/png'));
+            } catch (e) { _qrFailed = true; break; }
         }
-    } catch (e) { qrDataUrl = ''; }
-    var qrBlockHtml = qrDataUrl
-        ? '<div class="qrframe"><img class="qrimg" src="' + qrDataUrl + '" alt="Note QR">' +
-          '<div class="qrcap">Note Content QR Payload</div></div>'
-        : '<div class="note" style="text-align:center;">(Note too long to encode as a single QR &mdash; transcribe the text above.)</div>';
+        if (_qrFailed || _parts.length === 0) {
+            qrBlockHtml = '<div class="note" style="text-align:center;">(Note content could not be encoded as QR codes &mdash; transcribe the text above.)</div>';
+        } else {
+            var _total = _parts.length;
+            for (var _pi = 0; _pi < _total; _pi++) {
+                var _cap = (_total > 1)
+                    ? 'Note Content QR Payload (Part ' + (_pi + 1) + ' of ' + _total + ')'
+                    : 'Note Content QR Payload';
+                qrBlockHtml += '<div class="qrframe"><img class="qrimg" src="' + _parts[_pi] + '" alt="Note QR part ' + (_pi + 1) + '">' +
+                               '<div class="qrcap">' + _cap + '</div></div>';
+            }
+        }
+    }
 
     function _esc(s) {
         return String(s == null ? '' : s)
