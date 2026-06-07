@@ -38208,7 +38208,7 @@ function s39_copyShare(index) {
  *   - Master Seed Fingerprint
  *   - BIP-39 checksum word (last word of the master mnemonic)
  */
-function s39_printShare(index) {
+async function s39_printShare(index) {
     var mnemonic = s39_state.generatedShares[index];
     if (!mnemonic) { showStatus('Share data not found.', 'error'); return; }
 
@@ -38222,11 +38222,31 @@ function s39_printShare(index) {
     var masterWords = (session && session.mnemonic) ? session.mnemonic.trim().split(/\s+/) : [];
     var checksumWord = masterWords.length > 0 ? masterWords[masterWords.length - 1] : '--------';
 
-    // Build the word grid rows
+    // Build the word grid rows (numbered, monospace via .w/.n/.v CSS)
     var rowsHtml = '';
     for (var i = 0; i < words.length; i++) {
-        rowsHtml += '<div class="w"><span class="n">' + (i + 1) + '.</span><span class="v">' + words[i] + '</span></div>';
+        rowsHtml += '<div class="w"><span class="n">' + (i + 1) + '</span><span class="v">' + words[i] + '</span></div>';
     }
+
+    // Generate a QR of this share's plaintext words (space-separated) in THIS
+    // window (where window.QRCode lives), then embed it as a data-URL <img> in
+    // the popup (the popup is a separate document with no QR library).
+    var qrDataUrl = '';
+    try {
+        if (window.QRCode && window.QRCode.toCanvas) {
+            var _qc = document.createElement('canvas');
+            await window.QRCode.toCanvas(_qc, mnemonic, {
+                width: 360, margin: 2, errorCorrectionLevel: 'M',
+                color: { dark: '#000000', light: '#ffffff' }
+            });
+            qrDataUrl = _qc.toDataURL('image/png');
+        }
+    } catch (e) { qrDataUrl = ''; }
+    var dateStr = new Date().toLocaleString();
+    var qrBlockHtml = qrDataUrl
+        ? '<div class="qrframe"><img class="qrimg" src="' + qrDataUrl + '" alt="Share QR">' +
+          '<div class="qrcap">Share ' + (index + 1) + ' of ' + n + ' QR Payload</div></div>'
+        : '';
 
     // Tag and closing script split to prevent HTML parser from
     // matching inside the JS string (same pattern as XOR share page)
@@ -38235,42 +38255,61 @@ function s39_printShare(index) {
         '<style>' +
         '  * { box-sizing: border-box; }' +
         '  html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }' +
-        '  .page { padding: 0.6in 0.7in; max-width: 7.5in; margin: 0 auto; }' +
-        '  .warn { border: 3px solid #000; background: #f8f8f8; text-align: center; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; padding: 14px 12px; font-size: 14px; line-height: 1.5; }' +
-        '  .warn .sub { font-size: 11px; font-weight: 700; margin-top: 6px; color: #333; }' +
-        '  .hdr { margin-top: 18px; font-size: 22px; font-weight: 900; color: #000; }' +
-        '  .sub-hdr { font-size: 12px; font-weight: 700; color: #555; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }' +
-        '  .ctx { margin-top: 14px; display: flex; gap: 18px; flex-wrap: wrap; }' +
-        '  .ctx-box { padding: 8px 14px; border: 2px dashed #333; font-family: "Courier New", Courier, monospace; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; }' +
-        '  .ctx-box strong { color: #000; }' +
-        '  .grid { margin-top: 22px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 16px; font-family: "Courier New", Courier, monospace; }' +
-        '  .w { border-bottom: 1px solid #bbb; padding: 6px 2px; font-size: 14px; }' +
-        '  .n { display: inline-block; width: 28px; color: #666; font-weight: 700; font-size: 11px; }' +
+        '  .page { padding: 0.5in 0.6in; max-width: 7.5in; margin: 0 auto; font-size: 10.5pt; }' +
+        /* Loud-but-clean high-contrast warning (retained, restyled) */
+        '  .warn { border: 2px solid #000; background: #fff; color: #000; text-align: center; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 10px; font-size: 11pt; line-height: 1.4; }' +
+        '  .warn .sub { font-size: 8pt; font-weight: 700; margin-top: 4px; letter-spacing: 0.04em; }' +
+        '  .head { text-align: center; margin: 0.5rem 0 0.4rem; }' +
+        '  .head h2 { font-size: 15pt; margin: 0 0 0.1rem; letter-spacing: 0.02em; }' +
+        '  .head .sub-hdr { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.08em; color: #444; }' +
+        /* Bounded boxes — identical styling to Armory/BIP-85/Descriptor/XOR */
+        '  .box { border: 1px solid #ccc; background: #f8f9fa; border-radius: 4px; padding: 0.4rem 0.6rem; margin: 0 0 0.4rem; page-break-inside: avoid; break-inside: avoid; }' +
+        '  .box-label { font-size: 8.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #444; margin-bottom: 0.3rem; padding-bottom: 0.18rem; border-bottom: 1px solid #ddd; }' +
+        '  .note { font-size: 7.5pt; color: #666; margin-top: 0.3rem; }' +
+        '  .idrow { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; }' +
+        '  .kv { display: flex; flex-direction: column; }' +
+        '  .kv .k { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #888; }' +
+        '  .kv .val { font-family: "Courier New", Courier, monospace; font-size: 11pt; font-weight: 700; letter-spacing: 0.04em; }' +
+        /* 4-column grid keeps 20/33-word SLIP-39 shares on a single page */
+        '  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.18rem 0.7rem; font-family: "Courier New", Courier, monospace; }' +
+        '  .w { font-size: 8.5pt; white-space: nowrap; }' +
+        '  .n { display: inline-block; width: 1.8em; text-align: right; margin-right: 0.35em; font-size: 7.5pt; color: #888; }' +
         '  .v { font-weight: 700; color: #000; }' +
-        '  .ftr { margin-top: 26px; font-size: 10px; color: #555; border-top: 1px solid #ccc; padding-top: 10px; line-height: 1.5; }' +
-        '  .ftr strong { color: #000; }' +
-        '  @media print { .noprint { display: none; } .page { padding: 0.4in 0.5in; } }' +
+        /* QR framing — 1.8in, 2px border, quiet zone, bold caption */
+        '  .qrframe { text-align: center; margin: 0.35rem auto 0.45rem; padding: 0.16in; border: 2px solid #000; border-radius: 4px; background: #fff; width: -moz-fit-content; width: fit-content; page-break-inside: avoid; break-inside: avoid; }' +
+        '  .qrimg { width: 1.8in; height: 1.8in; display: block; margin: 0 auto; }' +
+        '  .qrcap { font-size: 10pt; font-weight: 700; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }' +
+        '  .ftr { margin-top: 0.5rem; padding-top: 0.3rem; border-top: 1px solid #ccc; display: flex; justify-content: space-between; font-size: 7.5pt; color: #555; font-family: "Courier New", Courier, monospace; }' +
+        '  @media print { .noprint { display: none !important; } .page { padding: 0.4in 0.5in; } }' +
         '</style></head><body>' +
         '<div class="page">' +
         '  <div class="warn">' +
-        '    SLIP-39 SHAMIR SHARE &mdash; STORE SECURELY' +
-        '    <div class="sub">ANY ' + m + ' OF ' + n + ' SHARES REQUIRED FOR RECOVERY &mdash; EACH SHARE ALONE REVEALS NOTHING</div>' +
+        '    &#9888; ANY ' + m + ' OF ' + n + ' SHARES REQUIRED FOR RECOVERY &#9888;' +
+        '    <div class="sub">EACH SHARE ALONE REVEALS NOTHING &mdash; STORE EACH IN A SEPARATE SECURE LOCATION</div>' +
         '  </div>' +
-        '  <div class="hdr">Share ' + (index + 1) + ' of ' + n + '</div>' +
-        '  <div class="sub-hdr">SafeKeep OS &mdash; Shamir Backup (SLIP-39)</div>' +
-        '  <div class="ctx">' +
-        '    <div class="ctx-box">MASTER FINGERPRINT: <strong>' + fingerprint + '</strong></div>' +
-        '    <div class="ctx-box">CHECKSUM WORD: <strong>' + checksumWord.toUpperCase() + '</strong></div>' +
-        '    <div class="ctx-box">THRESHOLD: <strong>' + m + ' of ' + n + '</strong></div>' +
+        '  <div class="head">' +
+        '    <h2>SafeKeep SLIP-39 Share Backup</h2>' +
+        '    <div class="sub-hdr">Share ' + (index + 1) + ' of ' + n + ' &middot; Shamir Backup (SLIP-39)</div>' +
         '  </div>' +
-        '  <div class="grid">' + rowsHtml + '</div>' +
-        '  <div class="ftr">' +
-        '    <strong>This is one piece of a Shamir secret-sharing split.</strong> ' +
-        'Store each share in a separate, secure location. ' +
-        'Any ' + m + ' of the ' + n + ' total shares can reconstruct the master seed via SLIP-39 recovery. ' +
-        'The fingerprint and checksum word identify which master seed these shares belong to.' +
+        '  <div class="box">' +
+        '    <div class="box-label">Master Identity</div>' +
+        '    <div class="idrow">' +
+        '      <div class="kv"><span class="k">Master Fingerprint</span><span class="val">' + fingerprint + '</span></div>' +
+        '      <div class="kv"><span class="k">Checksum Word</span><span class="val">' + checksumWord.toUpperCase() + '</span></div>' +
+        '      <div class="kv"><span class="k">Threshold</span><span class="val">' + m + ' of ' + n + '</span></div>' +
+        '    </div>' +
         '  </div>' +
-        '  <div class="noprint" style="margin-top:24px; text-align:center;">' +
+        '  <div class="box">' +
+        '    <div class="box-label">Share ' + (index + 1) + ' Words (' + words.length + ')</div>' +
+        '    <div class="grid">' + rowsHtml + '</div>' +
+        '  </div>' +
+        qrBlockHtml +
+        '  <div class="box">' +
+        '    <div class="box-label">Recovery</div>' +
+        '    <div class="note">This is one piece of a Shamir secret-sharing split. Any ' + m + ' of the ' + n + ' total shares reconstruct the master seed via SLIP-39 recovery. The fingerprint + checksum word identify which master these shares belong to.</div>' +
+        '  </div>' +
+        '  <div class="ftr"><span>SafeKeep SLIP-39 Share Backup</span><span>' + dateStr + '</span></div>' +
+        '  <div class="noprint" style="margin-top:18px; text-align:center;">' +
         '    <button onclick="window.print()">Print</button> &nbsp; <button onclick="window.close()">Close</button>' +
         '  </div>' +
         '</div></body></html>';
