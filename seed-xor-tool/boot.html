@@ -8591,6 +8591,9 @@
                         <button type="button" class="skb-btn"
                                 style="flex: 0 0 auto; flex-shrink: 0; box-sizing: border-box; padding: 0.65rem 1rem; min-height: 2.5rem;"
                                 onclick="codex_new()">Clear / New</button>
+                        <button type="button" class="skb-btn" id="codex-print-btn"
+                                style="flex: 0 0 auto; flex-shrink: 0; box-sizing: border-box; padding: 0.65rem 1rem; min-height: 2.5rem;"
+                                onclick="codex_print()">Print</button>
                         <button type="button" class="skb-btn" id="codex-delete-btn"
                                 style="flex: 0 0 auto; flex-shrink: 0; box-sizing: border-box; padding: 0.65rem 1rem; min-height: 2.5rem; color: var(--skb-danger, #ff3c3c); border-color: var(--skb-danger, #ff3c3c); display: none;"
                                 onclick="codex_delete()">Delete</button>
@@ -30835,6 +30838,132 @@ function codex_clearAll() {
     var deleteBtn = document.getElementById('codex-delete-btn');
     if (deleteBtn) deleteBtn.style.display = 'none';
     showStatus('The Encrypted Notes tool has been reset. Editor cleared.', 'info');
+}
+
+/**
+ * Print a single note as a cold-storage backup. Spawns a self-contained popup
+ * window (total DOM isolation, like the Seed XOR / SLIP-39 share prints), so
+ * none of this styling can affect any other tool. Prints the note currently
+ * open in the editor (title + plaintext content + its saved timestamp) and
+ * embeds a QR of the full plaintext for frictionless re-entry.
+ */
+async function codex_print() {
+    var titleEl = document.getElementById('codex-title');
+    var contentEl = document.getElementById('codex-editor');
+    var title = (titleEl && titleEl.value ? titleEl.value : '').trim();
+    // Plaintext only — never the rich-text HTML. innerText preserves line breaks.
+    var plaintext = contentEl ? (contentEl.innerText || contentEl.textContent || '') : '';
+    if (!title && !plaintext.trim()) {
+        showStatus('Open or write a note before printing.', 'error');
+        return;
+    }
+
+    // Original created/last-edited timestamp — looked up from the saved index.
+    var savedTs = '';
+    try {
+        if (_codexActiveSlug && window.SafeKeepOS && window.SafeKeepOS.listNotes) {
+            var notes = await window.SafeKeepOS.listNotes();
+            for (var i = 0; i < notes.length; i++) {
+                if (notes[i].slug === _codexActiveSlug && notes[i].updatedAt) {
+                    savedTs = new Date(notes[i].updatedAt).toLocaleString();
+                    break;
+                }
+            }
+        }
+    } catch (e) { /* non-fatal */ }
+    if (!savedTs) savedTs = 'Unsaved — current session';
+    var dateStr = new Date().toLocaleString();
+
+    // QR of the full plaintext. Notes can be long, so use the highest-capacity
+    // EC level and gracefully omit the QR (with a caption) if the text exceeds
+    // QR v40 capacity rather than failing the whole print.
+    var qrDataUrl = '';
+    try {
+        if (plaintext.trim() && window.QRCode && window.QRCode.toCanvas) {
+            var _qc = document.createElement('canvas');
+            await window.QRCode.toCanvas(_qc, plaintext, {
+                width: 360, margin: 2, errorCorrectionLevel: 'L',
+                color: { dark: '#000000', light: '#ffffff' }
+            });
+            qrDataUrl = _qc.toDataURL('image/png');
+        }
+    } catch (e) { qrDataUrl = ''; }
+    var qrBlockHtml = qrDataUrl
+        ? '<div class="qrframe"><img class="qrimg" src="' + qrDataUrl + '" alt="Note QR">' +
+          '<div class="qrcap">Note Content QR Payload</div></div>'
+        : '<div class="note" style="text-align:center;">(Note too long to encode as a single QR &mdash; transcribe the text above.)</div>';
+
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    var html =
+        '<!doctype html><html><head><meta charset="utf-8"><title>Encrypted Note - ' + _esc(title || 'Untitled') + '</title>' +
+        '<style>' +
+        '  * { box-sizing: border-box; }' +
+        '  html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }' +
+        '  .page { padding: 0.5in 0.6in; max-width: 7.5in; margin: 0 auto; font-size: 10.5pt; }' +
+        '  .head { text-align: center; margin: 0 0 0.4rem; }' +
+        '  .head h2 { font-size: 15pt; margin: 0 0 0.1rem; letter-spacing: 0.02em; }' +
+        '  .head .sub-hdr { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.08em; color: #444; }' +
+        '  .box { border: 1px solid #ccc; background: #f8f9fa; border-radius: 4px; padding: 0.4rem 0.6rem; margin: 0 0 0.4rem; page-break-inside: avoid; break-inside: avoid; }' +
+        '  .box-label { font-size: 8.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #444; margin-bottom: 0.3rem; padding-bottom: 0.18rem; border-bottom: 1px solid #ddd; }' +
+        '  .note { font-size: 7.5pt; color: #666; margin-top: 0.3rem; }' +
+        '  .meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; }' +
+        '  .kv { display: flex; flex-direction: column; }' +
+        '  .kv .k { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #888; }' +
+        '  .kv .val { font-size: 11pt; font-weight: 700; }' +
+        '  .content { font-family: "Courier New", Courier, monospace; font-size: 10pt; line-height: 1.5; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word; }' +
+        '  .qrframe { text-align: center; margin: 0.35rem auto 0.45rem; padding: 0.16in; border: 2px solid #000; border-radius: 4px; background: #fff; width: -moz-fit-content; width: fit-content; page-break-inside: avoid; break-inside: avoid; }' +
+        '  .qrimg { width: 1.8in; height: 1.8in; display: block; margin: 0 auto; }' +
+        '  .qrcap { font-size: 10pt; font-weight: 700; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }' +
+        '  .ftr { margin-top: 0.5rem; padding-top: 0.3rem; border-top: 1px solid #ccc; display: flex; justify-content: space-between; font-size: 7.5pt; color: #555; font-family: "Courier New", Courier, monospace; }' +
+        '  @media print { .noprint { display: none !important; } .page { padding: 0.4in 0.5in; } }' +
+        '</style></head><body>' +
+        '<div class="page">' +
+        '  <div class="head">' +
+        '    <h2>Encrypted Note Backup</h2>' +
+        '    <div class="sub-hdr">SafeKeep Vault &middot; Generated ' + _esc(dateStr) + '</div>' +
+        '  </div>' +
+        '  <div class="box">' +
+        '    <div class="box-label">Note Metadata</div>' +
+        '    <div class="meta">' +
+        '      <div class="kv"><span class="k">Title</span><span class="val">' + _esc(title || 'Untitled') + '</span></div>' +
+        '      <div class="kv"><span class="k">Last Saved</span><span class="val">' + _esc(savedTs) + '</span></div>' +
+        '    </div>' +
+        '  </div>' +
+        '  <div class="box">' +
+        '    <div class="box-label">Note Content</div>' +
+        '    <div class="content">' + _esc(plaintext) + '</div>' +
+        '  </div>' +
+        qrBlockHtml +
+        '  <div class="ftr"><span>SafeKeep Encrypted Note Backup</span><span>' + _esc(dateStr) + '</span></div>' +
+        '  <div class="noprint" style="margin-top:18px; text-align:center;">' +
+        '    <button onclick="window.print()">Print</button> &nbsp; <button onclick="window.close()">Close</button>' +
+        '  </div>' +
+        '</div></body></html>';
+
+    function _doCodexPrint() {
+        var w = window.open('', '_blank', 'width=820,height=1000');
+        if (!w) {
+            showStatus('Pop-up blocked. Allow pop-ups for this page and try again.', 'error');
+            return;
+        }
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+        setTimeout(function() { try { w.focus(); } catch (e) { /* non-fatal */ } }, 250);
+    }
+
+    // Honor the actual Transfer-Drive mount state (same gate as every other
+    // tool): only show the mount reminder when the drive is NOT mounted.
+    if (window.vaultTransferDriveHandle) {
+        _doCodexPrint();
+    } else {
+        _skbPrintInterstitial(_doCodexPrint);
+    }
 }
 
 
