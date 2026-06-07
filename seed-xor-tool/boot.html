@@ -5329,79 +5329,80 @@
          The live tool UI is hidden entirely; only the structured artifact in
          #arm-print-doc (built by arm_print/_armBuildPrintDoc) renders. */
       body.printing-armory #arm-content { display: none !important; }
+      /* Condensed to fit a single page: tight rhythm, no fold lines. */
       body.printing-armory #arm-print-doc {
         display: block !important;
         color: #000 !important;
-        font-size: 11pt;
-        line-height: 1.5;
+        font-size: 10pt;
+        line-height: 1.3;
       }
       body.printing-armory #arm-print-doc * { color: #000 !important; }
 
-      .arm-pd-head { text-align: center; margin: 0 0 0.6rem; }
-      .arm-pd-head h2 { font-size: 18pt; margin: 0 0 0.2rem; letter-spacing: 0.02em; }
-      .arm-pd-fp-line { font-size: 10pt; }
+      .arm-pd-head { text-align: center; margin: 0 0 0.35rem; }
+      .arm-pd-head h2 { font-size: 15pt; margin: 0 0 0.1rem; letter-spacing: 0.02em; }
+      .arm-pd-fp-line { font-size: 9.5pt; }
       .arm-pd-fp-line strong { font-family: "Courier New", Courier, monospace; }
 
-      /* Isolation boxes around the critical payloads */
+      /* Isolation boxes around the critical payloads (tightened) */
       .arm-pd-box {
         border: 1px solid #ccc;
         background-color: #f8f9fa;
         border-radius: 4px;
-        padding: 0.6rem 0.85rem;
-        margin: 0 0 0.7rem;
+        padding: 0.4rem 0.6rem;
+        margin: 0 0 0.4rem;
         page-break-inside: avoid;
         break-inside: avoid;
       }
       .arm-pd-box-label {
-        font-size: 9pt; font-weight: 700; text-transform: uppercase;
+        font-size: 8.5pt; font-weight: 700; text-transform: uppercase;
         letter-spacing: 0.08em; color: #444 !important;
-        margin-bottom: 0.45rem; padding-bottom: 0.25rem; border-bottom: 1px solid #ddd;
+        margin-bottom: 0.3rem; padding-bottom: 0.18rem; border-bottom: 1px solid #ddd;
       }
-      .arm-pd-note { font-size: 8pt; color: #666 !important; margin-top: 0.45rem; font-style: italic; }
+      .arm-pd-note { font-size: 7.5pt; color: #666 !important; margin-top: 0.3rem; font-style: italic; }
 
-      /* Master seed — monospace numbered grid */
-      .arm-pd-seed { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem 0.9rem; }
-      .arm-pd-word { font-family: "Courier New", Courier, monospace; font-size: 11pt; white-space: nowrap; }
-      .arm-pd-word-num { display: inline-block; width: 1.7em; text-align: right; margin-right: 0.45em; font-size: 9pt; color: #888 !important; }
+      /* Final seed word (checksum only) — single prominent monospace token */
+      .arm-pd-seed { font-size: 0; }
+      .arm-pd-word-num { display: inline-block; width: 1.7em; font-size: 8.5pt; color: #888 !important; vertical-align: middle; }
+      .arm-pd-checksum-word {
+        font-family: "Courier New", Courier, monospace; font-size: 13pt; font-weight: 700;
+        letter-spacing: 0.04em; vertical-align: middle;
+        padding: 0.1rem 0.5rem; background: #fff; border: 1px solid #ddd; border-radius: 3px;
+      }
 
       /* Passphrase explicit checkbox state */
-      .arm-pd-pp-state { display: flex; gap: 1.75rem; font-size: 10.5pt; }
+      .arm-pd-pp-state { display: flex; gap: 1.5rem; font-size: 10pt; }
       .arm-pd-check { font-family: "Courier New", Courier, monospace; }
       .arm-pd-pp-val {
-        font-family: "Courier New", Courier, monospace; font-size: 11pt; word-break: break-all;
-        margin-top: 0.45rem; padding: 0.35rem 0.5rem; background: #fff; border: 1px solid #ddd; border-radius: 3px;
+        font-family: "Courier New", Courier, monospace; font-size: 10pt; word-break: break-all;
+        margin-top: 0.3rem; padding: 0.3rem 0.45rem; background: #fff; border: 1px solid #ddd; border-radius: 3px;
       }
 
-      /* Extended public key (chunked, monospace) */
-      .arm-pd-path-line { font-size: 9pt; margin-bottom: 0.35rem; }
+      /* Extended public key + path — continuous strings, wrapped inside the box */
+      .arm-pd-path-line { font-size: 8.5pt; margin-bottom: 0.25rem; }
       .arm-pd-path-line span { font-family: "Courier New", Courier, monospace; }
-      .arm-pd-xpub { font-family: "Courier New", Courier, monospace; font-size: 10pt; line-height: 1.7; word-break: break-all; letter-spacing: 0.03em; }
+      .arm-pd-xpub {
+        font-family: "Courier New", Courier, monospace; font-size: 9pt; line-height: 1.4;
+        word-break: break-all; overflow-wrap: break-word;
+      }
 
-      /* QR framing: solid border, generous quiet-zone padding, bold caption */
+      /* QR framing: solid border, quiet-zone padding, bold caption (scaled down) */
       .arm-pd-qr-frame {
-        text-align: center; margin: 0.5rem auto 0.85rem; padding: 0.3in;
+        text-align: center; margin: 0.35rem auto 0.45rem; padding: 0.16in;
         border: 2px solid #000; border-radius: 4px; background: #fff; width: fit-content;
         page-break-inside: avoid; break-inside: avoid;
       }
-      .arm-pd-qr-frame canvas { width: 2.3in !important; height: 2.3in !important; display: block; margin: 0 auto; }
-      .arm-pd-qr-caption { font-size: 11pt; font-weight: 700; margin-top: 0.35rem; text-transform: uppercase; letter-spacing: 0.05em; }
+      .arm-pd-qr-frame canvas { width: 1.8in !important; height: 1.8in !important; display: block; margin: 0 auto; }
+      .arm-pd-qr-caption { font-size: 10pt; font-weight: 700; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }
 
-      /* Receive addresses (chunked, monospace) */
-      .arm-pd-addr-row { font-size: 9.5pt; margin-bottom: 0.22rem; display: flex; gap: 0.55rem; }
-      .arm-pd-addr-idx { color: #888 !important; min-width: 1.4em; text-align: right; }
-      .arm-pd-addr-val { font-family: "Courier New", Courier, monospace; word-break: break-all; letter-spacing: 0.03em; }
-
-      /* Dashed fold line with centred label */
-      .arm-pd-fold { border-top: 1px dashed #999; text-align: center; margin: 1rem 0; height: 0; }
-      .arm-pd-fold span {
-        position: relative; top: -0.65em; background: #fff; padding: 0 0.65rem;
-        font-size: 7.5pt; color: #999 !important; text-transform: uppercase; letter-spacing: 0.1em;
-      }
+      /* Receive addresses — continuous monospace, small enough for 5 on page 1 */
+      .arm-pd-addr-row { font-size: 8pt; margin-bottom: 0.12rem; display: flex; gap: 0.5rem; }
+      .arm-pd-addr-idx { color: #888 !important; min-width: 1.3em; text-align: right; }
+      .arm-pd-addr-val { font-family: "Courier New", Courier, monospace; word-break: break-all; overflow-wrap: break-word; }
 
       /* Print footer (title + generation date) */
       .arm-pd-footer {
-        margin-top: 1.1rem; padding-top: 0.45rem; border-top: 1px solid #ccc;
-        display: flex; justify-content: space-between; font-size: 8pt; color: #555 !important;
+        margin-top: 0.5rem; padding-top: 0.3rem; border-top: 1px solid #ccc;
+        display: flex; justify-content: space-between; font-size: 7.5pt; color: #555 !important;
       }
       .arm-pd-footer span { font-family: "Courier New", Courier, monospace; }
 
@@ -9156,11 +9157,12 @@
                     <div class="arm-pd-fp-line">Master Key Fingerprint: <strong id="arm-pd-fp">--------</strong></div>
                 </div>
 
-                <!-- Master Seed -->
+                <!-- Final Seed Word (Checksum) — verifies the handwritten backup;
+                     the full seed is NEVER printed. -->
                 <div class="arm-pd-box">
-                    <div class="arm-pd-box-label">Master Seed &mdash; BIP-39 Recovery Words</div>
+                    <div class="arm-pd-box-label">Final Seed Word (Checksum)</div>
                     <div class="arm-pd-seed" id="arm-pd-seed"></div>
-                    <div class="arm-pd-note">Anyone who reads these words controls the funds. Keep this sheet offline; never photograph it or type it into a networked device.</div>
+                    <div class="arm-pd-note">This is only the last word of your recovery phrase, used to verify the seed you wrote down by hand. The full seed is never printed.</div>
                 </div>
 
                 <!-- Passphrase -->
@@ -9169,9 +9171,6 @@
                     <div class="arm-pd-pp-state" id="arm-pd-pp-state"></div>
                     <div class="arm-pd-pp-val" id="arm-pd-pp-val" style="display: none;"></div>
                 </div>
-
-                <!-- Fold line: everything ABOVE folds inward (secret side hidden) -->
-                <div class="arm-pd-fold"><span>fold here &mdash; keep secret side facing inward</span></div>
 
                 <!-- Extended Public Key -->
                 <div class="arm-pd-box">
@@ -35426,16 +35425,6 @@ async function arm_toggleXpubQR() {
     }
 }
 
-// Visually group a cryptographic string into 4-character chunks separated by
-// a single space (e.g. "bc1qpray..." -> "bc1q pray ..."). DISPLAY ONLY — the
-// caller passes a copy, so the underlying payload (used for Copy / QR / export)
-// is never mutated. Whitespace in the input is stripped first so re-chunking
-// is idempotent.
-function _armChunk4(s) {
-    s = String(s == null ? '' : s).replace(/\s+/g, '');
-    return s.replace(/(.{4})/g, '$1 ').trim();
-}
-
 // Minimal HTML escape for text pulled from the live DOM before re-injection.
 function _armEsc(s) {
     return String(s == null ? '' : s)
@@ -35454,14 +35443,22 @@ async function _armBuildPrintDoc(fp) {
     // Fingerprint
     if ($('arm-pd-fp')) $('arm-pd-fp').textContent = fp || '--------';
 
-    // Master seed words — read the rendered grid (display-only source).
+    // Checksum-only: print ONLY the final seed word (verifies the handwritten
+    // backup). The full phrase is never rendered. Read the last word from the
+    // live grid; fall back to the dedicated checksum element if present.
     var cells = document.querySelectorAll('#arm-seed-grid .bip85-out-word');
-    var seedHtml = '';
-    for (var i = 0; i < cells.length; i++) {
-        seedHtml += '<span class="arm-pd-word"><span class="arm-pd-word-num">' + (i + 1) + '</span>' +
-                    _armEsc(cells[i].textContent.trim()) + '</span>';
+    var finalWord = '';
+    if (cells.length) {
+        finalWord = cells[cells.length - 1].textContent.trim();
+    } else {
+        var ckEl = $('arm-checksum-word');
+        if (ckEl) finalWord = ckEl.textContent.trim();
     }
-    if ($('arm-pd-seed')) $('arm-pd-seed').innerHTML = seedHtml || '<em>No seed loaded.</em>';
+    if ($('arm-pd-seed')) {
+        $('arm-pd-seed').innerHTML = finalWord
+            ? '<span class="arm-pd-word-num">' + cells.length + '</span><span class="arm-pd-checksum-word">' + _armEsc(finalWord) + '</span>'
+            : '<em>No seed loaded.</em>';
+    }
 
     // Passphrase — explicit checkbox state (filled vs empty), value only if used.
     var ppEl = $('arm-passphrase');
@@ -35478,12 +35475,13 @@ async function _armBuildPrintDoc(fp) {
         ppVal.textContent = used ? pp : '';
     }
 
-    // Derivation path + extended public key (chunked).
+    // Derivation path + extended public key (continuous strings; CSS word-break
+    // wraps them inside the box).
     if ($('arm-pd-path')) $('arm-pd-path').textContent = (($('arm-path') || {}).textContent || '').trim();
     var xpub = (($('arm-xpub') || {}).textContent || '').trim();
-    if ($('arm-pd-xpub')) $('arm-pd-xpub').textContent = _armChunk4(xpub);
+    if ($('arm-pd-xpub')) $('arm-pd-xpub').textContent = xpub;
 
-    // Receive addresses (chunked) from the live table.
+    // Receive addresses (continuous) from the live table.
     var rows = document.querySelectorAll('#arm-addr-body tr');
     var addrHtml = '';
     for (var r = 0; r < rows.length; r++) {
@@ -35491,7 +35489,7 @@ async function _armBuildPrintDoc(fp) {
         if (tds.length < 2) continue;
         addrHtml += '<div class="arm-pd-addr-row">' +
                     '<span class="arm-pd-addr-idx">' + _armEsc(tds[0].textContent.trim()) + '</span>' +
-                    '<span class="arm-pd-addr-val">' + _armEsc(_armChunk4(tds[1].textContent.trim())) + '</span>' +
+                    '<span class="arm-pd-addr-val">' + _armEsc(tds[1].textContent.trim()) + '</span>' +
                     '</div>';
     }
     if ($('arm-pd-addrs')) $('arm-pd-addrs').innerHTML = addrHtml || '<em>No addresses.</em>';
