@@ -25250,7 +25250,17 @@ async function xor_printShare(index) {
         '      <button onclick="document.getElementById(\'xor-print-gate\').style.display=\'none\';" style="margin-left:0.5rem; padding:0.7rem 1.5rem; font-size:0.95rem; background:transparent; border:1px solid #444; color:#888; border-radius:4px; cursor:pointer;">Cancel</button>' +
         '    </div>' +
         '  </div>' +
-        '  <scr' + 'ipt>function _xorPrintGated() { document.getElementById("xor-print-gate").style.display = "flex"; }</scr' + 'ipt>' +
+        '  <scr' + 'ipt>' +
+        '    function _xorPrintGated() {' +
+        /* State-sync fix: the Transfer-Drive reminder is only useful when the
+           drive is NOT mounted. The mount state lives on the PARENT window as
+           window.vaultTransferDriveHandle (the same flag every other tool gates
+           on); this popup reads it via window.opener. If mounted, skip the
+           redundant reminder and print immediately. */
+        '      try { if (window.opener && window.opener.vaultTransferDriveHandle) { window.print(); return; } } catch (e) {}' +
+        '      document.getElementById("xor-print-gate").style.display = "flex";' +
+        '    }' +
+        '  </scr' + 'ipt>' +
         '</div></body></html>';
 
     var w = window.open('', '_blank', 'width=820,height=1000');

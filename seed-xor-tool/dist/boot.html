@@ -26513,7 +26513,7 @@ function xor_toggleShareQR(index) {
  * fingerprint specifically (not SHA-256) so it is comparable against
  * every other wallet/signer the user might consult.
  */
-function xor_printShare(index) {
+async function xor_printShare(index) {
     var mnemonic = xor_state.generatedShares[index];
     if (!mnemonic) return;
     var n = xor_state.generatedShares.length;
@@ -26527,44 +26527,82 @@ function xor_printShare(index) {
 
     var rowsHtml = '';
     for (var i = 0; i < words.length; i++) {
-        rowsHtml += '<div class="w"><span class="n">' + (i + 1) + '.</span><span class="v">' + words[i] + '</span></div>';
+        rowsHtml += '<div class="w"><span class="n">' + (i + 1) + '</span><span class="v">' + words[i] + '</span></div>';
     }
+
+    // Generate a QR of this share's plaintext seed words (space-separated) in
+    // THIS window (where window.QRCode lives), then embed it into the popup as
+    // a data-URL <img> — the popup is a separate document with no QR library.
+    var qrDataUrl = '';
+    try {
+        if (window.QRCode && window.QRCode.toCanvas) {
+            var _qc = document.createElement('canvas');
+            await window.QRCode.toCanvas(_qc, mnemonic, {
+                width: 320, margin: 2, errorCorrectionLevel: 'M',
+                color: { dark: '#000000', light: '#ffffff' }
+            });
+            qrDataUrl = _qc.toDataURL('image/png');
+        }
+    } catch (e) { qrDataUrl = ''; }
+    var dateStr = new Date().toLocaleString();
+    var qrBlockHtml = qrDataUrl
+        ? '<div class="qrframe"><img class="qrimg" src="' + qrDataUrl + '" alt="Share QR">' +
+          '<div class="qrcap">Share ' + (index + 1) + ' of ' + n + ' QR Payload</div></div>'
+        : '';
 
     var html =
         '<!doctype html><html><head><meta charset="utf-8"><title>SafeKeep XOR Share ' + (index + 1) + ' of ' + n + '</title>' +
         '<style>' +
         '  * { box-sizing: border-box; }' +
         '  html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }' +
-        '  .page { padding: 0.6in 0.7in; max-width: 7.5in; margin: 0 auto; }' +
-        '  .warn { border: 4px solid #c00; background: #fff3f3; color: #c00; text-align: center; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; padding: 14px 12px; font-size: 14px; line-height: 1.5; }' +
-        '  .warn .sub { font-size: 11px; font-weight: 700; margin-top: 6px; color: #600; }' +
-        '  .hdr { margin-top: 18px; font-size: 22px; font-weight: 900; color: #000; }' +
-        '  .sub-hdr { font-size: 12px; font-weight: 700; color: #c00; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }' +
-        '  .fpbox { margin-top: 14px; padding: 10px 14px; border: 2px dashed #c00; display: inline-block; font-family: "Courier New", Courier, monospace; font-size: 13px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }' +
-        '  .fpbox strong { color: #c00; }' +
-        '  .grid { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 24px; font-family: "Courier New", Courier, monospace; }' +
-        '  .w { border-bottom: 1px solid #bbb; padding: 6px 2px; font-size: 15px; }' +
-        '  .n { display: inline-block; width: 28px; color: #666; font-weight: 700; font-size: 11px; }' +
+        '  .page { padding: 0.5in 0.6in; max-width: 7.5in; margin: 0 auto; font-size: 10.5pt; }' +
+        /* Loud-but-clean high-contrast warning (retained, restyled) */
+        '  .warn { border: 2px solid #000; background: #fff; color: #000; text-align: center; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 10px; font-size: 11pt; line-height: 1.4; }' +
+        '  .warn .sub { font-size: 8pt; font-weight: 700; margin-top: 4px; letter-spacing: 0.04em; }' +
+        '  .head { text-align: center; margin: 0.5rem 0 0.4rem; }' +
+        '  .head h2 { font-size: 15pt; margin: 0 0 0.1rem; letter-spacing: 0.02em; }' +
+        '  .head .sub-hdr { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.08em; color: #444; }' +
+        /* Bounded boxes — identical styling to Armory/BIP-85/Descriptor */
+        '  .box { border: 1px solid #ccc; background: #f8f9fa; border-radius: 4px; padding: 0.4rem 0.6rem; margin: 0 0 0.4rem; page-break-inside: avoid; break-inside: avoid; }' +
+        '  .box-label { font-size: 8.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #444; margin-bottom: 0.3rem; padding-bottom: 0.18rem; border-bottom: 1px solid #ddd; }' +
+        '  .note { font-size: 7.5pt; color: #666; margin-top: 0.3rem; }' +
+        '  .fp { font-family: "Courier New", Courier, monospace; font-size: 13pt; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }' +
+        '  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.22rem 0.9rem; font-family: "Courier New", Courier, monospace; }' +
+        '  .w { font-size: 10pt; white-space: nowrap; }' +
+        '  .n { display: inline-block; width: 1.7em; text-align: right; margin-right: 0.4em; font-size: 8.5pt; color: #888; }' +
         '  .v { font-weight: 700; color: #000; }' +
-        '  .ftr { margin-top: 26px; font-size: 10px; color: #555; border-top: 1px solid #ccc; padding-top: 10px; line-height: 1.5; }' +
-        '  .ftr strong { color: #c00; }' +
-        '  @media print { .noprint { display: none; } .page { padding: 0.4in 0.5in; } }' +
+        /* QR framing — 1.8in, 2px border, quiet zone, bold caption */
+        '  .qrframe { text-align: center; margin: 0.35rem auto 0.45rem; padding: 0.16in; border: 2px solid #000; border-radius: 4px; background: #fff; width: -moz-fit-content; width: fit-content; page-break-inside: avoid; break-inside: avoid; }' +
+        '  .qrimg { width: 1.8in; height: 1.8in; display: block; margin: 0 auto; }' +
+        '  .qrcap { font-size: 10pt; font-weight: 700; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }' +
+        '  .ftr { margin-top: 0.5rem; padding-top: 0.3rem; border-top: 1px solid #ccc; display: flex; justify-content: space-between; font-size: 7.5pt; color: #555; font-family: "Courier New", Courier, monospace; }' +
+        '  @media print { .noprint { display: none !important; } .page { padding: 0.4in 0.5in; } }' +
         '</style></head><body>' +
         '<div class="page">' +
         '  <div class="warn">' +
         '    &#9888; ALL ' + n + ' SHARES REQUIRED FOR RECOVERY &#9888;' +
         '    <div class="sub">NO THRESHOLD RECOVERY &mdash; LOSING ANY ONE SHARE MEANS PERMANENT LOSS OF THE SEED</div>' +
         '  </div>' +
-        '  <div class="hdr">Share ' + (index + 1) + ' of ' + n + '</div>' +
-        '  <div class="sub-hdr">SafeKeep OS &mdash; Seed XOR (BIP-39)</div>' +
-        '  <div class="fpbox">TARGET MASTER FINGERPRINT: <strong>' + targetFP + '</strong></div>' +
-        '  <div class="grid">' + rowsHtml + '</div>' +
-        '  <div class="ftr">' +
-        '    <strong>This paper is only one piece of the puzzle.</strong> Store each share in a separate, secure location. ' +
-        'To recover your seed, ALL ' + n + ' shares must be combined via BIP-39 XOR. ' +
-        'The fingerprint above is the BIP-32 root fingerprint of the master mnemonic &mdash; it matches the value displayed by every BIP-32-aware wallet, hardware signer, and the SafeKeep dashboard. Use it to confirm all your shares belong to the same master before attempting recovery.' +
+        '  <div class="head">' +
+        '    <h2>SafeKeep XOR Share Backup</h2>' +
+        '    <div class="sub-hdr">Share ' + (index + 1) + ' of ' + n + ' &middot; Seed XOR (BIP-39)</div>' +
         '  </div>' +
-        '  <div class="noprint" style="margin-top:24px; text-align:center;">' +
+        '  <div class="box">' +
+        '    <div class="box-label">Target Master Fingerprint</div>' +
+        '    <div class="fp">' + targetFP + '</div>' +
+        '    <div class="note">BIP-32 root fingerprint of the master mnemonic &mdash; confirm every share carries this same value before attempting recovery.</div>' +
+        '  </div>' +
+        '  <div class="box">' +
+        '    <div class="box-label">Share ' + (index + 1) + ' Seed Words</div>' +
+        '    <div class="grid">' + rowsHtml + '</div>' +
+        '  </div>' +
+        qrBlockHtml +
+        '  <div class="box">' +
+        '    <div class="box-label">Recovery</div>' +
+        '    <div class="note">This paper is only one piece of the puzzle. Store each share in a separate, secure location. To recover the seed, ALL ' + n + ' shares must be combined via BIP-39 XOR &mdash; there is NO threshold recovery.</div>' +
+        '  </div>' +
+        '  <div class="ftr"><span>SafeKeep XOR Share Backup</span><span>' + dateStr + '</span></div>' +
+        '  <div class="noprint" style="margin-top:18px; text-align:center;">' +
         '    <button onclick="_xorPrintGated()">Print</button> &nbsp; <button onclick="window.close()">Close</button>' +
         '  </div>' +
         '  <div id="xor-print-gate" class="noprint" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.88); align-items:center; justify-content:center;">' +
@@ -26576,7 +26614,17 @@ function xor_printShare(index) {
         '      <button onclick="document.getElementById(\'xor-print-gate\').style.display=\'none\';" style="margin-left:0.5rem; padding:0.7rem 1.5rem; font-size:0.95rem; background:transparent; border:1px solid #444; color:#888; border-radius:4px; cursor:pointer;">Cancel</button>' +
         '    </div>' +
         '  </div>' +
-        '  <scr' + 'ipt>function _xorPrintGated() { document.getElementById("xor-print-gate").style.display = "flex"; }</scr' + 'ipt>' +
+        '  <scr' + 'ipt>' +
+        '    function _xorPrintGated() {' +
+        /* State-sync fix: the Transfer-Drive reminder is only useful when the
+           drive is NOT mounted. The mount state lives on the PARENT window as
+           window.vaultTransferDriveHandle (the same flag every other tool gates
+           on); this popup reads it via window.opener. If mounted, skip the
+           redundant reminder and print immediately. */
+        '      try { if (window.opener && window.opener.vaultTransferDriveHandle) { window.print(); return; } } catch (e) {}' +
+        '      document.getElementById("xor-print-gate").style.display = "flex";' +
+        '    }' +
+        '  </scr' + 'ipt>' +
         '</div></body></html>';
 
     var w = window.open('', '_blank', 'width=820,height=1000');
