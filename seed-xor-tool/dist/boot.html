@@ -5243,9 +5243,10 @@
         margin: 0 !important; padding: 0 !important;
         visibility: visible !important;
       }
-      body.printing-bip85 #state-bip85 > .tool-hero,
-      body.printing-bip85 #state-bip85 > .skb-card,
-      body.printing-bip85 #state-bip85 > button { display: none !important; }
+      /* Hide ALL live UI (hero, cards, AND the "Reset Tool — Clear All Data"
+         button, which lives inside a wrapper <div> and so escaped the old
+         `> button` rule and bled onto page 2). Only #bip85-print-area survives. */
+      body.printing-bip85 #state-bip85 > *:not(#bip85-print-area) { display: none !important; }
 
       /* --- 2FA Backup (Tool 16) --- */
       body.printing-twofa #state-2fa {
@@ -5309,20 +5310,83 @@
         justify-self: end !important;
       }
 
-      /* --- Descriptor print area fine-tuning --- */
-      body.printing-descriptor #desc-print-area { padding: 1.5rem 2rem !important; }
-      body.printing-descriptor #desc-print-area div { color: #000 !important; }
-      body.printing-descriptor #desc-print-area h2 { color: #000 !important; }
-      body.printing-descriptor .desc-print-passphrase { color: #000 !important; font-weight: bold !important; }
-      body.printing-descriptor #desc-print-descriptor {
-        font-family: monospace !important; font-size: 0.82rem !important;
-        word-break: break-all !important; line-height: 1.6 !important;
+      /* --- Output Descriptor cold-storage print document ---
+         Mirrors the Armory (.arm-pd-*) artifact: same bounded boxes, monospace,
+         QR framing, single-page rhythm and footer. Every rule is scoped under
+         body.printing-descriptor so it cannot affect the Armory print or any
+         global styles. */
+      body.printing-descriptor #desc-print-area { padding: 0 !important; color: #000 !important; font-size: 10pt; line-height: 1.3; }
+      body.printing-descriptor #desc-print-area * { color: #000 !important; }
+
+      body.printing-descriptor .desc-pd-head { text-align: center; margin: 0 0 0.35rem; }
+      body.printing-descriptor .desc-pd-head h2 { font-size: 15pt; margin: 0 0 0.1rem; letter-spacing: 0.02em; }
+      body.printing-descriptor .desc-pd-sub { font-size: 9.5pt; color: #444 !important; text-transform: uppercase; letter-spacing: 0.08em; }
+
+      /* Isolation boxes — identical to the Armory */
+      body.printing-descriptor .desc-pd-box {
+        border: 1px solid #ccc;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 0.4rem 0.6rem;
+        margin: 0 0 0.4rem;
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
-      body.printing-descriptor #desc-print-qr-canvas { width: 400px !important; height: 400px !important; max-width: 60vw !important; object-fit: contain; }
-      body.printing-descriptor #desc-print-addresses {
-        font-family: monospace !important; font-size: 0.8rem !important;
-        line-height: 1.8 !important; word-break: break-all !important;
+      body.printing-descriptor .desc-pd-row { display: flex; gap: 0.4rem; }
+      body.printing-descriptor .desc-pd-half { flex: 1; }
+      body.printing-descriptor .desc-pd-box-label {
+        font-size: 8.5pt; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.08em; color: #444 !important;
+        margin-bottom: 0.3rem; padding-bottom: 0.18rem; border-bottom: 1px solid #ddd;
       }
+      body.printing-descriptor .desc-pd-note { font-size: 7.5pt; color: #666 !important; margin-top: 0.3rem; }
+      body.printing-descriptor .desc-pd-note span { font-family: "Courier New", Courier, monospace; }
+      body.printing-descriptor .desc-pd-token {
+        font-family: "Courier New", Courier, monospace; font-size: 12pt; font-weight: 700;
+        letter-spacing: 0.04em; text-transform: uppercase;
+      }
+      body.printing-descriptor .desc-pd-pp-val {
+        font-family: "Courier New", Courier, monospace; font-size: 10pt; font-weight: 700;
+        word-break: break-all; overflow-wrap: break-word;
+      }
+
+      /* Descriptor string — continuous monospace, wraps inside the box */
+      body.printing-descriptor .desc-pd-descriptor {
+        font-family: "Courier New", Courier, monospace; font-size: 9pt; line-height: 1.45;
+        word-break: break-all; overflow-wrap: break-word;
+      }
+
+      /* Receive addresses — small continuous monospace */
+      body.printing-descriptor .desc-pd-addrs {
+        font-family: "Courier New", Courier, monospace; font-size: 8pt; line-height: 1.5;
+        word-break: break-all; overflow-wrap: break-word;
+      }
+      body.printing-descriptor .desc-pd-addrs * {
+        font-family: "Courier New", Courier, monospace !important; font-size: 8pt !important;
+        line-height: 1.5 !important; color: #000 !important;
+      }
+
+      /* QR framing — identical to the Armory (1.8in, 2px border, quiet zone, caption) */
+      body.printing-descriptor .desc-pd-qr-frame {
+        text-align: center; margin: 0.35rem auto 0.45rem; padding: 0.16in;
+        border: 2px solid #000; border-radius: 4px; background: #fff; width: fit-content;
+        page-break-inside: avoid; break-inside: avoid;
+      }
+      body.printing-descriptor .desc-pd-qr-frame canvas {
+        width: 1.8in !important; height: 1.8in !important; max-width: 1.8in !important;
+        display: block; margin: 0 auto; object-fit: contain;
+      }
+      body.printing-descriptor .desc-pd-qr-caption {
+        font-size: 10pt; font-weight: 700; margin-top: 0.25rem;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+
+      /* Print footer (title + generation date) */
+      body.printing-descriptor .desc-pd-footer {
+        margin-top: 0.5rem; padding-top: 0.3rem; border-top: 1px solid #ccc;
+        display: flex; justify-content: space-between; font-size: 7.5pt; color: #555 !important;
+      }
+      body.printing-descriptor .desc-pd-footer span { font-family: "Courier New", Courier, monospace; }
 
       /* --- Seed Management (Armory) cold-storage print document ---
          The live tool UI is hidden entirely; only the structured artifact in
@@ -5467,10 +5531,66 @@
       body.printing-passphrase #pp-print-area div { color: #000 !important; }
       body.printing-passphrase #pp-print-passphrase { font-size: 1.3rem !important; letter-spacing: 0.02em; }
 
-      /* --- BIP-85 print area fine-tuning --- */
-      body.printing-bip85 #bip85-print-area { padding: 2rem !important; }
-      body.printing-bip85 #bip85-print-area div { color: #000 !important; }
-      body.printing-bip85 #bip85-print-qr { width: 250px !important; height: 250px !important; }
+      /* --- BIP-85 Child Seed cold-storage print document ---
+         Mirrors the Armory (.arm-pd-*) artifact; every rule scoped under
+         body.printing-bip85 so it cannot affect the Armory or Descriptor prints
+         or any global styles. The full child phrase is printed (not checksum-only). */
+      body.printing-bip85 #bip85-print-area { padding: 0 !important; color: #000 !important; font-size: 10pt; line-height: 1.3; }
+      body.printing-bip85 #bip85-print-area * { color: #000 !important; }
+
+      body.printing-bip85 .bip85-pd-head { text-align: center; margin: 0 0 0.35rem; }
+      body.printing-bip85 .bip85-pd-head h2 { font-size: 15pt; margin: 0 0 0.1rem; letter-spacing: 0.02em; }
+      body.printing-bip85 .bip85-pd-sub { font-size: 9.5pt; color: #444 !important; text-transform: uppercase; letter-spacing: 0.08em; }
+
+      /* Isolation boxes — identical to the Armory */
+      body.printing-bip85 .bip85-pd-box {
+        border: 1px solid #ccc;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 0.4rem 0.6rem;
+        margin: 0 0 0.4rem;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      body.printing-bip85 .bip85-pd-box-label {
+        font-size: 8.5pt; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.08em; color: #444 !important;
+        margin-bottom: 0.3rem; padding-bottom: 0.18rem; border-bottom: 1px solid #ddd;
+      }
+      body.printing-bip85 .bip85-pd-note { font-size: 7.5pt; color: #666 !important; margin-top: 0.3rem; }
+      body.printing-bip85 .bip85-pd-note span { font-family: "Courier New", Courier, monospace; }
+      body.printing-bip85 .bip85-pd-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+      body.printing-bip85 .bip85-pd-kv { display: flex; flex-direction: column; }
+      body.printing-bip85 .bip85-pd-k { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #888 !important; }
+      body.printing-bip85 .bip85-pd-v { font-family: "Courier New", Courier, monospace; font-size: 11pt; font-weight: 700; letter-spacing: 0.03em; }
+      body.printing-bip85 .bip85-pd-childfp { font-size: 12pt; }
+
+      /* Full child seed phrase — strict monospace numbered grid */
+      body.printing-bip85 .bip85-pd-words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.22rem 0.9rem; }
+      body.printing-bip85 .bip85-pd-word { font-family: "Courier New", Courier, monospace; font-size: 10pt; white-space: nowrap; }
+      body.printing-bip85 .bip85-pd-word-num { display: inline-block; width: 1.7em; text-align: right; margin-right: 0.4em; font-size: 8.5pt; color: #888 !important; }
+
+      /* QR framing — identical to the Armory (1.8in, 2px border, quiet zone, caption) */
+      body.printing-bip85 .bip85-pd-qr-frame {
+        text-align: center; margin: 0.35rem auto 0.45rem; padding: 0.16in;
+        border: 2px solid #000; border-radius: 4px; background: #fff; width: fit-content;
+        page-break-inside: avoid; break-inside: avoid;
+      }
+      body.printing-bip85 .bip85-pd-qr-frame canvas {
+        width: 1.8in !important; height: 1.8in !important; max-width: 1.8in !important;
+        display: block; margin: 0 auto; object-fit: contain;
+      }
+      body.printing-bip85 .bip85-pd-qr-caption {
+        font-size: 10pt; font-weight: 700; margin-top: 0.25rem;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+
+      /* Print footer (title + word count + generation date) */
+      body.printing-bip85 .bip85-pd-footer {
+        margin-top: 0.5rem; padding-top: 0.3rem; border-top: 1px solid #ccc;
+        display: flex; justify-content: space-between; font-size: 7.5pt; color: #555 !important;
+      }
+      body.printing-bip85 .bip85-pd-footer span { font-family: "Courier New", Courier, monospace; }
 
       /* =============================================================
          Wallet Record (state-designer / printing-wrec)
@@ -9558,58 +9678,49 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                 </div>
             </div>
 
-            <!-- ---- BIP-85 Hidden Print Area ---- -->
+            <!-- ---- BIP-85 Hidden Print Area ----
+                 Cypherpunk cold-storage layout matching the Armory/Descriptor docs
+                 (.bip85-pd-* mirror .arm-pd-*). The FULL child seed phrase is printed
+                 (this is the child backup). bip85_print() writes to the same ids. -->
             <div id="bip85-print-area" style="display: none;">
-                <div style="text-align: center; margin-bottom: 1.5rem;">
-                    <h2 style="font-size: 1.3rem; margin: 0 0 0.25rem;">SafeKeep BIP-85 Child Seed Backup</h2>
-                    <p style="font-size: 0.8rem; color: #666; margin: 0;">Generated by SafeKeep Vault — BIP-85 deterministic child derivation</p>
+                <div class="bip85-pd-head">
+                    <h2>SafeKeep Cold Storage Backup</h2>
+                    <div class="bip85-pd-sub">BIP-85 Child Seed</div>
                 </div>
 
                 <!-- Parent Identity -->
-                <div style="border: 1px solid #999; border-radius: 6px; padding: 1rem; margin-bottom: 1rem;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.75rem;">Parent Identity</div>
-                    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
-                        <div>
-                            <div style="font-size: 0.68rem; color: #999; text-transform: uppercase; letter-spacing: 0.04em;">Master Fingerprint</div>
-                            <div id="bip85-print-parent-fp" style="font-family: monospace; font-size: 1rem; font-weight: 700; margin-top: 0.15rem;">--------</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 0.68rem; color: #999; text-transform: uppercase; letter-spacing: 0.04em;">Checksum Word</div>
-                            <div id="bip85-print-checksum" style="font-family: monospace; font-size: 1rem; font-weight: 700; margin-top: 0.15rem;">--------</div>
-                        </div>
+                <div class="bip85-pd-box">
+                    <div class="bip85-pd-box-label">Parent Identity</div>
+                    <div class="bip85-pd-row">
+                        <div class="bip85-pd-kv"><span class="bip85-pd-k">Master Fingerprint</span><span class="bip85-pd-v" id="bip85-print-parent-fp">--------</span></div>
+                        <div class="bip85-pd-kv"><span class="bip85-pd-k">Checksum Word</span><span class="bip85-pd-v" id="bip85-print-checksum">--------</span></div>
                     </div>
+                    <div class="bip85-pd-note">Derivation path: <span id="bip85-print-path">—</span> &mdash; this child seed regenerates from the parent seed using this exact path.</div>
                 </div>
 
-                <!-- Derivation Path -->
-                <div style="border: 2px solid #000; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; background: #f5f5f5;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.5rem;">BIP-85 Derivation Path</div>
-                    <div id="bip85-print-path" style="font-family: monospace; font-size: 1.15rem; font-weight: 700; letter-spacing: 0.5px;">—</div>
-                    <div style="font-size: 0.7rem; color: #999; margin-top: 0.25rem;">This child seed can be regenerated from the parent seed using this exact path.</div>
+                <!-- Child Fingerprint -->
+                <div class="bip85-pd-box">
+                    <div class="bip85-pd-box-label">Child Fingerprint</div>
+                    <div class="bip85-pd-v bip85-pd-childfp" id="bip85-print-child-fp">--------</div>
+                    <div class="bip85-pd-note">Verify this fingerprint matches your wallet software after import.</div>
                 </div>
 
-                <!-- Child Identity -->
-                <div style="border: 1px solid #999; border-radius: 6px; padding: 1rem; margin-bottom: 1rem;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.5rem;">Child Fingerprint</div>
-                    <div id="bip85-print-child-fp" style="font-family: monospace; font-size: 1.15rem; font-weight: 700; letter-spacing: 1px;">--------</div>
-                    <div style="font-size: 0.7rem; color: #999; margin-top: 0.25rem;">Verify this fingerprint matches your wallet software after import.</div>
+                <!-- Child Seed Phrase (full 12/24 words) -->
+                <div class="bip85-pd-box">
+                    <div class="bip85-pd-box-label">Child Seed Phrase</div>
+                    <div class="bip85-pd-words" id="bip85-print-words"></div>
                 </div>
 
-                <!-- Child Seed Words -->
-                <div style="border: 2px solid #000; border-radius: 6px; padding: 1rem; margin-bottom: 1rem;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.75rem;">Child Seed Phrase</div>
-                    <div id="bip85-print-words" style="font-family: monospace; font-size: 0.95rem; line-height: 2.2; column-count: 2; column-gap: 2rem;"></div>
+                <!-- Child Seed QR — framed with quiet zone + bold caption -->
+                <div class="bip85-pd-qr-frame" id="bip85-print-qr-frame">
+                    <canvas id="bip85-print-qr"></canvas>
+                    <div class="bip85-pd-qr-caption">Child Seed Phrase QR</div>
                 </div>
 
-                <!-- Child Seed QR -->
-                <div style="text-align: center; margin-bottom: 1rem;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.5rem;">Plaintext Seed QR</div>
-                    <canvas id="bip85-print-qr" style="width: 250px; height: 250px;"></canvas>
-                    <div style="font-size: 0.68rem; color: #999; margin-top: 0.25rem;">Scan into hot wallet for easy import. Protect this document.</div>
-                </div>
-
-                <div style="display: flex; gap: 1rem; font-size: 0.75rem; color: #666;">
-                    <div><strong>Words:</strong> <span id="bip85-print-word-count">0</span></div>
-                    <div><strong>Date:</strong> <span id="bip85-print-date"></span></div>
+                <!-- Footer -->
+                <div class="bip85-pd-footer">
+                    <span>SafeKeep Cold Storage Backup &middot; <span id="bip85-print-word-count">0</span> words</span>
+                    <span id="bip85-print-date"></span>
                 </div>
             </div>
 
@@ -9916,55 +10027,58 @@ https://github.com/browserify/crypto-browserify`)},e.constants={DH_CHECK_P_NOT_S
                 </div>
             </div>
 
-            <!-- ======== PRINT-ONLY AREA (hidden on screen) ======== -->
+            <!-- ======== PRINT-ONLY AREA (hidden on screen) ========
+                 Cypherpunk cold-storage layout matching the Armory/Seed Management
+                 print document (.desc-pd-* classes mirror .arm-pd-*). desc_printPDF()
+                 writes to the same ids by textContent/innerHTML — only the structure
+                 and styling changed here, not the JS. -->
             <div id="desc-print-area" class="desc-print-only" style="display: none;">
-                <div style="text-align: center; margin-bottom: 0.75rem; border-bottom: 2px solid #000; padding-bottom: 0.5rem;">
-                    <h2 style="font-size: 1.3rem; color: #000; margin: 0 0 0.15rem;">SafekeepVault — Output Descriptor</h2>
-                    <div style="font-size: 0.8rem; color: #666;" id="desc-print-date"></div>
+                <div class="desc-pd-head">
+                    <h2>SafeKeep Cold Storage Backup</h2>
+                    <div class="desc-pd-sub">Output Descriptor</div>
                 </div>
 
-                <!-- Checksum Word + Fingerprint (hidden for multi-sig) -->
-                <div id="desc-print-seed-row" style="display: flex; gap: 1.5rem; margin-bottom: 1rem;">
-                    <div style="flex: 1; border: 2px solid #000; border-radius: 6px; padding: 0.75rem;">
-                        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.35rem;">Final Seed Word (Checksum)</div>
-                        <span style="font-family: monospace; font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;" id="desc-print-checksum">---</span>
+                <!-- Checksum Word + Fingerprint (row hidden for multi-sig via JS) -->
+                <div id="desc-print-seed-row" class="desc-pd-row" style="display: flex;">
+                    <div class="desc-pd-box desc-pd-half">
+                        <div class="desc-pd-box-label">Final Seed Word (Checksum)</div>
+                        <span class="desc-pd-token" id="desc-print-checksum">---</span>
                     </div>
-                    <div style="flex: 1; border: 2px solid #000; border-radius: 6px; padding: 0.75rem;">
-                        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.35rem;">Master Fingerprint</div>
-                        <span style="font-family: monospace; font-size: 1.2rem; font-weight: 700; letter-spacing: 0.05em;" id="desc-print-fingerprint">--------</span>
+                    <div class="desc-pd-box desc-pd-half">
+                        <div class="desc-pd-box-label">Master Fingerprint</div>
+                        <span class="desc-pd-token" id="desc-print-fingerprint">--------</span>
                     </div>
                 </div>
 
                 <!-- Passphrase (if any) -->
-                <div id="desc-print-passphrase-block" style="display: none; margin-bottom: 1rem; border: 2px solid #000; border-radius: 6px; padding: 0.75rem;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.35rem;">Passphrase Applied</div>
-                    <div class="desc-print-passphrase" id="desc-print-passphrase" style="font-family: monospace; font-size: 1rem; font-weight: bold; color: #000;"></div>
-                    <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #666;">
-                        <span>Passphrase Fingerprint: </span>
-                        <span style="font-family: monospace; font-weight: 700;" id="desc-print-pp-fingerprint"></span>
-                    </div>
+                <div id="desc-print-passphrase-block" class="desc-pd-box" style="display: none;">
+                    <div class="desc-pd-box-label">Passphrase Applied</div>
+                    <div class="desc-pd-pp-val desc-print-passphrase" id="desc-print-passphrase"></div>
+                    <div class="desc-pd-note">Passphrase Fingerprint: <span id="desc-print-pp-fingerprint"></span></div>
                 </div>
 
-                <!-- Descriptor String -->
-                <div style="border: 2px solid #000; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.5rem;">Output Descriptor</div>
-                    <div id="desc-print-descriptor" style="font-family: monospace; font-size: 0.82rem; word-break: break-all; line-height: 1.6; color: #000;"></div>
+                <!-- Output Descriptor (continuous monospace, wraps inside the box) -->
+                <div class="desc-pd-box">
+                    <div class="desc-pd-box-label">Output Descriptor</div>
+                    <div class="desc-pd-descriptor" id="desc-print-descriptor"></div>
                 </div>
 
-                <!-- Descriptor QR -->
-                <div style="text-align: center; margin-bottom: 0.6rem;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.35rem;">Descriptor QR</div>
-                    <canvas id="desc-print-qr-canvas" style="width: 400px; height: 400px; max-width: 60vw;"></canvas>
+                <!-- Descriptor QR — framed with quiet zone + bold caption -->
+                <div class="desc-pd-qr-frame" id="desc-print-qr-frame">
+                    <canvas id="desc-print-qr-canvas"></canvas>
+                    <div class="desc-pd-qr-caption">Output Descriptor Payload</div>
                 </div>
 
                 <!-- Receive Addresses -->
-                <div style="border: 2px solid #000; border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem;">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #666; margin-bottom: 0.5rem;">First 5 Receive Addresses</div>
-                    <div id="desc-print-addresses" style="font-family: monospace; font-size: 0.8rem; color: #000; line-height: 1.8;"></div>
+                <div class="desc-pd-box">
+                    <div class="desc-pd-box-label">First Receive Addresses</div>
+                    <div class="desc-pd-addrs" id="desc-print-addresses"></div>
                 </div>
 
-                <div style="font-size: 0.68rem; color: #999; text-align: center;">
-                    Generated by SafekeepVault — Air-Gapped Bitcoin Cold Storage
+                <!-- Footer -->
+                <div class="desc-pd-footer">
+                    <span>SafeKeep Cold Storage Backup</span>
+                    <span id="desc-print-date"></span>
                 </div>
             </div>
         </div>
@@ -27766,15 +27880,15 @@ function bip85_print() {
     document.getElementById('bip85-print-path').textContent = r.derivPath || '—';
     document.getElementById('bip85-print-child-fp').textContent = r.childFP || '--------';
 
-    // Fill word grid (numbered)
+    // Fill word grid (numbered, monospace via .bip85-pd-word CSS)
     var words = r.childMnemonic.trim().split(/\s+/);
     var wordsHtml = '';
     words.forEach(function(w, i) {
-        wordsHtml += '<div style="display: inline-block; width: 48%; margin-bottom: 0.2rem;"><strong>' + (i + 1) + '.</strong> ' + w + '</div>';
+        wordsHtml += '<span class="bip85-pd-word"><span class="bip85-pd-word-num">' + (i + 1) + '</span>' + w + '</span>';
     });
     document.getElementById('bip85-print-words').innerHTML = wordsHtml;
     document.getElementById('bip85-print-word-count').textContent = words.length;
-    document.getElementById('bip85-print-date').textContent = new Date().toLocaleDateString();
+    document.getElementById('bip85-print-date').textContent = new Date().toLocaleString();
 
     // Render QR for print
     var printArea = document.getElementById('bip85-print-area');
@@ -27785,10 +27899,16 @@ function bip85_print() {
         document.body.classList.add('printing-bip85');
 
         function _doBip85Print() {
+            // Dynamic PDF filename: "Child Seed Words - [Parent Fingerprint]".
+            // Saved and restored around window.print() so the page title is
+            // never left mutated after the dialog closes.
+            var _origTitle = document.title;
+            document.title = 'Child Seed Words - ' + (r.parentFP || '--------');
             window.print();
             setTimeout(function() {
                 document.body.classList.remove('printing-bip85');
                 if (printArea) printArea.style.display = 'none';
+                document.title = _origTitle;
             }, 500);
         }
 
