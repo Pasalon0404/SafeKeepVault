@@ -185,9 +185,36 @@ apt-get install -y wget curl ca-certificates jq \
     libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
     libasound2t64 libpango-1.0-0 libcairo2 libxshmfence1 libgl1-mesa-dri
 
-echo "Fetching latest ungoogled-chromium AppImage URL from GitHub..."
+# ============================================================================
+# Supply-chain pinning + integrity verification (SafeKeep hardening)
+# ----------------------------------------------------------------------------
+# The browser is the one piece of this OS that consumes untrusted data, so the
+# image must be built from a KNOWN-GOOD copy of it — not just "whatever the
+# GitHub API served at build time." Two knobs, overridable at build time:
+#
+#   UC_PIN_TAG         Pin a specific release tag for reproducible builds.
+#                      Empty = latest release (previous behavior).
+#   UC_EXPECTED_SHA256 Known-good SHA-256 of the AppImage. When set, the build
+#                      ABORTS on mismatch (fail-closed). When empty, the build
+#                      prints the downloaded file's hash and continues with a
+#                      loud warning, so you can lock it in next time.
+#
+#   Example (locked build):
+#     UC_PIN_TAG=2026.05.01 UC_EXPECTED_SHA256=<hash> sudo ./build.sh
+# ============================================================================
+UC_PIN_TAG="${UC_PIN_TAG:-}"
+UC_EXPECTED_SHA256="${UC_EXPECTED_SHA256:-}"
+
+if [ -n "$UC_PIN_TAG" ]; then
+    UC_API="https://api.github.com/repos/ungoogled-software/ungoogled-chromium-portablelinux/releases/tags/$UC_PIN_TAG"
+    echo "Fetching pinned ungoogled-chromium release ($UC_PIN_TAG) from GitHub..."
+else
+    UC_API="https://api.github.com/repos/ungoogled-software/ungoogled-chromium-portablelinux/releases/latest"
+    echo "Fetching latest ungoogled-chromium AppImage URL from GitHub (no tag pinned)..."
+fi
+
 # Queries the GitHub API, filters for the x86_64 AppImage URL, and extracts it
-APPIMAGE_URL=$(curl -s https://api.github.com/repos/ungoogled-software/ungoogled-chromium-portablelinux/releases/latest | grep "browser_download_url.*AppImage" | grep -iv "arm" | grep -iv "aarch64" | cut -d '"' -f 4 | head -n 1)
+APPIMAGE_URL=$(curl -s "$UC_API" | grep "browser_download_url.*AppImage" | grep -iv "arm" | grep -iv "aarch64" | cut -d '"' -f 4 | head -n 1)
 
 if [ -z "$APPIMAGE_URL" ]; then
     echo "ERROR: Failed to fetch AppImage URL from GitHub API." >&2
@@ -196,6 +223,31 @@ fi
 
 echo "Downloading ungoogled-chromium AppImage..."
 wget -q --show-progress -O /tmp/uc.AppImage "$APPIMAGE_URL"
+
+# --- Integrity gate: verify the AppImage before we trust it ---
+UC_GOT_SHA256=$(sha256sum /tmp/uc.AppImage | cut -d' ' -f1)
+echo "  Downloaded AppImage SHA-256: $UC_GOT_SHA256"
+if [ -n "$UC_EXPECTED_SHA256" ]; then
+    if [ "$UC_GOT_SHA256" != "$UC_EXPECTED_SHA256" ]; then
+        echo "ERROR: AppImage SHA-256 mismatch — refusing to build a wallet OS" >&2
+        echo "       around an unverified browser." >&2
+        echo "         expected: $UC_EXPECTED_SHA256" >&2
+        echo "         got:      $UC_GOT_SHA256" >&2
+        rm -f /tmp/uc.AppImage
+        exit 1
+    fi
+    echo "  OK: AppImage SHA-256 matches the pinned value."
+else
+    echo "  ###########################################################" >&2
+    echo "  # WARNING: the browser AppImage is NOT pinned. This image" >&2
+    echo "  # is being built from an unverified download. To lock it," >&2
+    echo "  # re-run the build with:" >&2
+    echo "  #   UC_EXPECTED_SHA256=$UC_GOT_SHA256" >&2
+    echo "  # (ideally with UC_PIN_TAG too) after independently" >&2
+    echo "  # confirming the release is genuine." >&2
+    echo "  ###########################################################" >&2
+fi
+
 chmod +x /tmp/uc.AppImage
 
 echo "Extracting AppImage to /opt/ungoogled-chromium..."

@@ -476,6 +476,116 @@ echo "  Host storage blacklist complete."
 
 
 # ============================================================================
+# SECTION 3b: PHYSICAL REMOVAL OF BANNED DRIVER FILES
+# ============================================================================
+# THREAT MODEL:
+#   Blacklisting stops `modprobe`, but the .ko driver files still sit in
+#   /lib/modules — and `install x /bin/false` does NOTHING against a direct
+#   `insmod /lib/modules/.../x.ko`. A root context (a browser exploit running
+#   as root, a recovery shell) could hand-load a banned driver and re-open a
+#   network or host-disk channel.
+#
+# STRATEGY:
+#   Delete the banned network + internal-storage module files outright.
+#   "Denied" becomes "physically absent": the kernel cannot load a driver
+#   that does not exist on disk.
+#
+# SAFETY:
+#   This list contains ONLY network + internal-storage drivers. It must NEVER
+#   include the USB-boot whitelist (usb-storage, uas, sd_mod, xhci_hcd,
+#   ehci_hcd, ext4, exfat, vfat, fat, nls_*, dm-crypt, dm-mod, squashfs,
+#   overlay, loop) or the boot drive becomes unbootable.
+# ============================================================================
+echo ""
+echo "[3b] PHYSICAL REMOVAL OF BANNED DRIVER FILES"
+echo "-------------------------------------------"
+
+BANNED_MODULES=(
+    # --- Wi-Fi ---
+    iwlwifi iwlmvm iwldvm b43 b43legacy bcma brcmfmac brcmsmac wl
+    ath9k ath9k_htc ath10k_pci ath10k_core ath11k ath11k_pci
+    rtl8xxxu rtw88_pci rtw88_usb rtw89_pci r8188eu rtl8192cu
+    mt76 mt7601u mt76x2u rt2800usb rt2800pci cfg80211 mac80211
+    # --- Bluetooth ---
+    bluetooth btusb btrtl btbcm btintel btmtk bnep rfcomm hidp
+    # --- Wired Ethernet ---
+    e1000 e1000e igb igc ixgbe i40e ice r8169 r8125 r8152
+    tg3 bnxt_en atlantic
+    # --- USB / cellular network ---
+    ax88179_178a cdc_ether cdc_ncm rndis_host usbnet cdc_mbim cdc_wdm qmi_wwan option
+    # --- Thunderbolt networking + virtual/tunnel interfaces ---
+    thunderbolt_net tun tap veth bridge bonding
+    # --- Internal storage controllers (host SATA / NVMe / eMMC / SAS) ---
+    ahci libahci ata_piix pata_acpi nvme nvme_core
+    sdhci sdhci_pci sdhci_acpi mmc_core mmc_block
+    mpt3sas megaraid_sas aacraid hpsa
+)
+
+_deleted=0
+for _m in "${BANNED_MODULES[@]}"; do
+    # Match the module file and any compressed variant (.ko / .ko.zst / .ko.gz / .ko.xz)
+    while IFS= read -r _f; do
+        [ -n "$_f" ] || continue
+        rm -f "$_f" 2>/dev/null && _deleted=$((_deleted + 1))
+    done < <(find /lib/modules -type f -name "${_m}.ko*" 2>/dev/null)
+done
+echo "  Deleted ${_deleted} banned driver file(s) from /lib/modules"
+
+# Rebuild dependency maps so the kernel no longer references deleted files.
+depmod -a 2>/dev/null || true
+echo "  Rebuilt module dependency maps (depmod)."
+echo "  Driver-file removal complete."
+
+
+# ============================================================================
+# SECTION 3c: NETWORK FIREWALL BACKSTOP (default-drop)
+# ============================================================================
+# THREAT MODEL:
+#   The module bans are an enumerated denylist; an unlisted NIC could in
+#   principle still load. This is the last net behind them.
+#
+# STRATEGY:
+#   An nftables ruleset that drops every packet in, out, and forwarded
+#   (loopback excepted for local IPC). "An interface came up" becomes
+#   "an interface came up but cannot send or receive anything."
+# ============================================================================
+echo ""
+echo "[3c] NETWORK FIREWALL BACKSTOP"
+echo "-------------------------------------------"
+
+# Install nftables (build-time has network; a boot-time re-run is a harmless no-op).
+apt-get install -y nftables 2>/dev/null || true
+
+cat > /etc/nftables.conf << 'NFT_EOF'
+#!/usr/sbin/nft -f
+# SafeKeep: deny-all firewall. No network interface should ever exist on this
+# device; if one does, nothing may traverse it. Loopback is permitted so local
+# inter-process communication (and any future localhost-only service) works.
+flush ruleset
+
+table inet safekeep {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        iif "lo" accept
+    }
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+    }
+    chain output {
+        type filter hook output priority 0; policy drop;
+        oif "lo" accept
+    }
+}
+NFT_EOF
+echo "  Created: /etc/nftables.conf (default-drop, loopback only)"
+
+systemctl unmask nftables.service 2>/dev/null || true
+systemctl enable nftables.service 2>/dev/null || true
+echo "  Enabled: nftables.service"
+echo "  Firewall backstop complete."
+
+
+# ============================================================================
 # SECTION 4: USB PERSISTENCE WHITELIST & AUTOMOUNT FIREWALL
 # ============================================================================
 #
