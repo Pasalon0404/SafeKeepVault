@@ -1697,6 +1697,47 @@ except Exception as e:
             if [ -f "$RESTORE_COMMIT_TRIGGER" ]; then
                 echo "Restore Watcher: commit trigger detected — writing to vault..."
 
+                # ── Self-healing re-extraction ──
+                # The commit phase must NOT depend on the inspect phase's leftover
+                # /tmp/reliquary surviving. That directory is wiped by a successful
+                # commit, by a fresh inspect, or by a reboot — so a second commit
+                # click (or any retry) used to fail with "no extracted archive".
+                # To make commit fully self-contained, re-extract the archive here
+                # whenever the extraction is missing/empty, using the filename +
+                # password carried in the commit trigger (same creds the inspect
+                # trigger already carries — no new exposure).
+                if [ ! -d "$RELIQUARY_TMP" ] || [ -z "$(ls -A "$RELIQUARY_TMP" 2>/dev/null)" ]; then
+                    echo "Restore Watcher: extraction missing/empty — re-extracting from archive"
+                    CM_DATA=$(python3 -c "
+import json, sys
+try:
+    with open('$RESTORE_COMMIT_TRIGGER') as f:
+        d = json.load(f)
+    print(d.get('filename', ''))
+    print(d.get('password', ''))
+except Exception:
+    print(''); print('')
+" 2>/dev/null)
+                    CM_FILE=$(echo "$CM_DATA" | sed -n '1p')
+                    CM_PW=$(echo "$CM_DATA" | sed -n '2p')
+                    if [ -n "$CM_FILE" ] && command -v 7z >/dev/null 2>&1; then
+                        CM_USB=$(find_transfer_drive)
+                        CM_PATH="$CM_USB/$CM_FILE"
+                        if [ -n "$CM_USB" ] && [ -f "$CM_PATH" ]; then
+                            rm -rf "$RELIQUARY_TMP"
+                            mkdir -p "$RELIQUARY_TMP"
+                            CM_OUT=$(7z x -o"$RELIQUARY_TMP" -p"$CM_PW" "$CM_PATH" -y 2>&1)
+                            CM_CODE=$?
+                            echo "Restore Watcher: re-extract 7z exit=$CM_CODE (archive=$CM_FILE)"
+                            [ $CM_CODE -ne 0 ] && echo "Restore Watcher: re-extract output: $(echo "$CM_OUT" | head -3 | tr '\n' ' ')"
+                        else
+                            echo "Restore Watcher: re-extract unavailable (USB='$CM_USB' path='$CM_PATH')"
+                        fi
+                    else
+                        echo "Restore Watcher: cannot re-extract — commit trigger has no filename or 7z missing"
+                    fi
+                fi
+
                 # ── Resolve PROBE_ROOT ──
                 # The inspect phase saved the dynamically-resolved path to
                 # .probe_root. Read it back so we copy from wherever the
@@ -1739,7 +1780,7 @@ except Exception as e:
                 if [ -z "$PROBE_ROOT" ] || [ ! -d "$PROBE_ROOT" ]; then
                     echo "Restore Watcher: FATAL — cannot locate vault data in extraction"
                     echo "Restore Watcher: ls $RELIQUARY_TMP = $(ls -la "$RELIQUARY_TMP" 2>&1 | head -10)"
-                    echo '{"ok":false,"error":"No extracted archive found. Run inspect first."}' > "$RESTORE_COMMIT_RESULT"
+                    echo '{"ok":false,"error":"Could not read the backup archive (extraction failed). Re-select the archive, re-enter the password, and Unlock again."}' > "$RESTORE_COMMIT_RESULT"
                     rm -f "$RESTORE_COMMIT_TRIGGER"
                     sleep 1
                     continue

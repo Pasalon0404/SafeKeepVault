@@ -1647,9 +1647,15 @@ const SafeKeepOS = (() => {
    * @param {'merge'|'overwrite'} mode
    *   - 'merge': copy extracted files into vault alongside existing
    *   - 'overwrite': wipe vault dirs, then copy extracted files in
+   * @param {string} [filename] Archive filename, echoed into the commit trigger
+   *   so the daemon can RE-EXTRACT if /tmp/reliquary was wiped between inspect
+   *   and commit (self-healing). Falls back to the inspect-leftover extraction.
+   * @param {string} [password] Archive password for that re-extraction. Escaped
+   *   identically to inspectReliquary so the daemon re-extracts with the exact
+   *   same credentials the inspect succeeded with.
    * @returns {{ committed: boolean, command: string, error?: string }}
    */
-  async function commitReliquary(mode) {
+  async function commitReliquary(mode, filename, password) {
     if (mode !== 'merge' && mode !== 'overwrite') {
       return { committed: false, command: '', error: 'Mode must be "merge" or "overwrite".' };
     }
@@ -1701,10 +1707,16 @@ const SafeKeepOS = (() => {
       await _sleep(500);
     }
 
-    // Step 3: Fire the commit trigger
+    // Step 3: Fire the commit trigger.
+    // Carry filename + password (escaped exactly as inspectReliquary does) so
+    // the daemon can re-extract the archive if its /tmp extraction is gone.
+    const commitFilename = (typeof filename === 'string') ? filename : '';
+    const commitEscapedPw = (typeof password === 'string') ? password.replace(/'/g, "'\\''") : '';
     const triggerPayload = JSON.stringify({
       action: 'commit',
       mode,
+      filename: commitFilename,
+      password: commitEscapedPw,
       command: cmd,
       timestamp: Date.now()
     });

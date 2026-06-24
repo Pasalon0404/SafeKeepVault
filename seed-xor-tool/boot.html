@@ -8863,7 +8863,7 @@
                     <!-- Phase 3: Commit -->
                     <div class="skb-card">
                         <h3 style="margin: 0 0 0.75rem; font-size: 0.9rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Phase 3: Commit to Vault</h3>
-                        <button type="button" class="skb-btn" style="width: 100%; padding: 0.75rem; font-weight: 600; font-size: 0.95rem; background: rgba(255, 60, 60, 0.08); border-color: var(--skb-danger, #ff3c3c); color: var(--skb-danger, #ff3c3c);" onclick="rlq_commit()">Restore Backup</button>
+                        <button type="button" id="rlq-commit-btn" class="skb-btn" style="width: 100%; padding: 0.75rem; font-weight: 600; font-size: 0.95rem; background: rgba(255, 60, 60, 0.08); border-color: var(--skb-danger, #ff3c3c); color: var(--skb-danger, #ff3c3c);" onclick="rlq_commit()">Restore Backup</button>
                     </div>
                 </div>
             </div>
@@ -31720,13 +31720,31 @@ async function rlq_unlock() {
  * to preserve the contract with the bash watcher daemon.
  */
 async function rlq_commit() {
+    // ── Re-entrancy guard ──
+    // Without this, every extra click on "Restore Backup" fired a fresh COMMIT
+    // trigger at the daemon. After the first commit wiped /tmp/reliquary, the
+    // follow-up triggers found no extraction and failed loudly ("no extracted
+    // archive"), which looked like a total restore failure. A commit must run
+    // exactly once per gesture; ignore clicks while one is in flight.
+    if (rlq_commit._busy) return;
+
     if (!confirm('Restoring this backup will wipe your current vault data and replace it entirely with the backup contents. This cannot be undone. Continue?')) return;
+
+    rlq_commit._busy = true;
+    var btn = document.getElementById('rlq-commit-btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.style.cursor = 'not-allowed'; }
 
     showStatus('Restoring backup to vault...', 'info');
 
+    // Pass the archive filename + password through to the daemon so it can
+    // re-extract if its temp extraction was cleaned up between inspect and
+    // commit. These are the same inputs the successful Unlock used.
+    var fname = (document.getElementById('rlq-restore-filename') || {}).value || '';
+    var fpw   = (document.getElementById('rlq-restore-password') || {}).value || '';
+
     try {
         var os = window.SafeKeepOS;
-        var result = await os.commitReliquary('overwrite');
+        var result = await os.commitReliquary('overwrite', fname, fpw);
 
         if (result.committed) {
             showStatus('Vault restored successfully. Reloading application...', 'success');
@@ -31736,6 +31754,7 @@ async function rlq_commit() {
             // This cleanly picks up all restored data: seed, codex, settings,
             // cipher — instead of trying to patch individual UI components.
             // Short delay so the success toast is visible before reload.
+            // Button stays disabled through the reload (success is terminal).
             setTimeout(function() {
                 window.location.reload();
             }, 1500);
@@ -31747,7 +31766,11 @@ async function rlq_commit() {
         showStatus('Commit error: ' + err.message, 'error');
     }
 
+    // Failure path: clear the guard and re-enable the button so the user can
+    // retry (the daemon re-extracts on the next attempt).
     _rlqLastManifest = null;
+    rlq_commit._busy = false;
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; }
 }
 
 
