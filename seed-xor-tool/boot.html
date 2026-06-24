@@ -9118,13 +9118,16 @@
                         </div>
                     </div>
                     <div id="arm-lib-dropdown" style="display: none; margin-bottom: 0.5rem; padding: 0.5rem; background: var(--skb-bg-card); border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); max-height: 180px; overflow-y: auto;"></div>
-                    <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;">
+                    <div style="display: flex; width: 100%; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;">
+                        <!-- max-width: none overrides the global tool-input 600px readability cap
+                             so flex:1 can fill the row and push CLEAR flush to the right edge,
+                             aligning it under the Library button above. -->
                         <input type="password" id="arm-passphrase"
                                spellcheck="false" autocomplete="off"
-                               style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);"
+                               style="flex: 1 1 auto; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);"
                                oninput="arm_onConfigChange()">
                         <button type="button" class="skb-btn arm-no-print" onclick="arm_clearPassphrase()"
-                                style="padding: 0.4rem 0.75rem; font-size: 0.72rem; font-family: var(--skb-mono); border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); white-space: nowrap;">CLEAR</button>
+                                style="flex: 0 0 auto; padding: 0.4rem 0.75rem; font-size: 0.72rem; font-family: var(--skb-mono); border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); white-space: nowrap;">CLEAR</button>
                     </div>
                     <div style="font-size: 0.7rem; color: var(--skb-text-muted);">
                         A passphrase creates a completely separate wallet. Leave blank for the default wallet.
