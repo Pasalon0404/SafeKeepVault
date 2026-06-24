@@ -2615,6 +2615,21 @@
       max-width: 600px;
     }
 
+    /* Message Signer (live UI): release every field from the 600px/80ch caps
+       above so inputs, textareas, and the path dropdown span the full workspace
+       width — flush right edge matching the rest of the OS. The ID selector
+       outranks the capped rules above. Screen-only (the tool has no print
+       layout and #state-authenticator is hidden in @media print regardless).
+       Each field keeps its own width:100% / flex:1, so this only lifts the cap. */
+    @media screen {
+      #state-authenticator input,
+      #state-authenticator textarea,
+      #state-authenticator select {
+        max-width: none;
+        box-sizing: border-box;
+      }
+    }
+
     /* Buttons: cap width */
     html.skb-sidebar-fits body.tool-active .skb-btn,
     html.skb-sidebar-fits body.tool-active .skb-btn--primary,
