@@ -15849,7 +15849,9 @@ function _updateVolatileFirewall() {
     //   buttons can write to the encrypted vault, so they belong
     //   OUTSIDE the volatile firewall.
     var hideSelectors = [
-        '#codex-save-btn',                 // Codex "Save to Vault" button (encrypted vault target)
+        // NOTE: #codex-save-btn is intentionally NOT firewall-hidden. codex_init()
+        // keeps it visible but disabled+relabeled in volatile sessions so the
+        // control never silently vanishes. codex_save() still refuses to write.
         '#rlq-export-btn'                  // Reliquary "Export Backup" button (encrypted vault target)
         // NOTE: #settings-lock-section intentionally NOT suppressed —
         // user must be able to lock vault to exit a volatile session.
@@ -30583,31 +30585,40 @@ async function codex_init() {
     // just did, since this code runs after.
     var idLabel = (document.getElementById('dash-identity-label') || {}).textContent || '';
     var inTemporaryMode = idLabel.toLowerCase().indexOf('temporary') >= 0;
-    var shouldHideSaveBtn = amnesia || inTemporaryMode;
+    // In a volatile session (amnesia or temporary-seed) there is no encrypted
+    // vault to write into, so saving is unavailable. We used to HIDE the Save
+    // button entirely in this state — but a vanishing control looks broken and
+    // confused users into thinking the feature was lost. Instead we keep the
+    // button VISIBLE but disabled, with a self-explanatory label, so it's clear
+    // *why* saving is off. This does not weaken the storage firewall: the button
+    // is disabled here and codex_save() independently refuses to write in a
+    // volatile session.
+    var saveUnavailable = amnesia || inTemporaryMode;
 
     if (saveBtn) {
-        if (shouldHideSaveBtn) {
-            // Temp-seed or amnesia mode — re-engage hiding on this
-            // specific button (firewall may have already done it; this
-            // is idempotent).
-            saveBtn.setAttribute('data-volatile-hidden', '1');
+        // The Save button is no longer firewall-hidden — strip any stale
+        // hiding mechanism left by an earlier _updateVolatileFirewall pass or a
+        // contaminated _vaultVolatile flag (task #193), so it's always visible.
+        saveBtn.removeAttribute('data-volatile-hidden');
+        if (saveBtn.style.display === 'none')      saveBtn.style.display = '';
+        if (saveBtn.style.visibility === 'hidden') saveBtn.style.visibility = '';
+
+        if (saveUnavailable) {
+            saveBtn.disabled = true;
+            saveBtn.style.opacity = '0.5';
+            saveBtn.style.cursor = 'not-allowed';
+            saveBtn.textContent = 'Save unavailable (Temporary Session)';
+            saveBtn.title = 'This is a temporary, RAM-only session — there is no encrypted vault to save into. Load your master seed to enable saving.';
         } else {
-            // Master vault is unlocked — strip every known hiding
-            // mechanism UNCONDITIONALLY. The firewall's prior pass might
-            // have just added data-volatile-hidden if _vaultVolatile was
-            // contaminated; our authoritative computation overrides it.
-            saveBtn.removeAttribute('data-volatile-hidden');
-            if (saveBtn.style.display === 'none')      saveBtn.style.display = '';
-            if (saveBtn.style.visibility === 'hidden') saveBtn.style.visibility = '';
+            saveBtn.disabled = false;
+            saveBtn.style.opacity = '';
+            saveBtn.style.cursor = '';
+            saveBtn.textContent = 'Save to Vault';
+            saveBtn.title = '';
         }
     }
 
     if (banner) banner.style.display = amnesia ? 'block' : 'none';
-    if (saveBtn) {
-        saveBtn.disabled = amnesia;
-        saveBtn.style.opacity = amnesia ? '0.4' : '';
-        saveBtn.title = amnesia ? 'Temporary Session: saving disabled' : '';
-    }
 
     // Refresh archive list (always — notes may have changed on disk)
     await codex_refreshArchive();
@@ -30703,6 +30714,18 @@ async function codex_open(slug) {
 var _codexSaveLock = false;  // async promise lock
 
 async function codex_save() {
+    // ── Hard volatile-session guard (defense in depth) ──
+    // The button is disabled+relabeled in amnesia/temporary mode by codex_init,
+    // but never trust the UI alone for a disk-write decision. Refuse to save in
+    // any volatile session BEFORE touching the lock or button state.
+    var _vSaveLabel = (document.getElementById('dash-identity-label') || {}).textContent || '';
+    var _vSaveVolatile = (typeof isAmnesiaMode === 'function' && isAmnesiaMode())
+                         || _vSaveLabel.toLowerCase().indexOf('temporary') >= 0;
+    if (_vSaveVolatile) {
+        showStatus('Temporary Session active: notes cannot be saved to disk.', 'error');
+        return;
+    }
+
     // Promise lock: prevent any re-entry until the entire save resolves
     if (_codexSaveLock) return;
     _codexSaveLock = true;
