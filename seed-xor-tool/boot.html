@@ -7706,11 +7706,13 @@
                             </div>
                         </div>
                         <div id="desc-lib-dropdown" style="display: none; margin-bottom: 0.5rem; padding: 0.5rem; background: var(--skb-bg-card); border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); max-height: 180px; overflow-y: auto;"></div>
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <div style="display: flex; width: 100%; gap: 0.5rem; align-items: center;">
+                            <!-- max-width: none overrides the global tool-input 600px readability cap
+                                 so flex:1 fills the row and pushes CLEAR flush right, under the Library button. -->
                             <input type="password" id="desc-passphrase" autocomplete="off" spellcheck="false"
-                                   style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);">
+                                   style="flex: 1 1 auto; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);">
                             <button type="button" class="skb-btn" onclick="document.getElementById('desc-passphrase').value=''"
-                                    style="padding: 0.4rem 0.75rem; font-size: 0.72rem; font-family: var(--skb-mono); border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); white-space: nowrap;">CLEAR</button>
+                                    style="flex: 0 0 auto; padding: 0.4rem 0.75rem; font-size: 0.72rem; font-family: var(--skb-mono); border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); white-space: nowrap;">CLEAR</button>
                         </div>
                     </div>
 
