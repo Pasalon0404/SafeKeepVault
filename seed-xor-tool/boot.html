@@ -2630,6 +2630,20 @@
       }
     }
 
+    /* Wallet Record (live UI): same cap-lift as the Message Signer above. Every
+       field already carries its own width:100% or flex:1 (and #wrec-pp-required
+       is a checkbox we must NOT stretch), so this only removes the 600px/80ch
+       caps — no blanket width is applied. Screen-only; #wrec-print-area and the
+       @media print cold-storage layout are untouched. */
+    @media screen {
+      #state-designer input,
+      #state-designer textarea,
+      #state-designer select {
+        max-width: none;
+        box-sizing: border-box;
+      }
+    }
+
     /* Buttons: cap width */
     html.skb-sidebar-fits body.tool-active .skb-btn,
     html.skb-sidebar-fits body.tool-active .skb-btn--primary,
