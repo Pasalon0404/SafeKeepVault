@@ -2595,10 +2595,14 @@
     html.skb-sidebar-fits body.tool-active code,
     html.skb-sidebar-fits body.tool-active .psbt-raw,
     html.skb-sidebar-fits body.tool-active .eob-pool-raw,
-    html.skb-sidebar-fits body.tool-active .eob-hash-display,
-    html.skb-sidebar-fits body.tool-active .arm-xpub-val {
+    html.skb-sidebar-fits body.tool-active .eob-hash-display {
       max-width: 80ch;
     }
+    /* NOTE: .arm-xpub-val is intentionally NOT capped at 80ch. The Seed
+       Management Extended Public Key field must span the full container width
+       so its right edge lines up with the Derivation Path field above it
+       (it gets width:100% in the .arm-xpub-val rule below). Screen-only —
+       the print layout uses .arm-pd-xpub and is unaffected. */
 
     /* Inputs, selects: comfortable but not banner-wide */
     html.skb-sidebar-fits body.tool-active input[type="text"],
@@ -4993,6 +4997,11 @@
       border-radius: 0;
       margin-bottom: 0.75rem;
       min-height: 1.2em;
+      /* Span the full container width so the right edge aligns with the
+         Derivation Path field above. border-box keeps the 2px border + padding
+         inside that 100% so it never overflows the parent. */
+      width: 100%;
+      box-sizing: border-box;
     }
     .arm-addr-table {
       width: 100%;
@@ -6666,7 +6675,7 @@
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.31b</span>
+                        <span class="version" id="dash-version">v1.32b</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
