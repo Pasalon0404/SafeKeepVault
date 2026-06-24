@@ -8761,7 +8761,7 @@
                             <button type="button" class="skb-btn" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; border-radius: 3px;" onclick="rlq_scanPassword('backup')" title="Scan password via QR">Scan QR</button>
                         </div>
                     </div>
-                    <input type="password" id="rlq-backup-password" placeholder="AES-256 encryption password" autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono);">
+                    <input type="password" id="rlq-backup-password" placeholder="AES-256 encryption password" autocomplete="off" style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono);">
                     <!-- QR Scanner area for backup password -->
                     <div id="rlq-pw-qr-backup" style="display: none; margin-top: 0.5rem;">
                         <div id="rlq-pw-qr-reader-backup" style="border-radius: 8px; overflow: hidden;"></div>
@@ -8777,7 +8777,7 @@
                             <button type="button" class="skb-btn" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; border-radius: 3px;" onclick="rlq_scanPassword('confirm')" title="Scan password via QR">Scan QR</button>
                         </div>
                     </div>
-                    <input type="password" id="rlq-confirm-password" placeholder="Re-enter encryption password" autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono);">
+                    <input type="password" id="rlq-confirm-password" placeholder="Re-enter encryption password" autocomplete="off" style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono);">
                     <div id="rlq-pw-mismatch" style="display: none; font-size: 0.75rem; color: var(--skb-danger, #ff3c3c); margin-top: 0.35rem; padding: 0.3rem 0.5rem; background: rgba(255, 60, 60, 0.08); border-radius: var(--skb-radius-sm);">Passwords do not match.</div>
                     <!-- QR Scanner area for confirm password -->
                     <div id="rlq-pw-qr-confirm" style="display: none; margin-top: 0.5rem;">
