@@ -7477,8 +7477,10 @@
                         </div>
                     </div>
                     <div id="bip85-lib-dropdown" style="display: none; margin-bottom: 0.5rem; padding: 0.5rem; background: var(--skb-bg-card); border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); max-height: 180px; overflow-y: auto;"></div>
+                    <!-- max-width: none overrides the global tool-input 600px readability cap so
+                         this full-width field reaches the right edge (no adjacent button here). -->
                     <input type="password" id="bip85-passphrase" placeholder="Leave blank if none" autocomplete="off"
-                           style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);">
+                           style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);">
                 </div>
 
                 <div class="tool-grid-2">
