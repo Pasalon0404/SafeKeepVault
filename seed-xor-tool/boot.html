@@ -14422,108 +14422,45 @@ function _generateVisualFingerprint(hexStr) {
 }
 
 /**
- * Cached 8-hex fingerprint of the encrypted vault drive itself.
- *
- * Set lazily on first call to `_getVaultDriveHex()` and never recomputed —
- * the dm-crypt UUID is stamped into the LUKS container at vault creation
- * and is invariant for the life of the drive. Caching here guarantees the
- * 3-word identifier rendered on the dashboard stays bit-for-bit constant
- * across master-seed swaps, passphrase changes, lock/unlock cycles, and
- * temporary-session boots.
- */
-var _cachedVaultDriveHex = null;
-var _cachedVaultDriveHexPromise = null;
-
-/**
- * Resolve the static 8-hex identifier of THIS vault drive (not the seed).
- *
- * Source of truth: `/media/.safekeep-vault/seeds/.vault-sentinel.json` — a
- * file that `safekeep-boot.sh` writes ONLY after cryptsetup successfully
- * opens the LUKS container and the filesystem mounts cleanly. The sentinel
- * contains the dm-crypt UUID, which is set by `cryptsetup luksFormat`
- * during first-boot vault creation and never changes thereafter.
- *
- * We SHA-256 the UUID and take the first 8 hex chars, mirroring the same
- * 8-hex format used everywhere else in the system (xpub fingerprint, BIP-32
- * fingerprint, etc.) so the BIP-39 mod-2048 visualizer can chew on it.
- *
- * Demo / dev-mode fallback: when not running on the real boot drive
- * (window.location.protocol !== 'file:') the sentinel doesn't exist, so we
- * return a hardcoded sentinel hex. This keeps the dashboard chip populated
- * during development and yields a stable 3-word phrase across page reloads.
- *
- * @returns {Promise<string>} 8-hex-char identifier (or '' on hard failure)
- */
-async function _getVaultDriveHex() {
-    if (_cachedVaultDriveHex) return _cachedVaultDriveHex;
-    if (_cachedVaultDriveHexPromise) return _cachedVaultDriveHexPromise;
-
-    _cachedVaultDriveHexPromise = (async function () {
-        var uuid = '';
-        try {
-            // Boot drive: read the dm-crypt UUID from the sentinel.
-            if (window.location.protocol === 'file:') {
-                var resp = await fetch('file:///media/.safekeep-vault/seeds/.vault-sentinel.json',
-                                       { cache: 'no-store' });
-                if (resp && resp.ok) {
-                    var sentinel = await resp.json();
-                    if (sentinel && sentinel.uuid) uuid = String(sentinel.uuid);
-                }
-            }
-        } catch (e) {
-            // Sentinel unreachable — fall through to dev fallback below.
-            console.warn('[VAULT-ID] sentinel fetch failed, using fallback:', e && e.message);
-        }
-
-        // Dev / demo / sentinel-missing fallback. A static string keeps the
-        // 3-word phrase identical across reloads in dev mode.
-        if (!uuid) uuid = 'SAFEKEEPVAULT-DEMO-MODE-STATIC-VAULT-ID';
-
-        try {
-            var bytes = new TextEncoder().encode(uuid);
-            var digest = await crypto.subtle.digest('SHA-256', bytes);
-            var hex = Array.from(new Uint8Array(digest))
-                .map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
-            _cachedVaultDriveHex = hex.slice(0, 8).toLowerCase();
-            return _cachedVaultDriveHex;
-        } catch (e) {
-            console.error('[VAULT-ID] hash failed:', e);
-            return '';
-        }
-    })();
-
-    return _cachedVaultDriveHexPromise;
-}
-
-/**
  * Compute and stamp the Vault Identifier on the dashboard.
  *
- * Bug-fix (Task #205): previously fed SHA-256(mnemonic) into the visualizer,
- * which made the 3-word phrase shift every time the user loaded a new seed,
- * applied a passphrase, or booted a temporary session. The phrase is meant
- * to identify the **vault itself** (the LUKS-encrypted drive), so it must be
- * a function of vault state — NOT seed state. We now derive the input from
- * the dm-crypt UUID (via `_getVaultDriveHex()`), which is invariant for the
- * life of the drive.
+ * The Vault Identifier is a deterministic 3-word phrase that identifies the
+ * MASTER SEED. Source of truth: SHA-256(normalized mnemonic) truncated to 8
+ * hex chars — exactly `window.SafeKeepOS.vaultFingerprint()`. That 8-hex value
+ * is fed to `_generateVisualFingerprint()` (BIP-39 mod-2048 visualizer).
  *
- * Argument is preserved for call-site compatibility but ignored — the
- * Vault Identifier no longer depends on the active mnemonic.
+ * Because the input is the seed words alone, the same seed ALWAYS yields the
+ * same 3-word phrase:
+ *   - on every fresh USB build and on any physical drive,
+ *   - across page reloads and lock/unlock cycles,
+ *   - regardless of the BIP-39 passphrase (not part of the mnemonic words),
+ *     derivation path, or address type.
+ * A different seed (including a temporary-session seed) correctly yields a
+ * different phrase, since it identifies the seed.
  *
- * The resulting phrase is wrapped in straight double quotes when written
- * to the DOM. The raw hex never reaches the dashboard surface.
+ * History: a prior change derived this from the LUKS dm-crypt UUID of the
+ * encrypted drive. Because cryptsetup randomizes that UUID at luksFormat time,
+ * the phrase changed on every fresh build even for an identical seed — which
+ * defeated its purpose (letting the user visually confirm "this is the same
+ * seed"). It is once again seed-derived. The on-screen tooltip
+ * ("derived from SHA-256(mnemonic)") now matches the implementation again.
+ *
+ * @param {string} [mnemonic] The active master mnemonic. Falls back to the
+ *   live SeedSession mnemonic when omitted/empty.
  */
-async function _updateDashVaultFingerprint(_unused_mnemonic) {
+async function _updateDashVaultFingerprint(mnemonic) {
     var el = document.getElementById('dash-vault-fingerprint');
     var chip = document.getElementById('dash-vfp-cc');
     if (!el) return;
     try {
-        var hex = await _getVaultDriveHex();
-        if (!hex) {
+        var m = (typeof mnemonic === 'string' && mnemonic.trim()) ? mnemonic : _getActiveMnemonic();
+        if (!m || !m.trim()) {
             if (chip) chip.setAttribute('data-empty', 'true');
             el.textContent = '--------';
             return;
         }
-        var phrase = _generateVisualFingerprint(hex);
+        var hex = await window.SafeKeepOS.vaultFingerprint(m);
+        var phrase = hex ? _generateVisualFingerprint(hex) : '--------';
         if (phrase && phrase !== '--------') {
             el.textContent = '"' + phrase + '"';
             if (chip) chip.setAttribute('data-empty', 'false');
@@ -14598,11 +14535,10 @@ function transitionToDashboard(seedData) {
         const wc = seedData.wordCount || seedData.mnemonic?.trim().split(/\s+/).length || '??';
         document.getElementById('dash-word-count').textContent = `${wc} words loaded into RAM`;
     }
-    // Vault Identifier — derived from the LUKS dm-crypt UUID, NOT the mnemonic.
-    // Stays constant across master/passphrase/temporary-seed swaps; identifies
-    // the encrypted drive itself. Called unconditionally (no seedData gate)
-    // because the identifier is a property of the vault, not of any loaded seed.
-    _updateDashVaultFingerprint();
+    // Vault Identifier — deterministic 3-word phrase derived from the master
+    // seed (SHA-256 of the mnemonic). The same seed words always produce the
+    // same phrase on every build/drive; independent of the BIP-39 passphrase.
+    _updateDashVaultFingerprint(seedData && seedData.mnemonic ? seedData.mnemonic : '');
 
     // Update sidebar seed status indicator
     _globalSeedStatusUpdate();
@@ -15442,9 +15378,9 @@ async function vaultDoMasterUnlock() {
             var wc = seedData.wordCount || (seedData.mnemonic ? seedData.mnemonic.trim().split(/\s+/).length : '??');
             document.getElementById('dash-word-count').textContent = wc + ' words loaded into RAM';
             document.getElementById('dash-identity-label').textContent = 'Master Seed Active';
-            // Vault Identifier — vault-derived, not seed-derived.
-            // The cached value from prior dashboard render will be reused.
-            _updateDashVaultFingerprint();
+            // Vault Identifier — seed-derived (SHA-256 of the mnemonic), so the
+            // same seed words reproduce the same 3-word phrase on any build.
+            _updateDashVaultFingerprint(seedData && seedData.mnemonic ? seedData.mnemonic : '');
 
             // Restore passphrase if present
             var pp = window.SafeKeepOS.getPassphrase ? window.SafeKeepOS.getPassphrase() : '';
