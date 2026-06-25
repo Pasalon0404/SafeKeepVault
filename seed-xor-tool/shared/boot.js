@@ -1585,10 +1585,17 @@ const SafeKeepOS = (() => {
     // ACK:     VAULT_MOUNT/seeds/RESTORE_INSPECT_ACK.json  (deferred)
     // Result:  VAULT_MOUNT/seeds/RESTORE_INSPECT_RESULT.json
 
+    // IMPORTANT: send the RAW password here, NOT escapedPw.
+    // The daemon does NOT bash-c the `command` field for restore — it parses
+    // this JSON with Python and passes the password to 7z as a double-quoted
+    // shell variable (`-p"$ARCHIVE_PW"`), which needs the exact raw bytes the
+    // archive was encrypted with. (escapedPw is shell-single-quote escaping for
+    // the legacy `command` string only; feeding it to 7z turns every ' into
+    // '\'' and yields "Wrong password?".)
     const triggerPayload = JSON.stringify({
       action: 'inspect',
       filename,
-      password: escapedPw,
+      password: password,
       command: extractCmd,
       timestamp: Date.now()
     });
@@ -1708,15 +1715,18 @@ const SafeKeepOS = (() => {
     }
 
     // Step 3: Fire the commit trigger.
-    // Carry filename + password (escaped exactly as inspectReliquary does) so
-    // the daemon can re-extract the archive if its /tmp extraction is gone.
+    // Carry filename + RAW password so the daemon can re-extract the archive if
+    // its /tmp extraction is gone. The daemon passes this to 7z as a
+    // double-quoted shell variable (`-p"$CM_PW"`), so it MUST be the raw
+    // password — the exact bytes the archive was encrypted with — not
+    // shell-escaped. (Mirrors inspectReliquary, which also sends raw.)
     const commitFilename = (typeof filename === 'string') ? filename : '';
-    const commitEscapedPw = (typeof password === 'string') ? password.replace(/'/g, "'\\''") : '';
+    const commitPassword = (typeof password === 'string') ? password : '';
     const triggerPayload = JSON.stringify({
       action: 'commit',
       mode,
       filename: commitFilename,
-      password: commitEscapedPw,
+      password: commitPassword,
       command: cmd,
       timestamp: Date.now()
     });
