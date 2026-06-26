@@ -33,11 +33,16 @@ Before=graphical.target
 # ships no DM, but this blocks accidental activation if one gets apt-install'd).
 Conflicts=display-manager.service
 
-# Cap the crash-restart storm. Two retries in 120s, then give up and leave
-# tty7 frozen on the last Xorg/openbox crash for operator diagnosis. Without
-# this cap, a broken boot.html would loop Chromium forever.
+# Cap the crash-restart storm, but leave generous headroom for INTENTIONAL
+# restarts: the soft-lock re-entry asks systemd to restart this unit
+# (`systemctl restart safekeep-session.service`) on every lock, and each lock
+# counts as a start. A burst of 2 would rate-limit a user who locks/unlocks a
+# few times. Allow 10 starts / 120s — far above any human lock cadence, still a
+# backstop. A genuine boot.html crash-loop does NOT consume this budget: a
+# Chromium exit < 5s is caught earlier and idles on a diagnostic halt
+# (exec sleep infinity), it does not restart the unit.
 StartLimitIntervalSec=120s
-StartLimitBurst=2
+StartLimitBurst=10
 
 [Service]
 Type=simple

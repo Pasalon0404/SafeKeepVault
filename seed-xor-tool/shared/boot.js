@@ -2076,24 +2076,27 @@ const SafeKeepOS = (() => {
   /**
    * TRUE CRYPTOGRAPHIC LOCK (soft teardown).
    *
-   * Drops POWER_ACTION.txt = "lock" and closes Chromium. The daemon's
-   * post-exit power sequence (safekeep-boot.sh) recognises "lock" and, instead
-   * of powering off, performs a soft teardown:
-   *   1. unmount the vault + `cryptsetup luksClose` → evicts the dm-crypt
-   *      master key from kernel memory and removes the plaintext seed files
-   *      from the namespace,
-   *   2. re-execs the boot script in place (`exec /usr/local/bin/safekeep-boot`).
-   *      Chromium has already exited by this point (window.close below), so its
-   *      V8 heap — the only place the immutable seed/passphrase strings JS
-   *      cannot zero still live — is freed by the kernel on process exit,
-   *   3. the re-exec'd boot flow lands on the native zenity unlock prompt, so
-   *      the LUKS passphrase is captured OUTSIDE the browser's memory space.
+   * IMPORTANT: lock does NOT depend on a signal file landing on disk. The daemon
+   * DEFAULTS to lock on any Chromium exit that lacks an explicit poweroff/reboot
+   * signal (see safekeep-boot.sh power sequence). So the reliable, race-free
+   * thing to do is simply CLOSE Chromium — the daemon then unmounts the vault,
+   * runs `cryptsetup luksClose` (evicting the dm-crypt key), and restarts the
+   * session into the native zenity unlock prompt. Chromium's exit frees its V8
+   * heap (the one place the immutable mnemonic/passphrase strings JS cannot zero
+   * still live).
    *
-   * Backend contract identical to powerOff()/restart(): drop the signal file,
-   * then window.close() to hand control back to the daemon.
+   * We still fire a best-effort "lock" marker so the daemon log records an
+   * intentional lock vs. an unexpected exit — but it is fire-and-forget: there is
+   * NO read-back, NO retry gate, and NO dependence on the download flushing.
+   * Unlike poweroff/reboot (which MUST land their signal to override the lock
+   * default), a lost lock marker changes nothing — the default is already lock.
    */
   function lock() {
-    return _submitPowerAction('lock');
+    try { _rawBlobDownload(POWER_ACTION_FILE, 'lock\n'); } catch (_) {}
+    // Small delay so the marker has a chance to flush (purely cosmetic for the
+    // daemon log), then close. The lock outcome does not depend on it.
+    setTimeout(function () { try { window.close(); } catch (_) {} }, 300);
+    return Promise.resolve(true);
   }
 
 

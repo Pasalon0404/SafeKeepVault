@@ -2152,12 +2152,13 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
     #    2. Unmount the vault and `cryptsetup luksClose` it — this EVICTS
     #       the dm-crypt master key from kernel memory and removes the
     #       plaintext seed files from the namespace.
-    #    3. exit NON-ZERO so systemd (Restart=on-failure) tears down the
-    #       entire session cgroup — Chromium, X, every watcher — which
-    #       ANNIHILATES the V8 heap (the only reliable way to clear the
-    #       immutable mnemonic/passphrase strings JS cannot zero), then
-    #       re-runs this script into the native zenity unlock prompt.
-    #  This branch never returns; it always exits the script.
+    #    3. ask systemd to restart this unit, which tears down the entire
+    #       session cgroup — Chromium, X, every watcher — ANNIHILATING the V8
+    #       heap (the only reliable way to clear the immutable mnemonic/
+    #       passphrase strings JS cannot zero), then re-runs this script into
+    #       the native zenity unlock prompt. (exec is the fallback.)
+    #  This branch never returns; it always restarts or halts safely — it never
+    #  powers the machine off.
     # ==================================================================
     if [ "$POWER_ACTION" = "lock" ]; then
         echo "Lock requested — evicting vault keys and restarting the session."
@@ -2198,25 +2199,39 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
 
         sync
 
-        # ── RE-ENTRY: re-exec the boot script IN THIS PROCESS ──
-        # safekeep-boot runs BACKGROUNDED under openbox autostart
-        # (`safekeep-boot ... &`), so it is NOT systemd's main process — a plain
-        # `exit` would neither restart the session nor relaunch anything (it
-        # would leave X/openbox idle), and worse, the legacy fall-through below
-        # ends in `sudo poweroff`. We therefore re-exec the full boot script in
-        # place: same PID, fresh image, X/openbox untouched. The fresh run sees
-        # the vault unmounted → stale-mapper guard → native zenity unlock prompt
-        # → cryptsetup open → relaunch Chromium. Chromium already exited (its V8
-        # heap is freed) and the watchers were just killed, so nothing leaks.
-        #
-        # `exec` only returns on FAILURE; if it does, the vault is already locked
-        # (unmounted + closed), so a poweroff is a safe last resort.
+        # ── RE-ENTRY: restart the graphical session cleanly via systemd ──
+        # safekeep-boot runs BACKGROUNDED under openbox autostart, so it is NOT
+        # systemd's main process. Rather than exec inside a session that another
+        # diagnosis worried might be collapsing, we ask systemd to restart the
+        # whole unit: it tears down the ENTIRE cgroup (Chromium, X, openbox,
+        # every watcher — annihilating the V8 heap) and re-runs us from the top
+        # into the native zenity unlock prompt. This is fully decoupled from the
+        # X/Chromium lifecycle, so a collapsing X session cannot take it down.
+        # --no-block: do not wait on our own unit (systemd kills us during the
+        # stop); we then sleep until that kill arrives.
         unset EPHEMERAL_MODE
-        echo "Lock: re-executing /usr/local/bin/safekeep-boot → native unlock prompt."
+        echo "Lock: requesting systemd restart of safekeep-session.service → native unlock prompt."
+        if sudo systemctl --no-block restart safekeep-session.service 2>/dev/null; then
+            sleep 30          # systemd is tearing down this cgroup; wait to be killed.
+            exit 0
+        fi
+
+        # Fallback 1: systemctl unavailable/failed — re-exec this boot script in
+        # place (same PID, X/openbox left running). The fresh run lands on the
+        # unlock prompt.
+        echo "Lock: systemctl restart unavailable — re-exec'ing /usr/local/bin/safekeep-boot in place."
         exec /usr/local/bin/safekeep-boot
-        echo "Lock: FATAL — exec failed; powering off as a safe fallback (vault already locked)."
-        sync
-        sudo poweroff
+
+        # Fallback 2: exec itself failed. The vault is ALREADY locked (unmounted +
+        # LUKS closed), so the seed is safe. Do NOT power off — an unexpected
+        # power-off on Lock is precisely the bug we are eliminating. Tell the user
+        # to reboot and idle safely here.
+        echo "Lock: re-entry failed; vault is locked (keys evicted). Halting safely — NO poweroff."
+        export DISPLAY="${DISPLAY:-:0}"
+        export XAUTHORITY="${XAUTHORITY:-/root/.Xauthority}"
+        zenity --info --width=480 --timeout=60 --title="SafeKeep Locked" \
+            --text="The vault is locked and its encryption keys have been evicted from memory.\n\nPlease reboot the device to start a new session." 2>/dev/null || true
+        exec sleep infinity
     fi
 
     # ------------------------------------------------------------------
