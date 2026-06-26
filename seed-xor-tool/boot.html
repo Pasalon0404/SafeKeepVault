@@ -10767,6 +10767,10 @@ window.addEventListener('DOMContentLoaded', () => {
             console.log('[DEV MOCK] restart() intercepted — no-op on dev host.');
             _devAnnounce('Restart intercepted (would exec `sudo reboot`)');
         },
+        lock: function () {
+            console.log('[DEV MOCK] lock() intercepted — no-op on dev host.');
+            _devAnnounce('True Lock intercepted (would evict LUKS keys + restart session)');
+        },
 
         // --- Display Sleep bridge (task #198) ---
         // Real backend (shared/boot.js on the live USB) translates this
@@ -15299,11 +15303,30 @@ function vaultLock() {
     // that no volatile seed is in RAM.
     if (typeof _updateVolatileFirewall === 'function') _updateVolatileFirewall();
 
-    // Show the lock overlay at the choice screen
+    // ── TRUE CRYPTOGRAPHIC LOCK (boot drive only) ──
+    // The JS clears above are best-effort only: the mnemonic/passphrase live as
+    // immutable strings in the V8 heap (and sessionStorage) that JavaScript
+    // cannot zero. The ONLY reliable purge is to destroy the process. On the
+    // real boot drive we hand off to the daemon: drop POWER_ACTION=lock and
+    // close Chromium → daemon unmounts the vault + cryptsetup luksClose (evicts
+    // the dm-crypt key) → systemd restarts the whole session cgroup (annihilates
+    // the V8 heap) → native zenity unlock prompt. See SafeKeepOS.lock().
+    if (window.SafeKeepOS && typeof window.SafeKeepOS.isBootDrive === 'function'
+        && window.SafeKeepOS.isBootDrive() && typeof window.SafeKeepOS.lock === 'function') {
+        _lockShowTeardown();
+        document.getElementById('vault-lock-overlay').style.display = 'block';
+        console.log('[VAULT] True lock initiated — evicting LUKS keys + tearing down session.');
+        // Hands control to the daemon and closes Chromium (after a short flush delay).
+        try { window.SafeKeepOS.lock(); } catch (e) { console.error('[VAULT] lock() failed:', e); }
+        return;
+    }
+
+    // Dev host / website fallback: no daemon to tear down the process, so just
+    // show the lock overlay choice screen (legacy behavior).
     _lockShowChoice();
     document.getElementById('vault-lock-overlay').style.display = 'block';
 
-    console.log('[VAULT] Session locked — seed zeroed from RAM.');
+    console.log('[VAULT] Session locked (UI overlay; no boot-drive teardown available).');
 }
 
 // ---- Lock Modal Panel Management ----
@@ -15315,11 +15338,21 @@ function _lockHideAllPanels() {
     document.getElementById('vault-lock-choice').style.display = 'none';
     document.getElementById('vault-master-unlock-panel').style.display = 'none';
     document.getElementById('vault-temp-seed-panel').style.display = 'none';
+    var td = document.getElementById('vault-lock-teardown');
+    if (td) td.style.display = 'none';
 }
 
 function _lockShowChoice() {
     _lockHideAllPanels();
     document.getElementById('vault-lock-choice').style.display = 'block';
+}
+
+// Boot-drive true-lock: show the "Locking…" teardown message while the daemon
+// evicts keys + restarts the session into the native unlock prompt.
+function _lockShowTeardown() {
+    _lockHideAllPanels();
+    var td = document.getElementById('vault-lock-teardown');
+    if (td) td.style.display = 'block';
 }
 
 /**
@@ -39402,6 +39435,12 @@ function tfa_renderTable() {
                 Enter Temporary Seed
                 <span class="lock-opt-sub">Load a temporary seed into RAM only. Never written to disk.</span>
             </button>
+        </div>
+
+        <!-- Soft-lock teardown progress (boot drive: keys being evicted) -->
+        <div id="vault-lock-teardown" style="display: none;">
+            <h2>Locking Vault&hellip;</h2>
+            <p>Evicting the encryption keys from memory and tearing down the session. The native unlock prompt will appear in a moment &mdash; re-enter your vault passphrase there to start a fresh, secure session.</p>
         </div>
 
         <!-- Master vault password entry (hidden until activated) -->

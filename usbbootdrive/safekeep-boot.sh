@@ -2056,7 +2056,7 @@ except Exception as e:
         # Read the first line and trim whitespace/newlines.
         REQUESTED=$(head -n 1 "$POWER_ACTION_READ_PATH" 2>/dev/null | tr -d '[:space:]')
         case "$REQUESTED" in
-            reboot|poweroff)
+            reboot|poweroff|lock)
                 POWER_ACTION="$REQUESTED"
                 ;;
             *)
@@ -2071,6 +2071,64 @@ except Exception as e:
         echo "No POWER_ACTION.txt found — defaulting to poweroff (safe fallback)."
     fi
     echo "Power sequence: $POWER_ACTION"
+
+    # ==================================================================
+    #  SOFT-TEARDOWN LOCK  (POWER_ACTION = "lock")
+    # ------------------------------------------------------------------
+    #  A true cryptographic lock, NOT a UI overlay:
+    #    1. Kill the background watchers forked by launch_browser so they
+    #       release the vault (Chromium is already gone at this point).
+    #    2. Unmount the vault and `cryptsetup luksClose` it — this EVICTS
+    #       the dm-crypt master key from kernel memory and removes the
+    #       plaintext seed files from the namespace.
+    #    3. exit NON-ZERO so systemd (Restart=on-failure) tears down the
+    #       entire session cgroup — Chromium, X, every watcher — which
+    #       ANNIHILATES the V8 heap (the only reliable way to clear the
+    #       immutable mnemonic/passphrase strings JS cannot zero), then
+    #       re-runs this script into the native zenity unlock prompt.
+    #  This branch never returns; it always exits the script.
+    # ==================================================================
+    if [ "$POWER_ACTION" = "lock" ]; then
+        echo "Lock requested — evicting vault keys and restarting the session."
+        if [ -w /dev/tty1 ]; then
+            {
+                printf '\033[2J\033[H\r'
+                printf '\r\n'
+                printf '    SafeKeep locked. Evicting encryption keys from memory...\r\n'
+                printf '    The unlock prompt will appear in a moment.\r\n'
+                printf '\r\n'
+            } > /dev/tty1 2>/dev/null || true
+        fi
+
+        # Forensic trail (same as the poweroff path) before teardown.
+        if mountpoint -q "$DATA_MOUNT" 2>/dev/null; then
+            cp -a /tmp/safekeep-boot.log "$DATA_MOUNT/safekeep-boot.log" 2>/dev/null || true
+        fi
+
+        # Release the vault: kill THIS script's background children (the
+        # watchers). `pkill -P $$` targets children only — never this script.
+        pkill -P $$ 2>/dev/null || true
+        sleep 0.3
+        sync
+
+        # Unmount, then evict the LUKS key. Retry close while references drain.
+        sudo umount "$VAULT_MOUNT" 2>/dev/null || sudo umount -l "$VAULT_MOUNT" 2>/dev/null || true
+        for _lk in 1 2 3 4 5; do
+            sudo cryptsetup close "$MAPPER_NAME" 2>/dev/null && break
+            sleep 0.4
+        done
+        if [ -e "/dev/mapper/$MAPPER_NAME" ]; then
+            echo "Lock: mapper '$MAPPER_NAME' still present after close attempts; the"
+            echo "      systemd cgroup teardown releases it and the stale-mapper guard"
+            echo "      re-closes it on relaunch before the unlock prompt."
+        else
+            echo "Lock: vault unmounted and LUKS closed — dm-crypt key evicted."
+        fi
+
+        sync
+        echo "Lock: exiting non-zero to trigger systemd session restart (V8 heap teardown)."
+        exit 42
+    fi
 
     # ------------------------------------------------------------------
     # tty1 SHUTDOWN SPLASH — raw-TTY safe
@@ -2131,6 +2189,17 @@ SKB_BYE_EOF
 if mountpoint -q "$VAULT_MOUNT" 2>/dev/null; then
     echo "Vault already mounted. Launching browser..."
     launch_browser
+fi
+
+# ── Soft-lock teardown safety net ──
+# An in-session lock (POWER_ACTION=lock) unmounts the vault and closes the LUKS
+# mapper, then exits so systemd restarts us here. If the mapper was briefly busy
+# and the close didn't complete before the cgroup was torn down, the mapper node
+# can linger. `cryptsetup open` fails if the mapper name already exists, so close
+# any stale mapper now — BEFORE the unlock flow re-opens it.
+if ! mountpoint -q "$VAULT_MOUNT" 2>/dev/null && [ -e "/dev/mapper/$MAPPER_NAME" ]; then
+    echo "Stale LUKS mapper '$MAPPER_NAME' present without a mount — closing before unlock."
+    sudo cryptsetup close "$MAPPER_NAME" 2>/dev/null || true
 fi
 
 # Find the data partition

@@ -91,7 +91,7 @@ Any ONE of these:
 ## How to resume
 
 1. Start a new Cowork session with Opus
-2. Connect the workspace folder: `/Volumes/512NVMe/Users/minipasalon/Documents/website for claude/entire website folder`
+2. Connect the workspace folder: `<PROJECT_FOLDER>`
 3. Tell the agent: "Read PROJECT_NOTES.md and LAST_SESSION_STATE.md to get up to speed, then let's continue debugging the kiosk void issue."
 4. Provide one of the four unblocking items listed above
 

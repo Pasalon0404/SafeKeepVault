@@ -2000,7 +2000,7 @@ const SafeKeepOS = (() => {
    * @param {'poweroff'|'reboot'} action
    */
   function _submitPowerAction(action) {
-    if (action !== 'poweroff' && action !== 'reboot') {
+    if (action !== 'poweroff' && action !== 'reboot' && action !== 'lock') {
       throw new Error('Invalid power action: ' + action);
     }
     try {
@@ -2030,6 +2030,29 @@ const SafeKeepOS = (() => {
    */
   function restart() {
     return _submitPowerAction('reboot');
+  }
+
+  /**
+   * TRUE CRYPTOGRAPHIC LOCK (soft teardown).
+   *
+   * Drops POWER_ACTION.txt = "lock" and closes Chromium. The daemon's
+   * post-exit power sequence (safekeep-boot.sh) recognises "lock" and, instead
+   * of powering off, performs a soft teardown:
+   *   1. unmount the vault + `cryptsetup luksClose` → evicts the dm-crypt
+   *      master key from kernel memory and removes the plaintext seed files
+   *      from the namespace,
+   *   2. exits non-zero so systemd (Restart=on-failure) tears down the entire
+   *      session cgroup — Chromium, X, and every watcher — which ANNIHILATES
+   *      the V8 heap (the only reliable way to clear the immutable seed/
+   *      passphrase strings JS cannot zero),
+   *   3. re-runs the boot flow into the native zenity unlock prompt, so the
+   *      LUKS passphrase is captured OUTSIDE the browser's memory space.
+   *
+   * Backend contract identical to powerOff()/restart(): drop the signal file,
+   * then window.close() to hand control back to the daemon.
+   */
+  function lock() {
+    return _submitPowerAction('lock');
   }
 
 
@@ -2245,6 +2268,7 @@ const SafeKeepOS = (() => {
     // Power sequence
     powerOff,
     restart,
+    lock,
 
     // Display sleep (DPMS timer)
     setDisplaySleep,
