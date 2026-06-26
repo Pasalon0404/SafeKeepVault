@@ -2041,12 +2041,12 @@ const SafeKeepOS = (() => {
    *   1. unmount the vault + `cryptsetup luksClose` → evicts the dm-crypt
    *      master key from kernel memory and removes the plaintext seed files
    *      from the namespace,
-   *   2. exits non-zero so systemd (Restart=on-failure) tears down the entire
-   *      session cgroup — Chromium, X, and every watcher — which ANNIHILATES
-   *      the V8 heap (the only reliable way to clear the immutable seed/
-   *      passphrase strings JS cannot zero),
-   *   3. re-runs the boot flow into the native zenity unlock prompt, so the
-   *      LUKS passphrase is captured OUTSIDE the browser's memory space.
+   *   2. re-execs the boot script in place (`exec /usr/local/bin/safekeep-boot`).
+   *      Chromium has already exited by this point (window.close below), so its
+   *      V8 heap — the only place the immutable seed/passphrase strings JS
+   *      cannot zero still live — is freed by the kernel on process exit,
+   *   3. the re-exec'd boot flow lands on the native zenity unlock prompt, so
+   *      the LUKS passphrase is captured OUTSIDE the browser's memory space.
    *
    * Backend contract identical to powerOff()/restart(): drop the signal file,
    * then window.close() to hand control back to the daemon.

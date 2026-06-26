@@ -2119,15 +2119,33 @@ except Exception as e:
         done
         if [ -e "/dev/mapper/$MAPPER_NAME" ]; then
             echo "Lock: mapper '$MAPPER_NAME' still present after close attempts; the"
-            echo "      systemd cgroup teardown releases it and the stale-mapper guard"
-            echo "      re-closes it on relaunch before the unlock prompt."
+            echo "      stale-mapper guard re-closes it on the re-exec'd run before the"
+            echo "      unlock prompt."
         else
             echo "Lock: vault unmounted and LUKS closed — dm-crypt key evicted."
         fi
 
         sync
-        echo "Lock: exiting non-zero to trigger systemd session restart (V8 heap teardown)."
-        exit 42
+
+        # ── RE-ENTRY: re-exec the boot script IN THIS PROCESS ──
+        # safekeep-boot runs BACKGROUNDED under openbox autostart
+        # (`safekeep-boot ... &`), so it is NOT systemd's main process — a plain
+        # `exit` would neither restart the session nor relaunch anything (it
+        # would leave X/openbox idle), and worse, the legacy fall-through below
+        # ends in `sudo poweroff`. We therefore re-exec the full boot script in
+        # place: same PID, fresh image, X/openbox untouched. The fresh run sees
+        # the vault unmounted → stale-mapper guard → native zenity unlock prompt
+        # → cryptsetup open → relaunch Chromium. Chromium already exited (its V8
+        # heap is freed) and the watchers were just killed, so nothing leaks.
+        #
+        # `exec` only returns on FAILURE; if it does, the vault is already locked
+        # (unmounted + closed), so a poweroff is a safe last resort.
+        unset EPHEMERAL_MODE
+        echo "Lock: re-executing /usr/local/bin/safekeep-boot → native unlock prompt."
+        exec /usr/local/bin/safekeep-boot
+        echo "Lock: FATAL — exec failed; powering off as a safe fallback (vault already locked)."
+        sync
+        sudo poweroff
     fi
 
     # ------------------------------------------------------------------
