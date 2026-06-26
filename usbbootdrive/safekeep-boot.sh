@@ -2210,22 +2210,32 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
         # --no-block: do not wait on our own unit (systemd kills us during the
         # stop); we then sleep until that kill arrives.
         unset EPHEMERAL_MODE
-        echo "Lock: requesting systemd restart of safekeep-session.service → native unlock prompt."
+
+        # PRIMARY — re-exec this boot script in place. This is a plain execve():
+        # it needs no polkit/login session (unlike `systemctl restart`, which is
+        # refused with "Interactive authentication required" under this OS's
+        # muted logind — NAutoVTs=0, KillUserProcesses=yes), it stays in the same
+        # PID/cgroup, and X/openbox keep running because OPENBOX — not Chromium —
+        # holds the session (Chromium is just a client that already exited). The
+        # fresh run sees the vault unmounted → stale-mapper guard → native zenity
+        # unlock prompt → cryptsetup open → relaunch Chromium. exec only returns
+        # if it FAILS to replace the image.
+        echo "Lock: re-exec'ing /usr/local/bin/safekeep-boot in place → native unlock prompt."
+        exec /usr/local/bin/safekeep-boot
+
+        # FALLBACK 1 — exec failed (binary missing/non-exec). Ask systemd to
+        # restart the unit. May be refused by polkit under muted logind; if so it
+        # returns non-zero and we fall through.
+        echo "Lock: exec failed — trying systemd restart of safekeep-session.service."
         if sudo systemctl --no-block restart safekeep-session.service 2>/dev/null; then
             sleep 30          # systemd is tearing down this cgroup; wait to be killed.
             exit 0
         fi
 
-        # Fallback 1: systemctl unavailable/failed — re-exec this boot script in
-        # place (same PID, X/openbox left running). The fresh run lands on the
-        # unlock prompt.
-        echo "Lock: systemctl restart unavailable — re-exec'ing /usr/local/bin/safekeep-boot in place."
-        exec /usr/local/bin/safekeep-boot
-
-        # Fallback 2: exec itself failed. The vault is ALREADY locked (unmounted +
-        # LUKS closed), so the seed is safe. Do NOT power off — an unexpected
-        # power-off on Lock is precisely the bug we are eliminating. Tell the user
-        # to reboot and idle safely here.
+        # FALLBACK 2 — both re-entry paths failed. The vault is ALREADY locked
+        # (unmounted + LUKS closed), so the seed is safe. Do NOT power off — an
+        # unexpected power-off on Lock is precisely the bug we are eliminating.
+        # Tell the user to reboot and idle safely here.
         echo "Lock: re-entry failed; vault is locked (keys evicted). Halting safely — NO poweroff."
         export DISPLAY="${DISPLAY:-:0}"
         export XAUTHORITY="${XAUTHORITY:-/root/.Xauthority}"
