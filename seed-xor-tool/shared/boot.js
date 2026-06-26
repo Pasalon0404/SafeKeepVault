@@ -1999,7 +1999,7 @@ const SafeKeepOS = (() => {
    *
    * @param {'poweroff'|'reboot'} action
    */
-  function _submitPowerAction(action) {
+  async function _submitPowerAction(action) {
     if (action !== 'poweroff' && action !== 'reboot' && action !== 'lock') {
       throw new Error('Invalid power action: ' + action);
     }
@@ -2007,13 +2007,48 @@ const SafeKeepOS = (() => {
       _rawBlobDownload(POWER_ACTION_FILE, action + '\n');
     } catch (err) {
       console.error('SafeKeepOS.powerAction: failed to drop signal file:', err);
-      // Fall through — closing the window still triggers the default
-      // poweroff path in safekeep-boot.sh.
     }
-    // Give Chromium time to flush the download to disk before exit.
-    setTimeout(function () {
-      try { window.close(); } catch (_) {}
-    }, 500);
+
+    // ── Confirm the signal landed on disk BEFORE closing Chromium ──
+    // The Blob download is asynchronous. Closing the kiosk on a fixed 500 ms
+    // timer races the flush: if Chromium exits before the file is written, the
+    // daemon finds no POWER_ACTION.txt and falls back to its DEFAULT (poweroff).
+    // That fallback is invisible for 'poweroff', a silent downgrade for
+    // 'reboot', and CATASTROPHIC for 'lock' — the box powers off instead of
+    // locking (and the vault is left mounted right up until the cut). The fact
+    // that 'poweroff' always "worked" never proved the signal channel works; it
+    // just matched the default. On the boot drive we now poll-read the file back
+    // until it contains the requested action, and only then close.
+    let confirmed = false;
+    if (isBootDrive()) {
+      const url = `file://${MASTER_SEED_DIR}/${POWER_ACTION_FILE}`;
+      for (let i = 0; i < 25 && !confirmed; i++) {   // up to ~5 s (25 × 200 ms)
+        await _sleep(200);
+        try {
+          const r = await fetch(url, { cache: 'no-store' });
+          if (r.ok && (await r.text()).trim() === action) confirmed = true;
+        } catch (_) { /* not flushed yet — keep polling */ }
+      }
+      if (!confirmed) {
+        console.error('SafeKeepOS.powerAction: signal "' + action + '" NOT confirmed on disk after 5s.');
+      }
+    } else {
+      // Dev host / website: no daemon to read the file — preserve legacy timing.
+      await _sleep(500);
+      confirmed = true;
+    }
+
+    // For 'lock', refuse to close the kiosk on an unconfirmed signal. Closing
+    // would let the daemon default to poweroff — turning a failed lock into a
+    // surprise shutdown. Leaving the (still-unlocked) session open is strictly
+    // safer: the user simply retries. poweroff/reboot close regardless, since
+    // their fallback is the action the user asked for anyway.
+    if (action === 'lock' && !confirmed) {
+      return false;
+    }
+
+    try { window.close(); } catch (_) {}
+    return confirmed;
   }
 
   /**

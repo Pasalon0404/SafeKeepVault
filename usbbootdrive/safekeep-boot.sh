@@ -2052,7 +2052,10 @@ except Exception as e:
 
     # Default action: poweroff (safe fallback — destroys RAM contents).
     POWER_ACTION="poweroff"
+    PA_FILE_EXISTED="no"
+    REQUESTED=""
     if [ -f "$POWER_ACTION_READ_PATH" ]; then
+        PA_FILE_EXISTED="yes"
         # Read the first line and trim whitespace/newlines.
         REQUESTED=$(head -n 1 "$POWER_ACTION_READ_PATH" 2>/dev/null | tr -d '[:space:]')
         case "$REQUESTED" in
@@ -2071,6 +2074,33 @@ except Exception as e:
         echo "No POWER_ACTION.txt found — defaulting to poweroff (safe fallback)."
     fi
     echo "Power sequence: $POWER_ACTION"
+
+    # ── Persistent power-action diagnostic ──
+    # /tmp is RAM-backed and is destroyed on poweroff, so when a lock unexpectedly
+    # powers the box off there is no log left to inspect. Persist exactly what the
+    # daemon evaluated to the ext4 data partition (which survives poweroff). The
+    # data partition may have been unmounted by the unlock flow, so mount it
+    # best-effort first. Read after the fact from the "safekeep-data" partition:
+    #   /media/safekeep-data/safekeep-power-debug.log
+    if ! mountpoint -q "$DATA_MOUNT" 2>/dev/null; then
+        _PA_DBG_PART=$(blkid -L "$DATA_LABEL" 2>/dev/null || true)
+        if [ -n "$_PA_DBG_PART" ]; then
+            sudo mkdir -p "$DATA_MOUNT" 2>/dev/null || true
+            sudo mount "$_PA_DBG_PART" "$DATA_MOUNT" 2>/dev/null || true
+        fi
+    fi
+    if mountpoint -q "$DATA_MOUNT" 2>/dev/null; then
+        {
+            echo "=== power-action eval $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+            echo "read_path   : $POWER_ACTION_READ_PATH"
+            echo "file_existed: $PA_FILE_EXISTED"
+            echo "requested   : '${REQUESTED:-<none>}'"
+            echo "resolved    : '$POWER_ACTION'"
+            echo "chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
+        } >> "$DATA_MOUNT/safekeep-power-debug.log" 2>/dev/null || true
+        cp -a /tmp/safekeep-boot.log "$DATA_MOUNT/safekeep-boot.log" 2>/dev/null || true
+        sync
+    fi
 
     # ==================================================================
     #  SOFT-TEARDOWN LOCK  (POWER_ACTION = "lock")

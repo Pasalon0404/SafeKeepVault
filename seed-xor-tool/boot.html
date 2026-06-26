@@ -15317,8 +15317,26 @@ function vaultLock() {
         _lockShowTeardown();
         document.getElementById('vault-lock-overlay').style.display = 'block';
         console.log('[VAULT] True lock initiated — evicting LUKS keys + tearing down session.');
-        // Hands control to the daemon and closes Chromium (after a short flush delay).
-        try { window.SafeKeepOS.lock(); } catch (e) { console.error('[VAULT] lock() failed:', e); }
+        // lock() drops POWER_ACTION=lock, CONFIRMS it landed on disk, then closes
+        // Chromium. It resolves false ONLY if the signal could not be confirmed —
+        // in which case we must NOT leave the user staring at a stuck "Locking…"
+        // panel (Chromium stays open), and we must surface that the lock didn't
+        // take so they can retry. A failed lock never powers the box off.
+        Promise.resolve()
+            .then(function () { return window.SafeKeepOS.lock(); })
+            .then(function (ok) {
+                if (ok === false) {
+                    console.error('[VAULT] lock signal not confirmed — session NOT torn down.');
+                    showStatus('Lock failed: could not hand the lock signal to the daemon. Your session is unchanged — please try Lock again.', 'error');
+                    _lockShowChoice();
+                }
+                // ok === true → Chromium is closing; the daemon takes over.
+            })
+            .catch(function (e) {
+                console.error('[VAULT] lock() error:', e);
+                showStatus('Lock error: ' + (e && e.message ? e.message : e) + '. Your session is unchanged — please try again.', 'error');
+                _lockShowChoice();
+            });
         return;
     }
 
