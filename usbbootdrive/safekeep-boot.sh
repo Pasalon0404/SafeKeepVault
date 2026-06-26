@@ -2075,13 +2075,35 @@ except Exception as e:
     fi
     echo "Power sequence: $POWER_ACTION"
 
-    # ── Persistent power-action diagnostic ──
-    # /tmp is RAM-backed and is destroyed on poweroff, so when a lock unexpectedly
-    # powers the box off there is no log left to inspect. Persist exactly what the
-    # daemon evaluated to the ext4 data partition (which survives poweroff). The
-    # data partition may have been unmounted by the unlock flow, so mount it
-    # best-effort first. Read after the fact from the "safekeep-data" partition:
-    #   /media/safekeep-data/safekeep-power-debug.log
+    # ── Power-action telemetry (multi-sink, survives poweroff) ──
+    # Build the diagnostic string once, then write it everywhere that can
+    # outlive a poweroff. /tmp is RAM-backed and lost on power-off, so it is
+    # useless for diagnosing a lock that powers the box off.
+    _PA_DIAG="=== power-action eval $(date -u +%Y-%m-%dT%H:%M:%SZ) ===
+read_path   : $POWER_ACTION_READ_PATH
+file_existed: $PA_FILE_EXISTED
+requested   : '${REQUESTED:-<none>}'
+resolved    : '$POWER_ACTION'
+chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
+    echo "$_PA_DIAG"
+
+    # Sink 1 — the ENCRYPTED VAULT. It is guaranteed mounted at this point (the
+    # user is in an unlocked session; the lock branch below has not unmounted yet
+    # and the poweroff fallthrough never unmounts). ext4-on-LUKS = persistent.
+    # Read after the fact, once you have unlocked again:
+    #     /media/.safekeep-vault/power-debug.log
+    if mountpoint -q "$VAULT_MOUNT" 2>/dev/null; then
+        printf '%s\n\n' "$_PA_DIAG" >> "$VAULT_MOUNT/power-debug.log" 2>/dev/null || true
+        cp -a /tmp/safekeep-boot.log "$VAULT_MOUNT/safekeep-boot.log" 2>/dev/null || true
+        sync
+    fi
+
+    # Sink 2 — the plaintext DATA partition (label "safekeep-data"). Lets you read
+    # the log by pulling the USB WITHOUT unlocking. It may have been unmounted by
+    # the unlock flow, so mount it best-effort first. NOTE the real path is
+    # /mnt/safekeep-data (NOT /media/safekeep-data). When you pull the USB and
+    # mount the "safekeep-data" partition on another computer, the file is at the
+    # PARTITION ROOT: <mountpoint>/safekeep-power-debug.log
     if ! mountpoint -q "$DATA_MOUNT" 2>/dev/null; then
         _PA_DBG_PART=$(blkid -L "$DATA_LABEL" 2>/dev/null || true)
         if [ -n "$_PA_DBG_PART" ]; then
@@ -2090,16 +2112,23 @@ except Exception as e:
         fi
     fi
     if mountpoint -q "$DATA_MOUNT" 2>/dev/null; then
-        {
-            echo "=== power-action eval $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
-            echo "read_path   : $POWER_ACTION_READ_PATH"
-            echo "file_existed: $PA_FILE_EXISTED"
-            echo "requested   : '${REQUESTED:-<none>}'"
-            echo "resolved    : '$POWER_ACTION'"
-            echo "chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
-        } >> "$DATA_MOUNT/safekeep-power-debug.log" 2>/dev/null || true
+        printf '%s\n\n' "$_PA_DIAG" >> "$DATA_MOUNT/safekeep-power-debug.log" 2>/dev/null || true
         cp -a /tmp/safekeep-boot.log "$DATA_MOUNT/safekeep-boot.log" 2>/dev/null || true
         sync
+    fi
+
+    # Sink 3 — ON SCREEN, only when the signal is MISSING. file_existed=no means
+    # Chromium exited without leaving a POWER_ACTION.txt, so the daemon is about
+    # to take its default (poweroff) — i.e. the lock signal never arrived. X is
+    # still up here, so surface it in a blocking zenity dialog the user can read
+    # and photograph BEFORE the box powers off. A normal poweroff/reboot/lock
+    # (file_existed=yes) skips this entirely.
+    if [ "$PA_FILE_EXISTED" = "no" ]; then
+        echo "Power-action: SIGNAL MISSING — no POWER_ACTION.txt at $POWER_ACTION_READ_PATH; defaulting to '$POWER_ACTION'."
+        export DISPLAY="${DISPLAY:-:0}"
+        export XAUTHORITY="${XAUTHORITY:-/root/.Xauthority}"
+        zenity --warning --title="SafeKeep — Lock Signal Missing" --width=560 \
+            --text="The power-action signal file was NOT found, so SafeKeep is about to POWER OFF by default.\n\nThis means the browser closed without writing the lock signal.\n\n$_PA_DIAG\n\nA copy was saved to the vault (/media/.safekeep-vault/power-debug.log) and, if available, the safekeep-data partition." 2>/dev/null || true
     fi
 
     # ==================================================================
