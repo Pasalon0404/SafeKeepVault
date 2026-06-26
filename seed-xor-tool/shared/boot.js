@@ -2023,6 +2023,12 @@ const SafeKeepOS = (() => {
     if (isBootDrive()) {
       const url = `file://${MASTER_SEED_DIR}/${POWER_ACTION_FILE}`;
       for (let i = 0; i < 25 && !confirmed; i++) {   // up to ~5 s (25 × 200 ms)
+        // Re-fire the download periodically. Chromium's download pipeline is
+        // asynchronous and can drop or stall a single Blob write; retrying
+        // every ~1 s makes the signal self-healing rather than one-shot.
+        if (i > 0 && i % 5 === 0) {
+          try { _rawBlobDownload(POWER_ACTION_FILE, action + '\n'); } catch (_) {}
+        }
         await _sleep(200);
         try {
           const r = await fetch(url, { cache: 'no-store' });

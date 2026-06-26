@@ -2050,8 +2050,19 @@ except Exception as e:
         sync
     fi
 
-    # Default action: poweroff (safe fallback — destroys RAM contents).
-    POWER_ACTION="poweroff"
+    # ── Default action: LOCK (NOT poweroff) ──
+    # A lost / garbled / never-written signal must NEVER auto-power-off the box.
+    # The power-action file arrives via Chromium's asynchronous download
+    # pipeline (the only file-write path a sandbox-less-but-still-browser
+    # renderer has — fetch/XHR to file:// are read-only and there is no Node fs
+    # bridge). If Chromium exits before that download flushes, the file is
+    # absent — and defaulting to poweroff turned every such miss into a
+    # shutdown. That is exactly the Lock-powers-off bug. We now default to
+    # 'lock': on a missing/unknown signal we evict the LUKS keys and return to
+    # the native unlock prompt (safe — Chromium's heap is already freed on exit,
+    # and lock is strictly less destructive than poweroff). An EXPLICIT
+    # 'poweroff'/'reboot' that actually lands still powers off / reboots.
+    POWER_ACTION="lock"
     PA_FILE_EXISTED="no"
     REQUESTED=""
     if [ -f "$POWER_ACTION_READ_PATH" ]; then
@@ -2063,7 +2074,7 @@ except Exception as e:
                 POWER_ACTION="$REQUESTED"
                 ;;
             *)
-                echo "Power-action file contained unrecognised value '$REQUESTED' — defaulting to poweroff."
+                echo "Power-action file contained unrecognised value '$REQUESTED' — defaulting to lock (never auto-poweroff)."
                 ;;
         esac
         # Shred and remove the signal file so nothing persists. On tmpfs
@@ -2071,7 +2082,7 @@ except Exception as e:
         # cheap insurance against stale signals on next boot.
         shred -u "$POWER_ACTION_READ_PATH" 2>/dev/null || rm -f "$POWER_ACTION_READ_PATH" 2>/dev/null || true
     else
-        echo "No POWER_ACTION.txt found — defaulting to poweroff (safe fallback)."
+        echo "No POWER_ACTION.txt found — defaulting to lock (never auto-poweroff on a lost signal)."
     fi
     echo "Power sequence: $POWER_ACTION"
 
@@ -2124,11 +2135,12 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
     # and photograph BEFORE the box powers off. A normal poweroff/reboot/lock
     # (file_existed=yes) skips this entirely.
     if [ "$PA_FILE_EXISTED" = "no" ]; then
-        echo "Power-action: SIGNAL MISSING — no POWER_ACTION.txt at $POWER_ACTION_READ_PATH; defaulting to '$POWER_ACTION'."
+        echo "Power-action: SIGNAL MISSING — no POWER_ACTION.txt at $POWER_ACTION_READ_PATH; defaulting to '$POWER_ACTION' (lock, never poweroff)."
         export DISPLAY="${DISPLAY:-:0}"
         export XAUTHORITY="${XAUTHORITY:-/root/.Xauthority}"
-        zenity --warning --title="SafeKeep — Lock Signal Missing" --width=560 \
-            --text="The power-action signal file was NOT found, so SafeKeep is about to POWER OFF by default.\n\nThis means the browser closed without writing the lock signal.\n\n$_PA_DIAG\n\nA copy was saved to the vault (/media/.safekeep-vault/power-debug.log) and, if available, the safekeep-data partition." 2>/dev/null || true
+        # Best-effort, auto-dismissing (--timeout) so it can NEVER hang the lock.
+        zenity --info --title="SafeKeep — Locking (signal not received)" --width=560 --timeout=15 \
+            --text="The browser closed without leaving a power-action signal, so SafeKeep is LOCKING by default — it will NOT power off. Re-enter your vault passphrase at the prompt.\n\n$_PA_DIAG\n\nSaved to /media/.safekeep-vault/power-debug.log (and the safekeep-data partition if available)." 2>/dev/null || true
     fi
 
     # ==================================================================
