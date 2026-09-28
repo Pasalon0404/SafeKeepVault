@@ -9458,7 +9458,7 @@
             <h2 class="tool-hero-title">Shamir<span>Backup</span></h2>
             <p class="tool-hero-subtitle">SLIP-39 Shamir Backup</p>
             <p class="tool-hero-desc">Split your master seed into threshold shares using Shamir's Secret Sharing. You can recover your master seed phase with fewer than all shares — e.g., any 2-of-3 or 3-of-5. Each share alone reveals nothing about the original seed.</p>
-            <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>Trezor Model T or SLIP-39 compatible tools</span></p>
+            <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>SafeKeepVault&rsquo;s Shamir Recovery tool. These shares encode your BIP-39 seed &mdash; restoring them directly on a Trezor or other SLIP-39 wallet opens a <em>different, empty</em> wallet.</span></p>
         </div>
 
         <!-- ======= SPLIT TAB ======= -->
@@ -18895,6 +18895,166 @@ function _psbtDetectMultisig(allEntries, outputObj) {
 }
 
 /**
+ * Prove that a multisig change output returns to the SAME wallet the
+ * transaction's inputs are spent from.
+ *
+ * _psbtVerifyMultisigChange only proves the change script is a multisig that
+ * contains OUR key, using cosigner pubkeys the PSBT itself supplies. That is
+ * not enough: a compromised coordinator can route change to a quorum such as
+ * 2-of-3 {us, attacker, attacker} or 1-of-2 {us, attacker}; it reconstructs
+ * perfectly and our key is in it. This function closes that hole.
+ *
+ * Why the inputs are the trust anchor: every input's witnessScript must hash
+ * to its UTXO's scriptPubKey, and our signature commits to that script. If a
+ * coordinator lies about an input's quorum, the transaction it gets back is
+ * invalid on-chain — so whenever a signed transaction CAN move funds, the
+ * input quorums below are the real wallet.
+ *
+ * Checks, in order:
+ *   1. Every input is a standard multisig whose witnessScript matches its UTXO,
+ *      and all inputs share one M-of-N.
+ *   2. The change has the same M and N (needs no metadata; cannot be spoofed).
+ *   3. Every input cosigner pubkey derives from one of the PSBT's global xpubs
+ *      (PSBT_GLOBAL_XPUB) at its declared path — binding each xpub to a real
+ *      wallet key. Forging an xpub that derives to a given real pubkey is
+ *      computationally infeasible.
+ *   4. Every change cosigner pubkey derives from that SAME proven xpub set.
+ *
+ * Returns { status: 'proven' | 'contradicted' | 'unprovable', detail }.
+ *   proven       → change provably returns to the spending wallet
+ *   contradicted → provably NOT the spending wallet (hijack — block signing)
+ *   unprovable   → metadata insufficient (e.g. no global xpubs) — never shown
+ *                  as verified; caller routes it to the acknowledgment gate
+ */
+function _psbtMultisigWalletBinding(btcLib, tx, outputObj, changeEntries, actualScript) {
+    const HDKeyLib = window.BtcMath.HDKey;
+    const eq = _psbtScriptsEqual;
+    const hex = (b) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+    const u32 = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
+    const unprovable = (detail) => ({ status: 'unprovable', detail });
+    const contradicted = (detail) => ({ status: 'contradicted', detail });
+
+    // Decode a witnessScript as standard multisig and confirm `script`
+    // (native P2WSH or P2SH-P2WSH) actually commits to it.
+    function quorumFor(ws, script) {
+        if (!ws || !script) return null;
+        let q;
+        try { q = btcLib.OutScript.decode(ws); } catch (_) { return null; }
+        if (!q || q.type !== 'ms' || !q.pubkeys || !q.pubkeys.length) return null;
+        let native, nested;
+        try {
+            const wsh = btcLib.p2wsh(btcLib.p2ms(q.m, q.pubkeys));
+            native = wsh.script;
+            nested = btcLib.p2sh(wsh).script;
+        } catch (_) { return null; }
+        if (!eq(native, script) && !eq(nested, script)) return null;
+        return { m: q.m, pubkeys: q.pubkeys };
+    }
+
+    // ---- 1. Wallet quorum from the inputs ----
+    const nIn = tx.inputsLength || 0;
+    if (nIn === 0) return unprovable('The transaction has no inputs to anchor the wallet.');
+    const inputs = [];
+    let inM = null, inN = null;
+    for (let k = 0; k < nIn; k++) {
+        const inp = tx.getInput(k);
+        const utxoScript = inp && inp.witnessUtxo && inp.witnessUtxo.script;
+        const q = quorumFor(inp && inp.witnessScript, utxoScript);
+        if (!q) return unprovable('Input ' + (k + 1) + ' is not a standard multisig input whose witnessScript matches its UTXO, so the wallet being spent cannot be established.');
+        if (inM === null) { inM = q.m; inN = q.pubkeys.length; }
+        else if (q.m !== inM || q.pubkeys.length !== inN) {
+            return unprovable('The inputs come from multisig wallets with different quorums.');
+        }
+        inputs.push({ q, entries: _psbtGetDerivEntries(inp.bip32Derivation) });
+    }
+
+    // ---- 2. Change must have the wallet's M-of-N ----
+    const chg = quorumFor(outputObj && outputObj.witnessScript, actualScript);
+    if (!chg) return unprovable('The change witnessScript is missing, non-standard, or does not match the output script.');
+    if (chg.m !== inM || chg.pubkeys.length !== inN) {
+        return contradicted('This change output is a ' + chg.m + '-of-' + chg.pubkeys.length +
+            ' multisig, but the coins being spent are ' + inM + '-of-' + inN +
+            '. It does not return to your wallet.');
+    }
+
+    // ---- 3/4. xpub-level binding ----
+    const gx = (tx.global && tx.global.xpub) || [];
+    if (!gx.length) {
+        return unprovable('The PSBT carries no global xpubs, so the change cosigners cannot be proven to match the wallet being spent.');
+    }
+    const xpubs = [];
+    for (const item of gx) {
+        const raw = item && item[0], d = item && item[1];
+        if (!raw || raw.length !== 78 || !d || !d.path) continue;
+        try {
+            const hd = new HDKeyLib({
+                depth: raw[4],
+                parentFingerprint: u32(raw, 5),
+                index: u32(raw, 9),
+                chainCode: raw.slice(13, 45),
+                publicKey: raw.slice(45, 78)
+            });
+            xpubs.push({ hd, fp: _psbtNormalizeFp(d.fingerprint), path: d.path, id: hex(raw.slice(13, 78)) });
+        } catch (_) { /* malformed xpub entry — skip */ }
+    }
+    if (!xpubs.length) return unprovable('The PSBT’s global xpubs could not be parsed.');
+
+    // Map a pubkey to the id of the global xpub it provably derives from,
+    // using that pubkey's own derivation entry (fingerprint + full path).
+    function resolve(pub, entries) {
+        const e = entries.find(x => x.pubKey && eq(x.pubKey, pub));
+        if (!e || !e.path) return null;
+        const efp = _psbtNormalizeFp(e.fingerprint);
+        for (const x of xpubs) {
+            if (x.fp !== efp || e.path.length < x.path.length) continue;
+            let prefixOk = true;
+            for (let t = 0; t < x.path.length; t++) {
+                if ((e.path[t] >>> 0) !== (x.path[t] >>> 0)) { prefixOk = false; break; }
+            }
+            if (!prefixOk) continue;
+            const rel = e.path.slice(x.path.length);
+            if (rel.some(c => (c >>> 0) >= 0x80000000)) continue; // hardened: not derivable from an xpub
+            try {
+                let c = x.hd;
+                for (const r of rel) c = c.deriveChild(r >>> 0);
+                if (eq(c.publicKey, pub)) return x.id;
+            } catch (_) { /* derivation failed — try next xpub */ }
+        }
+        return null;
+    }
+
+    let walletSet = null;
+    for (const inp of inputs) {
+        const ids = inp.q.pubkeys.map(p => resolve(p, inp.entries));
+        if (ids.some(id => !id)) {
+            return unprovable('Not every input cosigner key could be derived from the PSBT’s global xpubs.');
+        }
+        const set = new Set(ids);
+        if (set.size !== inN) return unprovable('An input’s cosigner keys do not map to ' + inN + ' distinct xpubs.');
+        if (!walletSet) walletSet = set;
+        else if (set.size !== walletSet.size || ![...set].every(id => walletSet.has(id))) {
+            return unprovable('The inputs come from different multisig wallets.');
+        }
+    }
+
+    const changeIds = chg.pubkeys.map(p => resolve(p, changeEntries));
+    if (changeIds.some(id => !id)) {
+        const hasAllEntries = chg.pubkeys.every(p => changeEntries.some(e => e.pubKey && eq(e.pubKey, p)));
+        return hasAllEntries
+            ? contradicted('One or more change cosigner keys do not derive from your wallet’s xpubs. This change output does not return to your wallet.')
+            : unprovable('The change output omits derivation data for some cosigner keys.');
+    }
+    const changeSet = new Set(changeIds);
+    if (changeSet.size !== walletSet.size || ![...changeSet].every(id => walletSet.has(id))) {
+        return contradicted('The change cosigner keys come from a different set of xpubs than the coins being spent. This change output does not return to your wallet.');
+    }
+    return {
+        status: 'proven',
+        detail: 'Bound to the spending wallet: same ' + inM + '-of-' + inN + ' quorum, every cosigner key derived from the PSBT’s global xpubs.'
+    };
+}
+
+/**
  * Verify a multisig change output by reconstructing the full
  * M-of-N script from derived pubkeys.
  *
@@ -19676,30 +19836,31 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
                 return;
             }
 
-            // Check if any entry has branch index === 1 (BIP-44 change branch)
+            // Check if any entry has branch index === 1 (BIP-44 change branch).
+            // Collect EVERY change-claiming entry, then verify the one that
+            // belongs to OUR key. In a multisig PSBT each cosigner has an entry
+            // on the change output; the old first-match loop could pick a
+            // cosigner's entry and skip verification entirely (fingerprint
+            // mismatch), so legitimate multisig change went unverified.
             let isChangeClaim = false;
             let changeEntry = null;
+            const changeCandidates = [];
             for (const entry of allEntries) {
-                if (entry.path && entry.path.length >= 4) {
-                    // path: [purpose', coinType', account', branch, index]
-                    // Branch is at index 3 (0-based), value 1 = change
-                    const branch = entry.path[3] >>> 0;
-                    if (branch === 1) {
-                        isChangeClaim = true;
-                        changeEntry = entry;
-                        break;
-                    }
-                }
-                // For shorter paths, conservatively treat derivation presence as change claim
-                if (!isChangeClaim && entry.path && entry.path.length >= 2) {
-                    // Could be a non-standard path — check last two components
-                    const secondLast = entry.path[entry.path.length - 2] >>> 0;
-                    if (secondLast === 1) {
-                        isChangeClaim = true;
-                        changeEntry = entry;
-                        break;
-                    }
-                }
+                if (!entry.path) continue;
+                // path: [purpose', coinType', account', branch, index] — branch
+                // at index 3, value 1 = change. For other shapes, a second-to-
+                // last component of 1 is conservatively treated as a claim.
+                const claimsChange =
+                    (entry.path.length >= 4 && (entry.path[3] >>> 0) === 1) ||
+                    (entry.path.length >= 2 && (entry.path[entry.path.length - 2] >>> 0) === 1);
+                if (claimsChange) changeCandidates.push(entry);
+            }
+            if (changeCandidates.length > 0) {
+                isChangeClaim = true;
+                changeEntry =
+                    changeCandidates.find(e => _psbtNormalizeFp(e.fingerprint) === myFingerprint) ||
+                    changeCandidates.find(e => _psbtNormalizeFp(e.fingerprint) === PSBT_WILDCARD_FP) ||
+                    changeCandidates[0];
             }
 
             // Not claiming to be change? It has derivation data (could be a
@@ -19732,12 +19893,20 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
             }
 
             if (entryFp && entryFp !== myFingerprint && !isWildcard) {
-                // Fingerprint doesn't match our key — can't verify
+                // No derivation entry on this output belongs to OUR key (entries
+                // with our fingerprint are preferred above), so nothing proves
+                // these funds come back to us. A compromised coordinator can tag
+                // its OWN address as "change" under a foreign fingerprint to dodge
+                // the hijack check. Treat the output as what it provably is — an
+                // outgoing payment — so it requires the mandatory "I have
+                // independently verified" checkbox instead of rendering as a
+                // passive, ungated change card.
                 results.push({
                     index: i, amount: amt, address: addr,
-                    category: 'unverified-change',
+                    category: 'destination',
+                    changeClaimRejected: true,
                     derivPath: pathStr,
-                    auditDetail: `Fingerprint mismatch: PSBT says ${entryFp}, your key is ${myFingerprint}. Cannot verify.`
+                    auditDetail: `The PSBT labels this output as change for key ${entryFp}, but that is not your key (${myFingerprint}). SafeKeep cannot prove it returns to you, so it is treated as a payment.`
                 });
                 return;
             }
@@ -19887,13 +20056,43 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
                     );
 
                     if (msResult.verified) {
-                        // VERIFIED multisig change
-                        results.push({
-                            index: i, amount: amt, address: addr,
-                            category: 'verified-change',
-                            derivPath: pathStr,
-                            auditDetail: msResult.detail
-                        });
+                        // The script reconstructs and contains OUR key — but on
+                        // its own that only proves the change is SOME multisig
+                        // we are part of. A compromised coordinator could route
+                        // change to a 2-of-3 {us, attacker, attacker} or a 1-of-2
+                        // {us, attacker} and it would reconstruct perfectly.
+                        // Bind it to the wallet actually being spent.
+                        const binding = _psbtMultisigWalletBinding(
+                            btcLib, tx, out, allEntries, actualScript
+                        );
+                        if (binding.status === 'proven') {
+                            results.push({
+                                index: i, amount: amt, address: addr,
+                                category: 'verified-change',
+                                derivPath: pathStr,
+                                auditDetail: msResult.detail + ' ' + binding.detail
+                            });
+                        } else if (binding.status === 'contradicted') {
+                            hijackOutputs.push(i);
+                            console.error(`[PSBT-AUDIT] MULTISIG WALLET HIJACK: Output ${i} — ${binding.detail}`);
+                            results.push({
+                                index: i, amount: amt, address: addr,
+                                category: 'hijack',
+                                derivPath: pathStr,
+                                auditDetail: 'CRITICAL: ' + binding.detail
+                            });
+                        } else {
+                            // Unprovable (e.g. no global xpubs). Never a green
+                            // check — require the explicit acknowledgment gate.
+                            metadataMissingOutputs.push(i);
+                            console.warn(`[PSBT-AUDIT] Output ${i} multisig change not bound to the spending wallet — ${binding.detail}`);
+                            results.push({
+                                index: i, amount: amt, address: addr,
+                                category: 'unverified-change',
+                                derivPath: pathStr,
+                                auditDetail: 'UNVERIFIED: ' + binding.detail + ' The change quorum includes your key, but SafeKeep cannot prove its other cosigners are your wallet’s cosigners. Verify this change address on an independent device before signing.'
+                            });
+                        }
                     } else if (msResult.metadataMissing) {
                         // DIET PSBT: metadata is insufficient for trustless
                         // verification. Do NOT hijack — downgrade to a soft
@@ -20010,11 +20209,17 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
                 const expectedScript = _psbtExpectedScript(btcLib, child.publicKey, addrType);
 
                 if (!expectedScript) {
+                    // Path purpose isn't one we can turn into a script (e.g. a
+                    // non-standard m/99'/…), so ownership is unprovable. This
+                    // must NOT become ungated "change": an attacker could pair
+                    // OUR fingerprint with an unknown purpose to bypass the
+                    // hijack comparison. Treat it as an outgoing payment.
                     results.push({
                         index: i, amount: amt, address: addr,
-                        category: 'unverified-change',
+                        category: 'destination',
+                        changeClaimRejected: true,
                         derivPath: pathStr,
-                        auditDetail: `Could not generate expected script for type "${addrType}".`
+                        auditDetail: `The PSBT labels this output as change (${pathStr}), but SafeKeep cannot derive an address type from that path to prove it returns to you, so it is treated as a payment.`
                     });
                     return;
                 }
@@ -20071,11 +20276,14 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
                 }
             } catch (derivErr) {
                 console.error(`[PSBT-AUDIT] Derivation failed for output ${i}:`, derivErr);
+                // Unprovable ownership → outgoing payment (see the no-script
+                // branch above for why this must not be ungated change).
                 results.push({
                     index: i, amount: amt, address: addr,
-                    category: 'unverified-change',
+                    category: 'destination',
+                    changeClaimRejected: true,
                     derivPath: pathStr,
-                    auditDetail: `Derivation error: ${derivErr.message}`
+                    auditDetail: `The PSBT labels this output as change, but deriving your key at that path failed (${derivErr.message}), so it is treated as a payment.`
                 });
             }
         });
@@ -20211,10 +20419,18 @@ function _psbtBuildReviewHtml(tx, auditResult) {
                 ? `<div class="psbt-sp-resolved"><span class="psbt-sp-resolved__label">Resolves to on-chain address (cryptographically verified)</span><span class="psbt-sp-resolved__addr">${_psbtEscape(out.taprootAddr)}</span></div>`
                 : '';
 
+            // An output the PSBT called "change" but that SafeKeep could not
+            // prove returns to this seed. Say so plainly — this is exactly how
+            // a compromised coordinator would try to disguise a theft.
+            const claimNote = out.changeClaimRejected
+                ? `<div style="margin: 0.4rem 0; padding: 0.45rem 0.6rem; border-left: 3px solid var(--skb-danger); background: rgba(220, 38, 38, 0.08); font-size: 0.8rem; line-height: 1.45;"><strong>&#9888; Labelled as change, but NOT proven to be yours.</strong> ${_psbtEscape(out.auditDetail || '')} If this is not an address you intend to pay, do not sign.</div>`
+                : '';
+
             outputsHtml += `
                 <div class="psbt-verify-card${out.silentPayment ? ' psbt-verify-card--sp' : ''}" id="${cardId}" data-dest-index="${idx}">
                     <span class="psbt-verify-card__label">SENDING TO &mdash; Destination ${idx + 1} of ${destinations.length} ${spBadge}</span>
                     <div class="psbt-verify-card__addr">${addr}</div>
+                    ${claimNote}
                     ${spResolved}
                     <div class="psbt-verify-card__row">
                         <div class="psbt-verify-card__col">
@@ -36941,15 +37157,15 @@ async function auth_verify() {
             // `format: 'der'`: Bitcoin signatures are DER-encoded; noble
             // defaults to 64-byte compact form which would reject a valid
             // BIP-322 sig as "wrong length".
-            // `lowS: false`: BIP-322 inherits Bitcoin Core's behavior of
-            // accepting either S half during verification (Core only
-            // *produces* low-S sigs; verification is permissive). We do
-            // not need to enforce malleability resistance here because
-            // the signature is bound to the message via the digest, not
-            // hashed elsewhere.
+            // `lowS: true`: the finalized BIP-322 (v1.0.0, 2026-04) lists
+            // LOW_S among its REQUIRED verification rules — a high-S ECDSA
+            // signature must be reported invalid. (A high-S sig can only be
+            // made by malleating a genuine signature from the same key, so
+            // this is conformance, not a forgery fix; our own signer only
+            // ever produces low-S.)
             var ok = false;
             try {
-                ok = secp.verify(derSig, sighash, pubkey, { prehash: false, format: 'der', lowS: false });
+                ok = secp.verify(derSig, sighash, pubkey, { prehash: false, format: 'der', lowS: true });
             } catch (e) {
                 throw new Error('Signature failed to parse as DER ECDSA: ' + e.message);
             }
@@ -38551,7 +38767,10 @@ async function s39_printShare(index) {
         qrBlockHtml +
         '  <div class="box">' +
         '    <div class="box-label">Recovery</div>' +
-        '    <div class="note">This is one piece of a Shamir secret-sharing split. Any ' + m + ' of the ' + n + ' total shares reconstruct the master seed via SLIP-39 recovery. The fingerprint + checksum word identify which master these shares belong to.</div>' +
+        '    <div class="note">This is one piece of a Shamir secret-sharing split. Any ' + m + ' of the ' + n + ' total shares reconstruct your BIP-39 master seed. The fingerprint + checksum word identify which master these shares belong to.<br><br>' +
+        '<strong>How to recover:</strong> use SafeKeepVault&rsquo;s Shamir Recovery tool, which rebuilds your original seed words. ' +
+        '<strong>Do NOT restore these shares directly on a Trezor or other SLIP-39 wallet</strong> &mdash; that opens a different, empty wallet (your funds are not lost). ' +
+        'Without SafeKeepVault: any SLIP-39 tool that outputs the raw &ldquo;master secret&rdquo; will work &mdash; that secret IS your BIP-39 entropy; convert it to words with any offline BIP-39 tool and confirm the fingerprint above.</div>' +
         '  </div>' +
         '  <div class="ftr"><span>SafeKeep SLIP-39 Share Backup</span><span>' + dateStr + '</span></div>' +
         '  <div class="noprint" style="margin-top:18px; text-align:center;">' +
