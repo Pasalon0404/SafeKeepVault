@@ -61,18 +61,18 @@ function ctxFor(values, extra = {}) { const { document } = makeDom(values); let 
 function merge(shares) { const vals = {}; shares.forEach((m, s) => m.split(' ').forEach((w, i) => vals['xor-mg-' + s + '-word-' + i] = w));
   const { ctx, status } = ctxFor(vals, { xor_state: { mergeShares: shares.length, mergeLength: shares[0].split(' ').length } });
   vm.runInContext(extract('xor_handleMerge'), ctx); ctx.xor_handleMerge(); return { seed: ctx.xor_state.mergedSeed, status: status() }; }
-function recover(shares) { const vals = {}; shares.forEach((m, s) => m.split(' ').forEach((w, i) => vals['xrr-' + s + '-word-' + i] = w));
+async function recover(shares) { const vals = {}; shares.forEach((m, s) => m.split(' ').forEach((w, i) => vals['xrr-' + s + '-word-' + i] = w));
   const { ctx, status } = ctxFor(vals, { _xrrShareCount: shares.length, _xrrWordCount: shares[0].split(' ').length, _xrrRecoveredMnemonic: null });
-  vm.runInContext(extract('xrr_combine'), ctx); ctx.xrr_combine(); return { seed: ctx._xrrRecoveredMnemonic, status: status() }; }
+  vm.runInContext(extract('_recoveryFingerprint') + '\n' + extract('xrr_combine'), ctx); await ctx.xrr_combine(); return { seed: ctx._xrrRecoveredMnemonic, status: status() }; }
 async function split(seed, n) { const { ctx } = ctxFor({}, { xor_state: { loadedSeed: seed, shares: n } });
   vm.runInContext(['function _xorRenderShareCards(){}', extract('xor_handleSplit')].join('\n'), ctx);
   await ctx.xor_handleSplit(); return ctx.xor_state.generatedShares; }
 // ---- Official Coldcard vector through the app's merge + recovery code ----
 ck('merge(): Coldcard A^B^C', merge([CC.A, CC.B, CC.C]).seed === CC.R, JSON.stringify(merge([CC.A, CC.B, CC.C])));
 ck('merge(): order independent (C,A,B)', merge([CC.C, CC.A, CC.B]).seed === CC.R);
-ck('recovery xrr_combine(): Coldcard A^B^C', recover([CC.A, CC.B, CC.C]).seed === CC.R, JSON.stringify(recover([CC.A, CC.B, CC.C])));
+{ const r = await recover([CC.A, CC.B, CC.C]); ck('recovery xrr_combine(): Coldcard A^B^C', r.seed === CC.R, JSON.stringify(r)); }
 // wrong share -> must NOT silently return a seed that looks right
-const wrong = recover([CC.A, CC.B, 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art']);
+const wrong = await recover([CC.A, CC.B, 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art']);
 ck('recovery with a wrong share != real seed', wrong.seed !== CC.R);
 // bad-checksum share must be rejected (swap two words)
 const bad = CC.C.split(' '); [bad[0], bad[1]] = [bad[1], bad[0]];
@@ -88,7 +88,7 @@ if (Array.isArray(s0) && s0.length === 3) {
   for (const len of [16, 32]) for (const n of [2, 3, 4]) for (let t = 0; t < 150; t++) {
     const seed = bip39.entropyToMnemonic(randomBytes(len), wordlist);
     const sh = (await split(seed, n)).map(x => typeof x === 'string' ? x : (x.mnemonic || x.words || x.phrase));
-    const m1 = merge(sh).seed, m2 = recover(sh).seed; (m1 === seed && m2 === seed) ? rt++ : rtFail++;
+    const m1 = merge(sh).seed, m2 = (await recover(sh)).seed; (m1 === seed && m2 === seed) ? rt++ : rtFail++;
     const sub = merge(sh.slice(0, n - 1)).seed; if (sub === seed) { rtFail++; console.log('  subset of shares recovered the seed!'); }
   }
   ck(`split->merge->recover round trips (${rt}) 12/24w x 2/3/4 shares, subsets never recover`, rtFail === 0, rtFail + ' failures');

@@ -13433,7 +13433,21 @@ function xrr_validateAll() {
 }
 
 // --- Combine: XOR all shares ---
-function xrr_combine() {
+/**
+ * BIP-32 master fingerprint of a recovered mnemonic (no BIP-39 passphrase),
+ * uppercase — the same value printed as "Master Fingerprint" on SafeKeep's
+ * Seed XOR and SLIP-39 share cards. Used to confirm a recovery before it is
+ * committed to the vault.
+ */
+async function _recoveryFingerprint(mnemonic) {
+    var seed = await window.BtcMath.bip39.mnemonicToSeed(mnemonic, '');
+    var root = window.BtcMath.HDKey.fromMasterSeed(seed);
+    var fp = (root.fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase();
+    if (seed instanceof Uint8Array) seed.fill(0);
+    return fp;
+}
+
+async function xrr_combine() {
     try {
         var bip39 = window.BtcMath?.bip39;
         var wordlist = window.BtcMath?.wordlist;
@@ -13485,7 +13499,15 @@ function xrr_combine() {
 
         document.getElementById('xrr-result').style.display = 'block';
         document.getElementById('xrr-action-btns').style.display = 'none';
-        document.getElementById('xrr-status').textContent = 'Checksum valid. Master seed recovered successfully.';
+        // Honest wording: XOR-ing valid shares ALWAYS yields a valid checksum,
+        // so this proves nothing about correctness — the fingerprint does.
+        try {
+            var _xrrFp = await _recoveryFingerprint(mergedMnemonic);
+            document.getElementById('xrr-status').textContent = 'Shares combined. Recovered seed fingerprint: ' + _xrrFp +
+                ' — confirm it matches the Master Fingerprint printed on your share cards before loading.';
+        } catch (_) {
+            document.getElementById('xrr-status').textContent = 'Shares combined. Confirm the fingerprint matches your share cards before loading.';
+        }
         document.getElementById('xrr-status').className = 'rst-status valid';
 
     } catch (e) {
@@ -13499,6 +13521,18 @@ async function xrr_loadIntoVault() {
     clearStatus();
 
     try {
+        // ── Fingerprint confirmation BEFORE committing ──
+        // XOR of ANY set of valid shares is itself a valid seed phrase, so a
+        // wrong or missing share cannot be detected by checksum. Compare with
+        // the Master Fingerprint printed on the XOR share cards.
+        var recFp = await _recoveryFingerprint(_xrrRecoveredMnemonic);
+        if (!confirm('Recovered seed fingerprint: ' + recFp + '\n\n' +
+                     'Does this match the "Master Fingerprint" printed on your Seed XOR share cards?\n\n' +
+                     'If it does NOT match, a share is wrong, missing, or mistyped. Press Cancel and check your shares.')) {
+            showStatus('Not loaded — fingerprint ' + recFp + ' was not confirmed. Check your shares and try again.', 'error');
+            return;
+        }
+
         // CIRCUIT BREAKER: ephemeral boot MUST NEVER call SafeKeepOS.
         var result = _isEphemeralBoot()
             ? await _ephemeralCommitSeed(_xrrRecoveredMnemonic)
@@ -15766,7 +15800,7 @@ async function vtmp_loadTempSeed() {
         if (el) words.push(el.value.trim().toLowerCase());
     }
     var mnemonic = words.join(' ');
-    var passphrase = (document.getElementById('vtmp-passphrase')?.value || '').trim();
+    var passphrase = document.getElementById('vtmp-passphrase')?.value || ''; // exact — BIP-39 passphrases are never trimmed
 
     try {
         var btc = window.BtcMath;
@@ -17888,7 +17922,15 @@ function _psbtShowDrivePicker(files) {
         btn.type = 'button';
         btn.setAttribute('data-psbt-drive-idx', String(i));
         btn.style.cssText = 'display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.45rem 0.65rem; margin-bottom: 0.3rem; background: rgba(247, 147, 26, 0.06); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8rem; cursor: pointer;';
-        btn.innerHTML = '<span>' + files[i].name + '</span><span style="font-size: 0.72rem; color: var(--skb-text-dim);">' + sizeKB + ' KB</span>';
+        // File names come from the transfer drive (untrusted) — build the label
+        // with textContent so a crafted name can never become markup.
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = files[i].name;
+        var sizeSpan = document.createElement('span');
+        sizeSpan.style.cssText = 'font-size: 0.72rem; color: var(--skb-text-dim);';
+        sizeSpan.textContent = sizeKB + ' KB';
+        btn.appendChild(nameSpan);
+        btn.appendChild(sizeSpan);
         listDiv.appendChild(btn);
     }
     wrap.appendChild(listDiv);
@@ -20558,8 +20600,18 @@ function _psbtBuildReviewHtml(tx, auditResult) {
             </div>
             <div class="psbt-review-row">
                 <span class="psbt-review-label">Fee Rate</span>
-                <span class="psbt-review-value">${auditResult.feeRate || '?'} sat/vB</span>
+                <span class="psbt-review-value">${auditResult.feeRate || '?'} sat/vB <span style="font-size: 0.72rem; opacity: 0.7;">(approx. &mdash; measured before signatures are added, so it reads high)</span></span>
             </div>`;
+        // Absurd-fee guard. A coordinator bug, a typo, or a malicious PSBT can
+        // set a fee of whole bitcoins; it would otherwise render like any other
+        // number. 5% of the value being spent is far above any normal fee.
+        const feeN = Number(auditResult.fee), inN = Number(auditResult.totalIn || 0n);
+        if (feeN < 0) {
+            feeHtml += `<div class="psbt-alert error" style="margin-top: 0.5rem;"><strong>&#9888; Invalid transaction:</strong> outputs exceed inputs by ${(-feeN).toLocaleString()} sats. Do not sign.</div>`;
+        } else if (inN > 0 && feeN * 20 >= inN) {
+            const pct = ((feeN / inN) * 100).toFixed(1);
+            feeHtml += `<div class="psbt-alert error" style="margin-top: 0.5rem;"><strong>&#9888; UNUSUALLY HIGH FEE:</strong> ${feeBtc} BTC is ${pct}% of the ${(inN / 1e8).toFixed(8)} BTC being spent. Normal fees are a tiny fraction of that. Confirm this fee on your coordinator before signing &mdash; if it is not what you intended, do not sign.</div>`;
+        }
     } else {
         feeHtml = `<div class="psbt-alert warning">Cannot calculate exact fee — some inputs lack witness UTXO data.</div>`;
     }
@@ -27463,7 +27515,7 @@ function desc_updateLocalKeyStatus() {
                 var bip39 = window.BtcMath?.bip39;
                 var HDKey = window.BtcMath?.HDKey;
                 if (!bip39 || !HDKey) return;
-                var pp = document.getElementById('desc-ms-passphrase')?.value?.trim() || '';
+                var pp = document.getElementById('desc-ms-passphrase')?.value || ''; // exact — never trim a BIP-39 passphrase
                 var seedBytes = await bip39.mnemonicToSeed(seed, pp);
                 var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
                 var fp = root.fingerprint.toString(16).padStart(8, '0').toUpperCase();
@@ -27641,7 +27693,11 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
     }
 
     var scriptType = desc_state.scriptType;
-    var passphrase = document.getElementById('desc-passphrase').value.trim();
+    // Do NOT trim: a BIP-39 passphrase is exact — a leading/trailing space is
+    // part of it and yields a different wallet. Every other tool (dashboard,
+    // Seed Management, BIP-85, PSBT Signer) uses the raw value, so trimming
+    // here showed a DIFFERENT wallet's descriptor than the one being signed.
+    var passphrase = document.getElementById('desc-passphrase').value || '';
 
     // ---- Silent Payment (BIP-352 / BIP-392) ----
     // A wholly different output type: a single static sp1q address + a BIP-392
@@ -27774,7 +27830,7 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
         throw new Error('Session seed is invalid (bad checksum).');
     }
 
-    var passphrase = document.getElementById('desc-ms-passphrase')?.value?.trim() || '';
+    var passphrase = document.getElementById('desc-ms-passphrase')?.value || ''; // exact — never trim a BIP-39 passphrase
     var seedBytes = await bip39.mnemonicToSeed(sessionSeed, passphrase);
     var rootNode = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
     var fingerprint = rootNode.fingerprint.toString(16).padStart(8, '0');
@@ -28076,7 +28132,7 @@ async function desc_printPDF() {
         // Passphrase
         var ppText = document.getElementById('desc-print-passphrase');
         var ppFpEl = document.getElementById('desc-print-pp-fingerprint');
-        var passphrase = document.getElementById('desc-passphrase')?.value?.trim() || '';
+        var passphrase = document.getElementById('desc-passphrase')?.value || ''; // exact — never trim a BIP-39 passphrase
 
         if (passphrase && ppBlock) {
             ppBlock.style.display = 'block';
@@ -28974,7 +29030,8 @@ async function desc_verify() {
         var btcSigner = window.BtcMath.btcSigner;
         if (!bip39 || !HDKey || !btcSigner) throw new Error('Core crypto libraries not loaded.');
 
-        var passphrase = document.getElementById('desc-verify-passphrase').value.trim();
+        // Exact passphrase — no trim (see desc-passphrase note above).
+        var passphrase = document.getElementById('desc-verify-passphrase').value || '';
         var seedBytes = await bip39.mnemonicToSeed(seed.mnemonic, passphrase);
         var rootNode = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
         var myFingerprint = rootNode.fingerprint.toString(16).padStart(8, '0').toLowerCase();
@@ -31712,7 +31769,14 @@ function rlq_classifyEntry(filename) {
  * Export (read-only → toast) variants.
  */
 function rlq_renderEntryButton(filename, kind) {
-    var safeName = filename.replace(/'/g, "\\'");
+    // The file name comes from the transfer drive — untrusted input. A stick
+    // formatted ext4 (unlike exFAT) permits < > " in names, so a booby-trapped
+    // name could inject markup/script into the kiosk page. HTML-escape it for
+    // both the attribute and the visible label, and never splice it into
+    // inline JavaScript: the click handler reads it back from the attribute.
+    var safeName = String(filename)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     var isExport = (kind === 'export');
     var isUnknown = (kind === 'unknown');
 
@@ -31751,7 +31815,7 @@ function rlq_renderEntryButton(filename, kind) {
 
     var clickAttr = isUnknown
         ? ''
-        : ' onclick="rlq_pickEntry(\'' + safeName + '\', \'' + kind + '\')"';
+        : ' onclick="rlq_pickEntry(this.getAttribute(\'data-rlq-entry-name\'), \'' + kind + '\')"';
 
     // Hover behaviour differs for unknown rows (no change) vs. clickable rows.
     var hoverIn = isUnknown
@@ -31768,7 +31832,7 @@ function rlq_renderEntryButton(filename, kind) {
            ' background: ' + BG_IDLE + '; border: 1px solid ' + BORDER + ';' +
            ' border-radius: var(--skb-radius-sm); color: var(--skb-text);' +
            ' font-family: var(--skb-mono); font-size: 0.82rem; cursor: ' + CURSOR + ';">' +
-           '<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + filename + '</span>' +
+           '<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + safeName + '</span>' +
            '<span style="flex: 0 0 auto; padding: 0.1rem 0.5rem; border-radius: 3px;' +
            ' font-family: var(--skb-mono); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;' +
            ' background: ' + LABEL_BG + '; color: ' + LABEL_COLOR + ';">' + LABEL_TEXT + '</span>' +
@@ -31831,7 +31895,7 @@ function rlq_pickEntry(filename, kind) {
             var buttons = listDiv.querySelectorAll('button[data-rlq-entry-kind="export"]');
             for (var i = 0; i < buttons.length; i++) {
                 var btn = buttons[i];
-                if (btn.getAttribute('data-rlq-entry-name') === filename.replace(/'/g, "\\'")) {
+                if (btn.getAttribute('data-rlq-entry-name') === filename) {
                     btn.style.background = 'rgba(3, 218, 198, 0.22)';
                     setTimeout((function(b) {
                         return function() { b.style.background = 'rgba(3, 218, 198, 0.06)'; };
@@ -31875,7 +31939,7 @@ function rlq_pickBackup(filename) {
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
             var btnName = btn.getAttribute('data-rlq-entry-name');
-            if (btnName === filename.replace(/'/g, "\\'")) {
+            if (btnName === filename) {
                 btn.classList.add('rlq-entry-selected');
                 btn.style.borderColor = 'var(--skb-primary)';
                 btn.style.background = 'rgba(187, 134, 252, 0.18)';
@@ -38079,6 +38143,22 @@ async function s39r_recover() {
         }
 
         var wordCount = mnemonic.trim().split(/\s+/).length;
+
+        // ── Fingerprint confirmation BEFORE committing ──
+        // SLIP-39 cannot detect a wrong passphrase: by design ANY passphrase
+        // decrypts to a valid-looking secret, and the BIP-39 checksum above is
+        // re-computed from that secret, so it always passes. A typo would
+        // silently install a different (empty) wallet as the master seed. The
+        // only real check is the Master Fingerprint printed on the share cards.
+        var recFp = await _recoveryFingerprint(mnemonic);
+        if (!confirm('Recovered seed fingerprint: ' + recFp + '\n\n' +
+                     'Does this match the "Master Fingerprint" printed on your SLIP-39 share cards?\n\n' +
+                     'If it does NOT match, the passphrase is almost certainly wrong (SLIP-39 cannot ' +
+                     'detect a wrong passphrase). Press Cancel and re-enter it.')) {
+            s39r_showLocalStatus('Recovery cancelled — fingerprint ' + recFp + ' was not confirmed. Nothing was written. Check the SLIP-39 passphrase and try again.', 'error');
+            return;
+        }
+
         s39r_showLocalStatus('Valid ' + wordCount + '-word BIP-39 mnemonic recovered. Writing to vault...', 'info');
 
         // Hand off to the hardened disk-write pipeline (same as rst_doRestore).
@@ -38547,6 +38627,11 @@ async function s39_generateShares() {
         // Validate threshold
         if (m < 1 || n < 2 || m > n || n > 16) {
             throw new Error('Invalid threshold: ' + m + '-of-' + n + '. M must be 1–N, N must be 2–16.');
+        }
+        if (m === 1) {
+            // SLIP-39 forbids 1-of-N: each "share" would simply BE the whole
+            // secret, so splitting adds risk (N copies) and no protection.
+            throw new Error('A threshold of 1 means every single share is a complete copy of your seed. SLIP-39 does not allow this — choose 2 or more shares required, or use an ordinary seed backup.');
         }
 
         // Call shamir-mnemonic-ts
