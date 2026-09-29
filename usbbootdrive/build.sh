@@ -138,9 +138,14 @@ sudo chattr -R -i "$STAGING_DIR" 2>/dev/null || true
 # safety in cleanup(), this gives two independent layers of
 # protection — the trap eagerly detaches, and rm refuses to cross
 # even if the trap fails.
+# The chroot is about to be rebuilt — it is no longer "complete" until the
+# marker below is re-written after hardening (quick-update.sh relies on this).
+# Remove the completion proofs FIRST, then the trees — so a build cancelled
+# mid-deletion can never leave "proof" next to a half-deleted chroot.
+rm -f "$WORKSPACE/.chroot-complete"
+rm -f "$OUTPUT_IMG"
 rm -rf --one-file-system "$CHROOT_DIR"
 rm -rf --one-file-system "$STAGING_DIR"
-rm -f "$OUTPUT_IMG"
 mkdir -p "$STAGING_DIR"
 mkdir -p "$APT_CACHE"
 mkdir -p "$APT_LISTS"
@@ -263,6 +268,9 @@ umount -l "$CHROOT_DIR/proc" 2>/dev/null || true
 umount -l "$CHROOT_DIR/sys" 2>/dev/null || true
 
 echo "Chroot configuration complete."
+# Mark the chroot as fully set up AND hardened — quick-update.sh refuses to
+# reuse a chroot without this (a cancelled build leaves a half-configured tree).
+date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE/.chroot-complete"
 
 # =====================================================================
 # PHASE 4: COMPRESS THE OS INTO SQUASHFS
