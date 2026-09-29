@@ -15263,7 +15263,17 @@ function vaultLock() {
     // unlock overlay here would just dead-end the user against a password
     // field that can't unlock anything. Hard-block with a reassuring
     // message that tells them what to do next.
-    if (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot()) {
+    //
+    // EXCEPTION (boot drive): the true lock no longer needs a mounted vault.
+    // The daemon's lock branch skips the unmount / luksClose (nothing is open),
+    // clears EPHEMERAL_MODE and re-execs into the native unlock prompt, where
+    // the user can choose the master vault. Closing Chromium also frees the
+    // temporary seed from RAM. So on the boot drive, Lock is the way BACK to
+    // the master seed from a Temporary session — no reboot needed. The old
+    // hard block only remains where no daemon teardown exists (dev/website).
+    var _trueLockAvailable = !!(window.SafeKeepOS && typeof window.SafeKeepOS.isBootDrive === 'function'
+        && window.SafeKeepOS.isBootDrive() && typeof window.SafeKeepOS.lock === 'function');
+    if (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot() && !_trueLockAvailable) {
         showStatus('The encrypted vault is unmounted during a Temporary session. Please reboot the device normally to access your saved vault.', 'error');
         return;
     }
@@ -15880,11 +15890,16 @@ function _updateSettingsLockBtn() {
             section.innerHTML =
                 '<h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.04em;">Temporary Session</h4>' +
                 '<p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.78rem; margin: 0 0 1rem; line-height: 1.6;">' +
-                'The encrypted vault stays unmounted for the life of this session. ' +
-                'Reboot normally to access your saved vault — or load a fresh seed ' +
-                'phrase in place. The current RAM-only seed and every derived key, ' +
-                'PSBT, and cached xpub will be wiped from memory first.' +
+                'The encrypted vault is not unlocked in this session. ' +
+                'Return to your master vault (you will re-enter its passphrase at the unlock prompt) ' +
+                '— or load a fresh seed phrase in place. Either way the current RAM-only seed and every ' +
+                'derived key, PSBT, and cached xpub are wiped from memory first.' +
                 '</p>' +
+                ((window.SafeKeepOS && typeof window.SafeKeepOS.lock === 'function')
+                    ? '<button type="button" id="settings-return-master-btn" class="btn-danger" ' +
+                      'style="border-color: var(--skb-primary); color: var(--skb-primary); margin-right: 0.5rem; margin-bottom: 0.5rem;" ' +
+                      'onclick="vaultLock()">RETURN TO MASTER VAULT</button>'
+                    : '') +
                 '<button type="button" id="settings-hotswap-btn" class="btn-danger" ' +
                 'style="border-color: var(--skb-primary); color: var(--skb-primary);" ' +
                 'onclick="ephemeralHotSwapSeed()">LOAD NEW TEMPORARY SEED PHRASE</button>';
