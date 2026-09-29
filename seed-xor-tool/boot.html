@@ -6683,7 +6683,7 @@
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.33b</span>
+                        <span class="version" id="dash-version">v1.34</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -14557,6 +14557,10 @@ function transitionToDashboard(seedData) {
     // seed (SHA-256 of the mnemonic). The same seed words always produce the
     // same phrase on every build/drive; independent of the BIP-39 passphrase.
     _updateDashVaultFingerprint(seedData && seedData.mnemonic ? seedData.mnemonic : '');
+
+    // Transfer Drive — mount silently via the Transfer Watcher bridge (no
+    // folder picker / permission prompt). Falls back to the manual button.
+    try { if (typeof _transferAutoMount === 'function') _transferAutoMount(); } catch (_) {}
 
     // Update sidebar seed status indicator
     _globalSeedStatusUpdate();
@@ -32293,9 +32297,82 @@ function _dashSyncMountStatus() {
 }
 
 /**
- * Mount: prompt user to select the Transfer Drive directory.
+ * Prompt-free Transfer Drive bridge (shared/transfer-drive.js).
+ *
+ * On the boot drive the TRANSFER partition is already mounted by
+ * safekeep-boot.sh, and its Transfer Watcher services reads/writes. We
+ * obtain a FileSystemDirectoryHandle look-alike from window.SKTransfer so
+ * every tool keeps using window.vaultTransferDriveHandle unchanged — but
+ * with no folder picker and no "Allow this site to edit files?" prompt.
+ *
+ * Returns the handle, or null when the bridge is unavailable (web build,
+ * watcher not running, partition missing) — callers then fall back to the
+ * legacy showDirectoryPicker flow.
+ */
+var _skxDevBackend = null;
+async function _transferBridgeHandle() {
+    var skx = window.SKTransfer;
+    if (!skx) return null;
+    try {
+        if (window.location.protocol === 'file:') {
+            var backend = await skx.daemonBackend();
+            return backend ? skx.makeHandle(backend) : null;
+        }
+        // Localhost dev server with the SafeKeepOS mock: in-memory drive so
+        // the prompt-free flow can be exercised without the daemon.
+        if (window.SafeKeepOS && window.SafeKeepOS._mockLabel) {
+            if (!_skxDevBackend) _skxDevBackend = skx.memoryBackend('TRANSFER (dev mock)');
+            return skx.makeHandle(_skxDevBackend);
+        }
+    } catch (e) {
+        console.warn('[TRANSFER] bridge unavailable:', e && e.message);
+    }
+    return null;
+}
+
+function _archiveAdoptHandle(handle) {
+    _archiveDirHandle = handle;
+    window.vaultTransferDriveHandle = handle;
+    var um = document.getElementById('archive-unmounted');
+    var mt = document.getElementById('archive-mounted');
+    var lb = document.getElementById('archive-dir-label');
+    if (um) um.style.display = 'none';
+    if (mt) mt.style.display = 'block';
+    if (lb) lb.textContent = 'TRANSFER:// ' + (handle.label || handle.name || 'unknown');
+    _dashSyncMountStatus();
+}
+
+/**
+ * Silent auto-mount — called whenever the dashboard is shown. No-op if the
+ * drive is already mounted or the bridge is unavailable (the manual
+ * "Mount Transfer Drive" button then remains as the fallback).
+ */
+var _transferAutoMountBusy = false;
+async function _transferAutoMount() {
+    if (window.vaultTransferDriveHandle || _transferAutoMountBusy) return;
+    _transferAutoMountBusy = true;
+    try {
+        var h = await _transferBridgeHandle();
+        if (h && !window.vaultTransferDriveHandle) {
+            _archiveAdoptHandle(h);
+            console.log('[TRANSFER] auto-mounted via Transfer Watcher → ' + (h.label || ''));
+        }
+    } finally {
+        _transferAutoMountBusy = false;
+    }
+}
+
+/**
+ * Mount: use the prompt-free bridge when available; otherwise prompt the
+ * user to select the Transfer Drive directory (legacy / web build).
  */
 async function archive_mount() {
+    var bridged = await _transferBridgeHandle();
+    if (bridged) {
+        _archiveAdoptHandle(bridged);
+        try { await archive_refresh(); } catch (_) {}
+        return;
+    }
     if (typeof window.showDirectoryPicker !== 'function') {
         showStatus('File System Access API not supported in this browser. Requires Chromium 86+.', 'error');
         return;
@@ -32574,6 +32651,14 @@ async function archive_commitRename(idx, newName) {
     }
 
     try {
+        // Prompt-free bridge: one atomic rename request (a single download,
+        // so Chromium's "multiple downloads" prompt can never trigger).
+        if (_archiveDirHandle.isSafeKeepTransfer && f.handle && typeof f.handle.move === 'function') {
+            await f.handle.move(newName);
+            showStatus('Renamed: ' + f.name + ' \u2192 ' + newName, 'success');
+            await archive_refresh();
+            return;
+        }
         // Read the original file contents
         var origFile = await f.handle.getFile();
         var contents = await origFile.arrayBuffer();
@@ -32668,6 +32753,12 @@ async function archive_transmit(idx) {
  * Initialize The Archive when navigated to.
  */
 function archive_init() {
+    // Prompt-free bridge: mount silently if not yet mounted, then re-init.
+    if (!_archiveDirHandle && typeof _transferAutoMount === 'function') {
+        _transferAutoMount().then(function () {
+            if (_archiveDirHandle) archive_init();
+        });
+    }
     // If we already have a directory handle, refresh the listing
     if (_archiveDirHandle) {
         document.getElementById('archive-unmounted').style.display = 'none';

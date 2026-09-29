@@ -761,12 +761,14 @@ launch_browser() {
     "DownloadDirectory": "$CHROMIUM_DOWNLOAD_DIR",
     "DefaultDownloadDirectory": "$CHROMIUM_DOWNLOAD_DIR",
     "PromptForDownloadLocation": false,
-    "AutomaticDownloadsAllowedForUrls": ["file://*"],
+    "AutomaticDownloadsAllowedForUrls": ["file://*", "file:///*"],
+    "DefaultAutomaticDownloadsSetting": 1,
     "DeveloperToolsAvailability": 2
 }
 POLICYEOF
     echo "Chromium policy: downloads → $CHROMIUM_DOWNLOAD_DIR"
     echo "Chromium policy: DevTools disallowed (DeveloperToolsAvailability=2)"
+    echo "Chromium policy: automatic (multiple) downloads allowed for file:// (no 'download multiple files' prompt)"
     echo "Power-action read path: $POWER_ACTION_READ_PATH"
 
     # Probe the vault for an existing master seed.
@@ -1390,6 +1392,163 @@ except Exception as e:
     ) &
     CODEX_WATCHER_PID=$!
     echo "Codex watcher daemon started (PID $CODEX_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
+    # TRANSFER WATCHER DAEMON — prompt-free Transfer Drive access
+    # -------------------------------------------------------------------
+    # Replaces the browser's File System Access API for the TRANSFER
+    # partition (which forced a folder picker + "Allow this site to edit
+    # files?" prompt on every boot). The frontend (shared/transfer-drive.js)
+    # talks to this watcher through files only:
+    #
+    #   state  → $SIGNAL_DIR/xfer/ready.txt   transfer mount path (absent = none)
+    #            $SIGNAL_DIR/xfer/index.txt   "SKX1" + lines hex(name)\tsize\tmtime
+    #            $SIGNAL_DIR/xfer/done-<id>.txt   "ok" | "error: <msg>"
+    #   requests (Chromium downloads into $CHROMIUM_DOWNLOAD_DIR):
+    #            SKXFER-W-<id>-<hexname>.skxfer   write file (payload = content)
+    #            SKXFER-D-<id>.skxfer             delete  (payload = hex name)
+    #            SKXFER-M-<id>.skxfer             rename  (payload = hex old \n hex new)
+    #
+    # SECURITY: the watcher runs FIXED operations only — nothing from the
+    # browser is ever executed. Names are hex-decoded then re-validated
+    # (no "/", no leading ".", no control chars, <= 200 bytes), and every
+    # operation is confined to the transfer mount root. Runs in BOTH normal
+    # and Temporary sessions (the Transfer Drive is deliberately available
+    # in Temporary mode — see task #91 note on the transfer mount above).
+    # >>> SKX_TRANSFER_WATCHER_BEGIN
+    _skx_hex_decode() {
+        # hex → bytes; rejects odd length / non-hex. Prints decoded string.
+        local hex="$1"
+        [ -n "$hex" ] || return 1
+        [ $(( ${#hex} % 2 )) -eq 0 ] || return 1
+        case "$hex" in *[!0-9a-f]*) return 1 ;; esac
+        printf '%b' "$(printf '%s' "$hex" | sed 's/../\\x&/g')"
+    }
+    _skx_name_ok() {
+        local n="$1"
+        [ -n "$n" ] || return 1
+        case "$n" in .*|*/*) return 1 ;; esac
+        [ "$(printf '%s' "$n" | LC_ALL=C tr -d '\000-\037\177' | wc -c)" -eq "$(printf '%s' "$n" | wc -c)" ] || return 1
+        [ "$(printf '%s' "$n" | wc -c)" -le 200 ] || return 1
+        return 0
+    }
+    _skx_write_index() {
+        local T="$1" D="$2" f b hex sz mt
+        {
+            echo "SKX1"
+            for f in "$T"/*; do
+                [ -f "$f" ] || continue
+                b=$(basename "$f")
+                case "$b" in .*) continue ;; esac
+                hex=$(printf '%s' "$b" | od -An -v -tx1 | tr -d ' \n')
+                sz=$(stat -c '%s' "$f" 2>/dev/null || echo 0)
+                mt=$(stat -c '%Y' "$f" 2>/dev/null || echo 0)
+                printf '%s\t%s\t%s\n' "$hex" "$sz" "$mt"
+            done
+        } > "$D/index.txt.tmp" 2>/dev/null && mv -f "$D/index.txt.tmp" "$D/index.txt"
+    }
+    _skx_transfer_watcher() {
+        # $1 = request (download) dir, $2 = state dir
+        local REQ_DIR="$1" D="$2" T LAST_T="" LAST_SIG="" SIG REQ B OP ID HEX NAME NAME2 RES
+        mkdir -p "$D"; chmod 755 "$D" 2>/dev/null || true
+        rm -f "$D"/ready.txt "$D"/index.txt "$D"/done-*.txt 2>/dev/null
+        rm -f "$REQ_DIR"/SKXFER-*.skxfer 2>/dev/null   # stale requests from a crash
+        while true; do
+            T=$(find_transfer_drive 2>/dev/null || true)
+            if [ -n "$T" ] && [ -d "$T" ]; then
+                if [ "$T" != "$LAST_T" ]; then
+                    printf '%s\n' "$T" > "$D/ready.txt.tmp" && mv -f "$D/ready.txt.tmp" "$D/ready.txt"
+                    LAST_T="$T"; LAST_SIG=""
+                    echo "Transfer Watcher: drive available at $T"
+                fi
+            else
+                if [ -n "$LAST_T" ]; then echo "Transfer Watcher: drive no longer available"; fi
+                rm -f "$D/ready.txt" "$D/index.txt"
+                LAST_T=""; LAST_SIG=""
+            fi
+
+            for REQ in "$REQ_DIR"/SKXFER-*.skxfer; do
+                [ -f "$REQ" ] || continue
+                B=$(basename "$REQ" .skxfer)
+                OP=$(printf '%s' "$B" | cut -d- -f2)
+                ID=$(printf '%s' "$B" | cut -d- -f3)
+                HEX=$(printf '%s' "$B" | cut -d- -f4)
+                RES="ok"
+                case "$ID" in ''|*[!a-z0-9]*) rm -f "$REQ"; continue ;; esac
+                if [ -z "$LAST_T" ]; then
+                    RES="error: Transfer Drive is not mounted"
+                else
+                    case "$OP" in
+                    W)
+                        NAME=$(_skx_hex_decode "$HEX") || NAME=""
+                        if ! _skx_name_ok "$NAME"; then
+                            RES="error: invalid file name"
+                        elif cp -f "$REQ" "$LAST_T/.skx-$ID.tmp" 2>/dev/null \
+                             && mv -f "$LAST_T/.skx-$ID.tmp" "$LAST_T/$NAME" 2>/dev/null; then
+                            sync
+                            echo "Transfer Watcher: wrote $NAME ($(stat -c '%s' "$LAST_T/$NAME" 2>/dev/null) bytes)"
+                        else
+                            rm -f "$LAST_T/.skx-$ID.tmp" 2>/dev/null
+                            RES="error: write failed (drive full or name not allowed on exFAT)"
+                        fi
+                        ;;
+                    D)
+                        NAME=$(_skx_hex_decode "$(head -n1 "$REQ" | tr -d '\r\n')") || NAME=""
+                        if ! _skx_name_ok "$NAME"; then
+                            RES="error: invalid file name"
+                        elif [ ! -f "$LAST_T/$NAME" ]; then
+                            RES="error: notfound"
+                        elif rm -f "$LAST_T/$NAME" 2>/dev/null; then
+                            sync
+                            echo "Transfer Watcher: deleted $NAME"
+                        else
+                            RES="error: delete failed"
+                        fi
+                        ;;
+                    M)
+                        NAME=$(_skx_hex_decode "$(sed -n 1p "$REQ" | tr -d '\r\n')") || NAME=""
+                        NAME2=$(_skx_hex_decode "$(sed -n 2p "$REQ" | tr -d '\r\n')") || NAME2=""
+                        if ! _skx_name_ok "$NAME" || ! _skx_name_ok "$NAME2"; then
+                            RES="error: invalid file name"
+                        elif [ ! -f "$LAST_T/$NAME" ]; then
+                            RES="error: notfound"
+                        elif mv -f "$LAST_T/$NAME" "$LAST_T/$NAME2" 2>/dev/null; then
+                            sync
+                            echo "Transfer Watcher: renamed $NAME → $NAME2"
+                        else
+                            RES="error: rename failed (name not allowed on exFAT?)"
+                        fi
+                        ;;
+                    *)
+                        RES="error: unknown request"
+                        ;;
+                    esac
+                fi
+                rm -f "$REQ"
+                # Refresh the index BEFORE acknowledging so the app's
+                # follow-up listing already reflects this operation.
+                [ -n "$LAST_T" ] && _skx_write_index "$LAST_T" "$D"
+                LAST_SIG=""
+                printf '%s\n' "$RES" > "$D/done-$ID.txt.tmp" && mv -f "$D/done-$ID.txt.tmp" "$D/done-$ID.txt"
+            done
+
+            # Keep the index current for changes made by other watchers
+            # (e.g. .7z backups): regenerate only when the listing changes.
+            if [ -n "$LAST_T" ]; then
+                SIG=$(ls -la --time-style=+%s "$LAST_T" 2>/dev/null | cksum)
+                if [ "$SIG" != "$LAST_SIG" ]; then
+                    _skx_write_index "$LAST_T" "$D"
+                    LAST_SIG="$SIG"
+                fi
+            fi
+            find "$D" -maxdepth 1 -name 'done-*.txt' -mmin +5 -delete 2>/dev/null
+            sleep 0.4
+        done
+    }
+    # <<< SKX_TRANSFER_WATCHER_END
+    ( _skx_transfer_watcher "$CHROMIUM_DOWNLOAD_DIR" "$SIGNAL_DIR/xfer" ) &
+    TRANSFER_WATCHER_PID=$!
+    echo "Transfer watcher daemon started (PID $TRANSFER_WATCHER_PID) — requests: $CHROMIUM_DOWNLOAD_DIR, state: $SIGNAL_DIR/xfer"
 
     # -------------------------------------------------------------------
     # DISPLAY-SLEEP WATCHER DAEMON — DPMS timer bridge (Task #14/#198)

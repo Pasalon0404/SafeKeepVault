@@ -92,6 +92,9 @@ import './shared/twofa-parser.js';
 // tracker) for the inline amnesia/ephemeral seed paths in boot.html. Imported
 // before boot.js so the global is present when those paths run.
 import './shared/entropy-harden.js';
+// transfer-drive.js exposes window.SKTransfer — the permission-prompt-free
+// Transfer Drive bridge (daemon-backed stand-in for showDirectoryPicker).
+import './shared/transfer-drive.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
 
