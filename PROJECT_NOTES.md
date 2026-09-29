@@ -1,5 +1,230 @@
 # SafeKeep Vault — Project Notes
 
+> **Start with the "Current state" section below (updated Sept 29, 2026).**
+> Everything after the line marked *"Historical notes (May 2026)"* is the
+> original pickup guide. It is still useful for architecture and gotchas,
+> but parts of it are out of date. Where the two disagree, trust the
+> Current state section.
+
+---
+
+## Current state (Sept 29, 2026) — version v1.34
+
+### Working with Dave (the owner)
+
+- Dave is not very technical. Give him copy-paste commands with a plain
+  explanation, say which machine each runs on ("On your Mac" / "On the
+  ZBook"), and ask him to paste back the output.
+- Don't put `#` comments inside commands. zsh on his Mac chokes on them,
+  especially comments that contain apostrophes.
+- Don't guess when he pastes an error. Read the actual output first. Two
+  past incidents came from running commands on the wrong machine.
+
+### Machines
+
+| Machine | Role | Access |
+|---|---|---|
+| Dave's Mac | Source of truth (git repo, `npm run dev`, `npm run build`) | Local |
+| HP ZBook 15u G3 | Builds the OS image and writes the USB | `ssh <ZBOOK_USER>@<ZBOOK_IP>`, build folder `/home/safekeep-build` |
+| Patriot USB stick | The vault itself | Shows up as `/dev/sdb` (TRAN=usb) on the ZBook. `sda` is the ZBook's internal drive, NEVER write to it |
+
+- ufw on the ZBook allows SSH from <HOME_LAN> only (Tailscale is not
+  installed).
+- The ZBook's build uses the top-level scripts in `/home/safekeep-build/`.
+  A past bug came from copying scripts into a nested folder by mistake.
+  Always use the rsync commands below exactly.
+
+### Build and deploy (the normal loop, ~5 minutes)
+
+On the Mac:
+```
+cd "<PROJECT_FOLDER>"
+cd seed-xor-tool
+npm run build
+cd ..
+rsync -av --delete --exclude '* (1)*' seed-xor-tool/dist/ <ZBOOK_USER>@<ZBOOK_IP>:/home/safekeep-build/src/dist/
+rsync -av --exclude 'workspace/' --exclude '*.img' --exclude '* (1)*' --exclude '.DS_Store' usbbootdrive/ <ZBOOK_USER>@<ZBOOK_IP>:/home/safekeep-build/
+```
+The second rsync is only needed when something in `usbbootdrive/` changed.
+
+On the ZBook:
+```
+cd /home/safekeep-build
+lsblk -o NAME,SIZE,TRAN,MODEL
+sudo bash quick-update.sh --usb /dev/sdb
+```
+- `quick-update.sh` reuses the last full build's chroot, drops in the new
+  app and scripts, re-squashes, and rewrites ONLY the OS partition.
+  **The vault and transfer data are preserved.** It asks you to type YES.
+- It refuses to run (and tells you to run the full `build.sh`, ~20 min)
+  if `chroot-setup.sh` or `safekeep-harden.sh` changed, or if the last full
+  build didn't finish (`workspace/.chroot-complete` marker).
+- `npm install` needs `--legacy-peer-deps`: vite 8 and
+  vite-plugin-node-polyfills have a harmless peer-version mismatch. Don't
+  run `npm audit fix --force`.
+- The Vite build can't run in the Linux sandbox (the rolldown native
+  binding is missing). Builds happen on the Mac.
+
+### Dev testing (no USB)
+
+- On the Mac: `cd seed-xor-tool && npm run dev`, then open
+  `http://localhost:5173/boot.html?devMode=seeded`
+  (also `normal`, `ephemeral`, `amnesia`). The Dev Drawer has
+  "Load test seed" (abandon×23 art → nickname "Digital Wheat Crumble").
+- In dev mode the Transfer Drive is an in-memory mock ("TRANSFER (dev mock)").
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs`, 18 files, all
+  passing. They extract real functions from boot.html and check them
+  against official vectors (BIP-39/32/44/49/84/86, BIP-85, Coldcard Seed
+  XOR, all 45 SLIP-39 vectors, BIP-322, PSBT change audit, Silent
+  Payments). `test-transfer-bridge.mjs` runs the real Transfer Watcher bash
+  code end-to-end and needs GNU coreutils, so it skips itself on macOS.
+
+### Git rules
+
+- Commit **source only**. Never stage `seed-xor-tool/dist/`.
+- The repo sits on a slow mount and sometimes leaves stale lock files:
+  `rm -f .git/index.lock .git/HEAD.lock`, then add/commit.
+- A broken duplicate ref `.git/refs/heads/main (1)` makes `git log --all`
+  print "fatal: bad object". It's safe to delete: `rm ".git/refs/heads/main (1)"`.
+- The folders contain stray `* (1).*` download duplicates (e.g.
+  `boot (1).html`, `safekeep-boot (1).sh`). They are untracked junk and
+  can be deleted. The rsync commands exclude them.
+
+### Safety rules (non-negotiable)
+
+- Confirm the USB device with `lsblk` before any `dd` or quick-update.
+- Never invent or choose passwords for Dave. Never bake secrets into the
+  installer.
+- The vault OS stays air-gapped: no network listeners (netcat/socat were
+  proposed once and declined), no network features.
+- **Lock must never power off or reboot.** It returns to the native unlock
+  screen.
+- Don't weaken crypto. Verify changes against official test vectors, with
+  a mutation check where practical.
+- UI polish is secondary. Never break function for looks.
+
+### How key subsystems work now
+
+**Browser ↔ OS bridge.** Chromium runs as a kiosk on `file://` and can't
+call the OS directly. The app "downloads" small trigger files. The
+enterprise policy (written at launch by `safekeep-boot.sh`) routes them
+silently into `/media/.safekeep-vault/seeds/` (normal boot) or
+`/tmp/safekeep-signals/` (temporary session), where bash watchers in
+`safekeep-boot.sh` act on them. The app reads results back with
+`fetch(file://…)`. Examples: POWER_ACTION, WIPE_TRIGGER, RELIQUARY_*
+(backups), RESTORE_*, Codex notes, passphrases, 2FA.
+
+**Lock (true lock).** The dashboard Lock button calls `SafeKeepOS.lock()`,
+which writes `POWER_ACTION.txt` = `lock` and closes the window. The daemon
+defaults to `lock` if the signal file is missing, so it can never fall
+through to poweroff. The lock branch kills the session's children,
+unmounts, runs `cryptsetup close vault`, then
+`exec /usr/local/bin/safekeep-boot` → native zenity unlock prompt.
+Fallbacks: `systemctl --no-block restart`, then a zenity message plus
+`sleep infinity`. The same mechanism powers "RETURN TO MASTER VAULT" from a
+temporary session (Settings). Debug logs:
+`/media/.safekeep-vault/power-debug.log` and
+`/mnt/safekeep-data/safekeep-power-debug.log`.
+
+**Transfer Drive (auto-mounted, no prompts — NEW, not yet hardware-tested).**
+The exFAT TRANSFER partition is mounted at boot at
+`/media/safekeep-transfer`. The app no longer uses showDirectoryPicker,
+which caused a folder picker plus an "Allow this site to edit files?" prompt
+every boot. `shared/transfer-drive.js` (window.SKTransfer) provides a
+FileSystemDirectoryHandle look-alike, so every tool still uses
+`window.vaultTransferDriveHandle` unchanged:
+- reads: `fetch(file://<transfer>/<name>)`
+- listing: `/tmp/safekeep-signals/xfer/index.txt`, kept current by the
+  Transfer Watcher
+- write/delete/rename: one download, `SKXFER-<W|D|M>-<id>[-<hexname>].skxfer`.
+  The Transfer Watcher (between the `SKX_TRANSFER_WATCHER_BEGIN/END` markers
+  in `safekeep-boot.sh`) performs FIXED operations only, re-validates names
+  (no `/`, no leading `.`, no control characters), and acks via
+  `/tmp/safekeep-signals/xfer/done-<id>.txt`.
+- Auto-mount happens in `transitionToDashboard()` via
+  `_transferAutoMount()`. If the watcher isn't running, the old Mount button
+  and picker come back as a fallback.
+- Chromium policy now also sets
+  `AutomaticDownloadsAllowedForUrls: ["file://*","file:///*"]` and
+  `DefaultAutomaticDownloadsSetting: 1` to stop the "download multiple
+  files" prompt.
+- If it misbehaves on hardware: `grep "Transfer Watcher" /tmp/safekeep-boot.log`
+
+**Seed Nickname** (status bar, formerly "Vault Identifier"). Three BIP-39
+words from SHA-256 of the normalized mnemonic (NFKD, lowercase, single
+spaces), truncated to 32 bits. Same seed → same words on every
+build and drive. The passphrase is not included. It is a convenience label
+only. It does NOT prove the USB drive is genuine or untampered: it is
+computed after unlock, and a cloned drive shows the same words. Decided
+Sept 2026: keep it and label it honestly. Skipped pre-unlock anti-phishing
+words (low value for a stick kept physically secure).
+
+**UI polish layer.** Nearly all visual styling is in
+`<style id="skb-polish">` near the end of boot.html, inside `@media screen`
+so print output is untouched. It holds the design tokens (palette, radii,
+type scale), buttons, the status-bar pills, and seed-word tiles that are
+blurred until hovered. Fonts: Inter + JetBrains Mono from
+`@fontsource-variable/*`, imported in `boot-entry.js` and inlined into the
+single-file build. Dashboard icons are inline Lucide SVGs. Advanced tools
+are grouped: Keys & Seeds / Backup & Recovery / Signing & Transfer /
+Private Data. Version string: `id="dash-version"` in boot.html.
+
+### Crypto review results (Sept 2026)
+
+All core crypto passed official vectors. Fixed in that review:
+- PSBT change-hijack holes: foreign-fingerprint and unknown-purpose outputs
+  are now treated as destinations; multisig change is bound to the wallet
+  via global xpubs.
+- Fee sanity guard: error if fee < 0 or fee ≥ 5% of inputs.
+- BIP-322 signatures use low-S.
+- Passphrases are no longer `.trim()`-ed (spaces are significant in BIP-39).
+- Seed XOR / SLIP-39 recovery shows the recovered fingerprint and asks for
+  confirmation before replacing the vault seed.
+- An XSS hole in restore file names was fixed.
+
+Known SLIP-39 facts worth remembering: SafeKeep's SLIP-39 shares encode the
+BIP-39 *entropy*, so restoring them on a Trezor gives a different wallet
+(the UI says so). A wrong SLIP-39 passphrase silently yields a different
+valid secret.
+
+### Open items / next steps
+
+1. **Hardware-test the Transfer Drive auto-mount** (v1.34 build): check the
+   status bar shows MOUNTED, the Mount button is gone, save/rename/delete
+   work, and no Chromium prompts appear.
+2. **Security hardening, not urgent:** the Reliquary/backup watcher
+   executes shell command text sent from the app, as root
+   (`exportToTransfer` / `createReliquary` build a `command` string). Replace
+   it with fixed operations like the Transfer Watcher uses.
+3. Chromium runs with `--no-sandbox` and `--disable-web-security`. That's
+   acceptable only because the machine is offline and runs only our page.
+   Revisit if anything ever loads untrusted content.
+4. Minor: the "Device Options" chevron is still a text glyph, not an SVG.
+
+### Recent commits (newest first)
+
+```
+3380e5b feat(transfer): auto-mount transfer drive via watcher, no browser permission prompts
+e8e7f0d ui(seed-nickname): rename Vault Identifier, honest tooltip, case-insensitive, clear on seed wipe
+844b929 ui(polish): embedded fonts, icon set, grouped tools, refined palette, seed-word privacy blur
+74ec864 build: quick-update.sh + completion marker so a cancelled build is never reused
+82db373 feat(lock): return from a Temporary session to the master vault without rebooting
+5d55949 fix: review round 2 - recovery confirmation, exact passphrases, input escaping, fee guard
+7962f6e fix(security): close PSBT change-hijack holes; crypto vector review
+```
+(v1.34 is committed; the version string lives at `id="dash-version"` in boot.html.)
+
+---
+---
+
+# Historical notes (May 2026)
+
+*Original pickup guide, kept for architecture and lessons learned. Out of
+date in places. Notably, power actions are now read from the vault's
+seeds dir (not `/tmp/POWER_ACTION.txt`), Lock no longer powers off, and web
+builds use `npm run build`.*
+
+
 A pickup guide for resuming development. Written by Claude Opus at the
 end of a long session that took the project through ~75 small fixes
 across the boot stack, the Bitcoin tools, and the build pipeline.
