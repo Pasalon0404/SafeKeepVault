@@ -993,14 +993,24 @@ POLICYEOF
     # RELIQUARY WATCHER DAEMON — ENCRYPTED BACKUP EXECUTION
     # -------------------------------------------------------------------
     # The web app (boot.js) cannot execute shell commands. To create a .7z
-    # encrypted backup, it silently downloads a trigger file containing the
-    # pre-built 7z command:
+    # encrypted backup (or write an export file to the transfer drive), it
+    # silently downloads a trigger file describing the REQUEST:
     #   /media/.safekeep-vault/seeds/RELIQUARY_TRIGGER.json
+    #   { "action": "create", "selections": [...], "dateStr": "YYYY-MM-DD",
+    #     "password": "..." }
+    #   { "action": "export-file", "filename": "...", "content_b64": "..." }
+    #
+    # SECURITY: the trigger is treated as UNTRUSTED DATA. It never contains
+    # a shell command, and nothing in it is ever run through a shell. The
+    # watcher only accepts the two actions above, validates every field
+    # (backup items come from a fixed list, filenames may not contain path
+    # separators), and calls 7z itself with an argument list. The trigger
+    # holds the backup password, so it is deleted the moment it is read.
     #
     # This background loop watches for that file and, when found:
     #   1. Validates the transfer drive is actually mounted and writable
     #   2. Validates that 7z (p7zip-full) is installed
-    #   3. Extracts and executes the shell command from the trigger
+    #   3. Validates the request and performs it (no shell involved)
     #   4. Writes a result file for the web app to poll:
     #      /media/.safekeep-vault/seeds/RELIQUARY_RESULT.json
     #      → { "ok": true, "filename": "Safekeep_backup_2026-04-07.7z" }
@@ -1052,36 +1062,119 @@ POLICYEOF
                     continue
                 fi
 
-                # ── Extract the command and rewrite the output path ──
-                # The trigger JSON contains a "command" field with the 7z shell
-                # script block. The command was built by boot.js using a hardcoded
-                # TRANSFER_ROOT (/media/safekeep-transfer). We replace that path
-                # with the dynamically resolved USB_TARGET so 7z writes to the
-                # actual physical hardware.
-                RAW_CMD=$(python3 -c "
-import json, sys
+                # ── Validate and perform the request (no shell commands) ──
+                # The helper below reads the trigger as plain data, deletes it
+                # immediately (it contains the backup password), checks every
+                # field against a fixed allowlist, and runs 7z directly with
+                # an argument list. Its output contract is unchanged: on
+                # success it prints RELIQUARY_FILE=<name> and exits 0.
+                OUTPUT=$(python3 - "$RELIQUARY_TRIGGER" "$USB_TARGET" "$VAULT_MOUNT" 2>&1 <<'RELIQUARY_PY'
+import base64, json, os, re, subprocess, sys
+
+trigger, usb_target, vault = sys.argv[1], sys.argv[2], sys.argv[3]
+MAX_TRIGGER_BYTES = 8 * 1024 * 1024
+BACKUP_DIRS = {
+    'codex': 'codex',
+    'settings': 'settings',
+    'cipher': 'passphrases',
+    'twofa': 'twofa',
+    'seed': 'seeds',
+}
+
+def fail(msg):
+    print(msg)
+    sys.exit(3)
+
 try:
-    with open('$RELIQUARY_TRIGGER') as f:
-        data = json.load(f)
-    print(data.get('command', ''))
-except Exception as e:
-    print('', file=sys.stderr)
-    sys.exit(1)
-" 2>/dev/null)
+    with open(trigger, 'rb') as f:
+        raw = f.read(MAX_TRIGGER_BYTES + 1)
+except OSError:
+    fail('Could not read the backup request.')
+finally:
+    try:
+        os.remove(trigger)
+    except OSError:
+        pass
 
-                if [ -z "$RAW_CMD" ]; then
-                    echo '{"ok":false,"error":"Failed to parse trigger file — no command found."}' > "$RELIQUARY_RESULT"
-                    rm -f "$RELIQUARY_TRIGGER"
-                    echo ".7z Backup Watcher: FAILED — trigger parse error"
-                    sleep 1
-                    continue
-                fi
+if len(raw) > MAX_TRIGGER_BYTES:
+    fail('Backup request is too large.')
+try:
+    data = json.loads(raw.decode('utf-8'))
+except Exception:
+    fail('Backup request is not valid JSON.')
+if not isinstance(data, dict):
+    fail('Backup request has the wrong format.')
 
-                # Rewrite the hardcoded transfer path to the resolved USB mount
-                CMD=$(echo "$RAW_CMD" | sed "s|/media/safekeep-transfer|$USB_TARGET|g")
+action = data.get('action')
 
-                # Execute the 7z command block and capture output + exit code
-                OUTPUT=$(bash -c "$CMD" 2>&1)
+if action == 'create':
+    selections = data.get('selections')
+    if not isinstance(selections, list) or not selections:
+        fail('No items selected for backup.')
+    sources = []
+    for key in selections:
+        if not isinstance(key, str) or key not in BACKUP_DIRS:
+            fail('Unknown backup item requested.')
+        path = os.path.join(vault, BACKUP_DIRS[key])
+        if path not in sources:
+            sources.append(path)
+
+    password = data.get('password')
+    if not isinstance(password, str) or not password or '\x00' in password:
+        fail('Encryption password is required.')
+
+    date_str = data.get('dateStr')
+    if not isinstance(date_str, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', date_str):
+        fail('Backup request has an invalid date.')
+
+    name = 'Safekeep_backup_' + date_str + '.7z'
+    out = os.path.join(usb_target, name)
+    try:
+        os.remove(out)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        fail('Could not replace the existing backup file: ' + e.strerror)
+
+    result = subprocess.run(
+        ['7z', 'a', '-t7z', '-m0=lzma2', '-mhe=on', '-p' + password, out] + sources,
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, text=True, errors='replace')
+    password = None
+    if result.returncode != 0:
+        print(result.stdout)
+        sys.exit(result.returncode)
+    print('RELIQUARY_FILE=' + name)
+
+elif action == 'export-file':
+    name = data.get('filename')
+    if (not isinstance(name, str) or not name or len(name) > 200
+            or name.startswith('.') or '..' in name
+            or any(c in name for c in '/\\"')
+            or any(ord(c) < 32 or ord(c) == 127 for c in name)):
+        fail('Export filename is not allowed.')
+
+    b64 = data.get('content_b64')
+    if not isinstance(b64, str):
+        fail('Export request has no content.')
+    try:
+        content = base64.b64decode(b64, validate=True)
+    except Exception:
+        fail('Export content is not valid.')
+
+    dest = os.path.join(usb_target, name)
+    try:
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+        with os.fdopen(fd, 'wb') as f:
+            f.write(content)
+    except OSError as e:
+        fail('Could not write the export file: ' + e.strerror)
+    print('RELIQUARY_FILE=' + name)
+
+else:
+    fail('Unknown request type.')
+RELIQUARY_PY
+)
                 EXIT_CODE=$?
 
                 if [ $EXIT_CODE -eq 0 ]; then

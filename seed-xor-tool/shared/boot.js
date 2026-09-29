@@ -1351,12 +1351,16 @@ const SafeKeepOS = (() => {
     // ACK:     VAULT_MOUNT/seeds/RELIQUARY_ACK.json
     // Result:  VAULT_MOUNT/seeds/RELIQUARY_RESULT.json
 
+    // SECURITY: the trigger carries a REQUEST, never a shell command.
+    // The watcher validates these fields against a fixed allowlist and
+    // runs 7z itself; `cmd` above is only used for demo-mode display.
     const triggerPayload = JSON.stringify({
+      version: 2,
       action: 'create',
-      command: cmd,
       baseName,
       dateStr,
       selections: [...selections],
+      password,
       timestamp: Date.now()
     });
 
@@ -1874,11 +1878,15 @@ const SafeKeepOS = (() => {
     // watcher doesn't care whether we asked it to create an archive
     // or just write a small file, as long as the command block is
     // valid and produces a RELIQUARY_FILE= line on success.
+    // SECURITY: the trigger carries a REQUEST, never a shell command.
+    // The watcher validates the filename and decodes content_b64 itself;
+    // `cmd` above is only used for demo-mode display.
     const triggerPayload = JSON.stringify({
-      action:    'export-file',   // informational only — watcher runs `command`
-      command:   cmd,
+      version:     2,
+      action:      'export-file',
       filename,
-      timestamp: Date.now()
+      content_b64: b64,
+      timestamp:   Date.now()
     });
 
     _silentDownload('RELIQUARY_TRIGGER.json', triggerPayload);

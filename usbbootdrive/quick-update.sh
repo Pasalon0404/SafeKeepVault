@@ -172,7 +172,7 @@ else
     LOOP=$(losetup --find --show -P "$OUTPUT_IMG")
     TARGET_PART="${LOOP}p3"
     [ -b "$TARGET_PART" ] || die "could not see partition 3 inside $OUTPUT_IMG."
-    [ "$(lsblk -no LABEL "$TARGET_PART" 2>/dev/null)" = "safekeep-os" ] || die "$OUTPUT_IMG partition 3 is not 'safekeep-os'."
+    [ "$(blkid -s LABEL -o value "$TARGET_PART" 2>/dev/null)" = "safekeep-os" ] || die "$OUTPUT_IMG partition 3 is not 'safekeep-os'."
     WHAT="$OUTPUT_IMG"
 fi
 
