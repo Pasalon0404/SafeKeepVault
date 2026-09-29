@@ -48,6 +48,23 @@ try {
   console.warn('Miniscript library not available — advanced policy features disabled.', e.message);
 }
 
+// ---- Typography: embedded fonts (offline, inlined into the single-file build) ----
+// The kiosk OS ships no modern UI fonts, so the app used to fall back to the
+// generic Linux default (DejaVu). Inter (UI) and JetBrains Mono (keys, words,
+// addresses) are bundled from npm (@fontsource-variable/*, OFL-licensed) and
+// registered at runtime via the FontFace API. If FontFace is unavailable the
+// CSS stack falls back to system fonts. Latin subset only (small).
+import _skbInterUrl from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
+import _skbMonoUrl from '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?url';
+for (const [family, url] of [['SKB Inter', _skbInterUrl], ['SKB JetBrains Mono', _skbMonoUrl]]) {
+  try {
+    const face = new FontFace(family, `url(${url}) format('woff2')`,
+        { weight: '100 900', style: 'normal', display: 'swap' });
+    document.fonts.add(face);
+    face.load().catch(() => {});
+  } catch (_) { /* no FontFace support — system fonts remain */ }
+}
+
 // Expose to window so boot.js and inline scripts can use them
 window.BtcMath = { bip39, wordlist, HDKey, btcSigner, secp256k1, schnorr };
 window.SLIP39 = { generateMnemonics, combineMnemonics };

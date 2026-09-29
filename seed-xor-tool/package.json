@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@bitcoinerlab/miniscript": "^2.0.0",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@ngraveio/bc-ur": "^1.1.13",
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^2.0.1",
