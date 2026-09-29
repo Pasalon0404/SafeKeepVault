@@ -553,7 +553,10 @@ const SafeKeepOS = (() => {
    */
   async function vaultFingerprint(mnemonic) {
     if (!mnemonic || typeof mnemonic !== 'string') return '';
-    const normalized = mnemonic.trim().split(/\s+/).join(' ');
+    // NFKD + lowercase so casing/Unicode form never changes the result.
+    // For ordinary lowercase English mnemonics this is a no-op, so existing
+    // nicknames and XOR-share fingerprints are unchanged.
+    const normalized = mnemonic.normalize('NFKD').toLowerCase().trim().split(/\s+/).join(' ');
     const bytes = new TextEncoder().encode(normalized);
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     const hex = Array.from(new Uint8Array(digest))

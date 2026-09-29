@@ -723,7 +723,7 @@
       color: var(--skb-text-dim);
       /* Task #199: the parent .dash-status-vfp forces uppercase + 0.15em
          letter-spacing to give the chip its monospaced status-readout feel.
-         The new "Vault Identifier - " label is mixed-case English prose, so
+         The "Seed Nickname - " label is mixed-case English prose, so
          we override both rules here. The value span gets the same overrides
          below for the same reason — the 3-word phrase needs to render as
          readable Title Case, not BLOCK CAPS WITH WIDE GAPS. */
@@ -5814,8 +5814,8 @@
             </div>
 
             <div class="dash-status-vfp" id="dash-vfp-cc" data-empty="true"
-                 title="Deterministic 3-word phrase derived from SHA-256(mnemonic) — a readable identifier for this master seed.">
-                <span class="dash-status-vfp__label">Vault Identifier&nbsp;-&nbsp;</span>
+                 title="A memorable 3-word nickname calculated from your seed words. The same seed always shows the same nickname, so you can tell at a glance which seed is loaded. It does NOT verify that this USB drive is genuine or untampered.">
+                <span class="dash-status-vfp__label">Seed Nickname&nbsp;-&nbsp;</span>
                 <span class="dash-status-vfp__value" id="dash-vault-fingerprint">--------</span>
             </div>
 
@@ -10583,7 +10583,7 @@ window.addEventListener('DOMContentLoaded', () => {
         // Shard / XOR tools to tag shards back to their master seed.
         try {
             if (!mnemonic || typeof mnemonic !== 'string') return '';
-            var normalized = mnemonic.trim().split(/\s+/).join(' ');
+            var normalized = mnemonic.normalize('NFKD').toLowerCase().trim().split(/\s+/).join(' ');
             var bytes = new TextEncoder().encode(normalized);
             var digest = await crypto.subtle.digest('SHA-256', bytes);
             var hex = Array.from(new Uint8Array(digest))
@@ -14439,10 +14439,11 @@ function _generateVisualFingerprint(hexStr) {
 }
 
 /**
- * Compute and stamp the Vault Identifier on the dashboard.
+ * Compute and stamp the Seed Nickname on the dashboard.
  *
- * The Vault Identifier is a deterministic 3-word phrase that identifies the
- * MASTER SEED. Source of truth: SHA-256(normalized mnemonic) truncated to 8
+ * The Seed Nickname is a deterministic 3-word phrase that identifies the
+ * MASTER SEED. It is a convenience label only — it does NOT authenticate the
+ * USB drive or detect a tampered/cloned OS (it is computed after unlock). Source of truth: SHA-256(normalized mnemonic) truncated to 8
  * hex chars — exactly `window.SafeKeepOS.vaultFingerprint()`. That 8-hex value
  * is fed to `_generateVisualFingerprint()` (BIP-39 mod-2048 visualizer).
  *
@@ -14552,7 +14553,7 @@ function transitionToDashboard(seedData) {
         const wc = seedData.wordCount || seedData.mnemonic?.trim().split(/\s+/).length || '??';
         document.getElementById('dash-word-count').textContent = `${wc} words loaded into RAM`;
     }
-    // Vault Identifier — deterministic 3-word phrase derived from the master
+    // Seed Nickname — deterministic 3-word phrase derived from the master
     // seed (SHA-256 of the mnemonic). The same seed words always produce the
     // same phrase on every build/drive; independent of the BIP-39 passphrase.
     _updateDashVaultFingerprint(seedData && seedData.mnemonic ? seedData.mnemonic : '');
@@ -14834,12 +14835,12 @@ function _wipeAllVolatileSeedState() {
     } catch (_) {}
 
     // --- Dashboard identity fields reset to "no seed" placeholders ---
-    // NOTE (Task #205): we deliberately do NOT wipe `#dash-vault-fingerprint`
-    // here. The Vault Identifier is a property of the encrypted drive itself
-    // (derived from the dm-crypt UUID), not of the loaded seed — wiping it on
-    // seed-clear would falsely suggest the vault is gone. The 3-word phrase
-    // stays on screen for as long as the vault is mounted; only the seed-level
-    // BIP-32 fingerprint (`#dash-fingerprint`) is reset here.
+    // The Seed Nickname (#dash-vault-fingerprint) is derived from the seed
+    // words (SHA-256 of the mnemonic), so it is cleared together with the
+    // seed — leaving it on screen would show a nickname for a seed that is
+    // no longer loaded. (An older design derived it from the dm-crypt UUID
+    // and deliberately kept it; that design was dropped.)
+    try { var _nnEl = document.getElementById('dash-vault-fingerprint'); if (_nnEl) _nnEl.textContent = '--------'; var _nnChip = document.getElementById('dash-vfp-cc'); if (_nnChip) _nnChip.setAttribute('data-empty', 'true'); } catch (_) {}
     try {
         var fpEl = document.getElementById('dash-fingerprint');
         if (fpEl) fpEl.textContent = '--------';
@@ -15262,8 +15263,8 @@ function vaultLock() {
     if (window.SafeKeepOS && window.SafeKeepOS.clearPassphrase) window.SafeKeepOS.clearPassphrase();
     _vaultVolatile = false;
 
-    // Wipe dashboard identity (seed-level only; the Vault Identifier is
-    // vault-level and persists across lock/unlock — see Task #205).
+    // Wipe dashboard identity, including the seed-derived Seed Nickname.
+    try { var _nnEl = document.getElementById('dash-vault-fingerprint'); if (_nnEl) _nnEl.textContent = '--------'; var _nnChip = document.getElementById('dash-vfp-cc'); if (_nnChip) _nnChip.setAttribute('data-empty', 'true'); } catch (_) {}
     var fpEl = document.getElementById('dash-fingerprint');
     if (fpEl) fpEl.textContent = '--------';
     var idEl = document.getElementById('dash-identity-label');
@@ -15453,7 +15454,7 @@ async function vaultDoMasterUnlock() {
             var wc = seedData.wordCount || (seedData.mnemonic ? seedData.mnemonic.trim().split(/\s+/).length : '??');
             document.getElementById('dash-word-count').textContent = wc + ' words loaded into RAM';
             document.getElementById('dash-identity-label').textContent = 'Master Seed Active';
-            // Vault Identifier — seed-derived (SHA-256 of the mnemonic), so the
+            // Seed Nickname — seed-derived (SHA-256 of the mnemonic), so the
             // same seed words reproduce the same 3-word phrase on any build.
             _updateDashVaultFingerprint(seedData && seedData.mnemonic ? seedData.mnemonic : '');
 
