@@ -2219,6 +2219,19 @@ const SafeKeepOS = (() => {
   const COLDCARD_PAIRING_VAULT  = 'file:///media/.safekeep-vault/settings/coldcard-pairing.json';
   const COLDCARD_PAIRING_TEMP   = `file://${COLDCARD_SIGNAL_DIR}/coldcard-pairing.json`;
   let _ccInFlight = false;
+  // Requests to the USB helpers are often sent back-to-back (find the
+  // Trezor → show its PIN grid; confirm → pair → sign). Each answer is
+  // acknowledged with an ACK file, and the watcher waits for that ACK
+  // before it reads the next request. So the next request must not be
+  // saved before the previous ACK: every request first waits for this.
+  let _usbAckChain = Promise.resolve();
+  function _usbQueueAck(filename) {
+    _usbAckChain = _usbAckChain.then(async function () {
+      await _sleep(300);
+      try { _rawBlobDownload(filename, '{"ack":true}'); } catch (_) {}
+      await _sleep(500);   // let Chromium finish saving it
+    });
+  }
 
   function _ccTemporarySession() {
     try { return window.location.hash === '#ephemeral=true'; } catch (_) { return false; }
@@ -2256,6 +2269,7 @@ const SafeKeepOS = (() => {
     _ccInFlight = true;
     const requestId = _ccRequestId();
     try {
+      await _usbAckChain;
       // Raw Blob download: a protocol file, not user data — and it must
       // also work in a temporary session (no vault).
       _rawBlobDownload(COLDCARD_REQUEST_FILE, JSON.stringify(Object.assign({}, payload, { request_id: requestId })));
@@ -2267,9 +2281,7 @@ const SafeKeepOS = (() => {
           if (resp.ok) {
             const result = await resp.json();
             if (result && result.request_id === requestId) {
-              setTimeout(function () {
-                try { _rawBlobDownload(COLDCARD_ACK_FILE, '{"ack":true}'); } catch (_) {}
-              }, 400);
+              _usbQueueAck(COLDCARD_ACK_FILE);
               return result;
             }
           }
@@ -2370,6 +2382,7 @@ const SafeKeepOS = (() => {
     _tzInFlight = true;
     const requestId = _ccRequestId();
     try {
+      await _usbAckChain;
       _rawBlobDownload(TREZOR_REQUEST_FILE, JSON.stringify(Object.assign({}, payload, { request_id: requestId })));
       payload = null;   // may hold PIN positions
       const deadline = Date.now() + maxWaitMs;
@@ -2380,9 +2393,7 @@ const SafeKeepOS = (() => {
           if (resp.ok) {
             const result = await resp.json();
             if (result && result.request_id === requestId) {
-              setTimeout(function () {
-                try { _rawBlobDownload(TREZOR_ACK_FILE, '{"ack":true}'); } catch (_) {}
-              }, 400);
+              _usbQueueAck(TREZOR_ACK_FILE);
               return result;
             }
           }

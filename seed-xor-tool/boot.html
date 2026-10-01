@@ -6770,7 +6770,9 @@
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 <button type="button" class="skb-btn" id="settings-trezor-pair-btn" onclick="tzSettingsStartPair()">Pair Trezor</button>
                                 <button type="button" class="skb-btn" id="settings-trezor-forget-btn" style="display: none;" onclick="tzSettingsForget()">Forget Trezor</button>
+                                <button type="button" class="skb-btn" id="settings-trezor-log-btn" onclick="tzSettingsShowLog()">Show Trezor log</button>
                             </div>
+                            <pre id="settings-trezor-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
                         </div>
                         <div class="settings-danger-zone">
                             <h4>Factory Reset</h4>
@@ -17029,6 +17031,10 @@ function showState(stateId) {
         _psbtHwMode = false;
         if (typeof _psbtApplyHwUi === 'function') _psbtApplyHwUi();
     }
+    // Transfer Drive: mount silently (no-op once mounted). The dashboard
+    // also does this, but a temporary session can open a tool (e.g. hardware
+    // signing) without ever showing the dashboard.
+    try { if (typeof _transferAutoMount === 'function') _transferAutoMount(); } catch (_) {}
     var allStates = _systemScreens.concat(['state-dashboard']).concat(_toolScreens);
     var isTool = _toolScreens.indexOf(stateId) !== -1;
     var isDashboard = (stateId === 'state-dashboard');
@@ -24176,6 +24182,30 @@ async function tzSettingsConfirmPair() {
     const r = await os.trezorPair(d.xfp, d.id_xpub);
     await tzSettingsRefresh();
     if (!r || !r.ok) _tzSettingsShowStatus((r && r.error) || 'Pairing failed.', true);
+}
+
+// Diagnostics: the Trezor lines of this session's logs (RAM only, gone at
+// power-off). They hold action names, statuses and timings — never PIN data.
+async function tzSettingsShowLog() {
+    const pre = document.getElementById('settings-trezor-log');
+    if (!pre) return;
+    if (pre.style.display !== 'none') { pre.style.display = 'none'; return; }
+    async function read(url) {
+        try { const r = await fetch(url, { cache: 'no-store' }); return r.ok ? await r.text() : null; }
+        catch (_) { return null; }
+    }
+    const boot = await read('file:///tmp/safekeep-boot.log');
+    const helper = await read('file:///tmp/safekeep-trezor.log');
+    const tail = (t, n) => t.split('\n').filter(Boolean).slice(-n).join('\n');
+    let out = '';
+    out += '== Trezor Watcher (safekeep-boot.log) ==\n';
+    out += boot === null ? '(not available here)\n'
+        : (tail(boot.split('\n').filter(l => /Trezor/.test(l)).join('\n'), 40) || '(no Trezor activity yet)') + '\n';
+    out += '\n== Trezor helper (safekeep-trezor.log) ==\n';
+    out += helper === null ? '(no helper messages yet)' : (tail(helper, 60) || '(empty)');
+    pre.textContent = out;
+    pre.style.display = '';
+    pre.scrollTop = pre.scrollHeight;
 }
 
 async function tzSettingsForget() {

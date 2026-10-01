@@ -470,6 +470,15 @@ def run_limited(fn, hwi, data, limit):
     return box['result'], False
 
 
+def _log(msg):
+    # Timing only: action names and statuses, never request contents (PIN positions).
+    try:
+        sys.stderr.write('%s trezor-helper: %s\n' % (time.strftime('%H:%M:%S'), msg))
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+
 def main(argv):
     if len(argv) != 3:
         print('usage: safekeep-trezor.py REQUEST.json RESULT.json', file=sys.stderr)
@@ -478,6 +487,8 @@ def main(argv):
     request_id = None
     stuck = False
     hwi = None
+    action_name = '?'
+    t_start = time.monotonic()
     try:
         data = load_request(req_path)
         rid = data.get('request_id')
@@ -487,8 +498,11 @@ def main(argv):
         if entry is None:
             raise Fail('bad_request', 'Unknown Trezor request.')
         fn, limit = entry
+        action_name = data.get('action')
+        _log('start %s' % action_name)
         if fn is not do_unpair:
             hwi = Hwi()
+            _log('library loaded (%.1fs)' % (time.monotonic() - t_start))
         result, stuck = run_limited(fn, hwi, data, limit)
         data = None   # drop the request (may hold PIN positions)
         if stuck:
@@ -502,6 +516,7 @@ def main(argv):
     if request_id:
         result['request_id'] = request_id
     write_result(res_path, result)
+    _log('done %s -> %s (%.1fs)' % (action_name, result.get('status'), time.monotonic() - t_start))
     rc = 0 if result.get('ok') else 3
     if stuck:
         sys.stdout.flush()

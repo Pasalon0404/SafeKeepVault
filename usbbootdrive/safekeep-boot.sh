@@ -1289,6 +1289,12 @@ RELIQUARY_PY
                         echo "Coldcard Watcher: cleanup complete (ACK received)"
                         break
                     fi
+                    # A new request means the app already read this result
+                    # (it only sends one request at a time): don't make it wait.
+                    if [ -f "$COLDCARD_REQUEST" ]; then
+                        echo "Coldcard Watcher: new request arrived (previous result read)"
+                        break
+                    fi
                     sleep 1
                     ACK_WAIT=$((ACK_WAIT + 1))
                 done
@@ -1335,7 +1341,7 @@ RELIQUARY_PY
     (
         while true; do
             if [ -f "$TREZOR_REQUEST" ]; then
-                echo "Trezor Watcher: request detected"
+                echo "$(date +%T) Trezor Watcher: request detected"
                 # Chromium names a download "X (1).json" if X.json still
                 # exists, so clear numbered leftovers of both protocol files.
                 rm -f "$TREZOR_RESULT" "$CHROMIUM_DOWNLOAD_DIR"/TREZOR_ACK*.json \
@@ -1343,10 +1349,11 @@ RELIQUARY_PY
                 if [ -x "$TREZOR_PY" ] && [ -f "$TREZOR_HELPER" ]; then
                     SAFEKEEP_TZ_PAIRING="$TREZOR_PAIRING" PYTHONDONTWRITEBYTECODE=1 \
                         "$TREZOR_PY" "$TREZOR_HELPER" "$TREZOR_REQUEST" "$TREZOR_RESULT" 2>>/tmp/safekeep-trezor.log
-                    echo "Trezor Watcher: helper finished (exit $?)"
+                    TZ_RC=$?
+                    echo "$(date +%T) Trezor Watcher: helper finished (exit $TZ_RC)"
                 else
                     echo '{"ok":false,"status":"not_installed","error":"Trezor support is not installed on this SafeKeep build."}' > "$TREZOR_RESULT"
-                    echo "Trezor Watcher: FAILED — helper or library not installed"
+                    echo "$(date +%T) Trezor Watcher: FAILED — helper or library not installed"
                 fi
                 rm -f "$TREZOR_REQUEST"
                 if [ ! -f "$TREZOR_RESULT" ]; then
@@ -1356,7 +1363,13 @@ RELIQUARY_PY
                 ACK_WAIT=0
                 while [ $ACK_WAIT -lt 120 ]; do
                     if compgen -G "$CHROMIUM_DOWNLOAD_DIR/TREZOR_ACK*.json" > /dev/null; then
-                        echo "Trezor Watcher: cleanup complete (ACK received)"
+                        echo "$(date +%T) Trezor Watcher: cleanup complete (ACK received)"
+                        break
+                    fi
+                    # A new request means the app already read this result
+                    # (it only sends one request at a time): don't make it wait.
+                    if [ -f "$TREZOR_REQUEST" ]; then
+                        echo "$(date +%T) Trezor Watcher: new request arrived (previous result read)"
                         break
                     fi
                     sleep 1
