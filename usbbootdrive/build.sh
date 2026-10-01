@@ -448,13 +448,13 @@ menuentry "SafeKeepVault" {
     # (dashboard Power Options modal calls sudo poweroff), so the "are you
     # sure?" prompt is not useful — it just leaves a wall of kernel I/O
     # warnings sitting on the screen during the casper eject sequence.
-    linux /casper/vmlinuz boot=casper nopersistent noprompt quiet splash ---
+    linux /casper/vmlinuz boot=casper nopersistent noprompt quiet splash usbhid.quirks=0xd13e:0xcc10:0x4 ---
     initrd /casper/initrd
 }
 
 menuentry "SafeKeepVault (Safe Mode)" {
     set root=${ospart}
-    linux /casper/vmlinuz boot=casper nopersistent noprompt nomodeset ---
+    linux /casper/vmlinuz boot=casper nopersistent noprompt nomodeset usbhid.quirks=0xd13e:0xcc10:0x4 ---
     initrd /casper/initrd
 }
 EOF

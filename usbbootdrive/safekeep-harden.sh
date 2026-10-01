@@ -756,6 +756,14 @@ ACTION!="add", GOTO="safekeep_hid_end"
 # Only block if the lockdown flag exists (set ~30s after boot)
 TEST!="/run/safekeep-hid-locked", GOTO="safekeep_hid_end"
 
+# Exception: Coinkite Coldcard (USB ID d13e:cc10) — the PSBT Signer talks to
+# it over USB for co-signing, and users plug it in after boot. This is safe
+# because /etc/modprobe.d/safekeep-coldcard.conf tells the kernel's HID
+# driver (usbhid) to IGNORE this ID completely, so a device faking the
+# Coldcard's ID can never act as a keyboard or mouse. SafeKeep's Coldcard
+# helper talks to it directly through libusb and needs no kernel driver.
+ATTRS{idVendor}=="d13e", ATTRS{idProduct}=="cc10", GOTO="safekeep_hid_end"
+
 # Block USB HID interfaces (bInterfaceClass 03 = HID)
 ATTR{bInterfaceClass}=="03", RUN+="/bin/sh -c 'echo 0 > /sys$env{DEVPATH}/authorized'"
 
@@ -763,6 +771,17 @@ LABEL="safekeep_hid_end"
 HID_EOF
 
 echo "  Created: /etc/udev/rules.d/85-safekeep-hid-lockdown.rules"
+
+# Coldcard: never let the kernel's HID driver bind it (HID_QUIRK_IGNORE = 0x4).
+# Pairs with the Coldcard exception in the lockdown rule above: the device
+# may be plugged in at any time, but can never become a keyboard or mouse.
+# (Also set on the kernel command line by build.sh, for built-in usbhid.)
+cat > /etc/modprobe.d/safekeep-coldcard.conf << 'CCMOD_EOF'
+# SafeKeep: Coinkite Coldcard (d13e:cc10) — ignored by usbhid (no keyboard/
+# mouse possible). SafeKeep's Coldcard helper uses libusb instead.
+options usbhid quirks=0xd13e:0xcc10:0x4
+CCMOD_EOF
+echo "  Created: /etc/modprobe.d/safekeep-coldcard.conf"
 
 # ----------------------------------------------------------------------------
 # HID lockdown trigger — timer + trivial oneshot (NOT blocking boot)

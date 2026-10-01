@@ -61,7 +61,8 @@ REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 DEFAULT_PAIRING = '/media/.safekeep-vault/settings/coldcard-pairing.json'
 
 MSG_NOT_CONNECTED = ('No Coldcard found. Plug it in, unlock it with your PIN, and make '
-                     'sure USB is turned on (Settings > Hardware On/Off > USB).')
+                     'sure USB is turned on (Settings > Hardware On/Off > USB). If it is '
+                     'plugged in, unplug it and plug it back in.')
 
 
 class Fail(Exception):
