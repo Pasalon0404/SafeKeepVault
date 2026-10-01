@@ -22,6 +22,8 @@
 
 ### Machines
 
+Personal values (`<PROJECT_FOLDER>`, `<ZBOOK_USER>`, `<ZBOOK_IP>`, `<HOME_LAN>`, `<MAC_USER>`) are kept out of this public repo; the real ones are in `PRIVATE_NOTES.md` next to this file (git-ignored).
+
 | Machine | Role | Access |
 |---|---|---|
 | Dave's Mac | Source of truth (git repo, `npm run dev`, `npm run build`) | Local |
