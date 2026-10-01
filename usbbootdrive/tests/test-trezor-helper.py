@@ -36,11 +36,15 @@ class DeviceAlreadyUnlockedError(HWWError): pass
 '''
 
 FAKE_PSBT = '''
-import base64
+import base64, json, os
+class _In:
+    def __init__(self, prev): self.non_witness_utxo = object() if prev else None
 class PSBT:
     def deserialize(self, s):
         self.data = base64.b64decode(s, validate=True)
         if not self.data.startswith(b'psbt\\xff'): raise ValueError('bad psbt')
+        no_prev = json.loads(os.environ.get('FAKE_TZ', '{}')).get('no_prev')
+        self.inputs = [_In(True), _In(not no_prev)]
     def serialize(self):
         return base64.b64encode(self.data).decode()
 '''
@@ -93,7 +97,8 @@ class _Features: pass
 class _Key:
     def __init__(self, fp, xpub): self.parent_fingerprint = bytes.fromhex(fp); self._x = xpub
     def to_string(self): return self._x
-class _Inner: pass
+class _Inner:
+    def cancel(self): log('cancel')
 
 class TrezorClient:
     def __init__(self, path, password=None, **kw):
@@ -130,6 +135,7 @@ class TrezorClient:
         if mode == 'busy': raise DeviceBusyError('busy')
         if mode == 'outdated': raise OutdatedFirmwareError('old')
         if mode == 'failure': raise TrezorFailure('DataError: Unsupported script type')
+        if mode == 'prevmissing': raise BadArgumentError('Previous transaction abcd not available')
         if mode == 'hang': time.sleep(30)
         if mode == 'badresult':
             class _B:
@@ -326,6 +332,13 @@ def main():
         check('Trezor rejects PSBT -> rejected (with reason)', r.get('status') == 'rejected' and 'Unsupported' in r.get('error', ''), str(r))
         rc, r, *_ = run(tmp, good, {'sign': 'badresult'})
         check('non-PSBT result -> error', r.get('status') == 'error', str(r))
+        rc, r, log, *_ = run(tmp, good, {'no_prev': True})
+        check('input without full previous tx -> missing_prev_tx, nothing sent', r.get('status') == 'missing_prev_tx' and 'sign' not in log and 'file' in r.get('error', ''), str(r))
+        rc, r, log, *_ = run(tmp, good, {'sign': 'prevmissing'})
+        check('Trezor asks for a missing previous tx -> missing_prev_tx', r.get('status') == 'missing_prev_tx', str(r))
+        check('  ...and the Trezor is told to cancel (not left stuck)', 'cancel' in log, str(log))
+        rc, r, log, *_ = run(tmp, good, {'sign': 'cancel'})
+        check('declined on Trezor -> Trezor told to cancel too', 'cancel' in log, str(log))
         rc, r, *_ = run(tmp, good, {'sign': 'hang'}, env_extra={'SAFEKEEP_TZ_TIMEOUT': '2'})
         check('stuck USB call -> timeout, result still written', r.get('status') == 'timeout' and rc == 3, str(r))
 

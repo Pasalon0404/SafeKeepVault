@@ -51,7 +51,7 @@ Result JSON: {"ok": true/false, "status": "...", ...}
   error statuses: bad_request, not_installed, not_paired, not_connected,
                   multiple_devices, unsupported_model, no_seed, locked,
                   wrong_pin, wrong_device, outdated_firmware, refused, busy,
-                  timeout, rejected, error
+                  timeout, rejected, missing_prev_tx, error
   Every result echoes the request's "request_id" (if valid) so the app can
   ignore stale results.
 """
@@ -88,6 +88,10 @@ MSG_NOT_CONNECTED = ('No Trezor found. Plug it in and try again. If it is plugge
 MSG_GONE = ('The Trezor is no longer at the same USB connection (it may have been '
             'unplugged). Start the PIN entry again.')
 MSG_LOCKED = 'The Trezor is locked. Unlock it with your PIN first.'
+MSG_MISSING_PREV_TX = ('The Trezor needs the full previous transaction for each coin being spent, and this '
+                       'transaction does not include them (some wallets leave them out of QR codes to keep '
+                       'them short). Nothing was sent to the Trezor. In your wallet, save the transaction '
+                       'as a file instead and load that file in SafeKeep. A Coldcard can sign it either way.')
 
 
 class Fail(Exception):
@@ -265,6 +269,8 @@ def translate(hwi, e):
         return Fail('error', 'This Trezor asked for a passphrase, which SafeKeep does not support yet.')
     if isinstance(e, E.BadArgumentError) and 'find device by path' in str(e):
         return Fail('not_connected', MSG_GONE)
+    if isinstance(e, E.BadArgumentError) and 'Previous transaction' in str(e):
+        return Fail('missing_prev_tx', MSG_MISSING_PREV_TX)
     if isinstance(e, hwi.tzexc.OutdatedFirmwareError):
         return Fail('outdated_firmware', 'The Trezor firmware is too old. Update it with Trezor Suite '
                                          'on another computer, then try again.')
@@ -426,7 +432,21 @@ def do_sign(hwi, data):
             tx.deserialize(psbt_b64)
         except Exception:
             raise Fail('bad_request', 'The transaction could not be read.')
-        signed = client.sign_tx(tx).serialize()   # never finalizes, never broadcasts
+        # The Trezor insists on the FULL previous transaction for every input
+        # (it checks the amounts itself). Check before anything reaches the
+        # device, so it is never left waiting for data SafeKeep cannot give.
+        missing = [i + 1 for i, inp in enumerate(tx.inputs) if not inp.non_witness_utxo]
+        if missing:
+            raise Fail('missing_prev_tx', MSG_MISSING_PREV_TX)
+        try:
+            signed = client.sign_tx(tx).serialize()   # never finalizes, never broadcasts
+        except BaseException:
+            # Don't leave the Trezor stuck mid-signing: cancel what it is doing.
+            try:
+                client.client.cancel()
+            except Exception:
+                pass
+            raise
     finally:
         client.close()
     try:

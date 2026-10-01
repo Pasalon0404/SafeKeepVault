@@ -23548,6 +23548,20 @@ function _psbtMultisigStatus(bytes) {
              cosigners: Array.from(cos, ([fp, s]) => ({ fp, signed: s })) };
 }
 
+/** True if every input carries its full previous transaction (the Trezor needs these). */
+function _psbtHasPrevTxs(bytes) {
+    const btcLib = window.BtcMath?.btcSigner;
+    if (!btcLib || !bytes) return true;
+    try {
+        const tx = btcLib.Transaction.fromPSBT(bytes, { network: PSBT_NETWORK });
+        return tx.inputs.every(inp => !!inp.nonWitnessUtxo);
+    } catch (e) { return true; }
+}
+const _PSBT_TREZOR_PREVTX_NOTE =
+    'The Trezor can\'t sign this one: it needs the full previous transaction for each coin being spent, ' +
+    'and this transaction doesn\'t include them (wallets often leave them out of QR codes to keep them short). ' +
+    'In your wallet, save the transaction as a file and load that file here instead. The Coldcard can sign it either way.';
+
 function _psbtVaultFingerprint() {
     try {
         const fp = window.SeedSession?.get()?.fingerprint || window.SafeKeepOS?.getFingerprint() || '';
@@ -23640,12 +23654,18 @@ async function _psbtUpdateCosignCard() {
     if (_psbtHwMode) {
         // Hardware-only: offer both device types; the device is identified
         // and confirmed against this transaction's keys when clicked.
+        const tzOk = _psbtHasPrevTxs(_psbtSignedBytes);
         actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-trezor-btn',
             onclick: psbtCosignTrezor }, _psbtCosignBusy === 'trezor' ? 'Waiting for Trezor…' : 'Sign with Trezor'));
         actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-coldcard-btn',
             onclick: psbtCosignColdcard }, _psbtCosignBusy === 'coldcard' ? 'Waiting for Coldcard…' : 'Sign with Coldcard'));
         card.appendChild(actions);
         if (_psbtCosignBusy) actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
+        if (!tzOk) {
+            const tb = document.getElementById('psbt-cosign-trezor-btn');
+            if (tb) { tb.disabled = true; tb.style.opacity = '0.45'; tb.style.cursor = 'not-allowed'; }
+            card.appendChild(_psbtEl('div', { class: 'psbt-alert warning', style: 'margin-top: 0.6rem;', id: 'psbt-trezor-prevtx-note' }, _PSBT_TREZOR_PREVTX_NOTE));
+        }
         card.appendChild(_psbtEl('p', { style: 'font-size: 0.8125rem; color: var(--skb-text-dim); margin: 0.5rem 0 0;' },
             'Plug in one device at a time. After it signs, unplug it and plug in the next one.'));
         return;
@@ -23658,6 +23678,7 @@ async function _psbtUpdateCosignCard() {
         }, _psbtCosignBusy === 'coldcard' ? 'Waiting for Coldcard…' : 'Sign with Coldcard (' + pairing.xfp + ')'));
     }
     const tzCosigner = tzPairing ? st.cosigners.find(c => c.fp === tzPairing.xfp) : null;
+    const tzBlocked = !!(tzCosigner && !tzCosigner.signed && !_psbtHasPrevTxs(_psbtSignedBytes));
     if (tzCosigner && !tzCosigner.signed) {
         actions.appendChild(_psbtEl('button', {
             type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-trezor-btn',
@@ -23669,6 +23690,11 @@ async function _psbtUpdateCosignCard() {
     }, 'Sign with another seed'));
     card.appendChild(actions);
     if (_psbtCosignBusy) actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    if (tzBlocked) {
+        const tb = document.getElementById('psbt-cosign-trezor-btn');
+        if (tb) { tb.disabled = true; tb.style.opacity = '0.45'; tb.style.cursor = 'not-allowed'; }
+        card.appendChild(_psbtEl('div', { class: 'psbt-alert warning', style: 'margin-top: 0.6rem;', id: 'psbt-trezor-prevtx-note' }, _PSBT_TREZOR_PREVTX_NOTE));
+    }
 
     const hints = [];
     if (pairing && !ccCosigner) {
