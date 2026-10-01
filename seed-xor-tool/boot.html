@@ -2737,6 +2737,76 @@
 
 
     /* ---- Factory Reset Confirmation Modal ---- */
+    /* Trezor One PIN grid (Device Options → Trezor, PSBT Signer) */
+    .tz-pin-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 1rem;
+    }
+    .tz-pin-overlay.visible { display: flex; }
+    .tz-pin-modal {
+      background: var(--skb-bg-secondary);
+      border: 2px solid var(--skb-primary);
+      padding: 1.5rem;
+      max-width: 380px;
+      width: 100%;
+      max-height: 100%;
+      overflow-y: auto;
+    }
+    .tz-pin-modal h3 {
+      margin: 0 0 0.5rem;
+      color: var(--skb-primary);
+      font-family: var(--skb-mono);
+      font-size: 1.1rem;
+    }
+    .tz-pin-modal p {
+      color: var(--skb-text-muted);
+      font-size: 0.875rem;
+      line-height: 1.55;
+      margin: 0 0 0.75rem;
+    }
+    .tz-pin-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.6rem;
+      margin: 0.75rem auto;
+      max-width: 260px;
+    }
+    .tz-pin-cell {
+      aspect-ratio: 1;
+      min-height: 64px;
+      background: var(--skb-bg-input);
+      border: 2px solid var(--skb-border);
+      border-radius: var(--skb-radius-sm);
+      cursor: pointer;
+    }
+    .tz-pin-cell:hover:not(:disabled),
+    .tz-pin-cell:focus-visible { border-color: var(--skb-primary); outline: none; }
+    .tz-pin-cell:active:not(:disabled) { background: var(--skb-primary); }
+    .tz-pin-cell:disabled { cursor: default; opacity: 0.5; }
+    .tz-pin-dots {
+      text-align: center;
+      font-family: var(--skb-mono);
+      font-size: 1.4rem;
+      letter-spacing: 0.35em;
+      min-height: 2rem;
+      color: var(--skb-text);
+    }
+    .tz-pin-msg {
+      min-height: 1.25rem;
+      font-size: 0.8125rem;
+      margin: 0.25rem 0 0.75rem;
+      text-align: center;
+      color: var(--skb-text-muted);
+    }
+    .tz-pin-msg.error { color: var(--skb-danger); }
+    .tz-pin-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
+
     .reset-modal-overlay {
       display: none;
       position: fixed;
@@ -6567,7 +6637,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh()">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -6678,6 +6748,18 @@
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 <button type="button" class="skb-btn" id="settings-coldcard-pair-btn" onclick="ccSettingsStartPair()">Pair Coldcard</button>
                                 <button type="button" class="skb-btn" id="settings-coldcard-forget-btn" style="display: none;" onclick="ccSettingsForget()">Forget Coldcard</button>
+                            </div>
+                        </div>
+                        <div id="settings-trezor-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Trezor</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                Pair a Trezor One so the PSBT Signer can ask it for a signature over USB. You unlock it here by clicking the positions of your PIN on a blank grid while reading the shuffled numbers on the Trezor's own screen. Every signature is approved on the Trezor. SafeKeep only ever uses the Trezor paired here.
+                            </p>
+                            <div id="settings-trezor-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem;">Checking…</div>
+                            <div id="settings-trezor-confirm" style="display: none; margin-bottom: 0.75rem;"></div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="skb-btn" id="settings-trezor-pair-btn" onclick="tzSettingsStartPair()">Pair Trezor</button>
+                                <button type="button" class="skb-btn" id="settings-trezor-forget-btn" style="display: none;" onclick="tzSettingsForget()">Forget Trezor</button>
                             </div>
                         </div>
                         <div class="settings-danger-zone">
@@ -10661,6 +10743,9 @@ window.addEventListener('DOMContentLoaded', () => {
     function _sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
     var _devCcPairing = null;   // dev-mock Coldcard pairing (in memory)
+    var _devTzPairing = null;   // dev-mock Trezor pairing (in memory)
+    var _devTzUnlocked = false; // dev-mock Trezor: PIN already entered?
+    var _devTzPinShown = false; // dev-mock Trezor: grid showing (reset by detect, like the real one)
     var mockOS = {
         _isMock: true,
         _mockLabel: 'SafeKeepOS mock v1 — Live Server dev bridge',
@@ -10874,6 +10959,49 @@ window.addEventListener('DOMContentLoaded', () => {
             if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found.' };
             // A mock cannot produce a real signature: return the PSBT unchanged.
             return { ok: true, status: 'signed', psbtBytes: bytes };
+        },
+
+        // --- Trezor One (dev mock). Behaviour via the console:
+        //   window._devTrezor = 'wrongpin' | 'refuse' | 'absent' | 'unlocked'
+        // Any PIN positions unlock it (unless 'wrongpin'). Like the real
+        // device, a detect between prompt and send cancels the PIN request.
+        trezorGetPairing: async function () { return _devTzPairing; },
+        trezorDetect: async function () {
+            await new Promise(function (r) { setTimeout(r, 500); });
+            _devTzPinShown = false;
+            if (window._devTrezor === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Trezor found. Plug it in and try again.' };
+            var unlocked = _devTzUnlocked || window._devTrezor === 'unlocked';
+            var r = { ok: true, status: 'detected', path: 'webusb:001:2', model: 'trezor_1', locked: !unlocked, passphrase_protection: false, firmware: '1.12.1' };
+            if (unlocked) { r.xfp = 'C0FFEE01'; r.id_xpub = 'xpub-dev-mock-trezor'; }
+            return r;
+        },
+        trezorPromptPin: async function () {
+            await new Promise(function (r) { setTimeout(r, 500); });
+            if (_devTzUnlocked) return { ok: true, status: 'unlocked' };
+            _devTzPinShown = true;
+            return { ok: true, status: 'pin_requested', path: 'webusb:001:2' };
+        },
+        trezorSendPin: async function (path, positions) {
+            await new Promise(function (r) { setTimeout(r, 500); });
+            console.log('[DEV MOCK] trezorSendPin() — ' + String(positions || '').length + ' position(s)');
+            if (!_devTzPinShown) return { ok: false, status: 'error', error: '[DEV MOCK] The Trezor was not showing a PIN grid (was it detected in between?).' };
+            _devTzPinShown = false;
+            if (window._devTrezor === 'wrongpin') return { ok: false, status: 'wrong_pin', error: '[DEV MOCK] The Trezor did not accept that PIN. It makes you wait a little longer after each wrong try. Start the PIN entry again.' };
+            _devTzUnlocked = true;
+            return { ok: true, status: 'unlocked', path: path };
+        },
+        trezorPair: async function (xfp) {
+            _devTzPairing = { xfp: String(xfp).toUpperCase(), pairedAt: new Date().toISOString(), temporary: false };
+            return { ok: true, status: 'paired', xfp: _devTzPairing.xfp };
+        },
+        trezorUnpair: async function () { _devTzPairing = null; return { ok: true, status: 'unpaired' }; },
+        trezorSign: async function (bytes) {
+            console.log('[DEV MOCK] trezorSign() — mode:', window._devTrezor || 'nochange');
+            await new Promise(function (r) { setTimeout(r, 2000); });
+            if (window._devTrezor === 'refuse') return { ok: false, status: 'refused', error: '[DEV MOCK] You declined on the Trezor. Nothing was signed.' };
+            if (window._devTrezor === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Trezor found.' };
+            // A mock cannot produce a real signature: return the PSBT unchanged.
+            return { ok: true, status: 'signed', psbtBytes: bytes, changed: false };
         },
         listTransfer: async function () { return []; }
     };
@@ -23263,8 +23391,9 @@ async function _psbtUpdateCosignCard() {
     if (!st) { card.style.display = 'none'; card.textContent = ''; return; }
 
     const os = window.SafeKeepOS;
-    let pairing = null;
+    let pairing = null, tzPairing = null;
     try { pairing = (os && typeof os.coldcardGetPairing === 'function') ? await os.coldcardGetPairing() : null; } catch (_) {}
+    try { tzPairing = (os && typeof os.trezorGetPairing === 'function') ? await os.trezorGetPairing() : null; } catch (_) {}
     const vaultFp = _psbtVaultFingerprint();
 
     card.textContent = '';
@@ -23275,8 +23404,11 @@ async function _psbtUpdateCosignCard() {
     const list = _psbtEl('div', { style: 'display: flex; flex-direction: column; gap: 0.3rem; font-family: var(--skb-mono); font-size: 0.8125rem; margin-bottom: 0.75rem;' });
     st.cosigners.forEach(c => {
         let label = c.fp;
-        if (pairing && c.fp === pairing.xfp) label += '  · Coldcard (paired)';
-        else if (vaultFp && c.fp === vaultFp) label += '  · SafeKeep vault';
+        const tags = [];
+        if (pairing && c.fp === pairing.xfp) tags.push('Coldcard (paired)');
+        if (tzPairing && c.fp === tzPairing.xfp) tags.push('Trezor (paired)');
+        if (vaultFp && c.fp === vaultFp) tags.push('SafeKeep vault');
+        if (tags.length) label += '  · ' + tags.join(' · ');
         list.appendChild(_psbtEl('div', { style: 'color: ' + (c.signed ? 'var(--skb-secondary, #3fb950)' : 'var(--skb-text-muted)') + ';' },
             (c.signed ? '✓ ' : '○ ') + label));
     });
@@ -23304,7 +23436,14 @@ async function _psbtUpdateCosignCard() {
         actions.appendChild(_psbtEl('button', {
             type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-coldcard-btn',
             onclick: psbtCosignColdcard
-        }, _psbtCosignBusy ? 'Waiting for Coldcard…' : 'Sign with Coldcard (' + pairing.xfp + ')'));
+        }, _psbtCosignBusy === 'coldcard' ? 'Waiting for Coldcard…' : 'Sign with Coldcard (' + pairing.xfp + ')'));
+    }
+    const tzCosigner = tzPairing ? st.cosigners.find(c => c.fp === tzPairing.xfp) : null;
+    if (tzCosigner && !tzCosigner.signed) {
+        actions.appendChild(_psbtEl('button', {
+            type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-trezor-btn',
+            onclick: psbtCosignTrezor
+        }, _psbtCosignBusy === 'trezor' ? 'Waiting for Trezor…' : 'Sign with Trezor (' + tzPairing.xfp + ')'));
     }
     actions.appendChild(_psbtEl('button', {
         type: 'button', class: 'skb-btn', id: 'psbt-cosign-seed-btn', onclick: psbtCosignAnotherSeed
@@ -23312,20 +23451,24 @@ async function _psbtUpdateCosignCard() {
     card.appendChild(actions);
     if (_psbtCosignBusy) actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
 
-    let hint = null;
+    const hints = [];
     if (pairing && !ccCosigner) {
-        hint = 'Your paired Coldcard (' + pairing.xfp + ') is not one of this wallet\'s keys.';
-    } else if (!pairing && os && typeof os.isBootDrive === 'function' && os.isBootDrive()) {
-        hint = 'To co-sign with a Coldcard over USB, pair it first in Device Options → Coldcard.';
+        hints.push('Your paired Coldcard (' + pairing.xfp + ') is not one of this wallet\'s keys.');
     }
-    if (hint) card.appendChild(_psbtEl('p', { style: 'font-size: 0.8125rem; color: var(--skb-text-dim); margin: 0.5rem 0 0;' }, hint));
+    if (tzPairing && !tzCosigner) {
+        hints.push('Your paired Trezor (' + tzPairing.xfp + ') is not one of this wallet\'s keys.');
+    }
+    if (!pairing && !tzPairing && os && typeof os.isBootDrive === 'function' && os.isBootDrive()) {
+        hints.push('To co-sign with a Coldcard or Trezor over USB, pair it first in Device Options.');
+    }
+    hints.forEach(h => card.appendChild(_psbtEl('p', { style: 'font-size: 0.8125rem; color: var(--skb-text-dim); margin: 0.5rem 0 0;' }, h)));
 }
 
 async function psbtCosignColdcard() {
     const os = window.SafeKeepOS;
     if (_psbtCosignBusy || !_psbtSignedBytes || !os || typeof os.coldcardSign !== 'function') return;
     const before = _psbtMultisigStatus(_psbtSignedBytes);
-    _psbtCosignBusy = true;
+    _psbtCosignBusy = 'coldcard';
     _psbtCosignMessage = { kind: 'info',
         text: 'Approve on your Coldcard: compare the amount and destination address on its screen with your wallet, then press ✓ (or X to decline). SafeKeep is waiting…' };
     await _psbtUpdateCosignCard();
@@ -23467,6 +23610,349 @@ async function ccSettingsForget() {
     const r = await os.coldcardUnpair();
     await ccSettingsRefresh();
     if (!r || !r.ok) _ccSettingsShowStatus((r && r.error) || 'Could not forget the Coldcard.', true);
+}
+
+// ===========================================================================
+// TREZOR ONE — PIN grid, unlock flow, PSBT co-signing, Device Options
+// ===========================================================================
+// The Trezor One shows a SHUFFLED 3×3 number grid on its own screen. Here the
+// user clicks the matching square on a BLANK grid; only the positions are sent
+// (keypad layout: 7 8 9 / 4 5 6 / 1 2 3), so SafeKeep never learns the PIN.
+// Rule: never call trezorDetect() between trezorPromptPin() and
+// trezorSendPin() — looking for the device resets its PIN request.
+const _TZ_GRID_POSITIONS = [7, 8, 9, 4, 5, 6, 1, 2, 3];   // top-left → bottom-right
+let _tzPin = null;   // { path, positions, resolve, busy } while the grid is open
+
+function _tzPinEls() {
+    let overlay = document.getElementById('tz-pin-overlay');
+    if (overlay) return overlay;
+    overlay = _psbtEl('div', { class: 'tz-pin-overlay', id: 'tz-pin-overlay', role: 'dialog',
+                                'aria-modal': 'true', 'aria-labelledby': 'tz-pin-title' });
+    const modal = _psbtEl('div', { class: 'tz-pin-modal' });
+    modal.appendChild(_psbtEl('h3', { id: 'tz-pin-title' }, 'Unlock your Trezor'));
+    modal.appendChild(_psbtEl('p', null,
+        'Your Trezor is showing a grid of numbers in a shuffled order. For each digit of your PIN, ' +
+        'find it on the Trezor\'s screen and click the square in the same position below. ' +
+        'The squares here are blank on purpose, so SafeKeep never learns your PIN.'));
+    const grid = _psbtEl('div', { class: 'tz-pin-grid', id: 'tz-pin-grid' });
+    _TZ_GRID_POSITIONS.forEach(function (pos, i) {
+        const row = ['top', 'middle', 'bottom'][Math.floor(i / 3)];
+        const col = ['left', 'centre', 'right'][i % 3];
+        grid.appendChild(_psbtEl('button', { type: 'button', class: 'tz-pin-cell',
+            'aria-label': row + ' ' + col, onclick: function () { _tzPinAdd(pos); } }));
+    });
+    modal.appendChild(grid);
+    modal.appendChild(_psbtEl('div', { class: 'tz-pin-dots', id: 'tz-pin-dots', 'aria-live': 'polite' }));
+    modal.appendChild(_psbtEl('div', { class: 'tz-pin-msg', id: 'tz-pin-msg', 'aria-live': 'polite' }));
+    const actions = _psbtEl('div', { class: 'tz-pin-actions', id: 'tz-pin-actions' });
+    actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', id: 'tz-pin-back',
+        onclick: _tzPinBackspace }, '⌫ Backspace'));
+    actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn skb-btn--primary', id: 'tz-pin-enter',
+        onclick: _tzPinSubmit }, 'Unlock'));
+    actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', id: 'tz-pin-retry',
+        style: 'display: none;', onclick: _tzPinRetry }, 'Show a new grid'));
+    actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', id: 'tz-pin-cancel',
+        onclick: function () { _tzPinClose({ ok: false, status: 'cancelled', error: 'PIN entry cancelled.' }); } }, 'Cancel'));
+    modal.appendChild(actions);
+    modal.appendChild(_psbtEl('p', { style: 'font-size: 0.75rem; margin: 0.75rem 0 0; text-align: center;' },
+        'Keyboard: number keys work like a numeric keypad (7 = top left, 1 = bottom left), Backspace, Enter, Esc.'));
+    overlay.appendChild(modal);
+    // Window + capture phase: runs before the app-wide Escape (back to the
+    // dashboard) and number-key dashboard shortcuts, which would otherwise
+    // also react to keys typed into the grid.
+    window.addEventListener('keydown', _tzPinKey, true);
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+function _tzPinRender(msg, isError) {
+    const dots = document.getElementById('tz-pin-dots');
+    if (dots && _tzPin) {
+        const n = _tzPin.positions.length;
+        dots.textContent = n ? '●'.repeat(n) : '';
+        dots.setAttribute('aria-label', n + ' of up to 9 entered');
+    }
+    const m = document.getElementById('tz-pin-msg');
+    if (m && msg !== undefined) { m.textContent = msg || ''; m.className = 'tz-pin-msg' + (isError ? ' error' : ''); }
+    const busy = !_tzPin || _tzPin.busy;
+    document.querySelectorAll('#tz-pin-grid .tz-pin-cell').forEach(b => { b.disabled = busy || (_tzPin && _tzPin.retryOnly); });
+    const enter = document.getElementById('tz-pin-enter');
+    const back = document.getElementById('tz-pin-back');
+    const retry = document.getElementById('tz-pin-retry');
+    const retryOnly = !!(_tzPin && _tzPin.retryOnly);
+    if (enter) { enter.style.display = retryOnly ? 'none' : ''; enter.disabled = busy || !_tzPin.positions.length; }
+    if (back) { back.style.display = retryOnly ? 'none' : ''; back.disabled = busy || !_tzPin.positions.length; }
+    if (retry) { retry.style.display = retryOnly ? '' : 'none'; retry.disabled = busy; }
+}
+
+function _tzPinAdd(pos) {
+    if (!_tzPin || _tzPin.busy || _tzPin.retryOnly || _tzPin.positions.length >= 9) return;
+    _tzPin.positions += String(pos);
+    _tzPinRender('');
+}
+
+function _tzPinBackspace() {
+    if (!_tzPin || _tzPin.busy || _tzPin.retryOnly) return;
+    _tzPin.positions = _tzPin.positions.slice(0, -1);
+    _tzPinRender('');
+}
+
+function _tzPinKey(e) {
+    if (!_tzPin) return;
+    const overlay = document.getElementById('tz-pin-overlay');
+    if (!overlay || !overlay.classList.contains('visible')) return;
+    const k = e.key;
+    // Only the grid's own keys are claimed; everything else (Tab, F-keys
+    // and the kiosk lockdown) carries on as normal.
+    if (!(/^[0-9]$/.test(k) || k === 'Backspace' || k === 'Enter' || k === 'Escape')) return;
+    e.stopPropagation();
+    // Enter means Unlock (or "Show a new grid" after a wrong PIN) wherever the
+    // focus is — except on Cancel, which keeps its normal click.
+    if (k === 'Enter' && e.target && e.target.id === 'tz-pin-cancel') return;
+    e.preventDefault();
+    if (k === 'Escape') { if (!_tzPin.busy) _tzPinClose({ ok: false, status: 'cancelled', error: 'PIN entry cancelled.' }); return; }
+    if (/^[1-9]$/.test(k)) { _tzPinAdd(Number(k)); return; }
+    if (k === 'Backspace') { _tzPinBackspace(); return; }
+    if (k === 'Enter') { if (_tzPin.retryOnly) _tzPinRetry(); else _tzPinSubmit(); }
+}
+
+async function _tzPinSubmit() {
+    const os = window.SafeKeepOS;
+    if (!_tzPin || _tzPin.busy || !_tzPin.positions.length) return;
+    const positions = _tzPin.positions;
+    _tzPin.positions = '';               // never kept once sent
+    _tzPin.busy = true;
+    _tzPinRender('Checking the PIN on the Trezor…');
+    let r;
+    try { r = await os.trezorSendPin(_tzPin.path, positions); }
+    catch (e) { r = { ok: false, error: 'Unexpected error: ' + (e && e.message ? e.message : e) }; }
+    if (!_tzPin) return;
+    _tzPin.busy = false;
+    if (r && r.ok) { _tzPinClose({ ok: true, status: 'unlocked' }); return; }
+    if (r && r.status === 'wrong_pin') {
+        _tzPin.retryOnly = true;
+        _tzPinRender((r.error || 'The Trezor did not accept that PIN.') + ' ', true);
+        const retry = document.getElementById('tz-pin-retry');
+        if (retry) retry.focus();
+        return;
+    }
+    _tzPinClose({ ok: false, status: (r && r.status) || 'error', error: (r && r.error) || 'The Trezor could not be unlocked.' });
+}
+
+async function _tzPinRetry() {
+    const os = window.SafeKeepOS;
+    if (!_tzPin || _tzPin.busy) return;
+    _tzPin.busy = true;
+    _tzPinRender('Asking the Trezor for a new grid…');
+    let r;
+    try { r = await os.trezorPromptPin(_tzPin.path); }
+    catch (e) { r = { ok: false, error: 'Unexpected error: ' + (e && e.message ? e.message : e) }; }
+    if (!_tzPin) return;
+    _tzPin.busy = false;
+    if (r && r.ok && r.status === 'unlocked') { _tzPinClose({ ok: true, status: 'unlocked' }); return; }
+    if (!r || !r.ok) { _tzPinClose({ ok: false, status: (r && r.status) || 'error', error: (r && r.error) || 'The Trezor did not show a new grid.' }); return; }
+    _tzPin.retryOnly = false;
+    _tzPin.positions = '';
+    _tzPinRender('New grid on the Trezor — enter your PIN again.');
+    const first = document.querySelector('#tz-pin-grid .tz-pin-cell');
+    if (first) first.focus();
+}
+
+function _tzPinClose(result) {
+    const overlay = document.getElementById('tz-pin-overlay');
+    if (overlay) overlay.classList.remove('visible');
+    const p = _tzPin;
+    _tzPin = null;
+    if (p && p.resolve) p.resolve(result);
+}
+
+function _tzPinOpen(path) {
+    return new Promise(function (resolve) {
+        const overlay = _tzPinEls();
+        _tzPin = { path: path, positions: '', resolve: resolve, busy: false, retryOnly: false };
+        overlay.classList.add('visible');
+        _tzPinRender('');
+        const first = overlay.querySelector('.tz-pin-cell');
+        if (first) first.focus();
+    });
+}
+
+/**
+ * Make sure the single connected Trezor is unlocked (asking for the PIN on
+ * the grid if needed). Resolves to the trezorDetect() result of the UNLOCKED
+ * device ({ ok, path, xfp, id_xpub, ... }) or { ok: false, status, error }.
+ * onStatus(text) gets progress messages.
+ */
+async function tzEnsureUnlocked(onStatus) {
+    const os = window.SafeKeepOS;
+    const say = typeof onStatus === 'function' ? onStatus : function () {};
+    if (!os || typeof os.trezorDetect !== 'function') {
+        return { ok: false, status: 'unavailable', error: 'Trezor support is not available in this build.' };
+    }
+    say('Looking for the Trezor… (plugged in by USB)');
+    let d = await os.trezorDetect();
+    if (!d || !d.ok) return d || { ok: false, error: 'No Trezor found.' };
+    if (!d.locked) return d;
+    say('The Trezor is locked — asking it to show its PIN grid…');
+    const p = await os.trezorPromptPin(d.path);
+    if (!p || !p.ok) return p || { ok: false, error: 'The Trezor did not show its PIN grid.' };
+    if (p.status !== 'unlocked') {
+        say('Enter your PIN on the grid (look at the Trezor\'s screen).');
+        const u = await _tzPinOpen(d.path);
+        if (!u || !u.ok) return u || { ok: false, error: 'The Trezor could not be unlocked.' };
+    }
+    // Unlocked now, so looking for it again is safe (no PIN request pending).
+    say('Unlocked. Reading the Trezor…');
+    d = await os.trezorDetect();
+    if (d && d.ok && d.locked) return { ok: false, status: 'locked', error: 'The Trezor is still locked. Try again.' };
+    return d || { ok: false, error: 'No Trezor found.' };
+}
+
+async function psbtCosignTrezor() {
+    const os = window.SafeKeepOS;
+    if (_psbtCosignBusy || !_psbtSignedBytes || !os || typeof os.trezorSign !== 'function') return;
+    const before = _psbtMultisigStatus(_psbtSignedBytes);
+    _psbtCosignBusy = 'trezor';
+    _psbtCosignMessage = { kind: 'info', text: 'Looking for the Trezor…' };
+    await _psbtUpdateCosignCard();
+
+    const u = await tzEnsureUnlocked(function (text) {
+        _psbtCosignMessage = { kind: 'info', text: text };
+        _psbtUpdateCosignCard();
+    });
+    if (!u || !u.ok) {
+        _psbtCosignBusy = false;
+        _psbtCosignMessage = (u && u.status === 'cancelled')
+            ? { kind: 'info', text: 'PIN entry cancelled. Nothing was signed.' }
+            : { kind: 'error', text: (u && u.error) || 'The Trezor could not be unlocked.' };
+        await _psbtUpdateCosignCard();
+        return;
+    }
+
+    _psbtCosignMessage = { kind: 'info',
+        text: 'Approve on your Trezor: compare the amount and destination address on its screen with your wallet, then confirm (or cancel to decline). ' +
+              'A Trezor One may not show outputs that go back to your own wallet, so check the amount carefully. SafeKeep is waiting…' };
+    await _psbtUpdateCosignCard();
+    let r;
+    try { r = await os.trezorSign(_psbtSignedBytes); }
+    catch (e) { r = { ok: false, error: 'Unexpected error: ' + (e && e.message ? e.message : e) }; }
+    _psbtCosignBusy = false;
+
+    if (r && r.ok && r.psbtBytes) {
+        const after = _psbtMultisigStatus(r.psbtBytes);
+        if (after && before && after.signed > before.signed) {
+            _psbtSignedBytes = r.psbtBytes;
+            _psbtRawTxHex = null;
+            _psbtCosignMessage = { kind: 'success', text: after.complete
+                ? 'The Trezor signed. All required signatures are present — scan the QR code below with Sparrow to broadcast.'
+                : 'The Trezor signed. More signatures are still needed.' };
+            const statusEl = document.getElementById('psbt-export-status');
+            if (statusEl && after.complete) {
+                statusEl.textContent = '';
+                statusEl.appendChild(_psbtEl('div', { class: 'psbt-alert success' },
+                    'Fully signed (' + after.signed + ' of ' + after.required + '). Pass it to Sparrow or another online coordinator to broadcast.'));
+            }
+            _psbtRenderQr();
+        } else {
+            _psbtCosignMessage = { kind: 'error',
+                text: 'The Trezor returned the transaction without adding a signature. Nothing changed.' };
+        }
+    } else {
+        _psbtCosignMessage = { kind: 'error', text: (r && r.error) || 'The Trezor did not sign.' };
+    }
+    await _psbtUpdateCosignCard();
+}
+
+// ---- Device Options → Trezor — pair / forget ----
+let _tzPendingDetect = null;
+
+function _tzSettingsShowStatus(text, isError) {
+    const el = document.getElementById('settings-trezor-status');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = isError ? 'var(--skb-danger)' : 'var(--skb-text)';
+}
+
+async function tzSettingsRefresh() {
+    const os = window.SafeKeepOS;
+    const pairBtn = document.getElementById('settings-trezor-pair-btn');
+    const forgetBtn = document.getElementById('settings-trezor-forget-btn');
+    const confirmEl = document.getElementById('settings-trezor-confirm');
+    if (!pairBtn) return;
+    if (confirmEl) { confirmEl.style.display = 'none'; confirmEl.textContent = ''; }
+    _tzPendingDetect = null;
+    if (!os || typeof os.trezorGetPairing !== 'function') {
+        _tzSettingsShowStatus('Trezor support is not available in this build.', true);
+        pairBtn.style.display = 'none'; forgetBtn.style.display = 'none';
+        return;
+    }
+    const p = await os.trezorGetPairing();
+    if (p) {
+        _tzSettingsShowStatus('Paired: fingerprint ' + p.xfp + (p.temporary ? '  ·  this temporary session only' : ''), false);
+        pairBtn.textContent = 'Pair a different Trezor';
+        forgetBtn.style.display = '';
+    } else {
+        _tzSettingsShowStatus('Not paired.', false);
+        pairBtn.textContent = 'Pair Trezor';
+        forgetBtn.style.display = 'none';
+    }
+    pairBtn.style.display = '';
+    pairBtn.disabled = false; forgetBtn.disabled = false;
+}
+
+async function tzSettingsStartPair() {
+    const pairBtn = document.getElementById('settings-trezor-pair-btn');
+    const forgetBtn = document.getElementById('settings-trezor-forget-btn');
+    const confirmEl = document.getElementById('settings-trezor-confirm');
+    if (!pairBtn || !confirmEl) return;
+    pairBtn.disabled = true;
+    if (forgetBtn) forgetBtn.disabled = true;
+    confirmEl.style.display = 'none'; confirmEl.textContent = '';
+    const d = await tzEnsureUnlocked(function (text) { _tzSettingsShowStatus(text, false); });
+    pairBtn.disabled = false;
+    if (forgetBtn) forgetBtn.disabled = false;
+    if (!d || !d.ok || !d.xfp) {
+        _tzSettingsShowStatus((d && d.error) || 'No Trezor found.', !(d && d.status === 'cancelled'));
+        return;
+    }
+    _tzPendingDetect = d;
+    pairBtn.style.display = 'none';
+    if (forgetBtn) forgetBtn.style.display = 'none';
+    _tzSettingsShowStatus('Found a Trezor One (unlocked).', false);
+    confirmEl.style.display = '';
+    let text = 'Fingerprint ' + d.xfp + '. Check this matches this key\'s fingerprint in your wallet software ' +
+               '(in Sparrow: the wallet\'s Settings → the keystore → Master fingerprint) before pairing.';
+    const vaultFp = _psbtVaultFingerprint();
+    if (vaultFp && vaultFp === d.xfp) text += ' It is the same key as this SafeKeep vault\'s seed.';
+    if (d.passphrase_protection) text += ' Passphrase protection is on for this Trezor: SafeKeep uses its standard wallet (no passphrase).';
+    confirmEl.appendChild(_psbtEl('div', { class: 'psbt-alert info', style: 'margin-bottom: 0.5rem;' }, text));
+    const row = _psbtEl('div', { style: 'display: flex; gap: 0.5rem; flex-wrap: wrap;' });
+    row.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn skb-btn--primary', onclick: tzSettingsConfirmPair },
+        'It matches — pair ' + d.xfp));
+    row.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', onclick: tzSettingsRefresh }, 'Cancel'));
+    confirmEl.appendChild(row);
+}
+
+async function tzSettingsConfirmPair() {
+    const os = window.SafeKeepOS;
+    const d = _tzPendingDetect;
+    if (!os || !d) return;
+    const confirmEl = document.getElementById('settings-trezor-confirm');
+    if (confirmEl) confirmEl.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    _tzSettingsShowStatus('Pairing…', false);
+    const r = await os.trezorPair(d.xfp, d.id_xpub);
+    await tzSettingsRefresh();
+    if (!r || !r.ok) _tzSettingsShowStatus((r && r.error) || 'Pairing failed.', true);
+}
+
+async function tzSettingsForget() {
+    const os = window.SafeKeepOS;
+    if (!os) return;
+    const forgetBtn = document.getElementById('settings-trezor-forget-btn');
+    if (forgetBtn) forgetBtn.disabled = true;
+    const r = await os.trezorUnpair();
+    await tzSettingsRefresh();
+    if (!r || !r.ok) _tzSettingsShowStatus((r && r.error) || 'Could not forget the Trezor.', true);
 }
 
 // ---- Base43 encoder (Electrum's native QR encoding for PSBTs/txns) ----

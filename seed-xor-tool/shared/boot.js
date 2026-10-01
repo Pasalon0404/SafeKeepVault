@@ -643,6 +643,7 @@ const SafeKeepOS = (() => {
     'POWER_ACTION',     // dashboard Power Options → safekeep-boot.sh dispatcher
     'DISPLAY_SLEEP',    // Settings idle timer → safekeep-boot.sh display watcher
     'COLDCARD_REQUEST', 'COLDCARD_ACK',   // PSBT Signer ↔ Coldcard Watcher
+    'TREZOR_REQUEST', 'TREZOR_ACK',       // PSBT Signer ↔ Trezor Watcher
     'master-seed'
   ];
 
@@ -2335,6 +2336,133 @@ const SafeKeepOS = (() => {
     return r;
   }
 
+  // ===================================================================
+  //  TREZOR ONE — USB signing (Trezor Watcher in safekeep-boot.sh)
+  // ===================================================================
+  // Same request / RAM result / ack pattern as the Coldcard above:
+  //   request : TREZOR_REQUEST.json  → Chromium's download folder
+  //   result  : /tmp/safekeep-signals/TREZOR_RESULT.json  (RAM, always)
+  //   ack     : TREZOR_ACK.json      → Chromium's download folder
+  // The Trezor One holds the "person" key (same key as the vault seed), so
+  // it is an alternative signer for that key, e.g. in a seedless temporary
+  // session. PIN entry: the Trezor shows a SHUFFLED number grid on its own
+  // screen; SafeKeep only ever sends the POSITIONS the user clicked
+  // (keypad layout: 7 8 9 / 4 5 6 / 1 2 3), never the PIN itself.
+  // IMPORTANT: between trezorPromptPin() and trezorSendPin() do NOT call
+  // trezorDetect() — looking for the device resets its PIN request.
+  const TREZOR_REQUEST_FILE  = 'TREZOR_REQUEST.json';
+  const TREZOR_ACK_FILE      = 'TREZOR_ACK.json';
+  const TREZOR_RESULT_URL    = `file://${COLDCARD_SIGNAL_DIR}/TREZOR_RESULT.json`;
+  const TREZOR_PAIRING_VAULT = 'file:///media/.safekeep-vault/settings/trezor-pairing.json';
+  const TREZOR_PAIRING_TEMP  = `file://${COLDCARD_SIGNAL_DIR}/trezor-pairing.json`;
+  // The helper gives up on most actions after 60 s, so wait a bit longer.
+  const TREZOR_SHORT_WAIT_MS = 75000;
+  let _tzInFlight = false;
+
+  async function _trezorRequest(payload, maxWaitMs) {
+    if (!isBootDrive()) {
+      return { ok: false, status: 'unavailable',
+               error: 'Trezor signing only works when SafeKeep is running from its USB stick.' };
+    }
+    if (_tzInFlight) {
+      return { ok: false, status: 'in_progress', error: 'A Trezor request is already in progress.' };
+    }
+    _tzInFlight = true;
+    const requestId = _ccRequestId();
+    try {
+      _rawBlobDownload(TREZOR_REQUEST_FILE, JSON.stringify(Object.assign({}, payload, { request_id: requestId })));
+      payload = null;   // may hold PIN positions
+      const deadline = Date.now() + maxWaitMs;
+      await _sleep(700);
+      while (Date.now() < deadline) {
+        try {
+          const resp = await fetch(TREZOR_RESULT_URL, { cache: 'no-store' });
+          if (resp.ok) {
+            const result = await resp.json();
+            if (result && result.request_id === requestId) {
+              setTimeout(function () {
+                try { _rawBlobDownload(TREZOR_ACK_FILE, '{"ack":true}'); } catch (_) {}
+              }, 400);
+              return result;
+            }
+          }
+        } catch (e) { /* not written yet */ }
+        await _sleep(500);
+      }
+      return { ok: false, status: 'no_answer',
+               error: 'SafeKeep did not hear back from the Trezor helper. Unplug the Trezor, plug it back in, and try again.' };
+    } finally {
+      _tzInFlight = false;
+    }
+  }
+
+  function _tzUpper(r) {
+    if (r && r.ok && r.xfp) r.xfp = String(r.xfp).toUpperCase();
+    return r;
+  }
+
+  /** Saved pairing, or null. { xfp, pairedAt, temporary } */
+  async function trezorGetPairing() {
+    if (!isBootDrive()) return null;
+    const temporary = _ccTemporarySession();
+    try {
+      const resp = await fetch(temporary ? TREZOR_PAIRING_TEMP : TREZOR_PAIRING_VAULT, { cache: 'no-store' });
+      if (!resp.ok) return null;
+      const p = await resp.json();
+      if (p && typeof p.xfp === 'string' && /^[0-9a-f]{8}$/.test(p.xfp)) {
+        return { xfp: p.xfp.toUpperCase(), pairedAt: String(p.paired_at || ''), temporary };
+      }
+    } catch (e) { /* no pairing */ }
+    return null;
+  }
+
+  /**
+   * Find the single connected Trezor One.
+   * ok → { path, locked, passphrase_protection, firmware, xfp?, id_xpub? }
+   * (xfp / id_xpub only when unlocked). Never call between promptPin and sendPin.
+   */
+  async function trezorDetect() {
+    return _tzUpper(await _trezorRequest({ action: 'detect' }, TREZOR_SHORT_WAIT_MS));
+  }
+
+  /** Ask the Trezor at `path` to show its PIN grid. ok → status 'pin_requested' | 'unlocked' */
+  async function trezorPromptPin(path) {
+    return _trezorRequest({ action: 'prompt_pin', path: String(path || '') }, TREZOR_SHORT_WAIT_MS);
+  }
+
+  /** Send the clicked grid POSITIONS (digits 1-9). ok → status 'unlocked'; wrong → 'wrong_pin' */
+  async function trezorSendPin(path, positions) {
+    return _trezorRequest({ action: 'send_pin', path: String(path || ''),
+                            pin_positions: String(positions || '') }, TREZOR_SHORT_WAIT_MS);
+  }
+
+  /** Save the Trezor the user just confirmed (values from trezorDetect while unlocked). */
+  async function trezorPair(xfp, idXpub) {
+    return _tzUpper(await _trezorRequest({ action: 'pair',
+      expected_xfp: String(xfp || '').toLowerCase(), expected_xpub: String(idXpub || '') }, TREZOR_SHORT_WAIT_MS));
+  }
+
+  async function trezorUnpair() {
+    return _trezorRequest({ action: 'unpair' }, 15000);
+  }
+
+  /**
+   * Ask the paired, unlocked Trezor to sign. The user approves on the Trezor.
+   * ok → { psbtBytes: Uint8Array, changed }  (helper gives up after 10 minutes)
+   */
+  async function trezorSign(psbtBytes) {
+    if (!(psbtBytes instanceof Uint8Array) || psbtBytes.length < 5) {
+      return { ok: false, status: 'bad_request', error: 'No transaction to send to the Trezor.' };
+    }
+    const r = _tzUpper(await _trezorRequest({ action: 'sign', psbt_b64: _ccToBase64(psbtBytes) }, 11 * 60 * 1000));
+    if (r.ok && r.psbt_b64) {
+      try { r.psbtBytes = _ccFromBase64(r.psbt_b64); }
+      catch (e) { return { ok: false, status: 'error', error: 'The Trezor result could not be read.' }; }
+      delete r.psbt_b64;
+    }
+    return r;
+  }
+
   function _twofaKey(a) {
     return [(a.issuer || ''), (a.account || ''), (a.secret || '')].join('\u0000');
   }
@@ -2519,6 +2647,15 @@ const SafeKeepOS = (() => {
     coldcardPair,
     coldcardUnpair,
     coldcardSign,
+
+    // Trezor One — USB signing via the Trezor Watcher
+    trezorGetPairing,
+    trezorDetect,
+    trezorPromptPin,
+    trezorSendPin,
+    trezorPair,
+    trezorUnpair,
+    trezorSign,
 
     // Constants (for tooling/tests)
     MASTER_SEED_PATH,
