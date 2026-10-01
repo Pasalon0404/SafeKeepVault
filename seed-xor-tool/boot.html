@@ -5991,6 +5991,12 @@
                          untouched. -->
                     Unlock .7z Backup
                 </button>
+                <!-- Temporary sessions only (shown by transitionToWelcome):
+                     sign a multisig PSBT with paired hardware wallets
+                     (Trezor / Coldcard) without ever loading a seed. -->
+                <button type="button" class="skb-btn skb-btn--primary" id="welcome-hw-btn" style="display: none;" onclick="openHardwareSigner()">
+                    Sign with Hardware Wallet
+                </button>
             </div>
 
             <!-- Shown when vault already has a seed (query param ?state=initialized) -->
@@ -6873,8 +6879,8 @@
                 </div>
 
                 <!-- Key source selection -->
-                <div class="psbt-card">
-                    <div class="psbt-card-title">Signing Key</div>
+                <div class="psbt-card" id="psbt-signing-key-card">
+                    <div class="psbt-card-title" id="psbt-signing-key-title">Signing Key</div>
 
                     <!-- Fingerprint match indicator -->
                     <div id="psbt-fp-match-area" style="margin-bottom: 1rem;"></div>
@@ -10019,6 +10025,12 @@ document.addEventListener('keydown', function(evt) {
         var style = window.getComputedStyle(acList[i]);
         if (style.display !== 'none') return;
     }
+    // Hardware-only signing has no dashboard to return to (no seed).
+    if (typeof _psbtHwMode !== 'undefined' && _psbtHwMode && typeof psbtBackToDashboard === 'function') {
+        evt.preventDefault();
+        psbtBackToDashboard();
+        return;
+    }
     // Defensive guard: showState must exist before we navigate
     if (typeof showState === 'function') {
         evt.preventDefault();
@@ -10949,7 +10961,7 @@ window.addEventListener('DOMContentLoaded', () => {
         coldcardDetect: async function () {
             await new Promise(function (r) { setTimeout(r, 600); });
             if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on.' };
-            return { ok: true, status: 'detected', xfp: 'DECAF002', serial: 'DEVMOCK0001', master_xpub: 'xpub-dev-mock' };
+            return { ok: true, status: 'detected', xfp: window._devColdcardXfp || 'DECAF002', serial: 'DEVMOCK0001', master_xpub: 'xpub-dev-mock' };
         },
         coldcardPair: async function (xfp) {
             _devCcPairing = { xfp: String(xfp).toUpperCase(), serial: 'DEVMOCK0001', pairedAt: new Date().toISOString(), temporary: false };
@@ -10967,6 +10979,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
         // --- Trezor One (dev mock). Behaviour via the console:
         //   window._devTrezor = 'wrongpin' | 'refuse' | 'absent' | 'unlocked'
+        //   window._devTrezorXfp / window._devColdcardXfp = fingerprint the mocks report
         // Any PIN positions unlock it (unless 'wrongpin'). Like the real
         // device, a detect between prompt and send cancels the PIN request.
         trezorGetPairing: async function () { return _devTzPairing; },
@@ -10976,7 +10989,7 @@ window.addEventListener('DOMContentLoaded', () => {
             if (window._devTrezor === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Trezor found. Plug it in and try again.' };
             var unlocked = _devTzUnlocked || window._devTrezor === 'unlocked';
             var r = { ok: true, status: 'detected', path: 'webusb:001:2', model: 'trezor_1', locked: !unlocked, passphrase_protection: false, firmware: '1.12.1' };
-            if (unlocked) { r.xfp = 'C0FFEE01'; r.id_xpub = 'xpub-dev-mock-trezor'; }
+            if (unlocked) { r.xfp = window._devTrezorXfp || 'C0FFEE01'; r.id_xpub = 'xpub-dev-mock-trezor'; }
             return r;
         },
         trezorPromptPin: async function () {
@@ -14796,6 +14809,8 @@ function transitionToWelcome() {
         } else {
             if (wb) wb.style.display = 'flex';
             if (vln) vln.style.display = 'none';
+            const hwb = document.getElementById('welcome-hw-btn');
+            if (hwb) hwb.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none';
             if (heading) heading.textContent = 'No Master Seed Found';
             if (subtitle) subtitle.textContent = 'This device does not have a master seed configured. Generate a fresh seed or restore one from your backup words to get started.';
         }
@@ -14891,7 +14906,9 @@ function startEphemeralSession() {
         if (wb) wb.style.display = 'flex';
         if (vln) vln.style.display = 'none';
         if (heading) heading.textContent = 'Temporary Session';
-        if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off. Nothing is written to disk.';
+        if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
+        var hwb = document.getElementById('welcome-hw-btn');
+        if (hwb) hwb.style.display = '';
     } catch (e) {}
 
     var welcomeEl = document.getElementById('state-welcome');
@@ -15087,7 +15104,9 @@ function ephemeralHotSwapSeed() {
         if (wb) wb.style.display = 'flex';
         if (vln) vln.style.display = 'none';
         if (heading) heading.textContent = 'Temporary Session';
-        if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off. Nothing is written to disk.';
+        if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
+        var hwb = document.getElementById('welcome-hw-btn');
+        if (hwb) hwb.style.display = '';
     } catch (_) {}
 
     // 5. Hide any Generate/Restore sub-panels lingering open from the prior session.
@@ -17006,6 +17025,10 @@ function showState(stateId) {
         }
     }
 
+    if (stateId !== 'state-psbt-signer' && typeof _psbtHwMode !== 'undefined' && _psbtHwMode) {
+        _psbtHwMode = false;
+        if (typeof _psbtApplyHwUi === 'function') _psbtApplyHwUi();
+    }
     var allStates = _systemScreens.concat(['state-dashboard']).concat(_toolScreens);
     var isTool = _toolScreens.indexOf(stateId) !== -1;
     var isDashboard = (stateId === 'state-dashboard');
@@ -17124,12 +17147,59 @@ function showState(stateId) {
     clearStatus();
 }
 
+// ---- Hardware-only signing (temporary session, no seed) ----
+// Opened from the welcome screen's "Sign with Hardware Wallet". The normal
+// PSBT Signer flow (scan → review → export) is reused; no seed is ever
+// loaded. On the review step the Signing Key card lists the transaction's
+// keys instead of seed options, "Continue to Hardware Signing" skips seed
+// signing, and the export card offers Sign with Trezor / Coldcard, pairing
+// a device for this session after the user confirms it is one of the
+// transaction's keys.
+let _psbtHwMode = false;
+
+function _psbtApplyHwUi() {
+    const on = _psbtHwMode;
+    const card = document.getElementById('psbt-signing-key-card');
+    if (card) {
+        Array.from(card.children).forEach(function (el) {
+            if (el.id === 'psbt-signing-key-title' || el.id === 'psbt-fp-match-area') return;
+            if (on) { el.dataset.hwHidden = '1'; el.style.display = 'none'; }
+            else if (el.dataset.hwHidden) { delete el.dataset.hwHidden; el.style.display = ''; }
+        });
+    }
+    const title = document.getElementById('psbt-signing-key-title');
+    if (title) title.textContent = on ? 'Signers (hardware wallets)' : 'Signing Key';
+    const signBtn = document.getElementById('psbt-sign-btn');
+    if (signBtn && !signBtn.disabled) signBtn.textContent = on ? 'Continue to Hardware Signing' : 'Sign Transaction';
+    document.querySelectorAll('#state-psbt-signer button[onclick="psbtBackToDashboard()"]').forEach(function (b) {
+        b.textContent = on ? 'Back' : 'Done';
+    });
+    const sub = document.querySelector('#state-psbt-signer .tool-hero-subtitle');
+    if (sub) sub.textContent = on ? 'sign with hardware wallets' : 'sign a transaction';
+}
+
+let _psbtHwWelcomeText = null;   // welcome heading/subtitle to restore on Back
+
+function openHardwareSigner() {
+    try {
+        const h = document.querySelector('.welcome-message h2');
+        const p = document.querySelector('.welcome-message p');
+        _psbtHwWelcomeText = [h ? h.textContent : '', p ? p.textContent : ''];
+    } catch (_) { _psbtHwWelcomeText = null; }
+    showState('state-psbt-signer');
+    _psbtHwMode = true;
+    psbtResetToIngest();
+    psbtShowStatus('Scan or load the transaction from your wallet (e.g. Sparrow). No seed is loaded: ' +
+                   'the signatures will come from your hardware wallets.', 'info');
+}
+
 function openPsbtSigner() {
     // Pre-fill vault fingerprint before routing (dashboard is still in DOM)
     const fp = document.getElementById('dash-fingerprint')?.textContent || '--------';
     const pp = window.SafeKeepOS?.getPassphrase() || '';
 
     showState('state-psbt-signer');
+    _psbtHwMode = false;
     psbtResetToIngest();
 
     document.getElementById('psbt-vault-fp').textContent = fp;
@@ -17155,6 +17225,26 @@ function psbtBackToDashboard() {
     document.getElementById('psbt-passphrase').value = '';
     psbtShowStatus('', '');
 
+    if (_psbtHwMode) {
+        // Hardware-only signing was opened from the welcome screen (no seed,
+        // so there is no dashboard): go back there.
+        _psbtHwMode = false;
+        _psbtApplyHwUi();
+        transitionToWelcome();
+        try {
+            // transitionToWelcome() resets the heading for a normal boot;
+            // put the temporary-session wording and the button back.
+            const h = document.querySelector('.welcome-message h2');
+            const p = document.querySelector('.welcome-message p');
+            if (_psbtHwWelcomeText) {
+                if (h) h.textContent = _psbtHwWelcomeText[0];
+                if (p) p.textContent = _psbtHwWelcomeText[1];
+            }
+            const hwb = document.getElementById('welcome-hw-btn');
+            if (hwb) hwb.style.display = '';
+        } catch (_) {}
+        return;
+    }
     showState('state-dashboard');
 }
 
@@ -17203,6 +17293,7 @@ function psbtShowStatus(msg, type) {
 function psbtResetToIngest() {
     _psbtWipeTempSeed();
     _psbtCosignMessage = null;
+    if (_psbtCosignConfirm) { const cf = _psbtCosignConfirm; _psbtCosignConfirm = null; cf.resolve(false); }
     var _cosignCard = document.getElementById('psbt-cosign-card');
     if (_cosignCard) { _cosignCard.style.display = 'none'; _cosignCard.textContent = ''; }
     _psbtStopQrAnimation();
@@ -17288,6 +17379,7 @@ function psbtResetToIngest() {
 
     psbtSetStep(1);
     psbtShowStatus('', '');
+    _psbtApplyHwUi();
 }
 
 
@@ -18934,8 +19026,10 @@ async function _psbtIngestComplete(psbtBytes, filename) {
             // the user must verify the change address on their coordinator
             // and click Acknowledge & Proceed to clear the gate.
             psbtShowStatus(
-                '<strong>&#9888; UNVERIFIED CHANGE:</strong> This PSBT lacks the metadata needed to auto-verify the change address ' +
-                '(e.g. a BlueWallet BBQR "diet" export without cosigner pubkeys or witnessScript). ' +
+                '<strong>&#9888; UNVERIFIED CHANGE:</strong> ' + (_psbtHwMode
+                    ? 'No seed is loaded, so SafeKeep cannot verify the change address itself. '
+                    : 'This PSBT lacks the metadata needed to auto-verify the change address ' +
+                      '(e.g. a BlueWallet BBQR "diet" export without cosigner pubkeys or witnessScript). ') +
                 'You <strong>MUST</strong> manually verify the change address on your coordinator before signing. ' +
                 'Review the outputs below, then click <em>Acknowledge &amp; Proceed</em> on the highlighted card to unlock signing.',
                 'warning'
@@ -20103,7 +20197,10 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
                     index: i, amount: amt, address: addr,
                     category: 'unverified-change',
                     derivPath: pathStr,
-                    auditDetail: 'No seed available for verification. Load your seed to enable change address audit.'
+                    auditDetail: _psbtHwMode
+                        ? 'No seed is loaded, so SafeKeep cannot prove this change output comes back to your wallet. ' +
+                          'Check it in your wallet software (e.g. Sparrow). A Coldcard with this multisig wallet registered also checks change itself.'
+                        : 'No seed available for verification. Load your seed to enable change address audit.'
                 });
                 return;
             }
@@ -21037,7 +21134,7 @@ function _psbtUpdateSignGate() {
             (remaining > 0 ? ' (' + remaining + ' remaining)' : '');
     } else {
         signBtn.disabled = false;
-        signBtn.textContent = 'Sign Transaction';
+        signBtn.textContent = _psbtHwMode ? 'Continue to Hardware Signing' : 'Sign Transaction';
         signBtn.style.background = '';
         signBtn.style.borderColor = '';
         signBtn.style.opacity = '';
@@ -22207,6 +22304,31 @@ async function _psbtRenderFingerprintMatch() {
     const area = document.getElementById('psbt-fp-match-area');
     const fpSet = _psbtCachedPsbtFps;
 
+    if (_psbtHwMode) {
+        const os = window.SafeKeepOS;
+        let cc = null, tz = null;
+        try { cc = (os && os.coldcardGetPairing) ? await os.coldcardGetPairing() : null; } catch (_) {}
+        try { tz = (os && os.trezorGetPairing) ? await os.trezorGetPairing() : null; } catch (_) {}
+        area.textContent = '';
+        if (fpSet.size) {
+            const line = _psbtEl('div', { style: 'font-size: 0.82rem; color: var(--skb-text-muted); margin-bottom: 0.5rem;' }, 'Keys in this transaction: ');
+            Array.from(fpSet).forEach(function (fp) {
+                let label = fp;
+                if (cc && cc.xfp === fp) label += ' (Coldcard)';
+                if (tz && tz.xfp === fp) label += ' (Trezor)';
+                line.appendChild(_psbtEl('span', { class: 'psbt-fp-badge' }, label));
+                line.appendChild(document.createTextNode(' '));
+            });
+            area.appendChild(line);
+        }
+        area.appendChild(_psbtEl('div', { class: 'psbt-alert info' },
+            'No seed is loaded. After you check the transaction above, continue to sign it with your ' +
+            'hardware wallets, one at a time.'));
+        _psbtFpMatchState = { computed: true, noFpData: fpSet.size === 0, hasWildcard: false, matches: true };
+        _psbtUpdateAuditGate();
+        return;
+    }
+
     if (fpSet.size === 0) {
         area.innerHTML = `<div class="psbt-alert info">No fingerprint data in PSBT — the signer will try all derivation paths.</div>`;
         // No fp declared in the PSBT at all — the audit has nothing to gate
@@ -22389,6 +22511,22 @@ async function psbtDoSign() {
     }
     if (!_psbtLoadedBytes) {
         psbtShowStatus('No PSBT loaded.', 'error');
+        return;
+    }
+
+    if (_psbtHwMode) {
+        // No seed: hand the reviewed PSBT straight to the hardware-signing step.
+        _psbtSignedBytes = _psbtLoadedBytes;
+        _psbtRawTxHex = null;
+        _psbtCosignMessage = null;
+        _psbtShowExport(0, false);
+        const statusEl = document.getElementById('psbt-export-status');
+        if (statusEl) {
+            statusEl.textContent = '';
+            statusEl.appendChild(_psbtEl('div', { class: 'psbt-alert info' },
+                'Ready for hardware signing. Plug in one device, sign, then unplug it and plug in the next. ' +
+                'When enough signatures are added, scan the QR code with Sparrow.'));
+        }
         return;
     }
 
@@ -23322,6 +23460,40 @@ function _psbtShowExport(sigsAdded, isFinalized) {
 // ===========================================================================
 let _psbtCosignBusy = false;
 let _psbtCosignMessage = null;   // { kind: 'info'|'error'|'success', text }
+let _psbtCosignConfirm = null;   // { text, yesLabel, resolve } — hardware mode "use this device?"
+
+/**
+ * Hardware-only mode: check a just-identified device against the
+ * transaction's keys and, after the user confirms, pair it for this
+ * session (the helper only signs with a paired device).
+ * kind: 'trezor' | 'coldcard'; d: detect result ({ xfp, id_xpub | master_xpub }).
+ * Returns { ok: true } or { ok: false, status, error }.
+ */
+async function _psbtHwConfirmAndPair(kind, d) {
+    const os = window.SafeKeepOS;
+    const name = kind === 'trezor' ? 'Trezor' : 'Coldcard';
+    const st = _psbtMultisigStatus(_psbtSignedBytes);
+    const xfp = String((d && d.xfp) || '').toUpperCase();
+    const c = st ? st.cosigners.find(x => x.fp === xfp) : null;
+    if (!c) return { ok: false, status: 'wrong_device',
+        error: 'This ' + name + ' (' + xfp + ') is not one of this transaction\'s keys. Nothing was signed.' };
+    if (c.signed) return { ok: false, status: 'already_signed',
+        error: 'This ' + name + ' (' + xfp + ') has already signed this transaction. Plug in a different device.' };
+    let current = null;
+    try { current = kind === 'trezor' ? await os.trezorGetPairing() : await os.coldcardGetPairing(); } catch (_) {}
+    if (current && current.xfp === xfp) return { ok: true };
+    const yes = await new Promise(function (resolve) {
+        _psbtCosignConfirm = { resolve: resolve, yesLabel: 'Use this ' + name,
+            text: 'Found a ' + name + ' with fingerprint ' + xfp + ', one of this transaction\'s keys. ' +
+                  'Use it to sign? It will be remembered only until this temporary session ends.' };
+        _psbtCosignMessage = null;
+        _psbtUpdateCosignCard();
+    });
+    if (!yes) return { ok: false, status: 'cancelled', error: 'Cancelled. Nothing was signed.' };
+    const r = kind === 'trezor' ? await os.trezorPair(xfp, d.id_xpub) : await os.coldcardPair(xfp, d.master_xpub);
+    if (!r || !r.ok) return { ok: false, status: (r && r.status) || 'error', error: (r && r.error) || ('Could not use this ' + name + '.') };
+    return { ok: true };
+}
 
 function _psbtHex(u8) {
     return Array.from(u8 || []).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -23392,7 +23564,18 @@ async function _psbtUpdateCosignCard() {
     const card = document.getElementById('psbt-cosign-card');
     if (!card) return;
     const st = _psbtMultisigStatus(_psbtSignedBytes);
-    if (!st) { card.style.display = 'none'; card.textContent = ''; return; }
+    if (!st) {
+        if (_psbtHwMode) {
+            card.textContent = '';
+            card.style.display = '';
+            card.appendChild(_psbtEl('div', { class: 'psbt-card-title' }, 'Hardware signing'));
+            card.appendChild(_psbtEl('div', { class: 'psbt-alert warning' },
+                'Hardware signing here supports multisig (m-of-n) transactions, and this one is not. ' +
+                'Sign it in your wallet software with the hardware wallet instead.'));
+            return;
+        }
+        card.style.display = 'none'; card.textContent = ''; return;
+    }
 
     const os = window.SafeKeepOS;
     let pairing = null, tzPairing = null;
@@ -23434,7 +23617,33 @@ async function _psbtUpdateCosignCard() {
     card.appendChild(_psbtEl('div', { style: 'font-size: 0.875rem; margin-bottom: 0.6rem;' },
         need === 1 ? 'One more signature is needed.' : need + ' more signatures are needed.'));
 
+    if (_psbtCosignConfirm) {
+        const box = _psbtEl('div', { class: 'psbt-alert info', style: 'margin-bottom: 0.6rem;' });
+        box.appendChild(_psbtEl('div', { style: 'margin-bottom: 0.5rem;' }, _psbtCosignConfirm.text));
+        const row = _psbtEl('div', { style: 'display: flex; gap: 0.5rem; flex-wrap: wrap;' });
+        const cf = _psbtCosignConfirm;
+        row.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-confirm-yes',
+            onclick: function () { _psbtCosignConfirm = null; cf.resolve(true); } }, cf.yesLabel));
+        row.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', id: 'psbt-cosign-confirm-no',
+            onclick: function () { _psbtCosignConfirm = null; cf.resolve(false); } }, 'Cancel'));
+        box.appendChild(row);
+        card.appendChild(box);
+    }
+
     const actions = _psbtEl('div', { class: 'psbt-actions', style: 'margin-top: 0;' });
+    if (_psbtHwMode) {
+        // Hardware-only: offer both device types; the device is identified
+        // and confirmed against this transaction's keys when clicked.
+        actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-trezor-btn',
+            onclick: psbtCosignTrezor }, _psbtCosignBusy === 'trezor' ? 'Waiting for Trezor…' : 'Sign with Trezor'));
+        actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-coldcard-btn',
+            onclick: psbtCosignColdcard }, _psbtCosignBusy === 'coldcard' ? 'Waiting for Coldcard…' : 'Sign with Coldcard'));
+        card.appendChild(actions);
+        if (_psbtCosignBusy) actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
+        card.appendChild(_psbtEl('p', { style: 'font-size: 0.8125rem; color: var(--skb-text-dim); margin: 0.5rem 0 0;' },
+            'Plug in one device at a time. After it signs, unplug it and plug in the next one.'));
+        return;
+    }
     const ccCosigner = pairing ? st.cosigners.find(c => c.fp === pairing.xfp) : null;
     if (ccCosigner && !ccCosigner.signed) {
         actions.appendChild(_psbtEl('button', {
@@ -23473,6 +23682,19 @@ async function psbtCosignColdcard() {
     if (_psbtCosignBusy || !_psbtSignedBytes || !os || typeof os.coldcardSign !== 'function') return;
     const before = _psbtMultisigStatus(_psbtSignedBytes);
     _psbtCosignBusy = 'coldcard';
+    if (_psbtHwMode) {
+        _psbtCosignMessage = { kind: 'info', text: 'Looking for the Coldcard… (plugged in, unlocked with its PIN, USB turned on)' };
+        await _psbtUpdateCosignCard();
+        let d = null;
+        try { d = await os.coldcardDetect(); } catch (e) { d = { ok: false, error: String(e && e.message || e) }; }
+        const p = (d && d.ok) ? await _psbtHwConfirmAndPair('coldcard', d) : d;
+        if (!p || !p.ok) {
+            _psbtCosignBusy = false;
+            _psbtCosignMessage = { kind: (p && p.status === 'cancelled') ? 'info' : 'error', text: (p && p.error) || 'No Coldcard found.' };
+            await _psbtUpdateCosignCard();
+            return;
+        }
+    }
     _psbtCosignMessage = { kind: 'info',
         text: 'Approve on your Coldcard: compare the amount and destination address on its screen with your wallet, then press ✓ (or X to decline). SafeKeep is waiting…' };
     await _psbtUpdateCosignCard();
@@ -23829,6 +24051,15 @@ async function psbtCosignTrezor() {
             : { kind: 'error', text: (u && u.error) || 'The Trezor could not be unlocked.' };
         await _psbtUpdateCosignCard();
         return;
+    }
+    if (_psbtHwMode) {
+        const p = await _psbtHwConfirmAndPair('trezor', u);
+        if (!p || !p.ok) {
+            _psbtCosignBusy = false;
+            _psbtCosignMessage = { kind: (p && p.status === 'cancelled') ? 'info' : 'error', text: (p && p.error) || 'Nothing was signed.' };
+            await _psbtUpdateCosignCard();
+            return;
+        }
     }
 
     _psbtCosignMessage = { kind: 'info',
