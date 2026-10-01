@@ -23446,11 +23446,11 @@ function _psbtShowExport(sigsAdded, isFinalized) {
     // arriving from a coordinator already expect. The Nunchuk Raw Hex
     // and Electrum Raw Hex variants remain one click away in the
     // dropdown for users with cameras that prefer alphanumeric encoding.
-    const formatSelect = document.getElementById('psbt-qr-format');
-    if (formatSelect) {
-        _psbtQrFormat = 'standard';
-        formatSelect.value = 'standard';
-    }
+    // ...except that a large PSBT (e.g. one carrying full previous
+    // transactions for a Trezor) makes a single Base64 QR too dense for a
+    // webcam, so those start on animated UR instead (_psbtApplyAutoQrFormat).
+    _psbtQrFormatUserChosen = false;
+    _psbtApplyAutoQrFormat();
 
     // Generate QR code
     _psbtRenderQr();
@@ -23749,6 +23749,7 @@ async function psbtCosignColdcard() {
                 statusEl.appendChild(_psbtEl('div', { class: 'psbt-alert success' },
                     'Fully signed (' + after.signed + ' of ' + after.required + '). Pass it to Sparrow or another online coordinator to broadcast.'));
             }
+            _psbtApplyAutoQrFormat();
             _psbtRenderQr();
         } else {
             _psbtCosignMessage = { kind: 'error',
@@ -24117,6 +24118,7 @@ async function psbtCosignTrezor() {
                 statusEl.appendChild(_psbtEl('div', { class: 'psbt-alert success' },
                     'Fully signed (' + after.signed + ' of ' + after.required + '). Pass it to Sparrow or another online coordinator to broadcast.'));
             }
+            _psbtApplyAutoQrFormat();
             _psbtRenderQr();
         } else {
             _psbtCosignMessage = { kind: 'error',
@@ -24283,7 +24285,30 @@ function _psbtEncodeBase43(bytes) {
 
 // ---- QR format change handler ----
 
+// A single Base64 QR stops scanning reliably on a webcam above roughly this
+// size (a ~1.1 kB PSBT scanned fine; ~1.4 kB with previous transactions did not).
+const _PSBT_UR_AUTO_BYTES = 1200;
+let _psbtQrFormatUserChosen = false;   // the user picked a format in the dropdown
+let _psbtQrAutoUr = false;             // UR was picked automatically (shown in the hint)
+
+/** Start on Base64, or UR when the PSBT is too large for one clean QR — unless the user chose. */
+function _psbtApplyAutoQrFormat() {
+    if (_psbtQrFormatUserChosen) return;
+    const big = !!(_psbtSignedBytes && _psbtSignedBytes.length > _PSBT_UR_AUTO_BYTES);
+    const fmt = big ? 'ur' : 'standard';
+    _psbtQrAutoUr = big;
+    const formatSelect = document.getElementById('psbt-qr-format');
+    if (_psbtQrFormat === fmt && (!formatSelect || formatSelect.value === fmt)) return;
+    _psbtQrFormat = fmt;
+    if (formatSelect) formatSelect.value = fmt;
+    if (typeof _psbtReconfigureDensitySlider === 'function') {
+        try { _psbtReconfigureDensitySlider(fmt); } catch (_) {}
+    }
+}
+
 function psbtQrFormatChange(fmt) {
+    _psbtQrFormatUserChosen = true;
+    _psbtQrAutoUr = false;
     _psbtQrFormat = fmt;
     _psbtStopQrAnimation();
     // Reconfigure the Density slider for the new format's natural unit
@@ -24507,7 +24532,8 @@ async function _psbtRenderQr() {
             return;
         }
         titleEl.textContent = 'Signed PSBT — UR (ur:crypto-psbt)';
-        hintEl.textContent  = 'Animated BC-UR. Compatible with BlueWallet, Sparrow, Specter, Keystone, etc.';
+        hintEl.textContent  = 'Animated BC-UR. Compatible with BlueWallet, Sparrow, Specter, Keystone, etc.' +
+            (_psbtQrAutoUr ? ' Chosen automatically: this transaction is too large to scan reliably as one Base64 QR.' : '');
         try {
             // 1. CBOR-wrap the raw PSBT bytes. The input scanner pulls
             //    bytes back out via ur.decodeCBOR() (boot.html line
