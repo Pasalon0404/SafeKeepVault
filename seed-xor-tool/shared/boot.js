@@ -642,6 +642,7 @@ const SafeKeepOS = (() => {
     'RESTORE_COMMIT', 'RESTORE_COMMIT_ACK',
     'POWER_ACTION',     // dashboard Power Options → safekeep-boot.sh dispatcher
     'DISPLAY_SLEEP',    // Settings idle timer → safekeep-boot.sh display watcher
+    'COLDCARD_REQUEST', 'COLDCARD_ACK',   // PSBT Signer ↔ Coldcard Watcher
     'master-seed'
   ];
 
@@ -2196,6 +2197,144 @@ const SafeKeepOS = (() => {
   const TWOFA_MARKER = 'safekeep-2fa-backup';
   const _twofaStore  = new Map();   // identity key → sanitized account record
 
+  // ===================================================================
+  //  COLDCARD — USB co-signing (Coldcard Watcher in safekeep-boot.sh)
+  // ===================================================================
+  // The browser cannot talk to USB devices, so — like the backup watcher —
+  // it downloads a REQUEST file and a root helper does the work:
+  //   request : COLDCARD_REQUEST.json  → Chromium's download folder
+  //   result  : /tmp/safekeep-signals/COLDCARD_RESULT.json  (RAM, always)
+  //   ack     : COLDCARD_ACK.json      → Chromium's download folder
+  // The request carries DATA only ({action, psbt_b64, ...}); the helper
+  // validates it and only ever signs with the Coldcard it has PAIRED.
+  // The helper stores the pairing itself (vault settings/, or RAM in a
+  // temporary session); this side only reads it for display.
+  // Every request carries a random request_id that the helper echoes, so
+  // a stale result from an earlier request can never be mistaken for ours.
+  const COLDCARD_REQUEST_FILE   = 'COLDCARD_REQUEST.json';
+  const COLDCARD_ACK_FILE       = 'COLDCARD_ACK.json';
+  const COLDCARD_SIGNAL_DIR     = '/tmp/safekeep-signals';
+  const COLDCARD_RESULT_URL     = `file://${COLDCARD_SIGNAL_DIR}/COLDCARD_RESULT.json`;
+  const COLDCARD_PAIRING_VAULT  = 'file:///media/.safekeep-vault/settings/coldcard-pairing.json';
+  const COLDCARD_PAIRING_TEMP   = `file://${COLDCARD_SIGNAL_DIR}/coldcard-pairing.json`;
+  let _ccInFlight = false;
+
+  function _ccTemporarySession() {
+    try { return window.location.hash === '#ephemeral=true'; } catch (_) { return false; }
+  }
+
+  function _ccRequestId() {
+    const b = new Uint8Array(12);
+    crypto.getRandomValues(b);
+    return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  function _ccToBase64(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  }
+
+  function _ccFromBase64(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function _coldcardRequest(payload, maxWaitMs) {
+    if (!isBootDrive()) {
+      return { ok: false, status: 'unavailable',
+               error: 'Coldcard signing only works when SafeKeep is running from its USB stick.' };
+    }
+    if (_ccInFlight) {
+      return { ok: false, status: 'in_progress', error: 'A Coldcard request is already in progress.' };
+    }
+    _ccInFlight = true;
+    const requestId = _ccRequestId();
+    try {
+      // Raw Blob download: a protocol file, not user data — and it must
+      // also work in a temporary session (no vault).
+      _rawBlobDownload(COLDCARD_REQUEST_FILE, JSON.stringify(Object.assign({}, payload, { request_id: requestId })));
+      const deadline = Date.now() + maxWaitMs;
+      await _sleep(700);
+      while (Date.now() < deadline) {
+        try {
+          const resp = await fetch(COLDCARD_RESULT_URL, { cache: 'no-store' });
+          if (resp.ok) {
+            const result = await resp.json();
+            if (result && result.request_id === requestId) {
+              setTimeout(function () {
+                try { _rawBlobDownload(COLDCARD_ACK_FILE, '{"ack":true}'); } catch (_) {}
+              }, 400);
+              return result;
+            }
+          }
+        } catch (e) { /* not written yet */ }
+        await _sleep(500);
+      }
+      return { ok: false, status: 'no_answer',
+               error: 'SafeKeep did not hear back from the Coldcard helper. If the Coldcard is still ' +
+                      'showing the transaction, press X on it, then try again.' };
+    } finally {
+      _ccInFlight = false;
+    }
+  }
+
+  /** Saved pairing, or null. { xfp, serial, pairedAt, temporary } */
+  async function coldcardGetPairing() {
+    if (!isBootDrive()) return null;
+    const temporary = _ccTemporarySession();
+    try {
+      const resp = await fetch(temporary ? COLDCARD_PAIRING_TEMP : COLDCARD_PAIRING_VAULT, { cache: 'no-store' });
+      if (!resp.ok) return null;
+      const p = await resp.json();
+      if (p && typeof p.xfp === 'string' && /^[0-9a-f]{8}$/.test(p.xfp)) {
+        return { xfp: p.xfp.toUpperCase(), serial: String(p.serial || ''),
+                 pairedAt: String(p.paired_at || ''), temporary };
+      }
+    } catch (e) { /* no pairing */ }
+    return null;
+  }
+
+  /** Find the single connected Coldcard. ok → { xfp, master_xpub, serial } */
+  async function coldcardDetect() {
+    const r = await _coldcardRequest({ action: 'detect' }, 30000);
+    if (r.ok && r.xfp) r.xfp = String(r.xfp).toUpperCase();
+    return r;
+  }
+
+  /** Save the Coldcard the user just confirmed (values from coldcardDetect). */
+  async function coldcardPair(xfp, masterXpub) {
+    const r = await _coldcardRequest({ action: 'pair',
+      expected_xfp: String(xfp || '').toLowerCase(), expected_xpub: String(masterXpub || '') }, 30000);
+    if (r.ok && r.xfp) r.xfp = String(r.xfp).toUpperCase();
+    return r;
+  }
+
+  async function coldcardUnpair() {
+    return _coldcardRequest({ action: 'unpair' }, 15000);
+  }
+
+  /**
+   * Ask the paired Coldcard to sign. The user approves on the Coldcard.
+   * ok → { psbtBytes: Uint8Array }  (helper gives up after 10 minutes)
+   */
+  async function coldcardSign(psbtBytes) {
+    if (!(psbtBytes instanceof Uint8Array) || psbtBytes.length < 5) {
+      return { ok: false, status: 'bad_request', error: 'No transaction to send to the Coldcard.' };
+    }
+    const r = await _coldcardRequest({ action: 'sign', psbt_b64: _ccToBase64(psbtBytes) }, 11 * 60 * 1000);
+    if (r.ok && r.psbt_b64) {
+      try { r.psbtBytes = _ccFromBase64(r.psbt_b64); }
+      catch (e) { return { ok: false, status: 'error', error: 'The Coldcard result could not be read.' }; }
+      delete r.psbt_b64;
+    }
+    return r;
+  }
+
   function _twofaKey(a) {
     return [(a.issuer || ''), (a.account || ''), (a.secret || '')].join('\u0000');
   }
@@ -2373,6 +2512,13 @@ const SafeKeepOS = (() => {
 
     // Transfer-partition exports (piggy-backs on Reliquary Watcher daemon)
     exportToTransfer,
+
+    // Coldcard — USB co-signing via the Coldcard Watcher
+    coldcardGetPairing,
+    coldcardDetect,
+    coldcardPair,
+    coldcardUnpair,
+    coldcardSign,
 
     // Constants (for tooling/tests)
     MASTER_SEED_PATH,

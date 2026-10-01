@@ -6567,7 +6567,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -6666,6 +6666,18 @@
                                            style="width: 5rem; padding: 0.4rem 0.55rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.875rem; text-align: right;">
                                     <span style="color: var(--skb-text-muted); letter-spacing: 0.05em;">MIN</span>
                                 </label>
+                            </div>
+                        </div>
+                        <div id="settings-coldcard-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Coldcard</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                Pair a Coldcard so the PSBT Signer can ask it for a co-signature over USB. Every signature is approved on the Coldcard's own screen. SafeKeep only ever uses the Coldcard paired here.
+                            </p>
+                            <div id="settings-coldcard-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem;">Checking…</div>
+                            <div id="settings-coldcard-confirm" style="display: none; margin-bottom: 0.75rem;"></div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="skb-btn" id="settings-coldcard-pair-btn" onclick="ccSettingsStartPair()">Pair Coldcard</button>
+                                <button type="button" class="skb-btn" id="settings-coldcard-forget-btn" style="display: none;" onclick="ccSettingsForget()">Forget Coldcard</button>
                             </div>
                         </div>
                         <div class="settings-danger-zone">
@@ -6884,6 +6896,11 @@
             <!-- ---- PHASE 3: EXPORT ---- -->
             <div id="psbt-phase-export" style="display: none;">
                 <div id="psbt-export-status"></div>
+
+                <!-- Multisig co-signing card (filled by _psbtUpdateCosignCard):
+                     signature count, cosigners, and "Sign with Coldcard" /
+                     "Sign with another seed" when signatures are still needed. -->
+                <div class="psbt-card" id="psbt-cosign-card" style="display: none;"></div>
 
                 <div class="psbt-card">
                     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
@@ -10643,6 +10660,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     function _sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
+    var _devCcPairing = null;   // dev-mock Coldcard pairing (in memory)
     var mockOS = {
         _isMock: true,
         _mockLabel: 'SafeKeepOS mock v1 — Live Server dev bridge',
@@ -10834,6 +10852,28 @@ window.addEventListener('DOMContentLoaded', () => {
         exportToTransfer: async function () {
             console.log('[DEV MOCK] exportToTransfer() → simulated success');
             return { success: true };
+        },
+
+        // --- Coldcard (dev mock). Behaviour via the console:
+        //   window._devColdcard = 'refuse' | 'absent' | 'nochange'
+        coldcardGetPairing: async function () { return _devCcPairing; },
+        coldcardDetect: async function () {
+            await new Promise(function (r) { setTimeout(r, 600); });
+            if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on.' };
+            return { ok: true, status: 'detected', xfp: 'DECAF002', serial: 'DEVMOCK0001', master_xpub: 'xpub-dev-mock' };
+        },
+        coldcardPair: async function (xfp) {
+            _devCcPairing = { xfp: String(xfp).toUpperCase(), serial: 'DEVMOCK0001', pairedAt: new Date().toISOString(), temporary: false };
+            return { ok: true, status: 'paired', xfp: _devCcPairing.xfp };
+        },
+        coldcardUnpair: async function () { _devCcPairing = null; return { ok: true, status: 'unpaired' }; },
+        coldcardSign: async function (bytes) {
+            console.log('[DEV MOCK] coldcardSign() — mode:', window._devColdcard || 'nochange');
+            await new Promise(function (r) { setTimeout(r, 2000); });
+            if (window._devColdcard === 'refuse') return { ok: false, status: 'refused', error: '[DEV MOCK] You declined the transaction on the Coldcard. Nothing was signed.' };
+            if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found.' };
+            // A mock cannot produce a real signature: return the PSBT unchanged.
+            return { ok: true, status: 'signed', psbtBytes: bytes };
         },
         listTransfer: async function () { return []; }
     };
@@ -17030,6 +17070,9 @@ function psbtShowStatus(msg, type) {
 
 function psbtResetToIngest() {
     _psbtWipeTempSeed();
+    _psbtCosignMessage = null;
+    var _cosignCard = document.getElementById('psbt-cosign-card');
+    if (_cosignCard) { _cosignCard.style.display = 'none'; _cosignCard.textContent = ''; }
     _psbtStopQrAnimation();
     psbtStopSeedScan();
     _psbtLoadedBytes = null;
@@ -23135,6 +23178,295 @@ function _psbtShowExport(sigsAdded, isFinalized) {
 
     // Generate QR code
     _psbtRenderQr();
+
+    // Multisig co-signing card (Coldcard / another seed)
+    _psbtUpdateCosignCard();
+}
+
+// ===========================================================================
+// MULTISIG CO-SIGNING — Export-step card: signature count, cosigners,
+// "Sign with Coldcard" (USB, via SafeKeepOS.coldcardSign) and
+// "Sign with another seed" (re-ingest the half-signed PSBT, Temporary Seed).
+// ===========================================================================
+let _psbtCosignBusy = false;
+let _psbtCosignMessage = null;   // { kind: 'info'|'error'|'success', text }
+
+function _psbtHex(u8) {
+    return Array.from(u8 || []).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function _psbtPartialSigPubkeys(ps) {
+    if (!ps) return [];
+    if (ps instanceof Map) return Array.from(ps.keys());
+    if (Array.isArray(ps)) return ps.map(e => Array.isArray(e) ? e[0] : (e && (e.pubkey || e.pubKey))).filter(Boolean);
+    return [];
+}
+
+/**
+ * Multisig signing status of a PSBT, or null if it is not a plain
+ * m-of-n CHECKMULTISIG spend (single-sig, taproot, mixed, unparseable).
+ * { required, signed, complete, cosigners: [{ fp: 'ABCD1234', signed }] }
+ * "signed" = fewest signatures on any input; a cosigner counts as signed
+ * only if it has signed every input.
+ */
+function _psbtMultisigStatus(bytes) {
+    const btcLib = window.BtcMath?.btcSigner;
+    if (!btcLib || !bytes) return null;
+    let tx;
+    try { tx = btcLib.Transaction.fromPSBT(bytes, { network: PSBT_NETWORK }); } catch (e) { return null; }
+    if (!tx.inputs.length) return null;
+    let required = null, minSigs = Infinity;
+    const cos = new Map();
+    for (const inp of tx.inputs) {
+        const ws = inp.witnessScript || inp.redeemScript;
+        if (!ws || ws.length < 3 || ws[ws.length - 1] !== 0xae) return null;
+        const m = ws[0] - 0x50;
+        if (m < 1 || m > 16) return null;
+        if (required === null) required = m; else if (required !== m) return null;
+        const sigPubs = new Set(_psbtPartialSigPubkeys(inp.partialSig).map(_psbtHex));
+        const finalized = (inp.finalScriptWitness && inp.finalScriptWitness.length) ||
+                          (inp.finalScriptSig && inp.finalScriptSig.length);
+        minSigs = Math.min(minSigs, finalized ? m : sigPubs.size);
+        _psbtGetDerivEntries(inp.bip32Derivation).forEach(d => {
+            const fp = ((d.fingerprint >>> 0).toString(16)).toUpperCase().padStart(8, '0');
+            const signed = !!finalized || (!!d.pubKey && sigPubs.has(_psbtHex(d.pubKey)));
+            cos.set(fp, (cos.has(fp) ? cos.get(fp) : true) && signed);
+        });
+    }
+    const signed = minSigs === Infinity ? 0 : minSigs;
+    return { required, signed, complete: signed >= required,
+             cosigners: Array.from(cos, ([fp, s]) => ({ fp, signed: s })) };
+}
+
+function _psbtVaultFingerprint() {
+    try {
+        const fp = window.SeedSession?.get()?.fingerprint || window.SafeKeepOS?.getFingerprint() || '';
+        return String(fp).toUpperCase();
+    } catch (_) { return ''; }
+}
+
+function _psbtEl(tag, attrs, text) {
+    const el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(k => {
+        if (k === 'style') el.style.cssText = attrs[k];
+        else if (k === 'onclick') el.addEventListener('click', attrs[k]);
+        else el.setAttribute(k, attrs[k]);
+    });
+    if (text !== undefined && text !== null) el.textContent = text;
+    return el;
+}
+
+async function _psbtUpdateCosignCard() {
+    const card = document.getElementById('psbt-cosign-card');
+    if (!card) return;
+    const st = _psbtMultisigStatus(_psbtSignedBytes);
+    if (!st) { card.style.display = 'none'; card.textContent = ''; return; }
+
+    const os = window.SafeKeepOS;
+    let pairing = null;
+    try { pairing = (os && typeof os.coldcardGetPairing === 'function') ? await os.coldcardGetPairing() : null; } catch (_) {}
+    const vaultFp = _psbtVaultFingerprint();
+
+    card.textContent = '';
+    card.style.display = '';
+    card.appendChild(_psbtEl('div', { class: 'psbt-card-title' },
+        'Signatures: ' + Math.min(st.signed, st.required) + ' of ' + st.required));
+
+    const list = _psbtEl('div', { style: 'display: flex; flex-direction: column; gap: 0.3rem; font-family: var(--skb-mono); font-size: 0.8125rem; margin-bottom: 0.75rem;' });
+    st.cosigners.forEach(c => {
+        let label = c.fp;
+        if (pairing && c.fp === pairing.xfp) label += '  · Coldcard (paired)';
+        else if (vaultFp && c.fp === vaultFp) label += '  · SafeKeep vault';
+        list.appendChild(_psbtEl('div', { style: 'color: ' + (c.signed ? 'var(--skb-secondary, #3fb950)' : 'var(--skb-text-muted)') + ';' },
+            (c.signed ? '✓ ' : '○ ') + label));
+    });
+    card.appendChild(list);
+
+    if (_psbtCosignMessage) {
+        card.appendChild(_psbtEl('div', { class: 'psbt-alert ' + _psbtCosignMessage.kind }, _psbtCosignMessage.text));
+    }
+
+    if (st.complete) {
+        if (!_psbtCosignMessage || _psbtCosignMessage.kind !== 'success') {
+            card.appendChild(_psbtEl('div', { class: 'psbt-alert success' },
+                'All required signatures are present. Scan the QR code below with Sparrow (or your coordinator) — it will check the signatures and broadcast.'));
+        }
+        return;
+    }
+
+    const need = st.required - st.signed;
+    card.appendChild(_psbtEl('div', { style: 'font-size: 0.875rem; margin-bottom: 0.6rem;' },
+        need === 1 ? 'One more signature is needed.' : need + ' more signatures are needed.'));
+
+    const actions = _psbtEl('div', { class: 'psbt-actions', style: 'margin-top: 0;' });
+    const ccCosigner = pairing ? st.cosigners.find(c => c.fp === pairing.xfp) : null;
+    if (ccCosigner && !ccCosigner.signed) {
+        actions.appendChild(_psbtEl('button', {
+            type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-coldcard-btn',
+            onclick: psbtCosignColdcard
+        }, _psbtCosignBusy ? 'Waiting for Coldcard…' : 'Sign with Coldcard (' + pairing.xfp + ')'));
+    }
+    actions.appendChild(_psbtEl('button', {
+        type: 'button', class: 'skb-btn', id: 'psbt-cosign-seed-btn', onclick: psbtCosignAnotherSeed
+    }, 'Sign with another seed'));
+    card.appendChild(actions);
+    if (_psbtCosignBusy) actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
+
+    let hint = null;
+    if (pairing && !ccCosigner) {
+        hint = 'Your paired Coldcard (' + pairing.xfp + ') is not one of this wallet\'s keys.';
+    } else if (!pairing && os && typeof os.isBootDrive === 'function' && os.isBootDrive()) {
+        hint = 'To co-sign with a Coldcard over USB, pair it first in Device Options → Coldcard.';
+    }
+    if (hint) card.appendChild(_psbtEl('p', { style: 'font-size: 0.8125rem; color: var(--skb-text-dim); margin: 0.5rem 0 0;' }, hint));
+}
+
+async function psbtCosignColdcard() {
+    const os = window.SafeKeepOS;
+    if (_psbtCosignBusy || !_psbtSignedBytes || !os || typeof os.coldcardSign !== 'function') return;
+    const before = _psbtMultisigStatus(_psbtSignedBytes);
+    _psbtCosignBusy = true;
+    _psbtCosignMessage = { kind: 'info',
+        text: 'Approve on your Coldcard: compare the amount and destination address on its screen with your wallet, then press ✓ (or X to decline). SafeKeep is waiting…' };
+    await _psbtUpdateCosignCard();
+    let r;
+    try { r = await os.coldcardSign(_psbtSignedBytes); }
+    catch (e) { r = { ok: false, error: 'Unexpected error: ' + (e && e.message ? e.message : e) }; }
+    _psbtCosignBusy = false;
+
+    if (r && r.ok && r.psbtBytes) {
+        const after = _psbtMultisigStatus(r.psbtBytes);
+        if (after && before && after.signed > before.signed) {
+            _psbtSignedBytes = r.psbtBytes;
+            _psbtRawTxHex = null;
+            _psbtCosignMessage = { kind: 'success', text: after.complete
+                ? 'The Coldcard signed. All required signatures are present — scan the QR code below with Sparrow to broadcast.'
+                : 'The Coldcard signed. More signatures are still needed.' };
+            const statusEl = document.getElementById('psbt-export-status');
+            if (statusEl && after.complete) {
+                statusEl.textContent = '';
+                statusEl.appendChild(_psbtEl('div', { class: 'psbt-alert success' },
+                    'Fully signed (' + after.signed + ' of ' + after.required + '). Pass it to Sparrow or another online coordinator to broadcast.'));
+            }
+            _psbtRenderQr();
+        } else {
+            _psbtCosignMessage = { kind: 'error',
+                text: 'The Coldcard returned the transaction without adding a signature. Nothing changed.' };
+        }
+    } else {
+        _psbtCosignMessage = { kind: 'error', text: (r && r.error) || 'The Coldcard did not sign.' };
+    }
+    await _psbtUpdateCosignCard();
+}
+
+async function psbtCosignAnotherSeed() {
+    if (_psbtCosignBusy || !_psbtSignedBytes) return;
+    const bytes = _psbtSignedBytes;
+    const name = _psbtLoadedFilename || 'transaction.psbt';
+    _psbtCosignMessage = null;
+    _psbtStopQrAnimation();
+    _psbtWipeTempSeed();
+    document.getElementById('psbt-phase-export').style.display = 'none';
+    const card = document.getElementById('psbt-cosign-card');
+    if (card) { card.style.display = 'none'; card.textContent = ''; }
+    _psbtSignedBytes = null;
+    _psbtRawTxHex = null;
+    await _psbtIngestComplete(bytes, name);
+    psbtSetKeySource('temp');
+    psbtShowStatus('Half-signed transaction loaded. Enter the next co-signer\'s seed under Temporary Seed, then sign.', 'info');
+}
+
+// ===========================================================================
+// SETTINGS → COLDCARD — pair / forget
+// ===========================================================================
+let _ccPendingDetect = null;
+
+function _ccSettingsShowStatus(text, isError) {
+    const el = document.getElementById('settings-coldcard-status');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = isError ? 'var(--skb-danger)' : 'var(--skb-text)';
+}
+
+async function ccSettingsRefresh() {
+    const os = window.SafeKeepOS;
+    const pairBtn = document.getElementById('settings-coldcard-pair-btn');
+    const forgetBtn = document.getElementById('settings-coldcard-forget-btn');
+    const confirmEl = document.getElementById('settings-coldcard-confirm');
+    if (!pairBtn) return;
+    if (confirmEl) { confirmEl.style.display = 'none'; confirmEl.textContent = ''; }
+    _ccPendingDetect = null;
+    if (!os || typeof os.coldcardGetPairing !== 'function') {
+        _ccSettingsShowStatus('Coldcard support is not available in this build.', true);
+        pairBtn.style.display = 'none'; forgetBtn.style.display = 'none';
+        return;
+    }
+    const p = await os.coldcardGetPairing();
+    if (p) {
+        _ccSettingsShowStatus('Paired: fingerprint ' + p.xfp + (p.serial ? '  ·  serial ' + p.serial : '') +
+            (p.temporary ? '  ·  this temporary session only' : ''), false);
+        pairBtn.textContent = 'Pair a different Coldcard';
+        forgetBtn.style.display = '';
+    } else {
+        _ccSettingsShowStatus('Not paired.', false);
+        pairBtn.textContent = 'Pair Coldcard';
+        forgetBtn.style.display = 'none';
+    }
+    pairBtn.style.display = '';
+    pairBtn.disabled = false; forgetBtn.disabled = false;
+}
+
+async function ccSettingsStartPair() {
+    const os = window.SafeKeepOS;
+    const pairBtn = document.getElementById('settings-coldcard-pair-btn');
+    const confirmEl = document.getElementById('settings-coldcard-confirm');
+    if (!os || !pairBtn || !confirmEl) return;
+    pairBtn.disabled = true;
+    confirmEl.style.display = 'none'; confirmEl.textContent = '';
+    _ccSettingsShowStatus('Looking for a Coldcard… (plugged in, unlocked with its PIN, and USB turned on)', false);
+    const d = await os.coldcardDetect();
+    pairBtn.disabled = false;
+    if (!d || !d.ok) { _ccSettingsShowStatus((d && d.error) || 'No Coldcard found.', true); return; }
+    _ccPendingDetect = d;
+    pairBtn.style.display = 'none';
+    const forgetBtn = document.getElementById('settings-coldcard-forget-btn');
+    if (forgetBtn) forgetBtn.style.display = 'none';
+    _ccSettingsShowStatus('Found a Coldcard.', false);
+    confirmEl.style.display = '';
+    confirmEl.appendChild(_psbtEl('div', { class: 'psbt-alert info', style: 'margin-bottom: 0.5rem;' },
+        'Fingerprint ' + d.xfp + (d.serial ? '  ·  serial ' + d.serial : '') +
+        '. Check this matches the Coldcard\'s fingerprint in your wallet software (in Sparrow: the wallet\'s Settings → the Coldcard keystore → Master fingerprint) before pairing.'));
+    const row = _psbtEl('div', { style: 'display: flex; gap: 0.5rem; flex-wrap: wrap;' });
+    row.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn skb-btn--primary', onclick: ccSettingsConfirmPair },
+        'It matches — pair ' + d.xfp));
+    row.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', onclick: ccSettingsRefresh }, 'Cancel'));
+    confirmEl.appendChild(row);
+}
+
+async function ccSettingsConfirmPair() {
+    const os = window.SafeKeepOS;
+    const d = _ccPendingDetect;
+    if (!os || !d) return;
+    const confirmEl = document.getElementById('settings-coldcard-confirm');
+    if (confirmEl) confirmEl.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    _ccSettingsShowStatus('Pairing…', false);
+    const r = await os.coldcardPair(d.xfp, d.master_xpub);
+    if (r && r.ok) {
+        await ccSettingsRefresh();
+    } else {
+        await ccSettingsRefresh();
+        _ccSettingsShowStatus((r && r.error) || 'Pairing failed.', true);
+    }
+}
+
+async function ccSettingsForget() {
+    const os = window.SafeKeepOS;
+    if (!os) return;
+    const forgetBtn = document.getElementById('settings-coldcard-forget-btn');
+    if (forgetBtn) forgetBtn.disabled = true;
+    const r = await os.coldcardUnpair();
+    await ccSettingsRefresh();
+    if (!r || !r.ok) _ccSettingsShowStatus((r && r.error) || 'Could not forget the Coldcard.', true);
 }
 
 // ---- Base43 encoder (Electrum's native QR encoding for PSBTs/txns) ----

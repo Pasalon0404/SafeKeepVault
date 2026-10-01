@@ -11,10 +11,16 @@ SECURITY MODEL
   * The request file is UNTRUSTED DATA written by the browser. It is read
     once, deleted immediately, size-limited and validated field by field.
     Nothing in it is ever run as a command.
-  * Only two actions exist:
+  * Only these actions exist:
       detect -> report the single connected Coldcard (serial, fingerprint,
-                master xpub) so the app can PAIR with it.
+                master xpub) so the user can confirm it.
+      pair   -> re-detect, check it is the device the user confirmed
+                (expected_xfp + expected_xpub), and SAVE the pairing.
+      unpair -> delete the saved pairing.
       sign   -> send a PSBT to the PAIRED Coldcard and return the result.
+  * The pairing is stored by THIS helper (path in SAFEKEEP_CC_PAIRING: the
+    vault's settings folder, or RAM in a temporary session). "sign" trusts
+    only that stored pairing — never device identity sent by the browser.
   * "sign" refuses unless the connected Coldcard's fingerprint AND master
     xpub match the pairing, then runs Coinkite's anti-MiTM check against
     the PAIRED xpub (not the one the device just presented, which would
@@ -25,10 +31,12 @@ SECURITY MODEL
   * The result is always written (ok or error) so the app never hangs.
 
 Result JSON: {"ok": true/false, "status": "...", ...}
-  ok statuses   : detected, signed
-  error statuses: bad_request, not_installed, not_connected,
+  ok statuses   : detected, paired, unpaired, signed
+  error statuses: bad_request, not_installed, not_paired, not_connected,
                   multiple_devices, no_seed, wrong_device, mitm_failed,
                   refused, busy, timeout, rejected, error
+  Every result echoes the request's "request_id" (if valid) so the app can
+  ignore stale results.
 """
 import base64
 import binascii
@@ -48,6 +56,9 @@ POLL_INTERVAL_S = 0.25
 PSBT_MAGIC = b'psbt\xff'
 XFP_RE = re.compile(r'^[0-9a-f]{8}$')
 XPUB_RE = re.compile(r'^[xt]pub[1-9A-HJ-NP-Za-km-z]{100,112}$')
+SERIAL_RE = re.compile(r'^[0-9A-Za-z]{1,64}$')
+REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+DEFAULT_PAIRING = '/media/.safekeep-vault/settings/coldcard-pairing.json'
 
 MSG_NOT_CONNECTED = ('No Coldcard found. Plug it in, unlock it with your PIN, and make '
                      'sure USB is turned on (Settings > Hardware On/Off > USB).')
@@ -123,6 +134,34 @@ def field_psbt(data):
     return psbt
 
 
+def pairing_path():
+    return os.environ.get('SAFEKEEP_CC_PAIRING') or DEFAULT_PAIRING
+
+
+def read_pairing():
+    try:
+        with open(pairing_path(), 'r') as f:
+            p = json.load(f)
+    except FileNotFoundError:
+        return None
+    except Exception:
+        raise Fail('error', 'The saved Coldcard pairing could not be read. Pair the Coldcard again.')
+    if (not isinstance(p, dict) or not isinstance(p.get('xfp'), str) or not XFP_RE.match(p['xfp'])
+            or not isinstance(p.get('master_xpub'), str) or not XPUB_RE.match(p['master_xpub'])):
+        raise Fail('error', 'The saved Coldcard pairing is damaged. Pair the Coldcard again.')
+    return p
+
+
+def write_pairing(info):
+    path = pairing_path()
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    tmp = path + '.tmp'
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f:
+        json.dump(info, f)
+    os.replace(tmp, path)
+
+
 def load_ckcc():
     try:
         import hid
@@ -164,19 +203,60 @@ def do_detect(data):
         dev.close()
 
 
-def do_sign(data):
-    psbt = field_psbt(data)
+def do_pair(data):
     want_xfp = field_xfp(data)
     want_xpub = field_xpub(data)
+    hid, ColdcardDevice, _ = load_ckcc()
+    dev = open_single_device(hid, ColdcardDevice)
+    try:
+        got_xfp = xfp_to_str(dev.master_fingerprint)
+        if got_xfp != want_xfp:
+            raise Fail('wrong_device', 'The connected Coldcard (fingerprint %s) is not the one you just '
+                                       'confirmed (%s). Nothing was saved.' % (got_xfp.upper(), want_xfp.upper()))
+        if dev.master_xpub != want_xpub:
+            raise Fail('wrong_device', 'The connected Coldcard has the same fingerprint (%s) but a different '
+                                       'master key than the one you just confirmed. Nothing was saved.' % got_xfp.upper())
+        serial = dev.serial if isinstance(dev.serial, str) and SERIAL_RE.match(dev.serial) else ''
+        info = {'xfp': got_xfp, 'master_xpub': dev.master_xpub, 'serial': serial,
+                'paired_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+    finally:
+        dev.close()
+    try:
+        write_pairing(info)
+    except OSError as e:
+        raise Fail('error', 'Could not save the pairing (%s).' % (e.strerror or type(e).__name__))
+    return dict({'ok': True, 'status': 'paired'}, **info)
+
+
+def do_unpair(data):
+    try:
+        os.remove(pairing_path())
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        raise Fail('error', 'Could not remove the pairing (%s).' % (e.strerror or type(e).__name__))
+    return {'ok': True, 'status': 'unpaired'}
+
+
+def do_sign(data):
+    psbt = field_psbt(data)
+    pairing = read_pairing()
+    if pairing is None:
+        raise Fail('not_paired', 'No Coldcard is paired with SafeKeep yet. Pair it first.')
+    want_xfp = pairing['xfp']
+    want_xpub = pairing['master_xpub']
     hid, ColdcardDevice, protocol = load_ckcc()
     P = protocol.CCProtocolPacker
 
     dev = open_single_device(hid, ColdcardDevice)
     try:
         got_xfp = xfp_to_str(dev.master_fingerprint)
-        if got_xfp != want_xfp or dev.master_xpub != want_xpub:
+        if got_xfp != want_xfp:
             raise Fail('wrong_device', 'This Coldcard (fingerprint %s) is not the one paired with '
                                        'SafeKeep (%s). Nothing was sent to it.' % (got_xfp.upper(), want_xfp.upper()))
+        if dev.master_xpub != want_xpub:
+            raise Fail('wrong_device', 'This Coldcard has the paired fingerprint (%s) but a different master '
+                                       'key, so it is not the paired device. Nothing was sent to it.' % got_xfp.upper())
         try:
             dev.check_mitm(expected_xpub=want_xpub)
         except Exception:
@@ -212,7 +292,7 @@ def do_sign(data):
         dev.close()
 
 
-ACTIONS = {'detect': do_detect, 'sign': do_sign}
+ACTIONS = {'detect': do_detect, 'pair': do_pair, 'unpair': do_unpair, 'sign': do_sign}
 
 
 def main(argv):
@@ -220,8 +300,12 @@ def main(argv):
         print('usage: safekeep-coldcard.py REQUEST.json RESULT.json', file=sys.stderr)
         return 2
     req_path, res_path = argv[1], argv[2]
+    request_id = None
     try:
         data = load_request(req_path)
+        rid = data.get('request_id')
+        if isinstance(rid, str) and REQUEST_ID_RE.match(rid):
+            request_id = rid
         action = ACTIONS.get(data.get('action'))
         if action is None:
             raise Fail('bad_request', 'Unknown Coldcard request.')
@@ -231,6 +315,8 @@ def main(argv):
     except Exception as e:
         result = {'ok': False, 'status': 'error',
                   'error': 'Unexpected Coldcard error (%s): %s' % (type(e).__name__, str(e)[:200])}
+    if request_id:
+        result['request_id'] = request_id
     write_result(res_path, result)
     return 0 if result.get('ok') else 3
 

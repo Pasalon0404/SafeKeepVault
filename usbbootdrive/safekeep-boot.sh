@@ -1234,22 +1234,31 @@ RELIQUARY_PY
     # -------------------------------------------------------------------
     # COLDCARD WATCHER DAEMON — USB SIGNING WITH A PAIRED COLDCARD
     # -------------------------------------------------------------------
-    # The web app asks for Coldcard actions by downloading a REQUEST file:
-    #   $SEED_DIR/COLDCARD_REQUEST.json
-    #     { "action": "detect" }
-    #     { "action": "sign", "psbt_b64": "...",
-    #       "expected_xfp": "decaf002", "expected_xpub": "xpub..." }
+    # The web app asks for Coldcard actions by downloading a REQUEST file
+    # into Chromium's download folder ($CHROMIUM_DOWNLOAD_DIR: the vault's
+    # seeds/ normally, the RAM signal dir in a temporary session):
+    #   COLDCARD_REQUEST.json
+    #     { "action": "detect" | "pair" | "unpair" | "sign", "request_id": ... }
     # The helper (/usr/local/lib/safekeep/safekeep-coldcard.py, run with the
     # pinned ckcc-protocol install in /opt/safekeep-ckcc) treats the request
-    # as untrusted data, deletes it on read, validates every field, only
-    # talks to the PAIRED Coldcard, and always writes:
-    #   $SEED_DIR/COLDCARD_RESULT.json   { "ok": ..., "status": ..., ... }
-    # The app reads the result, then downloads COLDCARD_ACK.json.
+    # as untrusted data, deletes it on read, validates every field, and only
+    # signs with the PAIRED Coldcard. The pairing is stored by the helper:
+    #   normal boot    : $VAULT_MOUNT/settings/coldcard-pairing.json
+    #   temporary boot : $SIGNAL_DIR/coldcard-pairing.json (RAM, this session)
+    # The RESULT always goes to RAM ($SIGNAL_DIR/COLDCARD_RESULT.json), so a
+    # signed transaction never lands on the stick. The app reads it, then
+    # downloads COLDCARD_ACK.json (into the download folder).
     # Nothing here runs a shell command taken from the request, and there
     # is no network code: signing needs approval on the Coldcard's screen.
-    COLDCARD_REQUEST="$SEED_DIR/COLDCARD_REQUEST.json"
-    COLDCARD_RESULT="$SEED_DIR/COLDCARD_RESULT.json"
-    COLDCARD_ACK="$SEED_DIR/COLDCARD_ACK.json"
+    COLDCARD_REQUEST="$CHROMIUM_DOWNLOAD_DIR/COLDCARD_REQUEST.json"
+    COLDCARD_RESULT="$SIGNAL_DIR/COLDCARD_RESULT.json"
+    COLDCARD_ACK="$CHROMIUM_DOWNLOAD_DIR/COLDCARD_ACK.json"
+    if [ "$EPHEMERAL_MODE" = "1" ]; then
+        COLDCARD_PAIRING="$SIGNAL_DIR/coldcard-pairing.json"
+    else
+        COLDCARD_PAIRING="$VAULT_MOUNT/settings/coldcard-pairing.json"
+    fi
+    rm -f "$COLDCARD_REQUEST" "$COLDCARD_RESULT" "$COLDCARD_ACK" 2>/dev/null
     COLDCARD_PY="/opt/safekeep-ckcc/bin/python3"
     COLDCARD_HELPER="/usr/local/lib/safekeep/safekeep-coldcard.py"
 
@@ -1257,9 +1266,13 @@ RELIQUARY_PY
         while true; do
             if [ -f "$COLDCARD_REQUEST" ]; then
                 echo "Coldcard Watcher: request detected"
-                rm -f "$COLDCARD_RESULT" "$COLDCARD_ACK"
+                # Chromium names a download "X (1).json" if X.json still
+                # exists, so clear numbered leftovers of both protocol files.
+                rm -f "$COLDCARD_RESULT" "$CHROMIUM_DOWNLOAD_DIR"/COLDCARD_ACK*.json \
+                      "$CHROMIUM_DOWNLOAD_DIR"/COLDCARD_REQUEST\ \(*\).json 2>/dev/null
                 if [ -x "$COLDCARD_PY" ] && [ -f "$COLDCARD_HELPER" ]; then
-                    "$COLDCARD_PY" "$COLDCARD_HELPER" "$COLDCARD_REQUEST" "$COLDCARD_RESULT" 2>>/tmp/safekeep-coldcard.log
+                    SAFEKEEP_CC_PAIRING="$COLDCARD_PAIRING" PYTHONDONTWRITEBYTECODE=1 \
+                        "$COLDCARD_PY" "$COLDCARD_HELPER" "$COLDCARD_REQUEST" "$COLDCARD_RESULT" 2>>/tmp/safekeep-coldcard.log
                     echo "Coldcard Watcher: helper finished (exit $?)"
                 else
                     echo '{"ok":false,"status":"not_installed","error":"Coldcard support is not installed on this SafeKeep build."}' > "$COLDCARD_RESULT"
@@ -1272,14 +1285,14 @@ RELIQUARY_PY
 
                 ACK_WAIT=0
                 while [ $ACK_WAIT -lt 120 ]; do
-                    if [ -f "$COLDCARD_ACK" ]; then
+                    if compgen -G "$CHROMIUM_DOWNLOAD_DIR/COLDCARD_ACK*.json" > /dev/null; then
                         echo "Coldcard Watcher: cleanup complete (ACK received)"
                         break
                     fi
                     sleep 1
                     ACK_WAIT=$((ACK_WAIT + 1))
                 done
-                rm -f "$COLDCARD_ACK" "$COLDCARD_RESULT" 2>/dev/null
+                rm -f "$CHROMIUM_DOWNLOAD_DIR"/COLDCARD_ACK*.json "$COLDCARD_RESULT" 2>/dev/null
             fi
             sleep 1
         done

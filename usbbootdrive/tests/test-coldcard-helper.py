@@ -91,16 +91,31 @@ def run(tmp, request, cfg=None, fakes=True, raw=None, env_extra=None):
         f.write(raw if raw is not None else json.dumps(request))
     env = dict(os.environ, FAKE_CC=json.dumps(cfg or {}), FAKE_CC_LOG=logf, PYTHONDONTWRITEBYTECODE='1')
     env['PYTHONPATH'] = os.path.join(tmp, 'fakes') if fakes else os.path.join(tmp, 'empty')
+    env['SAFEKEEP_CC_PAIRING'] = os.path.join(tmp, 'settings', 'coldcard-pairing.json')
     env.update(env_extra or {})
     rc = subprocess.run([sys.executable, '-S', HELPER, req, res], env=env, capture_output=True, text=True, timeout=60).returncode
     result = json.load(open(res))
     log = open(logf).read().split('\n') if os.path.exists(logf) else []
     return rc, result, log, os.path.exists(req)
 
+def set_pairing(tmp, xfp=PAIRED_XFP, xpub=PAIRED_XPUB, raw=None):
+    d = os.path.join(tmp, 'settings'); os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, 'coldcard-pairing.json')
+    if xfp is None and raw is None:
+        if os.path.exists(path): os.remove(path)
+        return
+    with open(path, 'w') as f:
+        f.write(raw if raw is not None else json.dumps({'xfp': xfp, 'master_xpub': xpub, 'serial': 'SN0'}))
+
+def read_pairing(tmp):
+    path = os.path.join(tmp, 'settings', 'coldcard-pairing.json')
+    return json.load(open(path)) if os.path.exists(path) else None
+
 def main():
     psbt = open(FIXTURE, 'rb').read() if os.path.exists(FIXTURE) else b'psbt\xff' + b'\x00' * 50
     psbt_b64 = base64.b64encode(psbt).decode()
-    good = {'action': 'sign', 'psbt_b64': psbt_b64, 'expected_xfp': PAIRED_XFP, 'expected_xpub': PAIRED_XPUB}
+    good = {'action': 'sign', 'psbt_b64': psbt_b64}
+    pair_req = {'action': 'pair', 'expected_xfp': PAIRED_XFP, 'expected_xpub': PAIRED_XPUB}
     passed = failed = 0
     with tempfile.TemporaryDirectory() as tmp:
         make_fakes(os.path.join(tmp, 'fakes')); os.makedirs(os.path.join(tmp, 'empty'))
@@ -121,7 +136,34 @@ def main():
         rc, r, *_ = run(tmp, {'action': 'detect'}, {'no_seed': True})
         check('locked / no seed -> no_seed', r.get('status') == 'no_seed', str(r))
 
+        print('pairing')
+        set_pairing(tmp, None)
+        rc, r, *_ = run(tmp, good)
+        check('sign before pairing -> not_paired', r.get('status') == 'not_paired', str(r))
+        rc, r, log, left = run(tmp, pair_req)
+        pr = read_pairing(tmp)
+        check('pair confirmed device -> paired + saved', r.get('status') == 'paired' and pr and pr.get('xfp') == PAIRED_XFP and pr.get('master_xpub') == PAIRED_XPUB, str(r))
+        check('pairing file is private (0600)', pr is not None and (os.stat(os.path.join(tmp, 'settings', 'coldcard-pairing.json')).st_mode & 0o077) == 0)
+        set_pairing(tmp, None)
+        rc, r, *_ = run(tmp, pair_req, {'xfp': 'deadbeef'})
+        check('pair when a different device is plugged in -> wrong_device, nothing saved', r.get('status') == 'wrong_device' and read_pairing(tmp) is None, str(r))
+        rc, r, *_ = run(tmp, dict(pair_req, expected_xfp='nothex!!'))
+        check('pair with bad fingerprint -> bad_request', r.get('status') == 'bad_request', str(r))
+        set_pairing(tmp)
+        rc, r, *_ = run(tmp, {'action': 'unpair'})
+        check('unpair -> unpaired + file removed', r.get('status') == 'unpaired' and read_pairing(tmp) is None, str(r))
+        rc, r, *_ = run(tmp, {'action': 'unpair'})
+        check('unpair when not paired -> still ok', r.get('status') == 'unpaired', str(r))
+        set_pairing(tmp, raw='{"xfp": "zz"}')
+        rc, r, *_ = run(tmp, good)
+        check('damaged pairing file -> error, nothing sent', r.get('status') == 'error' and 'damaged' in r.get('error', ''), str(r))
+        rc, r, *_ = run(tmp, dict(good, request_id='abc-123'))
+        check('request_id echoed', r.get('request_id') == 'abc-123', str(r))
+        rc, r, *_ = run(tmp, dict(good, request_id='bad id $(x)'))
+        check('invalid request_id not echoed', 'request_id' not in r, str(r))
+
         print('sign')
+        set_pairing(tmp)
         rc, r, log, left = run(tmp, good)
         out = base64.b64decode(r.get('psbt_b64', '')) if r.get('psbt_b64') else b''
         check('approve -> signed PSBT returned', r.get('status') == 'signed' and out == psbt + b'SIGNED-BY-FAKE' and rc == 0, str(r)[:200])
@@ -142,6 +184,8 @@ def main():
         check('non-PSBT result -> error', r.get('status') == 'error', str(r))
 
         print('device identity')
+        rc, r, log, _ = run(tmp, dict(good, expected_xfp='deadbeef', expected_xpub=OTHER_XPUB))
+        check('browser cannot override pairing (ignored expected_* fields)', r.get('status') == 'signed', str(r)[:150])
         rc, r, log, _ = run(tmp, good, {'xfp': 'deadbeef'})
         check('different fingerprint -> wrong_device', r.get('status') == 'wrong_device', str(r))
         check('  ...and nothing was uploaded', not any(l.startswith('upload') for l in log), str(log))
@@ -160,9 +204,9 @@ def main():
             ('missing PSBT', dict(good, psbt_b64=''), None),
             ('PSBT not base64', dict(good, psbt_b64='@@notbase64@@'), None),
             ('base64 but not a PSBT', dict(good, psbt_b64=base64.b64encode(b'hello').decode()), None),
-            ('bad fingerprint', dict(good, expected_xfp='zz; rm -rf /'), None),
-            ('missing xpub', dict(good, expected_xpub=None), None),
-            ('xpub with junk', dict(good, expected_xpub=PAIRED_XPUB + '$(id)'), None),
+            ('pair: bad fingerprint', dict(pair_req, expected_xfp='zz; rm -rf /'), None),
+            ('pair: missing xpub', dict(pair_req, expected_xpub=None), None),
+            ('pair: xpub with junk', dict(pair_req, expected_xpub=PAIRED_XPUB + '$(id)'), None),
         ]
         for name, req, raw in bad:
             rc, r, log, left = run(tmp, req, raw=raw)

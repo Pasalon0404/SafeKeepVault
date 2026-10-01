@@ -5,6 +5,8 @@
 #  Runs on the ZBook (not SafeKeep), using the ckcc test install in
 #  ~/ckcc-test. Does exactly what the SafeKeep watcher will do:
 #    1. "detect"  — finds the Coldcard, shows its fingerprint
+#    1b. "pair"   — saves that Coldcard as paired (to a TEMPORARY file
+#                   for this test only; SafeKeep's real pairing is untouched)
 #    2. "sign"    — (only if you give a PSBT) sends it to the Coldcard,
 #                   you approve or decline ON THE COLDCARD, and the result
 #                   is saved next to the input as <name>-safekeep-signed.psbt
@@ -26,6 +28,7 @@ PSBT="${1:-}"
 
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
+export SAFEKEEP_CC_PAIRING="$W/coldcard-pairing.json"
 
 echo "== 1. detect"
 echo '{"action":"detect"}' > "$W/req.json"
@@ -45,18 +48,26 @@ else:
 EOF
 [ $? -eq 0 ] || exit 1
 
+echo
+echo "== 1b. pair (temporary, test only)"
+python3 - "$W/detect.json" "$W/req.json" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+json.dump({'action': 'pair', 'expected_xfp': d['xfp'], 'expected_xpub': d['master_xpub']}, open(sys.argv[2], 'w'))
+EOF
+"$PY" "$HELPER" "$W/req.json" "$W/pair.json"
+python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print('   status : %s' % r.get('status')); r.get('ok') or print('   error  : %s' % r.get('error'))" "$W/pair.json"
+
 [ -n "$PSBT" ] || { echo; echo "Detect worked. Give a PSBT file to also test signing."; exit 0; }
 
 echo
 echo "== 2. sign $(basename "$PSBT")"
 echo "   Look at the Coldcard now: check the amount and address, then approve or decline."
-python3 - "$W/detect.json" "$PSBT" "$W/req.json" <<'EOF'
+python3 - "$PSBT" "$W/req.json" <<'EOF'
 import base64, json, sys
-d = json.load(open(sys.argv[1]))
-json.dump({'action': 'sign',
-           'psbt_b64': base64.b64encode(open(sys.argv[2], 'rb').read()).decode(),
-           'expected_xfp': d['xfp'], 'expected_xpub': d['master_xpub']},
-          open(sys.argv[3], 'w'))
+json.dump({'action': 'sign', 'request_id': 'hwtest',
+           'psbt_b64': base64.b64encode(open(sys.argv[1], 'rb').read()).decode()},
+          open(sys.argv[2], 'w'))
 EOF
 "$PY" "$HELPER" "$W/req.json" "$W/sign.json"
 OUT="${PSBT%.psbt}-safekeep-signed.psbt"
