@@ -150,6 +150,27 @@ apt-get install -y --no-install-recommends \
     x11-xserver-utils \
     python3-xdg
 
+# ============================================================================
+# Coldcard USB signing library (ckcc-protocol), hash-pinned
+# ============================================================================
+# Installed into its own environment, /opt/safekeep-ckcc — deliberately NOT
+# under /opt/safekeep, which quick-update.sh deletes and recreates.
+# Every file is checked against the SHA-256 in config/ckcc-requirements.txt;
+# pip refuses anything that does not match. pyaes ships only as source, so
+# a pinned setuptools is installed first and pyaes is built without fetching
+# any unpinned build tools (--no-build-isolation).
+echo "Installing Coldcard USB support (hash-pinned)..."
+apt-get install -y --no-install-recommends python3-venv
+python3 -m venv /opt/safekeep-ckcc
+/opt/safekeep-ckcc/bin/pip install --no-cache-dir --require-hashes --only-binary=:all: \
+    -r /ckcc-build-requirements.txt
+/opt/safekeep-ckcc/bin/pip install --no-cache-dir --require-hashes --no-build-isolation \
+    -r /ckcc-requirements.txt
+/opt/safekeep-ckcc/bin/python3 -c "import hid, ckcc.client, ckcc.protocol" \
+    || { echo "FATAL: Coldcard library failed to import"; exit 1; }
+rm -f /ckcc-requirements.txt /ckcc-build-requirements.txt
+echo "Coldcard USB support installed."
+
 echo "Installing Chromium..."
 
 # ============================================================================

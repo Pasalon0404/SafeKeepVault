@@ -192,6 +192,13 @@ chmod +x "$CHROOT_DIR/usr/local/bin/safekeep-boot"
 cp safekeep-harden.sh "$CHROOT_DIR/usr/local/bin/safekeep-harden"
 chmod +x "$CHROOT_DIR/usr/local/bin/safekeep-harden"
 
+# Coldcard USB signing: helper + hash-pinned library lists. chroot-setup.sh
+# installs the library from these lists, then deletes them.
+mkdir -p "$CHROOT_DIR/usr/local/lib/safekeep"
+install -m 755 safekeep-coldcard.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-coldcard.py"
+install -m 644 config/ckcc-requirements.txt "$CHROOT_DIR/ckcc-requirements.txt"
+install -m 644 config/ckcc-build-requirements.txt "$CHROOT_DIR/ckcc-build-requirements.txt"
+
 # ---------------------------------------------------------------------------
 # Install safekeep-session.service — the permanent replacement for the
 # getty@tty1-autologin → .profile → startx chain. Must land in the chroot

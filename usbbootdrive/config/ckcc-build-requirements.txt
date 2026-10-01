@@ -1,0 +1,5 @@
+# Build tool needed only to install pyaes (published as source, not a wheel).
+# Installed first, hash-checked, then pyaes is built with --no-build-isolation
+# so pip never fetches an unpinned build tool.
+setuptools==80.10.2 \
+    --hash=sha256:95b30ddfb717250edb492926c92b5221f7ef3fbcc2b07579bcd4a27da21d0173

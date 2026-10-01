@@ -134,6 +134,10 @@ cp -r src/dist/* "$CHROOT_DIR/opt/safekeep/"
 install -m 755 safekeep-boot.sh "$CHROOT_DIR/usr/local/bin/safekeep-boot"
 install -m 755 unlock-vault.sh  "$CHROOT_DIR/usr/local/bin/unlock-vault"
 install -m 755 setup-vault.sh   "$CHROOT_DIR/usr/local/bin/setup-vault"
+if [ -d "$CHROOT_DIR/opt/safekeep-ckcc" ]; then
+    mkdir -p "$CHROOT_DIR/usr/local/lib/safekeep"
+    install -m 755 safekeep-coldcard.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-coldcard.py"
+fi
 install -m 644 safekeep-session.service "$CHROOT_DIR/etc/systemd/system/safekeep-session.service"
 [ -f config/99-hide-drives.rules ] && install -m 644 config/99-hide-drives.rules "$CHROOT_DIR/etc/udev/rules.d/99-hide-drives.rules"
 echo "      app bundle : $(grep -o 'sha256=[0-9a-f]*' src/dist/manifest.json 2>/dev/null | head -1 | cut -c1-20)…"

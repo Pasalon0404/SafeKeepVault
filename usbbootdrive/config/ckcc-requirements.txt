@@ -1,0 +1,20 @@
+# Coldcard USB support for SafeKeep (installed by chroot-setup.sh into
+# /opt/safekeep-ckcc with `pip install --require-hashes`).
+#
+# Every file is pinned to an exact version AND its SHA-256, checked against
+# PyPI on 2026-09-30. pip refuses to install anything whose fingerprint does
+# not match. To upgrade, change a version, re-check its hash on pypi.org, and
+# test against the real Coldcard before building.
+#
+# hidapi is pinned from PyPI (not Ubuntu's python3-hid 0.9.0) because
+# ckcc-protocol opens devices with hid.device(serial=...), which 0.9.0 lacks.
+ckcc-protocol==1.6.0 \
+    --hash=sha256:594265953a4d12bdf1e237ebea3b4a4e05c4fa4ca198ba4795a704a5dc4c8227
+hidapi==0.15.0 \
+    --hash=sha256:cfdbc74d5c4b5fdeef58a246d80f7dbf4ca33fe741c889505a4a350dd2eb54fb
+ecdsa==0.19.2 \
+    --hash=sha256:840f5dc5e375c68f36c1a7a5b9caad28f95daa65185c9253c0c08dd952bb7399
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+pyaes==1.6.1 \
+    --hash=sha256:02c1b1405c38d3c370b085fb952dd8bea3fadcee6411ad99f312cc129c536d8f

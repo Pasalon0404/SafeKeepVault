@@ -1232,6 +1232,62 @@ RELIQUARY_PY
     echo ".7z backup watcher daemon started (PID $RELIQUARY_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # COLDCARD WATCHER DAEMON — USB SIGNING WITH A PAIRED COLDCARD
+    # -------------------------------------------------------------------
+    # The web app asks for Coldcard actions by downloading a REQUEST file:
+    #   $SEED_DIR/COLDCARD_REQUEST.json
+    #     { "action": "detect" }
+    #     { "action": "sign", "psbt_b64": "...",
+    #       "expected_xfp": "decaf002", "expected_xpub": "xpub..." }
+    # The helper (/usr/local/lib/safekeep/safekeep-coldcard.py, run with the
+    # pinned ckcc-protocol install in /opt/safekeep-ckcc) treats the request
+    # as untrusted data, deletes it on read, validates every field, only
+    # talks to the PAIRED Coldcard, and always writes:
+    #   $SEED_DIR/COLDCARD_RESULT.json   { "ok": ..., "status": ..., ... }
+    # The app reads the result, then downloads COLDCARD_ACK.json.
+    # Nothing here runs a shell command taken from the request, and there
+    # is no network code: signing needs approval on the Coldcard's screen.
+    COLDCARD_REQUEST="$SEED_DIR/COLDCARD_REQUEST.json"
+    COLDCARD_RESULT="$SEED_DIR/COLDCARD_RESULT.json"
+    COLDCARD_ACK="$SEED_DIR/COLDCARD_ACK.json"
+    COLDCARD_PY="/opt/safekeep-ckcc/bin/python3"
+    COLDCARD_HELPER="/usr/local/lib/safekeep/safekeep-coldcard.py"
+
+    (
+        while true; do
+            if [ -f "$COLDCARD_REQUEST" ]; then
+                echo "Coldcard Watcher: request detected"
+                rm -f "$COLDCARD_RESULT" "$COLDCARD_ACK"
+                if [ -x "$COLDCARD_PY" ] && [ -f "$COLDCARD_HELPER" ]; then
+                    "$COLDCARD_PY" "$COLDCARD_HELPER" "$COLDCARD_REQUEST" "$COLDCARD_RESULT" 2>>/tmp/safekeep-coldcard.log
+                    echo "Coldcard Watcher: helper finished (exit $?)"
+                else
+                    echo '{"ok":false,"status":"not_installed","error":"Coldcard support is not installed on this SafeKeep build."}' > "$COLDCARD_RESULT"
+                    echo "Coldcard Watcher: FAILED — helper or library not installed"
+                fi
+                rm -f "$COLDCARD_REQUEST"
+                if [ ! -f "$COLDCARD_RESULT" ]; then
+                    echo '{"ok":false,"status":"error","error":"The Coldcard helper stopped unexpectedly."}' > "$COLDCARD_RESULT"
+                fi
+
+                ACK_WAIT=0
+                while [ $ACK_WAIT -lt 120 ]; do
+                    if [ -f "$COLDCARD_ACK" ]; then
+                        echo "Coldcard Watcher: cleanup complete (ACK received)"
+                        break
+                    fi
+                    sleep 1
+                    ACK_WAIT=$((ACK_WAIT + 1))
+                done
+                rm -f "$COLDCARD_ACK" "$COLDCARD_RESULT" 2>/dev/null
+            fi
+            sleep 1
+        done
+    ) &
+    COLDCARD_WATCHER_PID=$!
+    echo "Coldcard watcher daemon started (PID $COLDCARD_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # CODEX WATCHER DAEMON — NOTE FILE ROUTING & TRANSFER COPY
     # -------------------------------------------------------------------
     # Chromium's DownloadDirectory points to .safekeep-vault/seeds/, but
