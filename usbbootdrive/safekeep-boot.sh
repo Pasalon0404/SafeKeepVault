@@ -1301,6 +1301,76 @@ RELIQUARY_PY
     echo "Coldcard watcher daemon started (PID $COLDCARD_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # TREZOR WATCHER DAEMON — USB SIGNING WITH A PAIRED TREZOR ONE
+    # -------------------------------------------------------------------
+    # Same pattern as the Coldcard watcher above. The web app downloads
+    #   TREZOR_REQUEST.json
+    #     { "action": "detect" | "prompt_pin" | "send_pin" | "pair" |
+    #                 "unpair" | "sign", "request_id": ... }
+    # into $CHROMIUM_DOWNLOAD_DIR. The helper
+    # (/usr/local/lib/safekeep/safekeep-trezor.py, run with the pinned HWI
+    # install in /opt/safekeep-hwi) treats it as untrusted data, deletes it
+    # on read, validates every field, and only signs with the PAIRED Trezor.
+    # PIN entry: "send_pin" carries only grid POSITIONS (1-9), which mean
+    # nothing without the shuffle shown on the Trezor's own screen; the
+    # helper never logs or echoes them. The pairing is stored by the helper:
+    #   normal boot    : $VAULT_MOUNT/settings/trezor-pairing.json
+    #   temporary boot : $SIGNAL_DIR/trezor-pairing.json (RAM, this session)
+    # The RESULT always goes to RAM ($SIGNAL_DIR/TREZOR_RESULT.json); the app
+    # reads it, then downloads TREZOR_ACK.json. Nothing here runs a shell
+    # command taken from the request, and there is no network code (the
+    # helper also switches off HWI's Trezor-simulator probe).
+    TREZOR_REQUEST="$CHROMIUM_DOWNLOAD_DIR/TREZOR_REQUEST.json"
+    TREZOR_RESULT="$SIGNAL_DIR/TREZOR_RESULT.json"
+    TREZOR_ACK="$CHROMIUM_DOWNLOAD_DIR/TREZOR_ACK.json"
+    if [ "$EPHEMERAL_MODE" = "1" ]; then
+        TREZOR_PAIRING="$SIGNAL_DIR/trezor-pairing.json"
+    else
+        TREZOR_PAIRING="$VAULT_MOUNT/settings/trezor-pairing.json"
+    fi
+    rm -f "$TREZOR_REQUEST" "$TREZOR_RESULT" "$TREZOR_ACK" 2>/dev/null
+    TREZOR_PY="/opt/safekeep-hwi/bin/python3"
+    TREZOR_HELPER="/usr/local/lib/safekeep/safekeep-trezor.py"
+
+    (
+        while true; do
+            if [ -f "$TREZOR_REQUEST" ]; then
+                echo "Trezor Watcher: request detected"
+                # Chromium names a download "X (1).json" if X.json still
+                # exists, so clear numbered leftovers of both protocol files.
+                rm -f "$TREZOR_RESULT" "$CHROMIUM_DOWNLOAD_DIR"/TREZOR_ACK*.json \
+                      "$CHROMIUM_DOWNLOAD_DIR"/TREZOR_REQUEST\ \(*\).json 2>/dev/null
+                if [ -x "$TREZOR_PY" ] && [ -f "$TREZOR_HELPER" ]; then
+                    SAFEKEEP_TZ_PAIRING="$TREZOR_PAIRING" PYTHONDONTWRITEBYTECODE=1 \
+                        "$TREZOR_PY" "$TREZOR_HELPER" "$TREZOR_REQUEST" "$TREZOR_RESULT" 2>>/tmp/safekeep-trezor.log
+                    echo "Trezor Watcher: helper finished (exit $?)"
+                else
+                    echo '{"ok":false,"status":"not_installed","error":"Trezor support is not installed on this SafeKeep build."}' > "$TREZOR_RESULT"
+                    echo "Trezor Watcher: FAILED — helper or library not installed"
+                fi
+                rm -f "$TREZOR_REQUEST"
+                if [ ! -f "$TREZOR_RESULT" ]; then
+                    echo '{"ok":false,"status":"error","error":"The Trezor helper stopped unexpectedly."}' > "$TREZOR_RESULT"
+                fi
+
+                ACK_WAIT=0
+                while [ $ACK_WAIT -lt 120 ]; do
+                    if compgen -G "$CHROMIUM_DOWNLOAD_DIR/TREZOR_ACK*.json" > /dev/null; then
+                        echo "Trezor Watcher: cleanup complete (ACK received)"
+                        break
+                    fi
+                    sleep 1
+                    ACK_WAIT=$((ACK_WAIT + 1))
+                done
+                rm -f "$CHROMIUM_DOWNLOAD_DIR"/TREZOR_ACK*.json "$TREZOR_RESULT" 2>/dev/null
+            fi
+            sleep 1
+        done
+    ) &
+    TREZOR_WATCHER_PID=$!
+    echo "Trezor watcher daemon started (PID $TREZOR_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # CODEX WATCHER DAEMON — NOTE FILE ROUTING & TRANSFER COPY
     # -------------------------------------------------------------------
     # Chromium's DownloadDirectory points to .safekeep-vault/seeds/, but
