@@ -2781,13 +2781,17 @@
       aspect-ratio: 1;
       min-height: 64px;
       background: var(--skb-bg-input);
-      border: 2px solid var(--skb-border);
+      border: 2px solid var(--skb-text-muted);
       border-radius: var(--skb-radius-sm);
+      color: var(--skb-text);
+      font-size: 1.6rem;
+      line-height: 1;
       cursor: pointer;
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
     }
     .tz-pin-cell:hover:not(:disabled),
-    .tz-pin-cell:focus-visible { border-color: var(--skb-primary); outline: none; }
-    .tz-pin-cell:active:not(:disabled) { background: var(--skb-primary); }
+    .tz-pin-cell:focus-visible { border-color: var(--skb-primary); color: var(--skb-primary); outline: none; }
+    .tz-pin-cell:active:not(:disabled) { background: var(--skb-primary); color: var(--skb-bg-secondary); transform: translateY(1px); box-shadow: none; }
     .tz-pin-cell:disabled { cursor: default; opacity: 0.5; }
     .tz-pin-dots {
       text-align: center;
@@ -6753,7 +6757,7 @@
                         <div id="settings-trezor-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Trezor</h4>
                             <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
-                                Pair a Trezor One so the PSBT Signer can ask it for a signature over USB. You unlock it here by clicking the positions of your PIN on a blank grid while reading the shuffled numbers on the Trezor's own screen. Every signature is approved on the Trezor. SafeKeep only ever uses the Trezor paired here.
+                                Pair a Trezor One so the PSBT Signer can ask it for a signature over USB. To unlock it, you click your PIN with the mouse on a grid of blank buttons, matching the shuffled numbers shown on the Trezor's own screen (like Sparrow). Every signature is approved on the Trezor. SafeKeep only ever uses the Trezor paired here.
                             </p>
                             <div id="settings-trezor-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem;">Checking…</div>
                             <div id="settings-trezor-confirm" style="display: none; margin-bottom: 0.75rem;"></div>
@@ -23631,15 +23635,15 @@ function _tzPinEls() {
     const modal = _psbtEl('div', { class: 'tz-pin-modal' });
     modal.appendChild(_psbtEl('h3', { id: 'tz-pin-title' }, 'Unlock your Trezor'));
     modal.appendChild(_psbtEl('p', null,
-        'Your Trezor is showing a grid of numbers in a shuffled order. For each digit of your PIN, ' +
-        'find it on the Trezor\'s screen and click the square in the same position below. ' +
-        'The squares here are blank on purpose, so SafeKeep never learns your PIN.'));
+        'Your Trezor is showing your numbers in a shuffled grid. Use the mouse: for each digit of your PIN, ' +
+        'find it on the Trezor\'s screen, then click the button in the same spot below. ' +
+        'The buttons here have no numbers on purpose, so SafeKeep never learns your PIN.'));
     const grid = _psbtEl('div', { class: 'tz-pin-grid', id: 'tz-pin-grid' });
     _TZ_GRID_POSITIONS.forEach(function (pos, i) {
         const row = ['top', 'middle', 'bottom'][Math.floor(i / 3)];
         const col = ['left', 'centre', 'right'][i % 3];
         grid.appendChild(_psbtEl('button', { type: 'button', class: 'tz-pin-cell',
-            'aria-label': row + ' ' + col, onclick: function () { _tzPinAdd(pos); } }));
+            'aria-label': row + ' ' + col, onclick: function () { _tzPinAdd(pos); } }, '•'));
     });
     modal.appendChild(grid);
     modal.appendChild(_psbtEl('div', { class: 'tz-pin-dots', id: 'tz-pin-dots', 'aria-live': 'polite' }));
@@ -23654,8 +23658,6 @@ function _tzPinEls() {
     actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', id: 'tz-pin-cancel',
         onclick: function () { _tzPinClose({ ok: false, status: 'cancelled', error: 'PIN entry cancelled.' }); } }, 'Cancel'));
     modal.appendChild(actions);
-    modal.appendChild(_psbtEl('p', { style: 'font-size: 0.75rem; margin: 0.75rem 0 0; text-align: center;' },
-        'Keyboard: number keys work like a numeric keypad (7 = top left, 1 = bottom left), Backspace, Enter, Esc.'));
     overlay.appendChild(modal);
     // Window + capture phase: runs before the app-wide Escape (back to the
     // dashboard) and number-key dashboard shortcuts, which would otherwise
