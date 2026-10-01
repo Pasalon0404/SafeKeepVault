@@ -168,8 +168,28 @@ python3 -m venv /opt/safekeep-ckcc
     -r /ckcc-requirements.txt
 /opt/safekeep-ckcc/bin/python3 -c "import hid, ckcc.client, ckcc.protocol" \
     || { echo "FATAL: Coldcard library failed to import"; exit 1; }
-rm -f /ckcc-requirements.txt /ckcc-build-requirements.txt
 echo "Coldcard USB support installed."
+
+# ============================================================================
+# Trezor USB signing library (Bitcoin Core's HWI), hash-pinned
+# ============================================================================
+# Own environment, /opt/safekeep-hwi (not under /opt/safekeep, which
+# quick-update.sh deletes). Every file is checked against the SHA-256 in
+# config/hwi-requirements.txt. pyaes ships only as source, so the same pinned
+# setuptools as above is installed first and pyaes is built with
+# --no-build-isolation. libusb-1.0-0 is needed to reach the Trezor One over
+# WebUSB. HWI's simulator (UDP) probe is switched off by safekeep-trezor.py.
+echo "Installing Trezor USB support (hash-pinned)..."
+apt-get install -y --no-install-recommends libusb-1.0-0
+python3 -m venv /opt/safekeep-hwi
+/opt/safekeep-hwi/bin/pip install --no-cache-dir --require-hashes --only-binary=:all: \
+    -r /ckcc-build-requirements.txt
+/opt/safekeep-hwi/bin/pip install --no-cache-dir --require-hashes --no-build-isolation \
+    -r /hwi-requirements.txt
+/opt/safekeep-hwi/bin/python3 -c "import usb1, hwilib.commands, hwilib.devices.trezor; usb1.USBContext().open()" \
+    || { echo "FATAL: Trezor library failed to import"; exit 1; }
+rm -f /ckcc-requirements.txt /ckcc-build-requirements.txt /hwi-requirements.txt
+echo "Trezor USB support installed."
 
 echo "Installing Chromium..."
 

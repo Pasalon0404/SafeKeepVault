@@ -198,6 +198,9 @@ mkdir -p "$CHROOT_DIR/usr/local/lib/safekeep"
 install -m 755 safekeep-coldcard.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-coldcard.py"
 install -m 644 config/ckcc-requirements.txt "$CHROOT_DIR/ckcc-requirements.txt"
 install -m 644 config/ckcc-build-requirements.txt "$CHROOT_DIR/ckcc-build-requirements.txt"
+# Trezor USB signing: helper + hash-pinned HWI list (same pattern as above).
+install -m 755 safekeep-trezor.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-trezor.py"
+install -m 644 config/hwi-requirements.txt "$CHROOT_DIR/hwi-requirements.txt"
 
 # ---------------------------------------------------------------------------
 # Install safekeep-session.service — the permanent replacement for the

@@ -1,0 +1,55 @@
+# Trezor USB support for SafeKeep (installed by chroot-setup.sh into
+# /opt/safekeep-hwi with `pip install --require-hashes`).
+#
+# Bitcoin Core's HWI library (hwilib) and every package it pulls in, each
+# pinned to an exact version AND its SHA-256, resolved for Ubuntu 24.04
+# (Python 3.12, x86_64) and checked against PyPI on 2026-10-01. pip refuses
+# to install anything whose fingerprint does not match. To upgrade, change a
+# version, re-check its hash on pypi.org, and test against the real Trezor
+# before building.
+#
+# HWI 3.2.0 supports Python >=3.9,<3.13. Ubuntu 24.04 ships 3.12.
+# hidapi, ecdsa, six and pyaes are the same files (same hashes) as in
+# ckcc-requirements.txt. pyaes ships only as source: it is built with the
+# hash-pinned setuptools from ckcc-build-requirements.txt and
+# --no-build-isolation, so pip never fetches an unpinned build tool.
+#
+# libusb1 is a pure-Python wrapper: it needs Ubuntu's libusb-1.0-0 package
+# (installed by chroot-setup.sh) to reach the Trezor One over WebUSB.
+#
+# Some packages are only used by HWI's code for OTHER devices and are never
+# touched on the Trezor path: noiseprotocol (+ cryptography, cffi, pycparser)
+# and semver for BitBox02, cbor2 for Jade. They are HWI's declared
+# requirements, so they are pinned and installed rather than left out.
+hwi==3.2.0 \
+    --hash=sha256:8a795341e2cd3393d4c8d3a0f03ddc90f4994666e277ac21ec52a02000573109
+cbor2==5.7.1 \
+    --hash=sha256:9fc81da8c0e09beb42923e455e477b36ff14a03b9ca18a8a2e9b462de9a953e8
+ecdsa==0.19.2 \
+    --hash=sha256:840f5dc5e375c68f36c1a7a5b9caad28f95daa65185c9253c0c08dd952bb7399
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+hidapi==0.15.0 \
+    --hash=sha256:cfdbc74d5c4b5fdeef58a246d80f7dbf4ca33fe741c889505a4a350dd2eb54fb
+libusb1==3.4.0 \
+    --hash=sha256:e83d034e44c3efe1c4599c6281d34bca50a38c12cab3b7b6217d583161a01ffd
+mnemonic==0.21 \
+    --hash=sha256:72dc9de16ec5ef47287237b9b6943da11647a03fe7cf1f139fc3d7c4a7439288
+noiseprotocol==0.3.1 \
+    --hash=sha256:2e1a603a38439636cf0ffd8b3e8b12cee27d368a28b41be7dbe568b2abb23111
+cryptography==50.0.2 \
+    --hash=sha256:4061c0079120205fb760c58acab6443e217307dcf05e3702cf970e0689972856
+cffi==2.1.1 \
+    --hash=sha256:c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
+protobuf==4.25.9 \
+    --hash=sha256:438c636de8fb706a0de94a12a268ef1ae8f5ba5ae655a7671fcda5968ba3c9be
+pyserial==3.5 \
+    --hash=sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0
+semver==3.1.0 \
+    --hash=sha256:6e4998f8b4762acdfea85f9bfd5b4032e0bb50038dc04bf82011b42d5d1145c5
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+pyaes==1.6.1 \
+    --hash=sha256:02c1b1405c38d3c370b085fb952dd8bea3fadcee6411ad99f312cc129c536d8f
