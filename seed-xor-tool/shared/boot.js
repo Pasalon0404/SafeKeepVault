@@ -2145,6 +2145,34 @@ const SafeKeepOS = (() => {
   // trigger (DISPLAY_SLEEP_* prefix in _SYSTEM_TRIGGER_PREFIXES) so the
   // Amnesia / Volatile firewall lets it through.
 
+  // ---- Device Options persistence ----
+  // The app keeps Device Options (theme, UI scale, sound, idle timers) in
+  // localStorage, which lives in RAM and is wiped every boot. To keep them,
+  // boot.html sends the current values here; we download them as
+  // DEVICE_SETTINGS.json into the vault's seeds/ folder (Chromium's download
+  // folder in a normal boot). safekeep-boot.sh's Settings Watcher validates
+  // the file (known keys only, size-limited) and stores it as
+  //   /media/.safekeep-vault/settings/device-settings.json
+  // which boot.html reads back at the next boot. Never in a temporary
+  // session. Goes through _silentDownload's vault check on purpose: these
+  // are vault data, so they must never land anywhere but the real vault.
+  const DEVICE_SETTINGS_FILE = 'DEVICE_SETTINGS.json';
+
+  /**
+   * @param {Object<string,string>} settings  localStorage key → raw value
+   * @returns {boolean} true if the save was handed to the download layer
+   */
+  function saveDeviceSettings(settings) {
+    if (!isBootDrive() || _ccTemporarySession()) return false;
+    if (!settings || typeof settings !== 'object') return false;
+    const clean = {};
+    for (const k of Object.keys(settings)) {
+      if (typeof settings[k] === 'string' && settings[k].length <= 1024) clean[k] = settings[k];
+    }
+    const payload = JSON.stringify({ version: 1, saved_at: new Date().toISOString(), settings: clean });
+    return _silentDownload(DEVICE_SETTINGS_FILE, payload);
+  }
+
   const DISPLAY_SLEEP_TRIGGER_FILE = 'DISPLAY_SLEEP_TRIGGER.json';
 
   /**
@@ -2653,6 +2681,8 @@ const SafeKeepOS = (() => {
     exportToTransfer,
 
     // Coldcard — USB co-signing via the Coldcard Watcher
+    saveDeviceSettings,
+
     coldcardGetPairing,
     coldcardDetect,
     coldcardPair,

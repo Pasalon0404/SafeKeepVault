@@ -1342,6 +1342,62 @@ RELIQUARY_PY
     echo "Coldcard watcher daemon started (PID $COLDCARD_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # SETTINGS WATCHER — KEEP DEVICE OPTIONS IN THE VAULT
+    # -------------------------------------------------------------------
+    # The browser profile is in RAM, so Device Options (theme, UI scale,
+    # sound, idle timers) would reset every boot. When one changes, the app
+    # downloads DEVICE_SETTINGS.json into the vault's seeds/ folder. This
+    # watcher treats it as untrusted data: it keeps only the four known
+    # keys, string values of at most 1 KB, from a file of at most 8 KB, and
+    # writes the result atomically to
+    #   $VAULT_MOUNT/settings/device-settings.json
+    # which boot.html reads at the next boot. Nothing from the file is
+    # executed. Normal boots only: a temporary session never touches the
+    # vault, so its request files are just deleted.
+    DEVICE_SETTINGS_SAVED="$VAULT_MOUNT/settings/device-settings.json"
+    rm -f "$CHROMIUM_DOWNLOAD_DIR"/DEVICE_SETTINGS*.json 2>/dev/null
+    (
+        while true; do
+            if compgen -G "$CHROMIUM_DOWNLOAD_DIR/DEVICE_SETTINGS*.json" > /dev/null; then
+                sleep 1
+                mapfile -t DS_FILES < <(ls -t "$CHROMIUM_DOWNLOAD_DIR"/DEVICE_SETTINGS*.json 2>/dev/null)
+                if [ "${#DS_FILES[@]}" -gt 0 ] && [ "$EPHEMERAL_MODE" != "1" ]; then
+                    mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
+                    if python3 -I - "${DS_FILES[0]}" "$DEVICE_SETTINGS_SAVED.tmp" <<'DSPYEOF'
+import json, sys
+ALLOWED = ('safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers')
+src, dst = sys.argv[1], sys.argv[2]
+with open(src, 'rb') as f:
+    raw = f.read(8193)
+if len(raw) > 8192:
+    sys.exit('file too large')
+data = json.loads(raw.decode('utf-8'))
+settings = data.get('settings') if isinstance(data, dict) else None
+if not isinstance(settings, dict):
+    sys.exit('no settings object')
+out = {k: v for k, v in settings.items()
+       if k in ALLOWED and isinstance(v, str) and len(v) <= 1024}
+with open(dst, 'w', encoding='utf-8') as f:
+    json.dump({'version': 1, 'settings': out}, f)
+DSPYEOF
+                    then
+                        chmod 600 "$DEVICE_SETTINGS_SAVED.tmp" 2>/dev/null
+                        mv -f "$DEVICE_SETTINGS_SAVED.tmp" "$DEVICE_SETTINGS_SAVED" && sync
+                        echo "Settings Watcher: Device Options saved to vault"
+                    else
+                        rm -f "$DEVICE_SETTINGS_SAVED.tmp" 2>/dev/null
+                        echo "Settings Watcher: rejected an invalid settings file"
+                    fi
+                fi
+                rm -f "${DS_FILES[@]}" 2>/dev/null
+            fi
+            sleep 1
+        done
+    ) &
+    SETTINGS_WATCHER_PID=$!
+    echo "Settings watcher daemon started (PID $SETTINGS_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # TREZOR WATCHER DAEMON — USB SIGNING WITH A PAIRED TREZOR ONE
     # -------------------------------------------------------------------
     # Same pattern as the Coldcard watcher above. The web app downloads

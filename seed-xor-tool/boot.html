@@ -14,6 +14,47 @@
       // `const _SKB_DEV_MODE` for inline use; this is the global alias.
       window._SKB_DEV_MODE = false; // <<<< SET TO false FOR PRODUCTION BUILD
 
+      // Device Options: load from the vault, once per boot.
+      // The browser profile lives in RAM (nopersistent live boot), so
+      // localStorage starts empty on every boot. The Settings Watcher in
+      // safekeep-boot.sh keeps a copy of the Device Options inside the
+      // encrypted vault (settings/device-settings.json). Read it here,
+      // synchronously, BEFORE the theme / UI scale / sound / idle-timer
+      // code below reads localStorage, and copy it in. The
+      // "safekeepDeviceSettingsApplied" marker lives only in this boot's
+      // RAM profile, so later in-session changes (or a backup restore,
+      // which reloads the page) are never overwritten by the older file.
+      // Temporary sessions (#ephemeral=true) never read or write it.
+      // Keys must match _RLQ_APP_SETTINGS_KEYS in the main script block
+      // and ALLOWED in safekeep-boot.sh's Settings Watcher.
+      window._skbVaultDeviceSettings = null;
+      if (window.location.protocol === 'file:' && window.location.hash !== '#ephemeral=true') {
+        try {
+          var _skbDsKeys = ['safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers'];
+          var _skbDsXhr = new XMLHttpRequest();
+          _skbDsXhr.open('GET', 'file:///media/.safekeep-vault/settings/device-settings.json', false);
+          _skbDsXhr.send(null);
+          var _skbDsText = _skbDsXhr.responseText || '';
+          if (_skbDsText.length > 0 && _skbDsText.length <= 8192) {
+            var _skbDsParsed = JSON.parse(_skbDsText);
+            var _skbDsIn = (_skbDsParsed && typeof _skbDsParsed.settings === 'object') ? _skbDsParsed.settings : null;
+            if (_skbDsIn) {
+              var _skbDs = {};
+              for (var _skbDsI = 0; _skbDsI < _skbDsKeys.length; _skbDsI++) {
+                var _skbDsK = _skbDsKeys[_skbDsI];
+                var _skbDsV = _skbDsIn[_skbDsK];
+                if (typeof _skbDsV === 'string' && _skbDsV.length <= 1024) _skbDs[_skbDsK] = _skbDsV;
+              }
+              window._skbVaultDeviceSettings = _skbDs;
+              if (localStorage.getItem('safekeepDeviceSettingsApplied') !== '1') {
+                for (var _skbDsK2 in _skbDs) localStorage.setItem(_skbDsK2, _skbDs[_skbDsK2]);
+              }
+            }
+          }
+        } catch (e) { /* no saved settings yet, or unreadable: keep defaults */ }
+        try { localStorage.setItem('safekeepDeviceSettingsApplied', '1'); } catch (e) { /* noop */ }
+      }
+
       // Pre-paint restore for theme + UI scale. Runs before any CSS
       // or layout so the user never sees a flash of the default
       // light/dark or default 100% zoom before their preference
@@ -32696,6 +32737,41 @@ function _rlqCollectAppSettings() {
     }
     return out;
 }
+
+/**
+ * Device Options → vault. The loader in <head> brought in whatever the
+ * vault had at boot (window._skbVaultDeviceSettings). Every 2 s, compare
+ * the Application Settings keys with what the vault last stored; once a
+ * change has held still for one tick (so dragging the volume slider saves
+ * once, not dozens of times), send it via SafeKeepOS.saveDeviceSettings().
+ * The Settings Watcher in safekeep-boot.sh validates it and stores it in
+ * the vault. Covers changes made in Device Options AND settings brought
+ * back by an Encrypted Backup restore. Off in temporary sessions.
+ */
+(function _skbDeviceSettingsSync() {
+    if (window.location.protocol !== 'file:' || window.location.hash === '#ephemeral=true') return;
+    function canon(obj) {
+        var keys = Object.keys(obj).sort(), out = {};
+        for (var i = 0; i < keys.length; i++) out[keys[i]] = obj[keys[i]];
+        return JSON.stringify(out);
+    }
+    var saved   = window._skbVaultDeviceSettings ? canon(window._skbVaultDeviceSettings) : null;
+    var pending = null;
+    setInterval(function () {
+        var cur = _rlqCollectAppSettings();
+        if (Object.keys(cur).length === 0) return;
+        var c = canon(cur);
+        if (c === saved) { pending = null; return; }
+        if (c !== pending) { pending = c; return; }
+        try {
+            if (window.SafeKeepOS && typeof window.SafeKeepOS.saveDeviceSettings === 'function' &&
+                window.SafeKeepOS.saveDeviceSettings(cur)) {
+                saved = c;
+                pending = null;
+            }
+        } catch (e) { /* vault not ready yet: try again next tick */ }
+    }, 2000);
+})();
 
 /**
  * Read every saved Encrypted Note out of the in-memory _notesStore (via the
