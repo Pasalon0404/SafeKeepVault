@@ -5,6 +5,7 @@ import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
+import { execFileSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -134,10 +135,34 @@ async function buildOfflineSuite() {
     // (it's what Chromium loads). If other files become security-
     // critical (e.g. a preload script), add them to the ATTESTED list.
     // ------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    // VERSION STAMP — automatic, nothing to edit per build
+    // ------------------------------------------------------------------
+    // Release number: seed-xor-tool/VERSION (bump it by hand for a release).
+    // Build number:   the git commit count (goes up by one with every commit).
+    // Commit:         short git hash, so any stick traces to one exact commit.
+    // "+ local changes" marks a build made from uncommitted app source.
+    // Fills every element marked data-skv-version (welcome screen, dashboard
+    // footer). Runs BEFORE the integrity manifest so the hash covers it.
+    const stamp = versionStamp();
+    {
+        const html = readFileSync(BOOT_HTML_PATH, 'utf8');
+        const SKV_RE = /(<[^>]*\bdata-skv-version\b[^>]*>)[^<]*(<)/g;
+        const hits = (html.match(SKV_RE) || []).length;
+        if (hits < 2) {
+            console.error(`[VERSION] ✗ expected the version spots in dist/boot.html, found ${hits}.`);
+            process.exit(1);
+        }
+        const esc = stamp.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        writeFileSync(BOOT_HTML_PATH, html.replace(SKV_RE, (m, open, close) => open + esc + close), { encoding: 'utf8' });
+        console.log(`\n🏷  Version: ${stamp}`);
+    }
+
     const ATTESTED = ['boot.html'];
     const distDir = resolve(__dirname, 'dist');
     const manifest = {
         schemaVersion: 1,
+        version: stamp,
         generatedAt: new Date().toISOString(),
         algorithm: 'sha256',
         files: {}
@@ -158,6 +183,22 @@ async function buildOfflineSuite() {
     const manifestPath = join(distDir, 'manifest.json');
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', { encoding: 'utf8' });
     console.log(`\n🔒 Integrity manifest written to ${manifestPath}`);
+}
+
+function versionStamp() {
+    let release = '0.0';
+    try { release = readFileSync(resolve(__dirname, 'VERSION'), 'utf8').trim() || release; } catch (_) {}
+    const git = (...args) => execFileSync('git', args, { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    try {
+        const count = git('rev-list', '--count', 'HEAD');
+        const hash = git('rev-parse', '--short', 'HEAD');
+        const date = git('log', '-1', '--format=%cs');
+        // Uncommitted changes to tracked app source (built output in dist/ ignored).
+        const dirty = git('status', '--porcelain', '--untracked-files=no', '--', '.', ':(exclude)dist') !== '';
+        return `v${release} · build ${count} · ${hash} · ${date}` + (dirty ? ' + local changes' : '');
+    } catch (_) {
+        return `v${release} · build unknown`;
+    }
 }
 
 buildOfflineSuite();

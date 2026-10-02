@@ -5946,6 +5946,8 @@
             <div class="welcome-message">
                 <h2>No Master Seed Found</h2>
                 <p>This device does not have a master seed configured. Generate a fresh seed or restore one from your backup words to get started.</p>
+                <!-- Version stamp: filled in by build-offline.mjs (see seed-xor-tool/VERSION). -->
+                <div class="welcome-version" data-skv-version style="margin-top: 0.75rem; font-family: var(--skb-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--skb-text-dim, var(--skb-text-muted));">dev build</div>
             </div>
 
             <div class="welcome-actions" id="welcome-buttons">
@@ -6789,7 +6791,7 @@
                 <div class="dash-footer-inner">
                     <div class="dash-footer-brand">
                         <span>SafeKeepVault</span>
-                        <span class="version" id="dash-version">v1.34</span>
+                        <span class="version" id="dash-version" data-skv-version>dev build</span>
                     </div>
                     <button type="button" class="dash-power-btn" onclick="skui_openPowerOptions()" title="Power Options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
