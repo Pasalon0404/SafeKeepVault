@@ -226,6 +226,14 @@ apt-get install -y wget curl ca-certificates jq \
     libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
     libasound2t64 libpango-1.0-0 libcairo2 libxshmfence1 libgl1-mesa-dri
 
+# Sound support. SafeKeep runs no sound server (no PulseAudio/PipeWire
+# daemons); Chromium talks to ALSA directly. alsa-utils supplies amixer/aplay
+# so safekeep-boot.sh can unmute the card and pick the speakers at boot.
+# firmware-sof-signed is needed by newer Intel laptops' sound DSP; optional.
+echo "Installing sound support (ALSA volume tools + laptop sound firmware)..."
+apt-get install -y alsa-utils
+apt-get install -y firmware-sof-signed || echo "  Note: firmware-sof-signed not available, skipping (older laptops do not need it)."
+
 # ============================================================================
 # Supply-chain pinning + integrity verification (SafeKeep hardening)
 # ----------------------------------------------------------------------------

@@ -347,9 +347,44 @@ find_transfer_drive() {
 # STEP 1: CHECK VAULT STATE
 # -------------------------------------------------------------------
 
+# Sound setup: unmute speakers and pick the default output before Chromium
+# starts. SafeKeep has no sound server; Chromium talks to ALSA directly, and
+# a fresh Linux boot leaves most cards muted. Prefers a USB sound device that
+# is present at boot (e.g. the 2016 MacBook Pro, whose built-in audio has no
+# stock Linux driver), otherwise the first non-HDMI output (built-in
+# speakers). Writes /etc/asound.conf. Report: /tmp/safekeep-audio.log.
+safekeep_audio_setup() {
+    local log=/tmp/safekeep-audio.log
+    command -v amixer >/dev/null 2>&1 || { echo "Audio Setup: amixer not installed" >> "$log"; return 0; }
+    local c n ctl line pick="" pickdev=0
+    for c in /proc/asound/card[0-9]*; do
+        [ -d "$c" ] || continue
+        n="${c##*/card}"
+        for ctl in Master PCM Speaker Headphone Front Surround Center LFE "Bass Speaker"; do
+            amixer -q -c "$n" sset "$ctl" 80% unmute >/dev/null 2>&1 || true
+        done
+        if [ -z "$pick" ] && [ -e "$c/usbid" ]; then pick="$n"; fi
+    done
+    if [ -z "$pick" ]; then
+        line=$(aplay -l 2>/dev/null | grep '^card ' | grep -v -i -E 'hdmi|displayport' | head -n 1 || true)
+        if [ -n "$line" ]; then
+            pick=$(echo "$line" | sed -E 's/^card ([0-9]+):.*/\1/')
+            pickdev=$(echo "$line" | sed -E 's/.*device ([0-9]+):.*/\1/')
+        fi
+    fi
+    if [ -n "$pick" ]; then
+        printf 'defaults.pcm.card %s\ndefaults.pcm.device %s\ndefaults.ctl.card %s\n' "$pick" "$pickdev" "$pick" > /etc/asound.conf
+        echo "Audio Setup: default output card $pick device $pickdev" >> "$log"
+    else
+        echo "Audio Setup: no speaker or USB sound device found" >> "$log"
+    fi
+    aplay -l >> "$log" 2>&1 || true
+}
+
 # Helper: launch Chromium and exit
 launch_browser() {
     echo "Vault ready. Launching SafeKeep..."
+    safekeep_audio_setup || true
 
     # ==================================================================
     #  ENTROPY GATE — refuse to hand off to Chromium until the kernel
