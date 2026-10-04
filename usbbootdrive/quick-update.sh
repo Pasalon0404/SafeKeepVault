@@ -144,7 +144,7 @@ if [ -d "$CHROOT_DIR/opt/safekeep-hwi" ]; then
 fi
 install -m 644 safekeep-session.service "$CHROOT_DIR/etc/systemd/system/safekeep-session.service"
 [ -f config/99-hide-drives.rules ] && install -m 644 config/99-hide-drives.rules "$CHROOT_DIR/etc/udev/rules.d/99-hide-drives.rules"
-echo "      app bundle : $(grep -o 'sha256=[0-9a-f]*' src/dist/manifest.json 2>/dev/null | head -1 | cut -c1-20)…"
+echo "      app bundle : $(grep -o '"sha256": *"[0-9a-f]*"' src/dist/manifest.json 2>/dev/null | head -1 | sed 's/.*"\([0-9a-f]*\)"$/sha256=\1/' | cut -c1-20)…"
 echo "      version    : $(grep -o '"version": *"[^"]*"' src/dist/manifest.json 2>/dev/null | head -1 | cut -d'"' -f4)"
 
 # ---------------------------------------------------------------------
