@@ -49,6 +49,15 @@ rsync -av --exclude 'workspace/' --exclude '*.img' --exclude '* (1)*' --exclude 
 ```
 The second rsync is only needed when something in `usbbootdrive/` changed.
 
+`build.sh` stops right away if `src/dist/boot.html` is missing (it used to
+skip the copy silently and produce an image with no app). Someone building
+from a fresh clone on one Linux machine runs `bash prepare-app.sh` (no sudo)
+in `usbbootdrive/` instead of the first rsync: it runs `npm ci` +
+`npm run build` and copies the result into `usbbootdrive/src/dist/`.
+`seed-xor-tool/.npmrc` sets `legacy-peer-deps=true` because
+`vite-plugin-node-polyfills@0.25.0` doesn't declare Vite 8 support yet;
+without it a clean `npm ci` fails.
+
 On the ZBook:
 ```
 cd /home/safekeep-build
@@ -361,6 +370,7 @@ entire website folder/                  ← project root
 │   └── public/                         ← static assets
 └── usbbootdrive/                       ← the OS image builder
     ├── build.sh                        ← Phase-by-phase build orchestrator
+    ├── prepare-app.sh                  ← builds seed-xor-tool from source into src/dist (fresh-clone builds)
     ├── chroot-setup.sh                 ← runs INSIDE the chroot (apt, configs)
     ├── safekeep-boot.sh                ← runtime boot orchestrator (lives at /usr/local/bin/safekeep-boot)
     ├── safekeep-harden.sh              ← hardening sweep (module blacklists, polkit, dconf, masked services)
