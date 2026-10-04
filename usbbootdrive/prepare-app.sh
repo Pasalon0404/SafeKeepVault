@@ -8,8 +8,8 @@
 #  result in usbbootdrive/src/dist, where build.sh and quick-update.sh
 #  expect it. (The usual Mac → rsync workflow does not need this.)
 #
-#  It always rebuilds from source — it never uses the prebuilt
-#  seed-xor-tool/dist that is committed to the repo.
+#  It always rebuilds from source — it never reuses an existing
+#  seed-xor-tool/dist.
 #
 #  Needs: git, Node.js 22+ and npm. Run WITHOUT sudo, from usbbootdrive/:
 #     bash prepare-app.sh

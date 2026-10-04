@@ -33,7 +33,7 @@ cd SafeKeepVault/usbbootdrive
 bash prepare-app.sh        # no sudo
 ```
 
-`prepare-app.sh` installs the exact dependency versions pinned in `seed-xor-tool/package-lock.json` (`npm ci`), compiles the app, and copies the result into `usbbootdrive/src/dist/`. It always rebuilds from source. The prebuilt `seed-xor-tool/dist/` committed to the repo is never used, so you run what you reviewed, not a file someone else compiled.
+`prepare-app.sh` installs the exact dependency versions pinned in `seed-xor-tool/package-lock.json` (`npm ci`), compiles the app, and copies the result into `usbbootdrive/src/dist/`. No compiled app is committed to the repo, so you always run what you reviewed, not a file someone else compiled.
 
 To build the app by hand instead: `cd seed-xor-tool && npm ci && npm run build`, then copy `seed-xor-tool/dist/*` into `usbbootdrive/src/dist/`.
 

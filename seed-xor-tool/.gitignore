@@ -1,5 +1,4 @@
 node_modules/
+dist/
 .DS_Store
-dist/.DS_Store*.bak
-.DS_Store
-node_modules/
+*.bak
