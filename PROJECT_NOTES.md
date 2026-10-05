@@ -83,7 +83,7 @@ sudo bash quick-update.sh --usb /dev/sdb
   (also `normal`, `ephemeral`, `amnesia`). The Dev Drawer has
   "Load test seed" (abandon×23 art → nickname "Digital Wheat Crumble").
 - In dev mode the Transfer Drive is an in-memory mock ("TRANSFER (dev mock)").
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs`, 18 files, all
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs`, 19 files, all
   passing. They extract real functions from boot.html and check them
   against official vectors (BIP-39/32/44/49/84/86, BIP-85, Coldcard Seed
   XOR, all 45 SLIP-39 vectors, BIP-322, PSBT change audit, Silent

@@ -10665,7 +10665,7 @@ window.addEventListener('DOMContentLoaded', () => {
                       'abandon abandon abandon abandon abandon art';
     var DUMMY_MN_12 = 'abandon abandon abandon abandon abandon abandon ' +
                       'abandon abandon abandon abandon abandon about';
-    var DUMMY_FP    = '73c5da0a';  // matches the real 24-word vector
+    var DUMMY_FP    = '5436d724';  // real master fingerprint of DUMMY_MN_24 (73c5da0a is the 12-word vector's)
 
     var _passphrase      = '';
     var _fingerprint     = (devMode === 'seeded') ? DUMMY_FP : null;
@@ -11307,7 +11307,7 @@ window.addEventListener('DOMContentLoaded', () => {
             // and can't operate. This mirrors what shared/boot.js does
             // in production after fetching master-seed.json.
             //
-            // DUMMY_FP ('73c5da0a') is the real BIP-32 master fingerprint
+            // DUMMY_FP ('5436d724') is the real BIP-32 master fingerprint
             // of the abandon×23+art test vector — verified, not a stub.
             setTimeout(function () {
                 try {
@@ -20057,6 +20057,92 @@ function _psbtVerifySilentPayments(tx, masterKey, myFingerprint, spMap) {
 }
 
 /**
+ * Estimate the virtual size (vB) the transaction will have once signed.
+ *
+ * @scure/btc-signer's tx.vsize / tx.weight throw "Transaction is not
+ * finalized" on an unsigned PSBT, so the fee rate can't be measured directly.
+ * Instead each input's final scriptSig + witness size is predicted from the
+ * script it spends: P2WPKH ~68 vB, P2TR key-path ~57.5 vB, P2SH-P2WPKH
+ * ~91 vB, P2PKH ~148 vB, P2WSH / P2SH-P2WSH multisig from the witnessScript's
+ * m-of-n. Inputs that are already finalized use their real sizes. ECDSA
+ * signatures are counted at 72 bytes (incl. sighash byte), so a real
+ * signature can come out up to ~1 byte per signature smaller.
+ *
+ * Returns a Number (vB, may be fractional) or null if any input's script
+ * type can't be determined.
+ */
+function _psbtEstimateVsize(tx) {
+    const btcLib = window.BtcMath.btcSigner;
+    const SIG = 72;            // DER ECDSA signature + sighash byte
+    const SCHNORR = 64;        // BIP-340 signature, default sighash
+    const varint = (n) => n < 0xfd ? 1 : n <= 0xffff ? 3 : n <= 0xffffffff ? 5 : 9;
+    const pushLen = (n) => n < 0x4c ? 1 + n : n <= 0xff ? 2 + n : 3 + n;
+    const decode = (s) => { try { return btcLib.OutScript.decode(s); } catch (_) { return null; } };
+    // Witness size (bytes) for a P2WSH spend of a witnessScript, or null.
+    const wshWitness = (ws) => {
+        if (!ws) return null;
+        const q = decode(ws);
+        if (!q || q.type !== 'ms' || !q.m) return null;
+        // item count + empty CHECKMULTISIG dummy + m signatures + the script
+        return varint(q.m + 2) + 1 + q.m * (1 + SIG) + varint(ws.length) + ws.length;
+    };
+
+    const ins = tx.inputs || [], outs = tx.outputs || [];
+    if (!ins.length) return null;
+    let weight = 4 * (4 + varint(ins.length) + varint(outs.length) + 4); // version, counts, locktime
+    let anyWitness = false, noWitnessInputs = 0;
+
+    for (const inp of ins) {
+        let sigLen, witLen;
+        // fromPSBT() gives every input an empty finalScriptSig, so only
+        // non-empty final data means the input is already finalized.
+        const fss = inp.finalScriptSig, fsw = inp.finalScriptWitness;
+        if ((fss && fss.length) || (fsw && fsw.length)) {
+            sigLen = inp.finalScriptSig ? inp.finalScriptSig.length : 0;
+            const w = inp.finalScriptWitness || [];
+            witLen = w.length ? varint(w.length) + w.reduce((a, it) => a + varint(it.length) + it.length, 0) : 0;
+        } else {
+            const prev = inp.witnessUtxo && inp.witnessUtxo.script;
+            const t = prev && decode(prev);
+            if (!t) return null;
+            if (t.type === 'wpkh') {
+                sigLen = 0; witLen = 1 + (1 + SIG) + (1 + 33);
+            } else if (t.type === 'tr') {
+                sigLen = 0; witLen = 1 + (1 + SCHNORR);
+            } else if (t.type === 'pkh') {
+                sigLen = (1 + SIG) + (1 + 33); witLen = 0;
+            } else if (t.type === 'wsh') {
+                sigLen = 0; witLen = wshWitness(inp.witnessScript);
+                if (witLen === null) return null;
+            } else if (t.type === 'sh') {
+                const rs = inp.redeemScript;
+                const r = rs && decode(rs);
+                if (!r) return null;
+                sigLen = pushLen(rs.length);
+                if (r.type === 'wpkh') witLen = 1 + (1 + SIG) + (1 + 33);
+                else if (r.type === 'wsh') witLen = wshWitness(inp.witnessScript);
+                else if (r.type === 'ms') { sigLen = 1 + r.m * (1 + SIG) + pushLen(rs.length); witLen = 0; }
+                else return null;
+                if (witLen === null) return null;
+            } else {
+                return null;
+            }
+        }
+        // outpoint (36) + scriptSig + sequence (4) are non-witness bytes
+        weight += 4 * (36 + varint(sigLen) + sigLen + 4);
+        if (witLen > 0) { weight += witLen; anyWitness = true; }
+        else noWitnessInputs++;
+    }
+    // Segwit marker + flag, and an empty-stack byte for each input without a witness.
+    if (anyWitness) weight += 2 + noWitnessInputs;
+    for (const out of outs) {
+        const len = out.script ? out.script.length : 0;
+        weight += 4 * (8 + varint(len) + len);
+    }
+    return weight / 4;
+}
+
+/**
  * Audit all PSBT outputs.
  *
  * @param {Transaction} tx — parsed PSBT
@@ -20654,10 +20740,14 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
     const fee = (canCalcFee && totalIn > 0n) ? (totalIn - totalOut) : null;
     let feeRate = null;
     if (fee !== null) {
-        try {
-            const vsize = tx.vsize || (tx.weight / 4);
-            if (vsize > 0) feeRate = (Number(fee) / vsize).toFixed(1);
-        } catch (e) {}
+        // tx.vsize throws on an unfinalized PSBT (the normal case here), so
+        // fall back to estimating the size the signed transaction will have.
+        let vsize = null;
+        try { vsize = tx.vsize; } catch (e) {}
+        if (!(vsize > 0)) {
+            try { vsize = _psbtEstimateVsize(tx); } catch (e) { vsize = null; }
+        }
+        if (vsize > 0) feeRate = (Number(fee) / vsize).toFixed(1);
     }
 
     return {
@@ -20920,7 +21010,7 @@ function _psbtBuildReviewHtml(tx, auditResult) {
             </div>
             <div class="psbt-review-row">
                 <span class="psbt-review-label">Fee Rate</span>
-                <span class="psbt-review-value">${auditResult.feeRate || '?'} sat/vB <span style="font-size: 0.75rem; opacity: 0.7;">(approx. &mdash; measured before signatures are added, so it reads high)</span></span>
+                <span class="psbt-review-value">${auditResult.feeRate || '?'} sat/vB <span style="font-size: 0.75rem; opacity: 0.7;">(approx. &mdash; estimated from the size the transaction will have once signed)</span></span>
             </div>`;
         // Absurd-fee guard. A coordinator bug, a typo, or a malicious PSBT can
         // set a fee of whole bitcoins; it would otherwise render like any other
