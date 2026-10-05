@@ -35,6 +35,10 @@
 #  Usage (from /home/safekeep-build):
 #     sudo bash quick-update.sh                 # update safekeep.img
 #     sudo bash quick-update.sh --usb /dev/sdb  # update the stick in place
+#
+#  For a public release image, use the full `sudo bash build.sh`. An image
+#  updated here still holds the old OS in its free space, so it zips to
+#  roughly twice the size (past GitHub's 2 GB limit per release file).
 # =====================================================================
 set -euo pipefail
 
@@ -224,4 +228,8 @@ if [ -n "$TARGET_USB" ]; then
 else
     echo "  $OUTPUT_IMG is updated. Flash it as usual:"
     echo "    sudo dd if=$OUTPUT_IMG of=/dev/sdX bs=4M status=progress conv=fsync"
+    echo ""
+    echo "  NOT FOR A PUBLIC RELEASE: the old OS is still in the image's free"
+    echo "  space, so it zips to about twice the size (too big for a GitHub"
+    echo "  release). For a release, run the full build: sudo bash build.sh"
 fi
