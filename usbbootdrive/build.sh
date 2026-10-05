@@ -78,6 +78,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The compiled web app must be in src/dist before anything slow happens —
+# rsync'd from the Mac, or produced by prepare-app.sh from a repo checkout.
+# Without this check, a missing app only showed up after booting the image.
+if [ ! -s src/dist/boot.html ]; then
+    echo "ERROR: src/dist/boot.html missing — the image would have no app." >&2
+    echo "       Copy the compiled app into src/dist/, or run (without sudo):" >&2
+    echo "       bash prepare-app.sh" >&2
+    exit 1
+fi
+
 # =====================================================================
 # PHASE 1: HOST DEPENDENCIES
 # =====================================================================
@@ -171,7 +181,7 @@ echo "Phase 3: Configuring the OS..."
 
 # Copy SafeKeep web tools (Vite single-file build — fully inlined HTML)
 mkdir -p "$CHROOT_DIR/opt/safekeep"
-cp -r src/dist/* "$CHROOT_DIR/opt/safekeep/" || true
+cp -r src/dist/* "$CHROOT_DIR/opt/safekeep/"
 
 # Copy chroot setup script
 cp chroot-setup.sh "$CHROOT_DIR/"
