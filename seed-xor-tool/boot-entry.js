@@ -97,9 +97,50 @@ import './shared/entropy-harden.js';
 import './shared/transfer-drive.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
+// Start-up self-check: published test vectors through the bundled crypto
+// libraries. A failure stops boot before any tool can be used.
+import { buildSelfTests, selfTestGate } from './shared/self-test.js';
+import { selfTestDleqOfficialVector } from './shared/silentpayments.js';
+
+// Replace the loading spinner with a plain failure notice. Test names are
+// inserted with textContent, never as markup.
+function showSelfTestFailure(failed) {
+  const spinner = document.querySelector('.boot-spinner');
+  if (spinner) spinner.style.display = 'none';
+  const text = document.querySelector('.boot-spinner-text');
+  if (!text) return;
+  text.textContent = '';
+  text.style.color = 'var(--skb-danger)';
+  text.style.textAlign = 'left';
+  const title = document.createElement('strong');
+  title.textContent = 'SafeKeep stopped: start-up self-check failed.';
+  const why = document.createElement('p');
+  why.textContent = 'This computer produced wrong answers for known Bitcoin test vectors, so any seed, ' +
+    'key or address it computed could be wrong. Do not use this session. Power off, and boot again ' +
+    'from a freshly verified SafeKeep drive or on different hardware.';
+  const list = document.createElement('ul');
+  list.style.paddingLeft = '1.25rem';
+  for (const name of failed) {
+    const item = document.createElement('li');
+    item.textContent = name;
+    list.appendChild(item);
+  }
+  text.append(title, why, list);
+}
 
 // Run the boot sequence once the DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
+  const failed = await selfTestGate(document.documentElement, buildSelfTests(window.BtcMath, {
+    subtle: window.crypto && window.crypto.subtle,
+    getRandomValues: (u8) => window.crypto.getRandomValues(u8),
+    sp: { selfTestDleqOfficialVector },
+  }));
+  if (failed.length) {
+    console.error('[SELF-TEST] Start-up self-check failed; boot halted:', failed);
+    showSelfTestFailure(failed);
+    return;
+  }
+  console.log('[SELF-TEST] Start-up self-check passed.');
   try {
     const result = await window.SafeKeepOS.boot();
     // Hand off to the inline script in boot.html
