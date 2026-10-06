@@ -19043,6 +19043,8 @@ async function _psbtIngestComplete(psbtBytes, filename) {
             console.log('[PSBT-AUDIT] Discarding audit result from stale generation', myGeneration);
             return;
         }
+        // Inputs requesting a sighash other than DEFAULT/ALL (read by the sign gate).
+        auditResult.unsafeSighashInputs = _psbtUnsafeSighashInputs(tx);
         _psbtLastAuditResult = auditResult;
 
         // Build review HTML from audit results
@@ -19063,7 +19065,16 @@ async function _psbtIngestComplete(psbtBytes, filename) {
         _psbtUpdateSignGate();
 
         // Surface hijack banner in the status line (gate handles the button).
-        if (auditResult.hijackDetected) {
+        const unsafeSighash = auditResult.unsafeSighashInputs;
+        if (unsafeSighash.length) {
+            psbtShowStatus(
+                '<strong>SIGNING BLOCKED:</strong> This PSBT asks for a signature that would not cover the whole transaction (' +
+                unsafeSighash.map(u => 'input ' + u.index + ': ' + _psbtSighashName(u.sighash)).join(', ') + '). ' +
+                'Whoever holds such a signature could change where the funds go. SafeKeep only signs with SIGHASH_ALL. ' +
+                'Create the transaction again in your wallet with the default signature type.',
+                'error'
+            );
+        } else if (auditResult.hijackDetected) {
             psbtShowStatus(
                 '<strong>SIGNING BLOCKED:</strong> One or more change outputs failed the derivation proof. ' +
                 'The output script does not match the pubkey derived from your seed at the claimed path. ' +
@@ -19089,7 +19100,7 @@ async function _psbtIngestComplete(psbtBytes, filename) {
         document.getElementById('psbt-phase-ingest').style.display = 'none';
         document.getElementById('psbt-phase-review').style.display = 'block';
         psbtSetStep(2);
-        if (!auditResult.hijackDetected && !auditResult.unverifiedChangeDetected) {
+        if (!unsafeSighash.length && !auditResult.hijackDetected && !auditResult.unverifiedChangeDetected) {
             psbtShowStatus('', '');
         }
 
@@ -21187,7 +21198,28 @@ function _psbtUpdateSignGate() {
     banner.style.color = '';
     banner.style.background = '';
 
-    if (hijack && !forceSign) {
+    // Unsafe sighash: blocked outright. Force Sign does not override this —
+    // such a signature lets its holder change the transaction afterwards.
+    var unsafeSighash = (_psbtLastAuditResult && _psbtLastAuditResult.unsafeSighashInputs) || [];
+
+    if (unsafeSighash.length) {
+        signBtn.disabled = true;
+        signBtn.textContent = 'SIGNING BLOCKED — Unsafe Signature Type';
+        signBtn.style.background = 'var(--skb-danger)';
+        signBtn.style.borderColor = 'var(--skb-danger)';
+        signBtn.style.opacity = '0.9';
+        signBtn.style.cursor = 'not-allowed';
+        banner.style.display = 'block';
+        banner.style.borderColor = 'var(--skb-danger)';
+        banner.style.color = 'var(--skb-danger)';
+        banner.style.background = 'rgba(220, 38, 38, 0.10)';
+        banner.innerHTML = 'SIGNING BLOCKED &mdash; ' +
+            (unsafeSighash.length === 1 ? 'an input asks' : unsafeSighash.length + ' inputs ask') +
+            ' for a signature type other than SIGHASH_ALL (' +
+            unsafeSighash.map(function (u) { return 'input ' + u.index + ': ' + _psbtSighashName(u.sighash); }).join(', ') +
+            '). Such a signature does not cover the whole transaction, so it could be reused to send the funds elsewhere. ' +
+            'Create the transaction again in your wallet with the default signature type.';
+    } else if (hijack && !forceSign) {
         signBtn.disabled = true;
         signBtn.textContent = 'SIGNING BLOCKED — Hijack Detected';
         signBtn.style.background = 'var(--skb-danger)';
@@ -22653,6 +22685,21 @@ async function psbtDoSign() {
         return;
     }
 
+    // Backstop for the review gate: never sign (or hand to a hardware wallet)
+    // a PSBT whose inputs request a sighash other than DEFAULT/ALL.
+    let unsafeSighash;
+    try {
+        unsafeSighash = _psbtUnsafeSighashInputs(btcLib.Transaction.fromPSBT(_psbtLoadedBytes, { network: PSBT_NETWORK }));
+    } catch (e) {
+        psbtShowStatus(`Failed to parse PSBT: ${e.message}`, 'error');
+        return;
+    }
+    if (unsafeSighash.length) {
+        psbtShowStatus('<strong>SIGNING BLOCKED:</strong> this PSBT asks for a signature type other than SIGHASH_ALL (' +
+            unsafeSighash.map(u => 'input ' + u.index + ': ' + _psbtSighashName(u.sighash)).join(', ') + '). Nothing was signed.', 'error');
+        return;
+    }
+
     if (_psbtHwMode) {
         // No seed: hand the reviewed PSBT straight to the hardware-signing step.
         _psbtSignedBytes = _psbtLoadedBytes;
@@ -23397,6 +23444,37 @@ function _psbtCountSigs(tx) {
 }
 
 // ===========================================================================
+// SIGHASH POLICY — only sign with SIGHASH_DEFAULT (0x00) or SIGHASH_ALL (0x01)
+// ===========================================================================
+// Any other sighash type (NONE, SINGLE, or an ANYONECANPAY variant) produces a
+// signature that does not commit to every input and output, so whoever holds
+// the signature can change the transaction afterwards, e.g. redirect the
+// outputs. A PSBT can request such a type per input (PSBT_IN_SIGHASH_TYPE).
+// btc-signer's signIdx already refuses them by default; the Silent Payment
+// signer below signs directly and must check for itself, and the review gate
+// blocks these PSBTs up front with no Force Sign override.
+const _PSBT_SAFE_SIGHASH = [0x00, 0x01];
+
+function _psbtSighashIsSafe(sighashType) {
+    return sighashType === undefined || sighashType === null || _PSBT_SAFE_SIGHASH.includes(sighashType);
+}
+
+function _psbtSighashName(sighashType) {
+    const base = { 0x00: 'DEFAULT', 0x01: 'ALL', 0x02: 'NONE', 0x03: 'SINGLE' }[sighashType & 0x7f];
+    const name = base ? 'SIGHASH_' + base + ((sighashType & 0x80) ? '|ANYONECANPAY' : '') : 'unknown';
+    return name + ' (0x' + (sighashType >>> 0).toString(16).padStart(2, '0') + ')';
+}
+
+// Returns [{ index, sighash }] for every input that requests an unsafe sighash type.
+function _psbtUnsafeSighashInputs(tx) {
+    const out = [];
+    (tx.inputs || []).forEach((inp, index) => {
+        if (inp && !_psbtSighashIsSafe(inp.sighashType)) out.push({ index, sighash: inp.sighashType });
+    });
+    return out;
+}
+
+// ===========================================================================
 // SILENT PAYMENT SPEND — sign a P2TR input whose key is B_spend + t_k·G
 // ===========================================================================
 // Sparrow signals a Silent Payment input to spend with two proprietary PSBT
@@ -23480,6 +23558,10 @@ function _psbtTrySignSilentPaymentInput(tx, idx, masterKey, myFingerprint) {
     if (!keyOK) { console.log(`[PSBT] SP input ${idx}: tweaked key does not match output key — refusing to sign`); return false; }
 
     // BIP-341 key-path sighash, then BIP-340 Schnorr signature (NO extra taptweak).
+    // Refuse any sighash type that would not cover every input and output.
+    if (!_psbtSighashIsSafe(inp.sighashType)) {
+        throw new Error(`SP input ${idx} requests ${_psbtSighashName(inp.sighashType)}; only SIGHASH_DEFAULT or SIGHASH_ALL is signed`);
+    }
     const sighashType = (inp.sighashType !== undefined && inp.sighashType !== null) ? inp.sighashType : 0x00; // DEFAULT
     const prevOutScript = tx.inputs.map(i => i.witnessUtxo && i.witnessUtxo.script);
     const amount = tx.inputs.map(i => i.witnessUtxo && i.witnessUtxo.amount);
