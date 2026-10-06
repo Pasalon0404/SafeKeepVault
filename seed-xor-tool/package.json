@@ -5,7 +5,9 @@
     "dev": "vite",
     "build": "node build-offline.mjs",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist"
+    "deploy": "npm run build && gh-pages -d dist",
+    "residue-audit": "node residue-audit.mjs",
+    "verify-release": "node verify-release.mjs"
   },
   "dependencies": {
     "@bitcoinerlab/miniscript": "^2.0.0",
@@ -18,12 +20,14 @@
     "bip39": "^3.1.0",
     "bip85": "^0.0.3",
     "jsqr": "^1.4.0",
+    "lifehash": "1.0.0",
     "qrcode": "^1.5.4",
     "shamir-mnemonic-ts": "^1.0.6"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^2.2.0",
     "gh-pages": "^6.3.0",
+    "playwright-core": "1.56.1",
     "vite": "^8.0.0",
     "vite-plugin-node-polyfills": "^0.25.0",
     "vite-plugin-singlefile": "^2.3.2"

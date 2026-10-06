@@ -4646,6 +4646,27 @@
       word-break: break-all;
       color: var(--skb-primary);
     }
+    .eob-dice-fairness {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      border: 2px solid var(--skb-border);
+      background: var(--skb-bg-card);
+      font-size: 0.7rem;
+      color: var(--skb-text-muted);
+    }
+    .eob-dice-fairness[data-tone="ok"] { border-color: var(--skb-primary); }
+    .eob-dice-fairness[data-tone="warn"] { border-color: var(--skb-warning, #f59e0b); }
+    .eob-dice-fairness[data-tone="danger"] { border-color: var(--skb-danger); }
+    .eob-dice-fairness strong { display: block; font-family: var(--skb-mono); letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+    .eob-dice-fairness[data-tone="ok"] strong { color: var(--skb-primary); }
+    .eob-dice-fairness[data-tone="warn"] strong { color: var(--skb-warning, #f59e0b); }
+    .eob-dice-fairness[data-tone="danger"] strong { color: var(--skb-danger); }
+    .eob-dice-fairness-face { display: grid; grid-template-columns: 1rem 1fr 2.5rem; gap: 0.4rem; align-items: center; font-family: var(--skb-mono); }
+    .eob-dice-fairness-track { position: relative; height: 0.5rem; background: var(--skb-bg-input); }
+    .eob-dice-fairness-bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--skb-text-muted); }
+    .eob-dice-fairness-expected { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--skb-text); }
+    .eob-dice-fairness-count { text-align: right; }
+    .eob-dice-fairness p { margin: 0.35rem 0 0; }
     .eob-wiggle-zone {
       width: 100%;
       height: 100px;
@@ -6403,7 +6424,7 @@
                 <!-- ---- Sidebar Seed Status (visible only in sidebar/tool-active mode) ---- -->
                 <div id="sidebar-seed-status" style="display: none; margin-bottom: 0.75rem; padding: 0.6rem 0.65rem; border: 2px solid var(--skb-danger); background: rgba(239, 68, 68, 0.06); cursor: pointer;" onclick="showState('state-dashboard')">
                     <div id="sidebar-seed-label" style="font-size: 0.75rem; font-weight: 700; color: var(--skb-danger); letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Vault Locked</div>
-                    <div id="sidebar-seed-fp" style="font-family: var(--skb-mono); font-size: 1rem; font-weight: 900; letter-spacing: 0.12em; color: var(--skb-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No seed loaded</div>
+                    <div id="sidebar-seed-fp" data-lifehash="36" data-lifehash-place="parent-right" style="font-family: var(--skb-mono); font-size: 1rem; font-weight: 900; letter-spacing: 0.12em; color: var(--skb-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No seed loaded</div>
                     <div style="margin-top: 0.4rem; font-family: var(--skb-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--skb-text-muted); text-align: right;">&#8592; Dashboard</div>
                 </div>
 
@@ -6427,7 +6448,7 @@
 
                     <!-- LEFT: Wallet Active / Fingerprint -->
                     <div class="dash-command-identity">
-                        <div class="dash-fingerprint-badge" id="dash-fingerprint"
+                        <div class="dash-fingerprint-badge" id="dash-fingerprint" data-lifehash="44"
                              role="button"
                              tabindex="0"
                              aria-label="Lock vault and switch seed"
@@ -6936,7 +6957,7 @@
                     </div>
 
                     <div id="psbt-vault-info" style="font-size: 0.875rem; color: var(--skb-text-muted);">
-                        Signing with the master seed loaded at boot. Fingerprint: <strong id="psbt-vault-fp" style="font-family: var(--skb-mono); color: var(--skb-primary);">--------</strong>
+                        Signing with the master seed loaded at boot. Fingerprint: <strong id="psbt-vault-fp" data-lifehash="20" style="font-family: var(--skb-mono); color: var(--skb-primary);">--------</strong>
                     </div>
 
                     <div class="psbt-temp-seed-area" id="psbt-temp-seed-area">
@@ -8064,6 +8085,19 @@
 
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 1rem; font-size: 0.8125rem; border: 1px dashed var(--skb-border);" onclick="desc_printPDF()">Print PDF</button>
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_exportTxt()">Export Descriptor (.txt)</button>
+                    <!-- Bitcoin Core watch-only export (importdescriptors JSON) -->
+                    <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_exportCore()">Export for Bitcoin Core (.json)</button>
+                    <label style="display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="desc-core-new-wallet" style="margin-top: 0.15rem;">
+                        <span>Brand-new wallet that has never received funds: skip Bitcoin Core's blockchain rescan. Leave unticked if it may have been used; Core will then rescan from the start of the chain so no past transactions are missed.</span>
+                    </label>
+                    <details id="desc-core-help" style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--skb-text-muted);">
+                        <summary style="cursor: pointer;">How to import into Bitcoin Core</summary>
+                        <p style="margin: 0.5rem 0 0.25rem;">Copy the .json file to the computer running Bitcoin Core (v0.21 or later), then run these two commands in the folder holding the file. The first creates an empty watch-only wallet; the second imports the receive and change descriptors (1,000 addresses each).</p>
+                        <pre id="desc-core-cmds" style="background: var(--skb-bg-input); padding: 0.5rem; white-space: pre-wrap; word-break: break-all; font-family: var(--skb-mono); font-size: 0.7rem; color: var(--skb-text);">bitcoin-cli -named createwallet wallet_name=safekeep-watch disable_private_keys=true blank=true
+bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMPORT-….json)"</pre>
+                        <p style="margin: 0.25rem 0 0;">In the Bitcoin Core app, use Window → Console and drop the <code>bitcoin-cli</code> prefix; paste the file's contents in place of <code>"$(cat …)"</code>. Afterwards, check that <code>getnewaddress</code> returns the first receive address shown above.</p>
+                    </details>
                     <div id="desc-export-status" style="display: none; text-align: center; font-size: 0.8125rem; margin-top: 0.5rem;"></div>
                 </div>
             </div>
@@ -8372,6 +8406,8 @@
                     <div style="font-size: 0.7rem; color: var(--skb-text-muted); margin-top: 0.25rem; text-align: center;">
                         <span id="eob-dice-count">0</span> rolls
                     </div>
+                    <!-- Fairness check on the hand-entered rolls only (digital rolls come from the CSPRNG). -->
+                    <div id="eob-dice-fairness" class="eob-dice-fairness" role="status" aria-live="polite" hidden></div>
                 </div>
 
                 <!-- Method B: Digital Dice -->
@@ -16880,6 +16916,7 @@ function eob_clearAll() {
     _activeEntropyPool = '';
     _eobEstimatedBits = 0;
     _eobDiceCount = 0;
+    _eobDiceRolls = [];
     _eobDigitalCount = 0;
     _eobWiggleCount = 0;
     _eobCamCount = 0;
@@ -16895,6 +16932,7 @@ function eob_clearAll() {
     document.getElementById('eob-dice-display').textContent = '';
     document.getElementById('eob-dice-input').value = '';
     document.getElementById('eob-dice-count').textContent = '0';
+    eob_renderDiceFairness();
     document.getElementById('eob-digital-count').textContent = '0';
     document.getElementById('eob-wiggle-count').textContent = '0';
     document.getElementById('eob-cam-count').textContent = '0';
@@ -29388,8 +29426,12 @@ function desc_exportTxt() {
 
     var content = lines.join('\n');
     var ts = new Date().toISOString().replace(/[:\-T]/g, '').slice(0, 14);
-    var filename = 'CUSTOM-DESCRIPTOR-' + ts + '.txt';
+    _descSaveFile('CUSTOM-DESCRIPTOR-' + ts + '.txt', content, 'text/plain');
+}
 
+// Save an export: silently to the vault on the boot drive, otherwise as a
+// browser download. Success is reported through the global toast.
+function _descSaveFile(filename, content, mimeType) {
     if (typeof _silentDownload === 'function' && typeof isBootDrive === 'function' && isBootDrive()) {
         _silentDownload(filename, content);
         // Sprint 22: route success through the global toast overlay
@@ -29398,7 +29440,7 @@ function desc_exportTxt() {
         if (s) { s.textContent = ''; s.style.display = 'none'; }
         showStatus('Exported ' + filename + ' to vault. Copy it to your transfer drive.', 'success');
     } else {
-        var blob = new Blob([content], { type: 'text/plain' });
+        var blob = new Blob([content], { type: mimeType });
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
@@ -29416,6 +29458,33 @@ function desc_exportTxt() {
         if (s2) { s2.textContent = ''; s2.style.display = 'none'; }
         showStatus('Download started: ' + filename, 'success');
     }
+}
+
+// Bitcoin Core watch-only export: an `importdescriptors` JSON array with the
+// <0;1> multipath split into receive (/0/*) and change (/1/*) descriptors.
+// Conversion and safety checks live in shared/core-import.js.
+function desc_exportCore() {
+    if (!desc_state.currentDescriptor) {
+        showStatus('No descriptor to export. Generate one first.', 'error');
+        return;
+    }
+    var CI = window.CoreImport;
+    if (!CI) { showStatus('Bitcoin Core export is unavailable in this build.', 'error'); return; }
+    var fresh = document.getElementById('desc-core-new-wallet');
+    var requests;
+    try {
+        requests = CI.buildCoreImport(desc_state.currentDescriptor, { timestamp: fresh && fresh.checked ? 'now' : 0 });
+    } catch (e) {
+        showStatus(e.message, 'error');
+        return;
+    }
+    var ts = new Date().toISOString().replace(/[:\-T]/g, '').slice(0, 14);
+    var filename = 'SAFEKEEP-CORE-IMPORT-' + ts + '.json';
+    var cmds = document.getElementById('desc-core-cmds');
+    if (cmds) cmds.textContent = CI.coreImportInstructions(filename).join('\n');
+    var help = document.getElementById('desc-core-help');
+    if (help) help.open = true;
+    _descSaveFile(filename, JSON.stringify(requests, null, 2) + '\n', 'application/json');
 }
 
 function desc_toggleQR() {
@@ -38747,6 +38816,7 @@ var _targetEntropyBits = 128;  // default 12 words (128 bits); eob_setWordCount 
 var _activeEntropyPool = '';
 var _eobEstimatedBits = 0;
 var _eobDiceCount = 0;
+var _eobDiceRolls = [];       // hand-entered rolls only, for the fairness check
 var _eobDigitalCount = 0;
 var _eobWiggleCount = 0;
 var _eobCamCount = 0;
@@ -38781,6 +38851,7 @@ function eob_init(context) {
     _activeEntropyPool = '';
     _eobEstimatedBits = 0;
     _eobDiceCount = 0;
+    _eobDiceRolls = [];
     _eobDigitalCount = 0;
     _eobWiggleCount = 0;
     _eobCamCount = 0;
@@ -38831,6 +38902,7 @@ function eob_init(context) {
     document.getElementById('eob-dice-display').textContent = '';
     document.getElementById('eob-dice-input').value = '';
     document.getElementById('eob-dice-count').textContent = '0';
+    eob_renderDiceFairness();
     document.getElementById('eob-digital-count').textContent = '0';
     document.getElementById('eob-wiggle-count').textContent = '0';
     document.getElementById('eob-cam-count').textContent = '0';
@@ -38952,8 +39024,57 @@ function eob_handleDiceKey(e) {
         display.scrollTop = display.scrollHeight;
         document.getElementById('eob-dice-count').textContent = _eobDiceCount;
         document.getElementById('eob-dice-input').value = '';
+        _eobDiceRolls.push(Number(key));
+        eob_renderDiceFairness();
         eob_addToPool('D' + key + Date.now().toString(36), 2.585);
     }
+}
+
+// Pearson chi-squared fairness check on the hand-entered rolls (advisory only;
+// never blocks forging). Math lives in shared/dice-fairness.js.
+function eob_renderDiceFairness() {
+    var panel = document.getElementById('eob-dice-fairness');
+    if (!panel) return;
+    var DF = window.DiceFairness;
+    if (!DF || !_eobDiceRolls.length) {
+        panel.hidden = true;
+        panel.textContent = '';
+        return;
+    }
+    var r = DF.assessDice(_eobDiceRolls, 6);
+    var titles = { 'need-more': 'Fairness check: collecting rolls', ok: 'Fairness check: looks fair',
+                   suspicious: 'Fairness check: possibly biased', biased: 'Fairness check: likely biased' };
+    panel.hidden = false;
+    panel.dataset.tone = r.verdict.tone;
+    panel.textContent = '';
+    var title = document.createElement('strong');
+    title.textContent = titles[r.verdict.id] || '';
+    panel.appendChild(title);
+    var peak = Math.max(r.expected, Math.max.apply(null, r.counts)) || 1;
+    r.counts.forEach(function (count, i) {
+        var row = document.createElement('div');
+        row.className = 'eob-dice-fairness-face';
+        var label = document.createElement('span');
+        label.textContent = String(i + 1);
+        var track = document.createElement('span');
+        track.className = 'eob-dice-fairness-track';
+        var bar = document.createElement('span');
+        bar.className = 'eob-dice-fairness-bar';
+        bar.style.width = (count / peak * 100).toFixed(1) + '%';
+        var exp = document.createElement('span');
+        exp.className = 'eob-dice-fairness-expected';
+        exp.style.left = (r.expected / peak * 100).toFixed(1) + '%';
+        exp.title = 'Expected for a fair die: ' + r.expected.toFixed(1);
+        track.append(bar, exp);
+        var c = document.createElement('span');
+        c.className = 'eob-dice-fairness-count';
+        c.textContent = String(count);
+        row.append(label, track, c);
+        panel.appendChild(row);
+    });
+    var note = document.createElement('p');
+    note.textContent = DF.describeAssessment(r);
+    panel.appendChild(note);
 }
 
 // --- Method B: Digital Dice ---
