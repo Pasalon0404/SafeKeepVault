@@ -84,10 +84,12 @@ jobs:
 
       - name: Check the version stamp
         run: |
-          if grep -q '+ local changes' dist/boot.html; then
-            echo "::error::boot.html is stamped '+ local changes'."
-            exit 1
-          fi
+          for mark in '+ local changes' '+ shallow clone'; do
+            if grep -qF "$mark" dist/boot.html; then
+              echo "::error::boot.html is stamped '$mark'."
+              exit 1
+            fi
+          done
           grep -o "v$(cat VERSION) · build [0-9]* · $(git rev-parse --short=7 HEAD) · [0-9-]*" dist/boot.html
 
       - name: Checksums

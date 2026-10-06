@@ -30,7 +30,7 @@ const git = (...args) => execFileSync('git', args, { cwd: here, encoding: 'utf8'
 const argv = process.argv.slice(2);
 const si = argv.indexOf('--sums');
 const sumsPath = si >= 0 ? argv[si + 1] : null;
-const target = argv.find((a, i) => !a.startsWith('--') && i !== si + 1);
+const target = argv.find((a, i) => !a.startsWith('--') && !(si >= 0 && i === si + 1));
 if (!target) fail('usage: npm run verify-release -- <path/to/boot.html> [--sums <SHA256SUMS>]');
 
 const file = resolve(process.env.INIT_CWD || process.cwd(), target);
@@ -51,6 +51,7 @@ const stamp = parseStamp(bytes.toString('utf8'));
 if (!stamp) fail('no version stamp found in the file.');
 console.log(`Stamp:    ${stamp.text}`);
 if (stamp.dirty) fail('this build was made from uncommitted changes ("+ local changes") and cannot be reproduced.');
+if (stamp.shallow) fail('this build was made in a shallow clone ("+ shallow clone"): its build number is wrong, so it cannot be reproduced.');
 
 if (git('rev-parse', '--is-shallow-repository') === 'true') {
     fail('this clone is shallow. Run `git fetch --unshallow` first (the build number is the commit count).');

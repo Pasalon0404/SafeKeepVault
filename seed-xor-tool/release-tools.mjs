@@ -7,12 +7,12 @@ import { createHash } from 'node:crypto';
 
 /**
  * Read the version stamp build-offline.mjs writes into boot.html:
- *   "v1.35 · build 61 · 9e2016a · 2026-10-06"  (+ " + local changes")
- * Returns { text, release, build, commit, date, dirty } or null.
+ *   "v1.35 · build 61 · 9e2016a · 2026-10-06"  (+ " + local changes") (+ " + shallow clone")
+ * Returns { text, release, build, commit, date, dirty, shallow } or null.
  */
 export function parseStamp(html) {
     const text = String(html);
-    const m = text.match(/v(\d+(?:\.\d+)*) · build (\d+) · ([0-9a-f]{7,40}) · (\d{4}-\d{2}-\d{2})( \+ local changes)?/);
+    const m = text.match(/v(\d+(?:\.\d+)*) · build (\d+) · ([0-9a-f]{7,40}) · (\d{4}-\d{2}-\d{2})( \+ local changes)?( \+ shallow clone)?/);
     if (!m) return null;
     return {
         text: m[0],
@@ -21,6 +21,7 @@ export function parseStamp(html) {
         commit: m[3],
         date: m[4],
         dirty: Boolean(m[5]),
+        shallow: Boolean(m[6]),
     };
 }
 

@@ -90,7 +90,8 @@ npm run verify-release -- /path/to/boot.html --sums /path/to/SHA256SUMS
 `verify-release` checks the checksum, reads the stamped commit, builds it in a
 temporary git worktree (`npm ci && npm run build`) and compares the result. It
 prints `MATCH` (exit 0) or `MISMATCH` (exit 1). It refuses a file stamped
-`+ local changes`, because that was built from uncommitted source.
+`+ local changes` (built from uncommitted source) or `+ shallow clone`
+(built in a clone missing history, so its build number is wrong).
 
 Two details make the build reproducible:
 
@@ -123,7 +124,7 @@ it is about to install. Before flashing, check that it equals the release's
    The `Release` workflow then does the following:
    - runs every test;
    - builds `boot.html` twice and requires identical bytes;
-   - refuses a `+ local changes` stamp;
+   - refuses a `+ local changes` or `+ shallow clone` stamp;
    - writes `SHA256SUMS`;
    - creates the attestation and a pending OpenTimestamps proof;
    - publishes the GitHub Release.

@@ -141,7 +141,8 @@ async function buildOfflineSuite() {
     // Release number: seed-xor-tool/VERSION (bump it by hand for a release).
     // Build number:   the git commit count (goes up by one with every commit).
     // Commit:         short git hash, so any stick traces to one exact commit.
-    // "+ local changes" marks a build made from uncommitted app source.
+    // "+ local changes" marks a build made from uncommitted app source,
+    // "+ shallow clone" one whose commit count (build number) is incomplete.
     // Fills every element marked data-skv-version (welcome screen, dashboard
     // footer). Runs BEFORE the integrity manifest so the hash covers it.
     const stamp = versionStamp();
@@ -207,7 +208,11 @@ function versionStamp() {
         const date = git('log', '-1', '--format=%cs');
         // Uncommitted changes to tracked app source (built output in dist/ ignored).
         const dirty = git('status', '--porcelain', '--untracked-files=no', '--', '.', ':(exclude)dist') !== '';
-        return `v${release} · build ${count} · ${hash} · ${date}` + (dirty ? ' + local changes' : '');
+        // A shallow clone counts only part of the history, so its build
+        // number is wrong and the file can't match a release. Say so.
+        const shallow = git('rev-parse', '--is-shallow-repository') === 'true';
+        if (shallow) console.warn('[VERSION] ⚠ shallow git clone: the build number is wrong. Run `git fetch --unshallow`.');
+        return `v${release} · build ${count} · ${hash} · ${date}` + (dirty ? ' + local changes' : '') + (shallow ? ' + shallow clone' : '');
     } catch (_) {
         return `v${release} · build unknown`;
     }

@@ -37,12 +37,16 @@ console.log('\n1. parseStamp');
     const s = parseStamp('<span data-skv-version>v1.35 · build 61 · 9e2016a · 2026-10-06</span>');
     ck('fields', s && s.release === '1.35' && s.build === 61 && s.commit === '9e2016a' && s.date === '2026-10-06' && !s.dirty, JSON.stringify(s));
     ck('"+ local changes" is dirty', parseStamp('v1.35 · build 61 · 9e2016a · 2026-10-06 + local changes').dirty === true);
+    ck('"+ shallow clone" is flagged', parseStamp('v1.35 · build 57 · 6638175 · 2026-10-06 + shallow clone').shallow === true);
+    ck('both markers together', (() => { const s = parseStamp('v1.35 · build 57 · 6638175 · 2026-10-06 + local changes + shallow clone'); return s.dirty && s.shallow; })());
     ck('no stamp → null', parseStamp('<html>nothing here</html>') === null);
     ck('"build unknown" is not a usable stamp', parseStamp('v1.35 · build unknown') === null);
     const dist = new URL('./dist/boot.html', import.meta.url);
     if (existsSync(dist)) {
         const st = parseStamp(readFileSync(dist, 'utf8'));
         ck(`stamp found in dist/boot.html (${st?.text})`, !!st && /^[0-9a-f]{7}$/.test(st.commit));
+        const shallow = spawnSync('git', ['rev-parse', '--is-shallow-repository'], { encoding: 'utf8' }).stdout.trim() === 'true';
+        ck('dist stamp\'s shallow marker matches this clone', st?.shallow === shallow, `stamp ${st?.shallow}, clone ${shallow} (rebuild?)`);
     } else skip('dist/boot.html not built');
 }
 
@@ -71,6 +75,7 @@ console.log('\n3. Reproducibility inputs (build-offline.mjs)');
     const src = readFileSync(new URL('./build-offline.mjs', import.meta.url), 'utf8');
     ck('manifest generatedAt uses the commit time', /generatedAt: commitTime\(\)/.test(src) && src.includes("'--format=%cI'"));
     ck('no build-time clock in the manifest', !/generatedAt: new Date\(\)/.test(src));
+    ck('shallow clones are marked in the stamp', src.includes("'--is-shallow-repository'") && src.includes("' + shallow clone'"));
     ck('stamp hash has a fixed length (--short=7)', src.includes("'--short=7'") && !src.includes("'rev-parse', '--short', 'HEAD'"));
 }
 
@@ -108,7 +113,7 @@ else {
     ck('npm ci', run.includes('npm ci'));
     ck('runs every test-*.mjs', run.includes('for f in test-*.mjs') && run.includes('node "$f"'));
     ck('builds twice and compares bytes', (run.match(/npm run build/g) || []).length >= 2 && run.includes('cmp "$RUNNER_TEMP/boot-first.html" dist/boot.html'));
-    ck('refuses "+ local changes"', run.includes("grep -q '+ local changes' dist/boot.html"));
+    ck('refuses "+ local changes" and "+ shallow clone"', run.includes("for mark in '+ local changes' '+ shallow clone'") && run.includes('grep -qF "$mark" dist/boot.html'));
     ck('stamp must name VERSION and HEAD', run.includes('$(git rev-parse --short=7 HEAD)'));
     ck('writes SHA256SUMS with sha256sum', run.includes('sha256sum boot.html > SHA256SUMS'));
     const attest = job.steps.find((s) => s.uses?.startsWith('actions/attest-build-provenance@'));

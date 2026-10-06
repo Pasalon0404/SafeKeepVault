@@ -49,6 +49,12 @@ rsync -av --exclude 'workspace/' --exclude '*.img' --exclude '* (1)*' --exclude 
 ```
 The second rsync is only needed when something in `usbbootdrive/` changed.
 
+If the build prints `⚠ shallow git clone` (the stamp then ends in
+`+ shallow clone`), the Mac's clone is missing history, so the build number
+is wrong and the file can't match a release. Fix it once with
+`git fetch --unshallow`. Releases are built by `.github/workflows/release.yml`
+from a `vX.Y` tag; see `VERIFYING.md` for checking and signing them.
+
 `build.sh` stops right away if `src/dist/boot.html` is missing (it used to
 skip the copy silently and produce an image with no app). Someone building
 from a fresh clone on one Linux machine runs `bash prepare-app.sh` (no sudo)
