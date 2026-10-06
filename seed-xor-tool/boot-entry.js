@@ -95,6 +95,9 @@ import './shared/entropy-harden.js';
 // transfer-drive.js exposes window.SKTransfer — the permission-prompt-free
 // Transfer Drive bridge (daemon-backed stand-in for showDirectoryPicker).
 import './shared/transfer-drive.js';
+// dice-fairness.js exposes window.DiceFairness — the chi-squared check behind
+// the Entropy Forge's Manual Dice fairness panel.
+import './shared/dice-fairness.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
 // Start-up self-check: published test vectors through the bundled crypto
