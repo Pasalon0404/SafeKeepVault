@@ -6424,7 +6424,7 @@
                 <!-- ---- Sidebar Seed Status (visible only in sidebar/tool-active mode) ---- -->
                 <div id="sidebar-seed-status" style="display: none; margin-bottom: 0.75rem; padding: 0.6rem 0.65rem; border: 2px solid var(--skb-danger); background: rgba(239, 68, 68, 0.06); cursor: pointer;" onclick="showState('state-dashboard')">
                     <div id="sidebar-seed-label" style="font-size: 0.75rem; font-weight: 700; color: var(--skb-danger); letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Vault Locked</div>
-                    <div id="sidebar-seed-fp" style="font-family: var(--skb-mono); font-size: 1rem; font-weight: 900; letter-spacing: 0.12em; color: var(--skb-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No seed loaded</div>
+                    <div id="sidebar-seed-fp" data-lifehash="36" data-lifehash-place="parent-right" style="font-family: var(--skb-mono); font-size: 1rem; font-weight: 900; letter-spacing: 0.12em; color: var(--skb-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No seed loaded</div>
                     <div style="margin-top: 0.4rem; font-family: var(--skb-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--skb-text-muted); text-align: right;">&#8592; Dashboard</div>
                 </div>
 
@@ -6448,7 +6448,7 @@
 
                     <!-- LEFT: Wallet Active / Fingerprint -->
                     <div class="dash-command-identity">
-                        <div class="dash-fingerprint-badge" id="dash-fingerprint"
+                        <div class="dash-fingerprint-badge" id="dash-fingerprint" data-lifehash="44"
                              role="button"
                              tabindex="0"
                              aria-label="Lock vault and switch seed"
@@ -6957,7 +6957,7 @@
                     </div>
 
                     <div id="psbt-vault-info" style="font-size: 0.875rem; color: var(--skb-text-muted);">
-                        Signing with the master seed loaded at boot. Fingerprint: <strong id="psbt-vault-fp" style="font-family: var(--skb-mono); color: var(--skb-primary);">--------</strong>
+                        Signing with the master seed loaded at boot. Fingerprint: <strong id="psbt-vault-fp" data-lifehash="20" style="font-family: var(--skb-mono); color: var(--skb-primary);">--------</strong>
                     </div>
 
                     <div class="psbt-temp-seed-area" id="psbt-temp-seed-area">

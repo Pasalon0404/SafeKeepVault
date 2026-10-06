@@ -101,6 +101,9 @@ import './shared/dice-fairness.js';
 // core-import.js exposes window.CoreImport — the Descriptor tool's Bitcoin Core
 // importdescriptors (watch-only) export.
 import './shared/core-import.js';
+// lifehash-icons.js draws a LifeHash beside every [data-lifehash] fingerprint
+// (dashboard badge, sidebar, PSBT signer) — the same picture Sparrow shows.
+import './shared/lifehash-icons.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
 // Start-up self-check: published test vectors through the bundled crypto
