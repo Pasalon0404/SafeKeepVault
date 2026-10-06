@@ -8085,6 +8085,19 @@
 
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 1rem; font-size: 0.8125rem; border: 1px dashed var(--skb-border);" onclick="desc_printPDF()">Print PDF</button>
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_exportTxt()">Export Descriptor (.txt)</button>
+                    <!-- Bitcoin Core watch-only export (importdescriptors JSON) -->
+                    <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_exportCore()">Export for Bitcoin Core (.json)</button>
+                    <label style="display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="desc-core-new-wallet" style="margin-top: 0.15rem;">
+                        <span>Brand-new wallet that has never received funds: skip Bitcoin Core's blockchain rescan. Leave unticked if it may have been used; Core will then rescan from the start of the chain so no past transactions are missed.</span>
+                    </label>
+                    <details id="desc-core-help" style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--skb-text-muted);">
+                        <summary style="cursor: pointer;">How to import into Bitcoin Core</summary>
+                        <p style="margin: 0.5rem 0 0.25rem;">Copy the .json file to the computer running Bitcoin Core (v0.21 or later), then run these two commands in the folder holding the file. The first creates an empty watch-only wallet; the second imports the receive and change descriptors (1,000 addresses each).</p>
+                        <pre id="desc-core-cmds" style="background: var(--skb-bg-input); padding: 0.5rem; white-space: pre-wrap; word-break: break-all; font-family: var(--skb-mono); font-size: 0.7rem; color: var(--skb-text);">bitcoin-cli -named createwallet wallet_name=safekeep-watch disable_private_keys=true blank=true
+bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMPORT-….json)"</pre>
+                        <p style="margin: 0.25rem 0 0;">In the Bitcoin Core app, use Window → Console and drop the <code>bitcoin-cli</code> prefix; paste the file's contents in place of <code>"$(cat …)"</code>. Afterwards, check that <code>getnewaddress</code> returns the first receive address shown above.</p>
+                    </details>
                     <div id="desc-export-status" style="display: none; text-align: center; font-size: 0.8125rem; margin-top: 0.5rem;"></div>
                 </div>
             </div>
@@ -29331,8 +29344,12 @@ function desc_exportTxt() {
 
     var content = lines.join('\n');
     var ts = new Date().toISOString().replace(/[:\-T]/g, '').slice(0, 14);
-    var filename = 'CUSTOM-DESCRIPTOR-' + ts + '.txt';
+    _descSaveFile('CUSTOM-DESCRIPTOR-' + ts + '.txt', content, 'text/plain');
+}
 
+// Save an export: silently to the vault on the boot drive, otherwise as a
+// browser download. Success is reported through the global toast.
+function _descSaveFile(filename, content, mimeType) {
     if (typeof _silentDownload === 'function' && typeof isBootDrive === 'function' && isBootDrive()) {
         _silentDownload(filename, content);
         // Sprint 22: route success through the global toast overlay
@@ -29341,7 +29358,7 @@ function desc_exportTxt() {
         if (s) { s.textContent = ''; s.style.display = 'none'; }
         showStatus('Exported ' + filename + ' to vault. Copy it to your transfer drive.', 'success');
     } else {
-        var blob = new Blob([content], { type: 'text/plain' });
+        var blob = new Blob([content], { type: mimeType });
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
@@ -29359,6 +29376,33 @@ function desc_exportTxt() {
         if (s2) { s2.textContent = ''; s2.style.display = 'none'; }
         showStatus('Download started: ' + filename, 'success');
     }
+}
+
+// Bitcoin Core watch-only export: an `importdescriptors` JSON array with the
+// <0;1> multipath split into receive (/0/*) and change (/1/*) descriptors.
+// Conversion and safety checks live in shared/core-import.js.
+function desc_exportCore() {
+    if (!desc_state.currentDescriptor) {
+        showStatus('No descriptor to export. Generate one first.', 'error');
+        return;
+    }
+    var CI = window.CoreImport;
+    if (!CI) { showStatus('Bitcoin Core export is unavailable in this build.', 'error'); return; }
+    var fresh = document.getElementById('desc-core-new-wallet');
+    var requests;
+    try {
+        requests = CI.buildCoreImport(desc_state.currentDescriptor, { timestamp: fresh && fresh.checked ? 'now' : 0 });
+    } catch (e) {
+        showStatus(e.message, 'error');
+        return;
+    }
+    var ts = new Date().toISOString().replace(/[:\-T]/g, '').slice(0, 14);
+    var filename = 'SAFEKEEP-CORE-IMPORT-' + ts + '.json';
+    var cmds = document.getElementById('desc-core-cmds');
+    if (cmds) cmds.textContent = CI.coreImportInstructions(filename).join('\n');
+    var help = document.getElementById('desc-core-help');
+    if (help) help.open = true;
+    _descSaveFile(filename, JSON.stringify(requests, null, 2) + '\n', 'application/json');
 }
 
 function desc_toggleQR() {

@@ -98,6 +98,9 @@ import './shared/transfer-drive.js';
 // dice-fairness.js exposes window.DiceFairness — the chi-squared check behind
 // the Entropy Forge's Manual Dice fairness panel.
 import './shared/dice-fairness.js';
+// core-import.js exposes window.CoreImport — the Descriptor tool's Bitcoin Core
+// importdescriptors (watch-only) export.
+import './shared/core-import.js';
 import './shared/seed-session.js';
 import './shared/boot.js';
 // Start-up self-check: published test vectors through the bundled crypto
