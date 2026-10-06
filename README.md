@@ -17,6 +17,8 @@ In the Bitcoin security ecosystem, blindly trusting a downloaded release file is
 
 Because SafeKeepVault is built entirely with transparent HTML and JavaScript, there are no black-box executables or hidden compiled binaries. We highly recommend that users audit the open-source code directly to verify no malicious logic exists, and then build the offline environment themselves. Compiling the code on your own machine is the only way to mathematically eliminate the risk of a compromised release file or a supply chain attack. 
 
+If you do use a release, verify it first. Each release of the app (`boot.html`) comes with a checksum, the maintainer's GPG signature, a GitHub build attestation and an OpenTimestamps proof, and the app is a reproducible build: `npm run verify-release` rebuilds the exact commit stamped in the file and compares the bytes. See **[VERIFYING.md](VERIFYING.md)**.
+
 ---
 
 ## Building & Verification
@@ -58,7 +60,8 @@ This **erases the whole stick**. The script refuses system disks, asks you to ty
 
 * It removes the risk of a tampered release download: the image contains the code you cloned.
 * The build also downloads Ubuntu packages, npm packages (pinned by `package-lock.json`) and Python packages (pinned by SHA-256 hash). Reviewing this repo does not review those.
-* Builds are not byte-for-byte reproducible yet (version stamps and package downloads differ), so your image will not match the published release's hash. That is expected.
+* The app is reproducible: building a commit gives byte-for-byte the same `boot.html` as that commit's release (use a full clone; see [VERIFYING.md](VERIFYING.md)).
+* The OS image is not reproducible yet (Ubuntu package downloads and filesystem timestamps differ), so your `safekeep.img` will not match anyone else's hash. That is expected.
 
 ---
 

@@ -163,7 +163,9 @@ async function buildOfflineSuite() {
     const manifest = {
         schemaVersion: 1,
         version: stamp,
-        generatedAt: new Date().toISOString(),
+        // Commit time, not build time, so rebuilding a commit reproduces
+        // the manifest byte-for-byte too (see VERIFYING.md).
+        generatedAt: commitTime(),
         algorithm: 'sha256',
         files: {}
     };
@@ -185,13 +187,23 @@ async function buildOfflineSuite() {
     console.log(`\n🔒 Integrity manifest written to ${manifestPath}`);
 }
 
+function commitTime() {
+    try {
+        return execFileSync('git', ['log', '-1', '--format=%cI'], { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    } catch (_) {
+        return new Date().toISOString();
+    }
+}
+
 function versionStamp() {
     let release = '0.0';
     try { release = readFileSync(resolve(__dirname, 'VERSION'), 'utf8').trim() || release; } catch (_) {}
     const git = (...args) => execFileSync('git', args, { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     try {
         const count = git('rev-list', '--count', 'HEAD');
-        const hash = git('rev-parse', '--short', 'HEAD');
+        // Fixed length: plain --short follows the builder's core.abbrev,
+        // which would make the stamp (and the file's hash) machine-dependent.
+        const hash = git('rev-parse', '--short=7', 'HEAD');
         const date = git('log', '-1', '--format=%cs');
         // Uncommitted changes to tracked app source (built output in dist/ ignored).
         const dirty = git('status', '--porcelain', '--untracked-files=no', '--', '.', ':(exclude)dist') !== '';
