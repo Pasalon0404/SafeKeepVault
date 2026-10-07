@@ -79,7 +79,6 @@ export default defineConfig({
         passphrase:   resolve(__dirname, 'passphrase/index.html'),
         secureNote:   resolve(__dirname, 'secure-note/index.html'),
         seedxor:      resolve(__dirname, 'seedxor/index.html'),
-        seedqr:       resolve(__dirname, 'seedqr/index.html'),
         signer:       resolve(__dirname, 'signer/index.html'),
         qrtransfer:   resolve(__dirname, 'qr-transfer/index.html'),
       }

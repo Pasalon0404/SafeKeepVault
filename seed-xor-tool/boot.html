@@ -6334,7 +6334,7 @@
                 <div id="backup-phase-verify" style="display: none;">
                     <div class="backup-header">
                         <h2>Verify Your Backup</h2>
-                        <p id="backup-verify-desc">Your words are now hidden. Prove you wrote them down correctly by entering the requested words from your backup, or scan your Compact SeedQR.</p>
+                        <p id="backup-verify-desc">Your words are now hidden. Prove you wrote them down correctly by entering the requested words from your backup, or scan your SeedQR.</p>
                     </div>
 
                     <div class="backup-fingerprint">
@@ -6352,7 +6352,7 @@
                     <div id="backup-scan-section">
                         <div style="text-align: center; color: var(--skb-text-muted); font-size: 0.8125rem; margin: 1rem 0; font-family: var(--skb-mono); letter-spacing: 1px;">— OR —</div>
                         <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.75rem;" onclick="backupVerifyScan()">
-                            Scan Compact SeedQR to Verify
+                            Scan SeedQR to Verify
                         </button>
                         <div id="backup-verify-qr-area" style="display: none; margin-bottom: 0.75rem;">
                             <div id="backup-verify-qr-reader" style="width: 100%; min-height: 300px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>
@@ -8165,7 +8165,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <div class="tool-hero">
                 <h2 class="tool-hero-title">SeedQR<span>Code</span></h2>
                 <p class="tool-hero-subtitle">Seed QR Backup</p>
-                <p class="tool-hero-desc">Encode your seed phrase as a compact SeedQR code for printing on paper. Verify hand-drawn or engraved copies by scanning them for accuracy.</p>
+                <p class="tool-hero-desc">Encode your seed phrase as a SeedQR code for printing on paper. Verify hand-drawn or engraved copies by scanning them for accuracy.</p>
             </div>
 
             <div class="tool-tabs">
@@ -8251,6 +8251,19 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                      12/24-word mnemonic entropy; passphrase storage lives
                      in the dedicated Passphrase Library tool. -->
 
+                <!-- QR Format: Compact (default, smallest, camera wallets only)
+                     or Standard (digits; also readable by phone wallets and
+                     ANY phone QR app). Both follow the SeedSigner SeedQR spec. -->
+                <div class="skb-card" style="margin-bottom: 1rem;">
+                    <label style="font-size: 0.875rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">QR Format</label>
+                    <div style="display: flex; gap: 0; margin-bottom: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;">
+                        <button type="button" id="sqr-fmt-compact" class="tool-tab-btn active" style="flex: 1;" onclick="sqr_setFormat('compact')">Compact (recommended)</button>
+                        <button type="button" id="sqr-fmt-standard" class="tool-tab-btn" style="flex: 1;" onclick="sqr_setFormat('standard')">Standard</button>
+                    </div>
+                    <p id="sqr-fmt-hint-compact" style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0;">Smallest grid to draw (21&times;21 for 12 words, 25&times;25 for 24). Ordinary phone QR apps can&rsquo;t read it, which keeps a casual scan from revealing your seed.</p>
+                    <p id="sqr-fmt-hint-standard" style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0; display: none;">Opens in more wallets, including phone wallets like BlueWallet, but needs a bigger grid (25&times;25 for 12 words, 29&times;29 for 24). <strong>Any phone camera app shows its digits, and those digits are your seed.</strong></p>
+                </div>
+
                 <!-- Generate Button -->
                 <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 1rem; background: var(--skb-primary); color: black; font-weight: 600; font-size: 0.9375rem;" onclick="sqr_generate()">Generate SeedQR</button>
 
@@ -8271,6 +8284,18 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     <div style="margin-bottom: 0.75rem;">
                         <button type="button" class="skb-btn" style="width: 100%;" onclick="sqr_printBlankGrid()">Print Blank Grid</button>
                     </div>
+
+                    <!-- Which wallets can scan which format. Kept short; the
+                         Sparrow path is spelled out because scanning anywhere
+                         else in Sparrow reports the code as invalid. -->
+                    <details class="skb-card" style="margin-bottom: 0.75rem; font-size: 0.8125rem; color: var(--skb-text-muted);">
+                        <summary style="cursor: pointer; color: var(--skb-text);">Which wallets can scan this?</summary>
+                        <ul style="margin: 0.75rem 0 0 1.1rem; display: flex; flex-direction: column; gap: 0.4rem; line-height: 1.5;">
+                            <li><strong>Both formats:</strong> SafeKeepVault, SeedSigner, Blockstream Jade, Krux, Foundation Passport, Sparrow.</li>
+                            <li><strong>Standard only:</strong> BlueWallet and most phone wallets. They report a Compact SeedQR as invalid.</li>
+                            <li><strong>Sparrow:</strong> scan it from <em>File &rsaquo; New Wallet &rsaquo; Keystore tab &rsaquo; Scan&hellip;</em> (next to the xpub field). Sparrow makes a watch-only keystore from it. Scanning from anywhere else in Sparrow shows an error.</li>
+                        </ul>
+                    </details>
                 </div>
 
                 <!-- Print-only container for the blank-grid output.
@@ -12710,7 +12735,7 @@ function transitionToBackup(seedData) {
         if (scanSection) scanSection.style.display = 'none';
     } else {
         if (verifyDesc) verifyDesc.textContent =
-            'Your words are now hidden. Prove you wrote them down correctly by entering the requested words from your backup, or scan your Compact SeedQR.';
+            'Your words are now hidden. Prove you wrote them down correctly by entering the requested words from your backup, or scan your SeedQR.';
         if (scanSection) scanSection.style.display = '';
     }
 }
@@ -12840,7 +12865,7 @@ function backupVerifyScan() {
         backupVerifyStopScan();
         var scannedWords = sqr_wordsFromScan(text, binaryData);
         if (!scannedWords || !_pendingBackupSeed) {
-            _backupVerifyScanResult(false, 'QR does not contain a valid Compact SeedQR.');
+            _backupVerifyScanResult(false, 'QR does not contain a valid SeedQR.');
             return;
         }
         // Compare scanned mnemonic against the pending seed
@@ -13195,9 +13220,9 @@ async function rst_scanQR() {
                     }
                 }
                 rst_validate();
-                showStatus('Compact SeedQR scanned — ' + words.length + ' words loaded.', 'success');
+                showStatus('SeedQR scanned — ' + words.length + ' words loaded.', 'success');
             } else {
-                showStatus('QR code does not contain a valid Compact SeedQR.', 'error');
+                showStatus('QR code does not contain a valid SeedQR.', 'error');
             }
         });
     } catch (err) {
@@ -17880,12 +17905,12 @@ function _psbtOnQrScanned(text, binaryData) {
     // If decode fails, just ignore — scanner keeps running for next frame
 }
 
-// ---- Seed QR handler (Compact SeedQR binary format) ----
+// ---- Seed QR handler (Compact or Standard SeedQR) ----
 function _psbtHandleSeedQr(text, binaryData) {
     const words = sqr_wordsFromScan(text, binaryData);
 
     if (!words) {
-        document.getElementById('psbt-seed-scan-status').textContent = 'Not a valid Compact SeedQR — keep scanning...';
+        document.getElementById('psbt-seed-scan-status').textContent = 'Not a valid SeedQR — keep scanning...';
         return;
     }
 
@@ -17900,7 +17925,7 @@ function _psbtHandleSeedQr(text, binaryData) {
         document.getElementById('psbt-temp-seed-input').value = words.join(' ');
     }
     psbtStopSeedScan();
-    psbtShowStatus(`Scanned ${words.length}-word seed from Compact SeedQR.`, 'success');
+    psbtShowStatus(`Scanned ${words.length}-word seed from SeedQR.`, 'success');
 
     // Trigger live fingerprint recomputation
     _psbtRenderFingerprintMatch();
@@ -26656,10 +26681,10 @@ async function xor_scanSeedQR() {
             xor_stopSeedQR();
             const words = sqr_wordsFromScan(text, binaryData);
             if (words && (words.length === 12 || words.length === 24)) {
-                xor_showSeedGrid(words.join(' '), 'Scanned from Compact SeedQR');
-                showStatus('Compact SeedQR scanned — ' + words.length + ' words loaded.', 'success');
+                xor_showSeedGrid(words.join(' '), 'Scanned from SeedQR');
+                showStatus('SeedQR scanned — ' + words.length + ' words loaded.', 'success');
             } else {
-                showStatus('QR code does not contain a valid Compact SeedQR.', 'error');
+                showStatus('QR code does not contain a valid SeedQR.', 'error');
             }
         });
     } catch (err) {
@@ -27173,7 +27198,7 @@ async function xor_scanMergeQR(shareIdx) {
                     showStatus('Share ' + (shareIdx + 1) + ' scanned — ' + words.length + ' words loaded.', 'success');
                 }, 20);
             } else {
-                showStatus('QR does not contain a valid Compact SeedQR.', 'error');
+                showStatus('QR does not contain a valid SeedQR.', 'error');
             }
         });
     } catch (err) {
@@ -28618,10 +28643,10 @@ async function desc_scanSeedQR() {
             desc_stopSeedQR();
             var w = sqr_wordsFromScan(text, binaryData);
             if (w && (w.length === 12 || w.length === 24)) {
-                desc_showSeedGrid(w.join(' '), 'Scanned from Compact SeedQR');
-                showStatus('Compact SeedQR scanned — ' + w.length + ' words.', 'success');
+                desc_showSeedGrid(w.join(' '), 'Scanned from SeedQR');
+                showStatus('SeedQR scanned — ' + w.length + ' words.', 'success');
             } else {
-                showStatus('QR does not contain a valid Compact SeedQR.', 'error');
+                showStatus('QR does not contain a valid SeedQR.', 'error');
             }
         });
     } catch (err) {
@@ -30721,10 +30746,26 @@ var sqr_state = {
     currentTab: 'create',
     inputMode: 'session',   // 'session' or 'manual'
     inputLength: 12,
-    currentEntropyBytes: null,  // Uint8Array — last generated compact SeedQR binary payload
+    format: 'compact',          // 'compact' (SeedSigner CompactSeedQR) or 'standard' (numeric SeedQR)
+    lastGridSize: null,         // module count of the last generated QR (drives the blank print grid)
+    currentEntropyBytes: null,  // Uint8Array — entropy of the last generated SeedQR (verify compares this)
     importScanner: null,
     verifyScanner: null
 };
+
+// --- QR format toggle (Compact / Standard) ---
+function sqr_setFormat(fmt) {
+    sqr_state.format = fmt === 'standard' ? 'standard' : 'compact';
+    var isStd = sqr_state.format === 'standard';
+    document.getElementById('sqr-fmt-compact').classList.toggle('active', !isStd);
+    document.getElementById('sqr-fmt-standard').classList.toggle('active', isStd);
+    document.getElementById('sqr-fmt-hint-compact').style.display = isStd ? 'none' : 'block';
+    document.getElementById('sqr-fmt-hint-standard').style.display = isStd ? 'block' : 'none';
+    // A QR already on screen is in the old format — hide it so the user
+    // regenerates before drawing or printing a grid of the wrong size.
+    document.getElementById('sqr-output').style.display = 'none';
+    sqr_state.lastGridSize = null;
+}
 
 // --- Tab switching ---
 function sqr_switchTab(tab) {
@@ -31166,8 +31207,8 @@ var SKScanner = (function() {
 // Routes the scan through the central universal parser
 // (shared/qr-parser.js → window.QRParser.parseQRScan). The parser
 // handles:
-//   • Numeric SeedQR (Sparrow Standard) — 48 or 96 digit string,
-//     1-indexed 4-digit chunks → BIP-39 words.
+//   • Numeric SeedQR (Standard) — 48 or 96 digit string,
+//     0-indexed 4-digit chunks → BIP-39 words ("0000" = abandon).
 //   • Compact SeedQR (SeedSigner binary) — 16 or 32 raw entropy bytes
 //     → entropyToMnemonic (appends SHA-256 checksum).
 //   • Plain text fallback — returns the scanner text exactly as-is.
@@ -31190,7 +31231,18 @@ function sqr_wordsFromScan(text, binaryData) {
     return parts.map(function(w) { return w.toLowerCase(); });
 }
 
-// --- Generate Compact SeedQR ---
+// --- Standard SeedQR encoding: each word → its 0-indexed wordlist position, 4 digits ---
+function sqr_encodeStandard(wordsArray) {
+    var wl = window.BtcMath ? window.BtcMath.wordlist : null;
+    if (!wl) throw new Error('Crypto libraries not available.');
+    return wordsArray.map(function(w) {
+        var idx = wl.indexOf(w);
+        if (idx < 0) throw new Error('Invalid BIP-39 word: "' + w + '"');
+        return String(idx).padStart(4, '0');
+    }).join('');
+}
+
+// --- Generate SeedQR (Compact or Standard, per sqr_state.format) ---
 async function sqr_generate() {
     try {
         var words = sqr_getSeedWords();
@@ -31211,20 +31263,26 @@ async function sqr_generate() {
             return;
         }
 
-        // Compact SeedQR: convert mnemonic → raw entropy bytes
+        // Verify compares entropy, so it works the same for either format.
         var entropyBytes = sqr_encodeCompact(words);
         sqr_state.currentEntropyBytes = entropyBytes;
 
-        // QR version: 24 words → 32 bytes → Version 2 (25x25), 12 words → 16 bytes → Version 1 (21x21)
-        var qrVersion = words.length === 24 ? 2 : 1;
-        var gridSize = words.length === 24 ? 25 : 21;
+        // SeedSigner SeedQR spec, error correction L:
+        //   Compact  (raw entropy, byte mode):  12w → 16 bytes, V1 21x21; 24w → 32 bytes, V2 25x25
+        //   Standard (4-digit indices, numeric): 12w → 48 digits, V2 25x25; 24w → 96 digits, V3 29x29
+        var isStd = sqr_state.format === 'standard';
+        var is24 = words.length === 24;
+        var qrVersion = isStd ? (is24 ? 3 : 2) : (is24 ? 2 : 1);
+        var gridSize = 17 + 4 * qrVersion;
+        var segment = isStd
+            ? { data: sqr_encodeStandard(words), mode: 'numeric' }
+            : { data: entropyBytes, mode: 'byte' };
 
-        // Render QR using qrcode library in Byte/Binary mode, L error correction
         var QR = window.QRCode;
         if (!QR) throw new Error('QR library not available.');
 
         var tempCanvas = document.createElement('canvas');
-        await QR.toCanvas(tempCanvas, [{ data: entropyBytes, mode: 'byte' }], {
+        await QR.toCanvas(tempCanvas, [segment], {
             errorCorrectionLevel: 'L',
             margin: 0,
             width: gridSize,
@@ -31292,16 +31350,18 @@ async function sqr_generate() {
             }
         }
 
+        sqr_state.lastGridSize = gridSize;
         document.getElementById('sqr-output').style.display = 'block';
 
-        showStatus('Compact SeedQR generated — ' + words.length + ' words encoded as ' + entropyBytes.length + ' bytes (' + gridSize + '×' + gridSize + ' grid).', 'success');
+        showStatus((isStd ? 'Standard' : 'Compact') + ' SeedQR generated — ' + words.length + ' words, ' + gridSize + '×' + gridSize + ' grid.', 'success');
     } catch (err) {
         document.getElementById('sqr-output').style.display = 'none';
         showStatus('SeedQR failed: ' + err.message, 'error');
     }
 }
 
-// --- Print blank grid for hand-drawing (25x25 for 24-word, 21x21 for 12-word) ---
+// --- Print blank grid for hand-drawing, sized to the last generated QR
+//     (Compact: 21x21 / 25x25; Standard: 25x25 / 29x29) ---
 //
 // Rewritten to use ES2015 template literals (backticks) instead of
 // `'...' + variable + '...'` concatenation. The two forms are
@@ -31315,7 +31375,7 @@ async function sqr_generate() {
 //       diff-reader can see the whole attribute at a glance.
 //
 function sqr_printBlankGrid() {
-    const gridSize = sqr_state.inputLength === 24 ? 25 : 21;
+    const gridSize = sqr_state.lastGridSize || (sqr_state.inputLength === 24 ? 25 : 21);
     const anchorOffset = gridSize - 7; // finder pattern position (top-right, bottom-left)
     const vbPad = 2;
     const vbSize = gridSize + (vbPad * 2);
@@ -31427,7 +31487,7 @@ function sqr_startImportScan() {
         sqr_stopImportScan();
         var words = sqr_wordsFromScan(text, binaryData);
         if (!words || (words.length !== 12 && words.length !== 24)) {
-            showStatus('QR does not contain a valid Compact SeedQR.', 'error');
+            showStatus('QR does not contain a valid SeedQR.', 'error');
             return;
         }
         var len = words.length;
@@ -31437,7 +31497,7 @@ function sqr_startImportScan() {
                 var inp = document.getElementById('sqr-in-word-' + i);
                 if (inp) inp.value = words[i];
             }
-            showStatus('Imported ' + len + ' words from Compact SeedQR.', 'success');
+            showStatus('Imported ' + len + ' words from SeedQR.', 'success');
         }, 50);
     }).catch(function(err) {
         showStatus('Camera error: ' + err, 'error');

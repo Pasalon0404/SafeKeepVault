@@ -371,7 +371,7 @@ entire website folder/                  ← project root
 │   │   └── design-system.css           ← base CSS variables + tokens
 │   ├── dist/                           ← build output (boot.html with everything inlined)
 │   ├── architecture/, bip85/, descriptor/, dice/, entropy-tool/,
-│   │   passphrase/, qr-transfer/, secure-note/, seedqr/, seedxor/,
+│   │   passphrase/, qr-transfer/, secure-note/, seedxor/,
 │   │   signer/                         ← per-tool source modules
 │   └── public/                         ← static assets
 └── usbbootdrive/                       ← the OS image builder
