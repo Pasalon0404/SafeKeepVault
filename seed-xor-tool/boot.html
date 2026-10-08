@@ -9232,7 +9232,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     <label for="wrec-purpose" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Wallet Purpose</label>
                     <textarea id="wrec-purpose" rows="2" placeholder="e.g. Main savings wallet" oninput="wrec_buildPreview()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;"></textarea>
                 </div>
-                <label style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Keys &mdash; name each seed word set so an heir knows which is which</label>
+                <label style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Keys &mdash; name each seed word set so an heir knows which is which. Only the name is printed; add the seed&rsquo;s own fingerprint to it if you want it on the record.</label>
                 <div id="wrec-keys-wrap"></div>
 
                 <!-- ── Step 3: notes and print ── -->
@@ -34740,9 +34740,13 @@ function _wrecCollectFormData() {
     var shape = meta || _wrecManualShape();
     var isMulti = !!shape.isMulti;
 
+    // Keys print with the user's name only. The descriptor's fingerprint is that
+    // of seed words + passphrase when the key has a passphrase, so printing it as
+    // the key's identity could mislead an heir holding just the seed words; the
+    // user writes the seed's own fingerprint into the name if they want it.
     var anyKeyInfo = _wrecKeys.some(function(k) { return k.fp || (k.name || '').trim(); });
     var seedSets = !anyKeyInfo ? [] : _wrecKeys.map(function(k, i) {
-        return ((k.name || '').trim() || ('Set ' + (i + 1))) + (k.fp ? ' (fingerprint ' + k.fp.toUpperCase() + ')' : '');
+        return (k.name || '').trim() || ('Set ' + (i + 1));
     });
 
     var passphrases = [];
@@ -34779,13 +34783,14 @@ function _wrecRenderKeys() {
     for (var i = 0; i < n; i++) {
         var k = _wrecKeys[i];
         var head = (n > 1 ? 'Key ' + (i + 1) + ' of ' + n : 'Key') +
-            (k.fp ? ' &middot; fingerprint <span style="font-family: var(--skb-mono); color: var(--skb-text);">' + esc(k.fp.toUpperCase()) + '</span>' : '') +
+            (k.fp ? ' &middot; descriptor fingerprint <span style="font-family: var(--skb-mono); color: var(--skb-text);">' + esc(k.fp.toUpperCase()) + '</span>' +
+                ' <span style="opacity: 0.8;">(includes the passphrase, if this key has one)</span>' : '') +
             (k.path ? ' &middot; <span style="font-family: var(--skb-mono);">m/' + esc(k.path) + '</span>' : '');
         html +=
             '<div class="wrec-key-row" style="margin-bottom: 0.6rem; padding: 0.6rem 0.7rem; background: var(--skb-bg, #1a1a1a); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);">' +
                 '<div style="font-size: 0.75rem; color: var(--skb-text-muted); margin-bottom: 0.4rem; word-break: break-all;">' + head + '</div>' +
                 '<input type="text" id="wrec-key-name-' + i + '" class="wrec-key-name" value="' + esc(k.name) + '" autocomplete="off" ' +
-                    'placeholder="' + (i === 0 ? 'e.g. Dave’s Coldcard — home safe' : 'e.g. Spare seed plate — bank box') + '" ' +
+                    'placeholder="' + (i === 0 ? 'e.g. Dave\u2019s Coldcard \u2014 home safe (seed fingerprint 9F8E7D6C)' : 'e.g. Spare seed plate \u2014 bank box') + '" ' +
                     'oninput="wrec_onKeyInput(' + i + ', \'name\', this.value)" style="' + inStyle + '">' +
                 '<label style="display: flex; align-items: center; gap: 0.45rem; margin-top: 0.45rem; font-size: 0.8125rem; color: var(--skb-text); cursor: pointer;">' +
                     '<input type="checkbox" id="wrec-key-ppon-' + i + '"' + (k.ppOn ? ' checked' : '') + ' onchange="wrec_onKeyPassphraseToggle(' + i + ', this.checked)">' +
