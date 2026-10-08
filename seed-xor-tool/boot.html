@@ -7246,21 +7246,120 @@
                                    style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-size: 0.9375rem; color: var(--skb-text);">
                         </div>
 
-                        <!-- Passphrase -->
+                        <!-- Passphrase (typed, or filled by the inline generator) -->
                         <div style="margin-bottom: 0.75rem;">
-                            <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Passphrase</label>
-                            <input type="text" id="cipher-passphrase" placeholder="Type, paste, or use the generator below" autocomplete="off" spellcheck="false"
-                                   oninput="cipher_onPassphraseInput()"
-                                   style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.9375rem; color: var(--skb-text);">
+                            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; margin-bottom: 0.35rem;">
+                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted);">Passphrase</label>
+                                <span id="cipher-pp-badge" style="display: none; font-size: 0.75rem; font-family: var(--skb-mono); color: var(--skb-primary);"></span>
+                            </div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                <input type="text" id="cipher-passphrase" placeholder="Type or paste a passphrase, or use Generate" autocomplete="off" spellcheck="false"
+                                       oninput="cipher_onPassphraseInput()"
+                                       style="flex: 1 1 220px; min-width: 0; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.9375rem; color: var(--skb-text);">
+                                <button type="button" class="skb-btn" id="cipher-gen-btn" style="flex-shrink: 0; font-size: 0.8125rem; padding: 0.4rem 0.75rem;" onclick="cipher_toggleGenerator()">Generate</button>
+                                <button type="button" class="skb-btn" id="cipher-edit-btn" style="display: none; flex-shrink: 0; font-size: 0.8125rem; padding: 0.4rem 0.75rem;" onclick="cipher_editGenerated()">Edit</button>
+                            </div>
+
+                            <!-- Generator (opens inline under the field) -->
+                            <div id="cipher-gen-panel" style="display: none; margin-top: 0.75rem; padding: 0.75rem; border: 1px dashed var(--skb-border); border-radius: var(--skb-radius-sm);">
+                                <!-- Word Count -->
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Count</label>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button type="button" class="skb-btn" id="pp-wc-4" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setWordCount(4)">4 Words</button>
+                                        <button type="button" class="skb-btn" id="pp-wc-6" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(6)">6 Words</button>
+                                        <button type="button" class="skb-btn" id="pp-wc-8" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(8)">8 Words</button>
+                                    </div>
+                                </div>
+
+                                <!-- Separator -->
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Separator</label>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button type="button" class="skb-btn" id="pp-sep-hyphen" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600; font-family: var(--skb-mono);" onclick="pp_setSeparator('-')">hyphen -</button>
+                                        <button type="button" class="skb-btn" id="pp-sep-space" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator(' ')">space</button>
+                                        <button type="button" class="skb-btn" id="pp-sep-dot" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator('.')">dot .</button>
+                                        <button type="button" class="skb-btn" id="pp-sep-none" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator('')">none</button>
+                                    </div>
+                                </div>
+
+                                <!-- Capitalization -->
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Capitalization</label>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button type="button" class="skb-btn" id="pp-cap-lower" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setCapitalization('lower')">lowercase</button>
+                                        <button type="button" class="skb-btn" id="pp-cap-title" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setCapitalization('title')">Title Case</button>
+                                        <button type="button" class="skb-btn" id="pp-cap-upper" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setCapitalization('upper')">UPPERCASE</button>
+                                    </div>
+                                </div>
+
+                                <!-- Toggles -->
+                                <div style="margin-bottom: 1rem;">
+                                    <div style="display: flex; gap: 1.5rem;">
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
+                                            <input type="checkbox" id="pp-add-num" onchange="pp_render()"> Append Number
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
+                                            <input type="checkbox" id="pp-add-sym" onchange="pp_render()"> Append Symbol
+                                        </label>
+                                    </div>
+                                </div>
+
+
+                                <!-- Generated Output (appears after generation) -->
+                                <div id="pp-output-card" style="display: none; margin-top: 1rem;">
+                                    <div style="padding: 1rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); margin-bottom: 0.75rem; word-break: break-all;">
+                                        <div id="pp-output" style="font-family: var(--skb-mono); font-size: 1rem; color: var(--skb-text); line-height: 1.6; min-height: 1.6em; user-select: all;"></div>
+                                    </div>
+
+                                    <!-- Entropy meter -->
+                                    <div style="margin-bottom: 1rem;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                            <span style="font-size: 0.8125rem; color: var(--skb-text-muted);">Entropy</span>
+                                            <span style="font-size: 0.8125rem; color: var(--skb-text); font-weight: 600;" id="pp-entropy-text">0 bits</span>
+                                        </div>
+                                        <div class="pp-entropy-meter">
+                                            <div class="pp-entropy-fill" id="pp-entropy-fill"></div>
+                                        </div>
+                                        <div style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 0.3rem;" id="pp-strength-label"></div>
+                                    </div>
+
+                                    <!-- Use in Workspace (fills the field above) -->
+                                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                        <button type="button" class="skb-btn" style="flex: 2; min-width: 160px; background: var(--skb-primary); color: black; font-weight: 600;" onclick="cipher_useGenerated()">Use this passphrase</button>
+                                        <button type="button" class="skb-btn" style="flex: 1; min-width: 120px;" onclick="pp_generate()">Regenerate</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- Confirm Passphrase -->
-                        <div style="margin-bottom: 0.75rem;">
+                        <!-- Confirm Passphrase (typed or loaded passphrases only) -->
+                        <div id="cipher-confirm-block" style="margin-bottom: 0.75rem;">
                             <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Confirm Passphrase</label>
                             <input type="text" id="cipher-confirm" placeholder="Re-type the passphrase exactly to confirm" autocomplete="off" spellcheck="false"
-                                   oninput="cipher_onConfirmInput()"
+                                   oninput="cipher_onConfirmInput()" onpaste="return cipher_blockPaste(event)" ondrop="return false"
                                    style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.9375rem; color: var(--skb-text);">
                             <div id="cipher-match-status" style="font-size: 0.75rem; margin-top: 0.3rem; min-height: 1.1em;"></div>
+                        </div>
+
+                        <!-- Check your written copy (generated passphrases only) -->
+                        <div id="cipher-verify-block" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(247, 147, 26, 0.06); border: 1px solid rgba(247, 147, 26, 0.2); border-radius: var(--skb-radius-sm);">
+                            <div id="cipher-verify-intro">
+                                <p style="font-size: 0.8125rem; color: var(--skb-text); margin: 0 0 0.6rem; line-height: 1.5;">Write this passphrase down exactly (or print it), then check your copy. Saving unlocks once your copy matches.</p>
+                                <button type="button" class="skb-btn" style="width: 100%; background: var(--skb-primary); color: black; font-weight: 600;" onclick="cipher_startVerify()">I've written it down &mdash; check my copy</button>
+                            </div>
+                            <div id="cipher-verify-step" style="display: none;">
+                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Type the passphrase from your written copy</label>
+                                <input type="text" id="cipher-verify-input" autocomplete="off" spellcheck="false"
+                                       onpaste="return cipher_blockPaste(event)" ondrop="return false" onkeydown="if (event.key === 'Enter') cipher_checkVerify()"
+                                       style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.9375rem; color: var(--skb-text);">
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                                    <button type="button" class="skb-btn" style="flex: 1; min-width: 120px; background: var(--skb-primary); color: black; font-weight: 600;" onclick="cipher_checkVerify()">Check</button>
+                                    <button type="button" class="skb-btn" style="flex: 1; min-width: 120px;" onclick="cipher_cancelVerify()">Show passphrase again</button>
+                                </div>
+                                <div id="cipher-verify-status" style="font-size: 0.8125rem; margin-top: 0.4rem; min-height: 1.1em; line-height: 1.5;"></div>
+                            </div>
+                            <div id="cipher-verify-done" style="display: none; font-size: 0.8125rem; font-weight: 600; color: var(--skb-secondary, #28a745);">&#10003; Your written copy matches.</div>
                         </div>
 
                         <!-- Fingerprint Preview (shown once passphrases match) -->
@@ -7288,6 +7387,9 @@
                                 <button type="button" class="skb-btn" id="cipher-save-btn"
                                         style="flex: 1; min-width: 120px; background: var(--skb-primary); color: black; font-weight: 600;"
                                         onclick="cipher_save()">Archive (Save)</button>
+                                <button type="button" class="skb-btn" id="cipher-use-btn"
+                                        style="flex: 1; min-width: 150px;"
+                                        onclick="cipher_useNow()">Use this wallet now</button>
                                 <button type="button" class="skb-btn" style="flex: 1; min-width: 100px;" onclick="cipher_new()">Clear / New</button>
                             </div>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -7306,89 +7408,9 @@
                         </div>
                     </div>
 
-                    <!-- ======== GENERATOR (collapsible, hidden by default) ======== -->
-                    <div class="skb-card" style="margin-bottom: 1rem;">
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; font-weight: 700; color: var(--skb-primary); text-transform: uppercase; letter-spacing: 0.04em;">
-                            <input type="checkbox" id="cipher-gen-toggle" onchange="cipher_toggleGenerator()" style="accent-color: var(--skb-primary);">
-                            Generator
-                        </label>
-
-                        <div id="cipher-gen-panel" style="display: none; margin-top: 0.75rem;">
-                            <!-- Word Count -->
-                            <div style="margin-bottom: 1rem;">
-                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Count</label>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <button type="button" class="skb-btn" id="pp-wc-4" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setWordCount(4)">4 Words</button>
-                                    <button type="button" class="skb-btn" id="pp-wc-6" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(6)">6 Words</button>
-                                    <button type="button" class="skb-btn" id="pp-wc-8" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(8)">8 Words</button>
-                                </div>
-                            </div>
-
-                            <!-- Separator -->
-                            <div style="margin-bottom: 1rem;">
-                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Separator</label>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <button type="button" class="skb-btn" id="pp-sep-hyphen" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600; font-family: var(--skb-mono);" onclick="pp_setSeparator('-')">hyphen -</button>
-                                    <button type="button" class="skb-btn" id="pp-sep-space" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator(' ')">space</button>
-                                    <button type="button" class="skb-btn" id="pp-sep-dot" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator('.')">dot .</button>
-                                    <button type="button" class="skb-btn" id="pp-sep-none" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator('')">none</button>
-                                </div>
-                            </div>
-
-                            <!-- Capitalization -->
-                            <div style="margin-bottom: 1rem;">
-                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Capitalization</label>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <button type="button" class="skb-btn" id="pp-cap-lower" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setCapitalization('lower')">lowercase</button>
-                                    <button type="button" class="skb-btn" id="pp-cap-title" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setCapitalization('title')">Title Case</button>
-                                    <button type="button" class="skb-btn" id="pp-cap-upper" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setCapitalization('upper')">UPPERCASE</button>
-                                </div>
-                            </div>
-
-                            <!-- Toggles -->
-                            <div style="margin-bottom: 1rem;">
-                                <div style="display: flex; gap: 1.5rem;">
-                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
-                                        <input type="checkbox" id="pp-add-num" onchange="pp_generate()"> Append Number
-                                    </label>
-                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
-                                        <input type="checkbox" id="pp-add-sym" onchange="pp_generate()"> Append Symbol
-                                    </label>
-                                </div>
-                            </div>
-
-                            <!-- Generate Button -->
-                            <button type="button" class="skb-btn" style="width: 100%; background: var(--skb-primary); color: black; font-weight: 600; font-size: 0.9375rem; padding: 0.7rem;" onclick="pp_generate()">Generate Passphrase</button>
-
-                            <!-- Generated Output (appears after generation) -->
-                            <div id="pp-output-card" style="display: none; margin-top: 1rem;">
-                                <div style="padding: 1rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); margin-bottom: 0.75rem; word-break: break-all;">
-                                    <div id="pp-output" style="font-family: var(--skb-mono); font-size: 1rem; color: var(--skb-text); line-height: 1.6; min-height: 1.6em; user-select: all;"></div>
-                                </div>
-
-                                <!-- Entropy meter -->
-                                <div style="margin-bottom: 1rem;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                                        <span style="font-size: 0.8125rem; color: var(--skb-text-muted);">Entropy</span>
-                                        <span style="font-size: 0.8125rem; color: var(--skb-text); font-weight: 600;" id="pp-entropy-text">0 bits</span>
-                                    </div>
-                                    <div class="pp-entropy-meter">
-                                        <div class="pp-entropy-fill" id="pp-entropy-fill"></div>
-                                    </div>
-                                    <div style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 0.3rem;" id="pp-strength-label"></div>
-                                </div>
-
-                                <!-- Use in Workspace -->
-                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                                    <button type="button" class="skb-btn" style="flex: 2; min-width: 160px; background: var(--skb-primary); color: black; font-weight: 600;" onclick="cipher_useGenerated()">&#8593; Use in Workspace</button>
-                                    <button type="button" class="skb-btn" style="flex: 1; min-width: 120px;" onclick="pp_generate()">Regenerate</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
 
-                <!-- ======== Archive (relocated below Generator, full width) ======== -->
+                <!-- ======== Archive (below the Workspace, full width) ======== -->
                 <div class="skb-card">
                     <div style="font-size: 0.875rem; font-weight: 700; color: var(--skb-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">Archive</div>
                     <div id="cipher-archive-list">
@@ -7618,6 +7640,7 @@
                             </div>
                         </div>
                         <div class="bip85-out-grid" id="xor-merge-output-grid"></div>
+                        <div id="xor-merge-fp" style="margin-top: 0.75rem; font-size: 0.8125rem; color: var(--skb-text); line-height: 1.5;"></div>
                         <div id="xor-merge-qr-wrap" style="display: none; margin-top: 1rem; text-align: center;">
                             <canvas id="xor-merge-qr-canvas" style="max-width: 300px; width: 100%; height: auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);"></canvas>
                         </div>
@@ -13774,6 +13797,7 @@ async function xrr_combine() {
         if (!bip39 || !wordlist) throw new Error('BIP-39 library not available.');
 
         var combinedBytes = null;
+        var entropies = [];
 
         for (var s = 0; s < _xrrShareCount; s++) {
             var words = [];
@@ -13786,6 +13810,7 @@ async function xrr_combine() {
             }
             var mnemonic = words.join(' ');
             var entropyBytes = bip39.mnemonicToEntropy(mnemonic, wordlist);
+            entropies.push(entropyBytes);
             if (!combinedBytes) {
                 combinedBytes = new Uint8Array(entropyBytes);
             } else {
@@ -13794,6 +13819,7 @@ async function xrr_combine() {
                 }
             }
         }
+        _xorCheckShares(entropies, combinedBytes);
 
         var mergedMnemonic = bip39.entropyToMnemonic(combinedBytes, wordlist);
 
@@ -14034,6 +14060,52 @@ function _dash_updatePassphraseButtons() {
  * the current seed + passphrase, update the identity badge, and push
  * the passphrase into the global session.
  */
+/**
+ * Make `passphrase` the session's active BIP-39 passphrase: derive the new
+ * master fingerprint, store the passphrase in both session layers, and update
+ * the dashboard. Shared by the Dashboard's Apply and the Passphrase Library's
+ * "Use this wallet now". Returns the new fingerprint; throws on failure.
+ */
+async function _applySessionPassphrase(passphrase) {
+    var session = window.SeedSession ? window.SeedSession.get() : null;
+    if (!session || !session.mnemonic) throw new Error('No seed loaded.');
+    if (!window.BtcMath || !window.BtcMath.bip39 || !window.BtcMath.HDKey) throw new Error('Core crypto libraries not loaded.');
+
+    // Derive root with passphrase
+    var newFP = await _ppFingerprint(session.mnemonic, passphrase);
+
+    // Store passphrase in both session layers
+    if (window.SeedSession && window.SeedSession.setPassphrase) window.SeedSession.setPassphrase(passphrase);
+    if (window.SafeKeepOS && window.SafeKeepOS.setPassphrase) window.SafeKeepOS.setPassphrase(passphrase);
+
+    // Save base fingerprint (before passphrase) for revert
+    if (typeof pp_config !== 'undefined') {
+        if (!pp_config._baseFingerprint) {
+            pp_config._baseFingerprint = session.fingerprint;
+        }
+        pp_config._lastAppliedFP = newFP;
+        pp_config._lastAppliedPassphrase = passphrase;
+        pp_config._passphraseActive = true;
+    }
+
+    // Keep the dashboard passphrase field in step when applied from elsewhere
+    var dashInput = document.getElementById('dash-pp-input');
+    if (dashInput) dashInput.value = passphrase;
+
+    // Update dashboard fingerprint badge
+    var dashFP = document.getElementById('dash-fingerprint');
+    if (dashFP) dashFP.textContent = newFP;
+
+    // Update identity label → "Passphrase Wallet Active"
+    var dashLabel = document.getElementById('dash-identity-label');
+    if (dashLabel) dashLabel.textContent = 'Passphrase Wallet Active';
+
+    // Update button states (Apply hides, Clear shows)
+    _dash_updatePassphraseButtons();
+    _globalSeedStatusUpdate();
+    return newFP;
+}
+
 async function dash_applyPassphrase() {
     var input = document.getElementById('dash-pp-input');
     var passphrase = input ? input.value : '';
@@ -14050,45 +14122,7 @@ async function dash_applyPassphrase() {
     }
 
     try {
-        var bip39 = window.BtcMath.bip39;
-        var HDKey = window.BtcMath.HDKey;
-        if (!bip39 || !HDKey) throw new Error('Core crypto libraries not loaded.');
-
-        // Derive root with passphrase
-        var seedBytes = await bip39.mnemonicToSeed(session.mnemonic, passphrase);
-        var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-        var newFP = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-
-        // Store passphrase in both session layers
-        if (window.SeedSession && window.SeedSession.setPassphrase) window.SeedSession.setPassphrase(passphrase);
-        if (window.SafeKeepOS && window.SafeKeepOS.setPassphrase) window.SafeKeepOS.setPassphrase(passphrase);
-
-        // Save base fingerprint (before passphrase) for revert
-        if (typeof pp_config !== 'undefined') {
-            if (!pp_config._baseFingerprint) {
-                pp_config._baseFingerprint = session.fingerprint;
-            }
-            pp_config._lastAppliedFP = newFP;
-            pp_config._lastAppliedPassphrase = passphrase;
-            pp_config._passphraseActive = true;
-        }
-
-        // Update dashboard fingerprint badge
-        var dashFP = document.getElementById('dash-fingerprint');
-        if (dashFP) dashFP.textContent = newFP;
-
-        // Update identity label → "Passphrase Wallet Active"
-        var dashLabel = document.getElementById('dash-identity-label');
-        if (dashLabel) dashLabel.textContent = 'Passphrase Wallet Active';
-
-        // Sync cipher workspace if it has fields
-        var cipherPP = document.getElementById('cipher-passphrase');
-        if (cipherPP) cipherPP.value = passphrase;
-
-        // Update button states (Apply hides, Clear shows)
-        _dash_updatePassphraseButtons();
-        _globalSeedStatusUpdate();
-
+        var newFP = await _applySessionPassphrase(passphrase);
         showStatus('Passphrase applied. New fingerprint: <strong>' + (newFP || '').toUpperCase() + '</strong>. All tools now derive from the passphrase wallet.', 'success');
     } catch (err) {
         showStatus('Failed to apply passphrase: ' + err.message, 'error');
@@ -16629,7 +16663,8 @@ var _sensitiveSelectors = [
     '#codex-title',            // Codex note title
     '#cipher-nickname',        // Cipher passphrase nickname
     '#cipher-passphrase',      // Cipher raw passphrase input
-    '#cipher-confirm'          // Cipher confirmation input
+    '#cipher-confirm',         // Cipher confirmation input
+    '#cipher-verify-input'     // Cipher written-copy check input
 ];
 
 /**
@@ -16897,6 +16932,8 @@ function xor_clearAll() {
     // Wipe merge tab DOM
     document.getElementById('xor-merge-results').style.display = 'none';
     document.getElementById('xor-merge-output-grid').innerHTML = '';
+    var mergeFp = document.getElementById('xor-merge-fp');
+    if (mergeFp) mergeFp.textContent = '';
     var mergeQrWrap = document.getElementById('xor-merge-qr-wrap');
     if (mergeQrWrap) mergeQrWrap.style.display = 'none';
     // Clear merge input grids
@@ -25551,7 +25588,7 @@ function pp_setSeparator(sep) {
     });
     var active = document.getElementById(map[sep]);
     if (active) { active.style.background = 'var(--skb-primary)'; active.style.color = 'black'; active.style.fontWeight = '600'; }
-    pp_generate();
+    pp_render();
 }
 
 function pp_setCapitalization(mode) {
@@ -25562,7 +25599,7 @@ function pp_setCapitalization(mode) {
     });
     var active = document.getElementById('pp-cap-' + mode);
     if (active) { active.style.background = 'var(--skb-primary)'; active.style.color = 'black'; active.style.fontWeight = '600'; }
-    pp_generate();
+    pp_render();
 }
 
 function pp_applyCase(word) {
@@ -25570,6 +25607,13 @@ function pp_applyCase(word) {
     if (pp_config.capitalization === 'title') return word.charAt(0).toUpperCase() + word.slice(1);
     return word.toLowerCase();
 }
+
+// The current random draw: the lowercase words, plus the appended digit and
+// symbol (each with the word it attaches to), drawn the first time they're
+// switched on. Separator, capitalization and the number/symbol toggles only
+// change how the draw is rendered (pp_render), so they keep the same words;
+// only Regenerate and a word-count change make a new draw (pp_generate).
+var _ppDraw = null;
 
 function pp_generate() {
     try {
@@ -25585,25 +25629,34 @@ function pp_generate() {
 
         var words = [];
         for (var i = 0; i < pp_config.wordCount; i++) {
-            var idx = pp_cryptoRandomInt(wl.length);
-            words.push(pp_applyCase(wl[idx]));
+            words.push(wl[pp_cryptoRandomInt(wl.length)]);
         }
+        _ppDraw = { words: words, num: null, sym: null };
+        pp_render();
+    } catch (err) {
+        showStatus('Generation failed: ' + err.message, 'error');
+    }
+}
 
+function pp_render() {
+    if (!_ppDraw || _ppDraw.words.length !== pp_config.wordCount) { pp_generate(); return; }
+    try {
         var addNum = document.getElementById('pp-add-num') && document.getElementById('pp-add-num').checked;
         var addSym = document.getElementById('pp-add-sym') && document.getElementById('pp-add-sym').checked;
 
-        // Inject number/symbol into a random word position
+        // Number/symbol go onto a random word; drawn once, then kept
         var NUMBERS = '0123456789';
         var SYMBOLS = '!@#$%^&*';
+        if (addNum && !_ppDraw.num) {
+            _ppDraw.num = { at: pp_cryptoRandomInt(_ppDraw.words.length), ch: NUMBERS[pp_cryptoRandomInt(NUMBERS.length)] };
+        }
+        if (addSym && !_ppDraw.sym) {
+            _ppDraw.sym = { at: pp_cryptoRandomInt(_ppDraw.words.length), ch: SYMBOLS[pp_cryptoRandomInt(SYMBOLS.length)] };
+        }
 
-        if (addNum) {
-            var ni = pp_cryptoRandomInt(words.length);
-            words[ni] = words[ni] + NUMBERS[pp_cryptoRandomInt(NUMBERS.length)];
-        }
-        if (addSym) {
-            var si = pp_cryptoRandomInt(words.length);
-            words[si] = words[si] + SYMBOLS[pp_cryptoRandomInt(SYMBOLS.length)];
-        }
+        var words = _ppDraw.words.map(pp_applyCase);
+        if (addNum) words[_ppDraw.num.at] += _ppDraw.num.ch;
+        if (addSym) words[_ppDraw.sym.at] += _ppDraw.sym.ch;
 
         var passphrase = words.join(pp_config.separator);
         pp_config.lastPassphrase = passphrase;
@@ -25617,17 +25670,20 @@ function pp_generate() {
     }
 }
 
-function pp_updateEntropy() {
-    var wc = pp_config.wordCount;
+// Entropy (bits) of the generator's current settings.
+function pp_entropyBits() {
     var addNum = document.getElementById('pp-add-num') && document.getElementById('pp-add-num').checked;
     var addSym = document.getElementById('pp-add-sym') && document.getElementById('pp-add-sym').checked;
 
     // BIP-39 wordlist = 2048 words → ~11 bits per word
-    var entropy = wc * Math.log2(2048);
+    var entropy = pp_config.wordCount * Math.log2(2048);
     if (addNum) entropy += Math.log2(10);   // one digit
     if (addSym) entropy += Math.log2(8);    // one of 8 symbols
+    return Math.round(entropy);
+}
 
-    var bits = Math.round(entropy);
+function pp_updateEntropy() {
+    var bits = pp_entropyBits();
     var fillEl = document.getElementById('pp-entropy-fill');
     var textEl = document.getElementById('pp-entropy-text');
     var labelEl = document.getElementById('pp-strength-label');
@@ -25713,7 +25769,7 @@ function _skbPrintInterstitial(callback) {
     };
 }
 
-function pp_print() {
+async function pp_print() {
     // Pull the passphrase from the Cipher workspace field
     var text = document.getElementById('cipher-passphrase').value;
     if (!text) { showStatus('No passphrase in the workspace. Enter or load a passphrase first.', 'error'); return; }
@@ -25721,17 +25777,18 @@ function pp_print() {
     // Fill print area — passphrase
     document.getElementById('pp-print-passphrase').textContent = text;
     var wordCount = text.trim().split(/\s+/).length;
-    document.getElementById('pp-print-words').textContent = wordCount;
-    // Entropy estimate: if it came from our generator, use the stored config; otherwise estimate from word count
+    // Entropy estimate: if it came from our generator, use the stats recorded
+    // when it was placed in the workspace (the generator's options may have
+    // changed since, and hyphen/dot/no separators defeat the word split above).
     var bits = 0;
-    if (pp_config.lastPassphrase === text) {
-        var addNum = document.getElementById('pp-add-num') && document.getElementById('pp-add-num').checked;
-        var addSym = document.getElementById('pp-add-sym') && document.getElementById('pp-add-sym').checked;
-        bits = Math.round(pp_config.wordCount * Math.log2(2048) + (addNum ? Math.log2(10) : 0) + (addSym ? Math.log2(8) : 0));
+    if (_cipherGenInfo && _cipherGenInfo.passphrase === text) {
+        wordCount = _cipherGenInfo.words;
+        bits = _cipherGenInfo.bits;
     } else {
         // Custom passphrase — rough estimate based on character entropy
         bits = Math.round(text.length * 4.7); // ~4.7 bits per random alphanumeric char
     }
+    document.getElementById('pp-print-words').textContent = wordCount;
     document.getElementById('pp-print-entropy').textContent = bits + ' bits (est.)';
     document.getElementById('pp-print-date').textContent = new Date().toLocaleDateString();
 
@@ -25749,13 +25806,15 @@ function pp_print() {
         var seedWords = session.mnemonic.trim().split(/\s+/);
         checksumEl.textContent = seedWords[seedWords.length - 1] || '--------';
 
-        // Passphrase fingerprint — use the cached value if available
-        if (pp_config._lastAppliedFP && pp_config.lastPassphrase) {
-            ppFpEl.textContent = pp_config._lastAppliedFP;
-        } else if (pp_config._liveFP) {
-            ppFpEl.textContent = pp_config._liveFP;
-        } else {
-            ppFpEl.textContent = 'Not yet computed — apply passphrase first';
+        // Passphrase fingerprint — always derived from the exact text being
+        // printed. (A cached value could belong to a different passphrase,
+        // e.g. the wallet applied on the Dashboard, and put the wrong
+        // fingerprint on the backup sheet.)
+        try {
+            ppFpEl.textContent = await _ppFingerprint(session.mnemonic, text);
+        } catch (e) {
+            showStatus('Could not compute the passphrase fingerprint: ' + e.message, 'error');
+            return;
         }
     } else {
         parentFpEl.textContent = 'No seed loaded';
@@ -25783,58 +25842,19 @@ function pp_print() {
 
 
 // =============================================
-// Passphrase Manager: Apply / Revert / Live FP
+// Passphrase Manager: Fingerprints
 // =============================================
 
 var _ppFpDebounce = null;
 
 /**
- * Called on every keystroke in the Apply inputs.
- * Validates match, shows/hides fingerprint preview, enables Apply button.
+ * BIP-32 master fingerprint (lowercase hex) of seed + passphrase.
  */
-function pp_onApplyInput() {
-    var pass1 = document.getElementById('cipher-passphrase').value;
-    var pass2 = document.getElementById('cipher-confirm').value;
-    var matchEl = document.getElementById('cipher-match-status');
-    var fpPreview = document.getElementById('pp-fp-preview');
-
-    // Show/hide Print button based on whether passphrase field has content
-    var printBtn = document.getElementById('pp-print-btn');
-    if (printBtn) {
-        printBtn.style.display = pass1.length > 0 ? 'block' : 'none';
-    }
-
-    // Live fingerprint preview — show whenever passphrase field has content
-    if (fpPreview) {
-        if (pass1.length > 0) {
-            fpPreview.style.display = 'block';
-            _pp_computeLiveFP(pass1);
-        } else {
-            fpPreview.style.display = 'none';
-            document.getElementById('pp-fp-value').textContent = '--------';
-            pp_config._liveFP = '';
-        }
-    }
-
-    // Show base fingerprint
-    var session = window.SeedSession ? window.SeedSession.get() : null;
-    var baseFpEl = document.getElementById('pp-fp-base');
-    if (baseFpEl) baseFpEl.textContent = (session && session.fingerprint) || '--------';
-
-    // Match validation
-    if (!matchEl) return;
-    if (pass2.length === 0) {
-        matchEl.textContent = '';
-        return;
-    }
-
-    if (pass1 === pass2) {
-        matchEl.textContent = 'Passphrases match';
-        matchEl.style.color = 'var(--skb-secondary, #28a745)';
-    } else {
-        matchEl.textContent = 'Passphrases do not match';
-        matchEl.style.color = 'var(--skb-danger)';
-    }
+async function _ppFingerprint(mnemonic, passphrase) {
+    var seedBytes = await window.BtcMath.bip39.mnemonicToSeed(mnemonic, passphrase);
+    var root = window.BtcMath.HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+    if (seedBytes instanceof Uint8Array) seedBytes.fill(0);
+    return root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
 }
 
 /**
@@ -25854,11 +25874,7 @@ function _pp_computeLiveFP(passphrase) {
                 return;
             }
 
-            var bip39 = window.BtcMath.bip39;
-            var HDKey = window.BtcMath.HDKey;
-            var seedBytes = await bip39.mnemonicToSeed(session.mnemonic, passphrase);
-            var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-            var fp = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
+            var fp = await _ppFingerprint(session.mnemonic, passphrase);
 
             document.getElementById('pp-fp-value').textContent = fp;
             pp_config._liveFP = fp;
@@ -25868,142 +25884,6 @@ function _pp_computeLiveFP(passphrase) {
         }
         if (computingEl) computingEl.style.display = 'none';
     }, 300);
-}
-
-/**
- * Apply the generated passphrase to the first input only.
- * Leaves the confirm field blank and focuses it, forcing the user to
- * manually re-type the passphrase to prove they have secured it.
- */
-function pp_applyGenerated() {
-    if (!pp_config.lastPassphrase) { showStatus('Generate a passphrase first.', 'error'); return; }
-    // Inject generated passphrase into the Cipher workspace
-    document.getElementById('cipher-passphrase').value = pp_config.lastPassphrase;
-    document.getElementById('cipher-confirm').value = '';  // intentionally blank — user must re-type
-    _cipherDirty = true;
-    cipher_onConfirmInput();
-    // Scroll the workspace into view and focus the confirm field
-    var workspace = document.getElementById('cipher-confirm');
-    if (workspace) {
-        workspace.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(function() { workspace.focus(); }, 350);
-    }
-    showStatus('Passphrase loaded. Re-type it in the Confirm field to verify.', 'info');
-}
-
-/**
- * Legacy alias — kept for backward compatibility if any code references pp_useGenerated.
- */
-function pp_useGenerated() {
-    pp_applyGenerated();
-}
-
-/**
- * Apply the verified passphrase to the vault.
- * Re-derives root from seed + passphrase, updates session and header.
- */
-async function pp_applyPassphrase() {
-    // Read from consolidated workspace fields
-    var pass1 = document.getElementById('cipher-passphrase').value;
-    var pass2 = document.getElementById('cipher-confirm').value;
-
-    if (pass1 !== pass2 || pass1.length === 0) {
-        showStatus('Passphrases do not match.', 'error');
-        return;
-    }
-
-    var session = window.SeedSession ? window.SeedSession.get() : null;
-    if (!session || !session.mnemonic) {
-        showStatus('No seed loaded. Cannot apply passphrase.', 'error');
-        return;
-    }
-
-    try {
-        var bip39 = window.BtcMath.bip39;
-        var HDKey = window.BtcMath.HDKey;
-        if (!bip39 || !HDKey) throw new Error('Core crypto libraries not loaded.');
-
-        // Derive root with passphrase
-        var seedBytes = await bip39.mnemonicToSeed(session.mnemonic, pass1);
-        var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-        var newFP = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-
-        // Store passphrase in session
-        if (window.SeedSession.setPassphrase) window.SeedSession.setPassphrase(pass1);
-        if (window.SafeKeepOS.setPassphrase) window.SafeKeepOS.setPassphrase(pass1);
-
-        // Update the session fingerprint to reflect the passphrase-derived identity
-        // We store the BASE fingerprint separately so we can revert
-        pp_config._baseFingerprint = session.fingerprint;
-        pp_config._lastAppliedFP = newFP;
-        pp_config._passphraseActive = true;
-
-        // Update global header fingerprint
-        var dashFP = document.getElementById('dash-fingerprint');
-        if (dashFP) dashFP.textContent = newFP;
-
-        // Update dashboard passphrase input to match
-        var dashPP = document.getElementById('dash-pp-input');
-        if (dashPP) dashPP.value = pass1;
-
-        // Update dashboard identity label
-        var dashInfo = document.getElementById('dash-identity-label');
-        if (dashInfo) dashInfo.textContent = 'Passphrase Wallet Active';
-
-        // Also sync pp_config._lastAppliedPassphrase for dashboard Apply button logic
-        if (typeof pp_config !== 'undefined') pp_config._lastAppliedPassphrase = pass1;
-
-        // Update clear button visibility on dashboard
-        if (typeof _dash_updatePassphraseButtons === 'function') _dash_updatePassphraseButtons();
-        if (typeof _globalSeedStatusUpdate === 'function') _globalSeedStatusUpdate();
-
-        showStatus('Passphrase applied. New fingerprint: <strong>' + (newFP || '').toUpperCase() + '</strong>. All tools now derive from the passphrase wallet.', 'success');
-    } catch (err) {
-        showStatus('Failed to apply passphrase: ' + err.message, 'error');
-    }
-}
-
-/**
- * Revert to the base vault (no passphrase).
- */
-function pp_revertToBase() {
-    // Clear passphrase from session
-    if (window.SeedSession.clearPassphrase) window.SeedSession.clearPassphrase();
-    if (window.SafeKeepOS.clearPassphrase) window.SafeKeepOS.clearPassphrase();
-
-    // Restore base fingerprint to dashboard header
-    var baseFP = pp_config._baseFingerprint || '';
-    if (!baseFP) {
-        var session = window.SeedSession ? window.SeedSession.get() : null;
-        baseFP = (session && session.fingerprint) || '--------';
-    }
-    var dashFP = document.getElementById('dash-fingerprint');
-    if (dashFP) dashFP.textContent = baseFP;
-
-    // Clear dashboard passphrase input
-    var dashPP = document.getElementById('dash-pp-input');
-    if (dashPP) dashPP.value = '';
-
-    // Restore dashboard identity label
-    var dashInfo = document.getElementById('dash-identity-label');
-    if (dashInfo) dashInfo.textContent = 'Master Seed Active';
-
-    // Reset UI state
-    pp_config._passphraseActive = false;
-    pp_config._lastAppliedFP = '';
-    pp_config._lastAppliedPassphrase = '';
-
-    // Reset consolidated workspace fields
-    var fpPreview = document.getElementById('pp-fp-preview');
-    if (fpPreview) fpPreview.style.display = 'none';
-    var printBtn = document.getElementById('pp-print-btn');
-    if (printBtn) printBtn.style.display = 'none';
-
-    // Update dashboard clear button
-    if (typeof _dash_updatePassphraseButtons === 'function') _dash_updatePassphraseButtons();
-    if (typeof _globalSeedStatusUpdate === 'function') _globalSeedStatusUpdate();
-
-    showStatus('Reverted to base vault. Fingerprint: <strong>' + (baseFP || '').toUpperCase() + '</strong>', 'success');
 }
 
 /**
@@ -26035,6 +25915,12 @@ function pp_initApplySection() {
 
 var _cipherActiveSlug = null; // currently loaded entry
 var _cipherDirty = true;      // tracks whether workspace has unsaved edits
+// Where the workspace passphrase came from. Typed and loaded passphrases are
+// confirmed by re-typing (catches typos); a generated one can't be mistyped
+// in the field, so instead the user checks their WRITTEN copy against it.
+var _cipherSource = 'typed';  // 'typed' | 'loaded' | 'generated'
+var _cipherVerified = false;  // generated only: written copy checked
+var _cipherGenInfo = null;    // generated only: { passphrase, words, bits }
 
 /**
  * HTML-escape helper for nicknames.
@@ -26057,12 +25943,206 @@ function _cipherMask(raw) {
 }
 
 /**
- * Toggle the Generator panel visibility.
+ * Open/close the inline Generator under the passphrase field. Pass a boolean
+ * to force a state; with no argument it toggles. Opening it shows the current
+ * draw, or generates one straight away if there is none.
  */
-function cipher_toggleGenerator() {
-    var toggle = document.getElementById('cipher-gen-toggle');
+function cipher_toggleGenerator(open) {
     var panel = document.getElementById('cipher-gen-panel');
-    if (panel) panel.style.display = (toggle && toggle.checked) ? 'block' : 'none';
+    var btn = document.getElementById('cipher-gen-btn');
+    if (!panel) return;
+    if (typeof open !== 'boolean') open = panel.style.display === 'none';
+    panel.style.display = open ? 'block' : 'none';
+    if (btn) btn.textContent = open ? 'Close' : 'Generate';
+    if (open) pp_render();   // re-shows the current draw, or makes the first one
+}
+
+/**
+ * Sync the parts of the workspace that depend on where the passphrase came
+ * from: read-only field + Edit button, badge, Confirm vs. written-copy check.
+ * For a generated passphrase it also drives the action row; typed and loaded
+ * passphrases keep using cipher_onConfirmInput / cipher_open for that.
+ */
+function _cipherApplySourceUI() {
+    var generated = _cipherSource === 'generated';
+    var show = function(id, on, display) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = on ? (display || 'block') : 'none';
+    };
+
+    var field = document.getElementById('cipher-passphrase');
+    field.readOnly = generated;
+    field.type = 'text';
+    show('cipher-edit-btn', generated, 'inline-block');
+    var genBtn = document.getElementById('cipher-gen-btn');
+    if (genBtn) genBtn.disabled = false;
+
+    var badge = document.getElementById('cipher-pp-badge');
+    if (badge) {
+        badge.textContent = generated && _cipherGenInfo
+            ? 'Generated · ' + _cipherGenInfo.words + ' words · ' + _cipherGenInfo.bits + ' bits' + (_cipherVerified ? ' · copy checked' : '')
+            : '';
+        badge.style.display = generated ? 'inline' : 'none';
+    }
+
+    show('cipher-confirm-block', !generated);
+    show('cipher-verify-block', generated);
+    show('cipher-verify-intro', generated && !_cipherVerified);
+    show('cipher-verify-step', false);
+    show('cipher-verify-done', generated && _cipherVerified);
+    var verifyInput = document.getElementById('cipher-verify-input');
+    if (verifyInput) verifyInput.value = '';
+    var verifyStatus = document.getElementById('cipher-verify-status');
+    if (verifyStatus) verifyStatus.textContent = '';
+
+    if (!generated) return;
+
+    var matchEl = document.getElementById('cipher-match-status');
+    if (matchEl) matchEl.textContent = '';
+    show('cipher-action-row', true);
+    show('cipher-prematch-row', false);
+    show('pp-print-btn', true, 'inline-block');
+
+    var amnesia = typeof isAmnesiaMode === 'function' && isAmnesiaMode();
+    var saveBtn = document.getElementById('cipher-save-btn');
+    if (saveBtn) {
+        var canSave = !amnesia && _cipherVerified && _cipherDirty;
+        saveBtn.disabled = !canSave;
+        saveBtn.style.opacity = canSave ? '1' : '0.4';
+        saveBtn.title = amnesia ? 'Temporary Session: saving disabled'
+                      : (!_cipherVerified ? 'Check your written copy first' : '');
+    }
+
+    _cipherUpdateUseBtn();
+
+    show('pp-fp-preview', true);
+    _pp_computeLiveFP(field.value);
+    var session = window.SeedSession ? window.SeedSession.get() : null;
+    var baseFpEl = document.getElementById('pp-fp-base');
+    if (baseFpEl) baseFpEl.textContent = (session && session.fingerprint) || '--------';
+}
+
+/**
+ * Turn a generated passphrase back into an editable, typed one. Editing
+ * means it no longer matches what the user wrote down, so it goes back
+ * through the normal Confirm step.
+ */
+function cipher_editGenerated() {
+    _cipherSource = 'typed';
+    _cipherVerified = false;
+    _cipherGenInfo = null;
+    _cipherDirty = true;
+    document.getElementById('cipher-confirm').value = '';
+    _cipherApplySourceUI();
+    cipher_onConfirmInput();
+    var field = document.getElementById('cipher-passphrase');
+    field.focus();
+    showStatus('Passphrase is editable. Confirm it below once you are done.', 'info');
+}
+
+/**
+ * Start the written-copy check: hide the passphrase and ask the user to
+ * type it from what they wrote down.
+ */
+function cipher_startVerify() {
+    if (_cipherSource !== 'generated') return;
+    cipher_toggleGenerator(false);
+    var genBtn = document.getElementById('cipher-gen-btn');
+    if (genBtn) genBtn.disabled = true;   // the generator output shows the passphrase
+    document.getElementById('cipher-passphrase').type = 'password';
+    document.getElementById('cipher-verify-intro').style.display = 'none';
+    document.getElementById('cipher-verify-step').style.display = 'block';
+    document.getElementById('cipher-verify-status').textContent = '';
+    var input = document.getElementById('cipher-verify-input');
+    input.value = '';
+    input.focus();
+}
+
+/**
+ * Compare what the user typed from their written copy with the passphrase.
+ */
+function cipher_checkVerify() {
+    if (_cipherSource !== 'generated') return;
+    var input = document.getElementById('cipher-verify-input');
+    var statusEl = document.getElementById('cipher-verify-status');
+    if (!input.value) { statusEl.textContent = 'Type the passphrase from your written copy first.'; statusEl.style.color = 'var(--skb-text-muted)'; return; }
+
+    if (input.value === document.getElementById('cipher-passphrase').value) {
+        _cipherVerified = true;
+        _cipherApplySourceUI();
+        showStatus('Your written copy matches. You can now save the passphrase.', 'success');
+    } else {
+        input.value = '';
+        statusEl.textContent = 'That does not match. Check your written copy carefully — capitals, separators, and any number or symbol all count. Use "Show passphrase again" to fix your copy.';
+        statusEl.style.color = 'var(--skb-danger)';
+        input.focus();
+    }
+}
+
+/**
+ * Leave the written-copy check and show the passphrase again.
+ */
+function cipher_cancelVerify() {
+    _cipherApplySourceUI();
+}
+
+/**
+ * Paste guard for the confirmation fields: a pasted copy proves nothing.
+ */
+function cipher_blockPaste(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    showStatus('Paste is turned off here — type it, so the check actually catches mistakes.', 'info');
+    return false;
+}
+
+/**
+ * Whether the workspace passphrase has passed its check: the written-copy
+ * check for a generated one, a matching Confirm for a typed or loaded one.
+ * Gates both Save and "Use this wallet now".
+ */
+function _cipherReady() {
+    var passphrase = document.getElementById('cipher-passphrase').value;
+    if (!passphrase) return false;
+    if (_cipherSource === 'generated') return _cipherVerified;
+    return document.getElementById('cipher-confirm').value === passphrase;
+}
+
+/**
+ * Sync the "Use this wallet now" button: enabled once the passphrase is
+ * ready, and shown as in use when it is already the session's passphrase.
+ */
+function _cipherUpdateUseBtn() {
+    var btn = document.getElementById('cipher-use-btn');
+    if (!btn) return;
+    var passphrase = document.getElementById('cipher-passphrase').value;
+    var ready = _cipherReady();
+    var active = (window.SeedSession && window.SeedSession.getPassphrase) ? window.SeedSession.getPassphrase() : '';
+    var inUse = ready && active === passphrase;
+    btn.disabled = !ready || inUse;
+    // "In use" is a status, not an unavailable action — keep it readable
+    btn.style.opacity = (btn.disabled && !inUse) ? '0.4' : '1';
+    btn.style.color = inUse ? 'var(--skb-secondary, #28a745)' : '';
+    btn.textContent = inUse ? '\u2713 Wallet in use' : 'Use this wallet now';
+    btn.title = !ready ? (_cipherSource === 'generated' ? 'Check your written copy first' : 'Confirm the passphrase first')
+              : (inUse ? 'Switch back to the base wallet from the Dashboard' : '');
+}
+
+/**
+ * Switch the session to this passphrase wallet without leaving the Library
+ * (same as loading it on the Dashboard and clicking Apply).
+ */
+async function cipher_useNow() {
+    if (!_cipherReady()) {
+        showStatus(_cipherSource === 'generated' ? 'Check your written copy of the passphrase first.' : 'Confirm the passphrase first.', 'error');
+        return;
+    }
+    try {
+        var newFP = await _applySessionPassphrase(document.getElementById('cipher-passphrase').value);
+        _cipherUpdateUseBtn();
+        showStatus('Now using this passphrase wallet. Fingerprint: <strong>' + newFP.toUpperCase() + '</strong>. All tools derive from it until you switch back on the Dashboard.', 'success');
+    } catch (err) {
+        showStatus('Could not use this passphrase: ' + err.message, 'error');
+    }
 }
 
 /**
@@ -26071,6 +26151,8 @@ function cipher_toggleGenerator() {
 function cipher_onPassphraseInput() {
     // Mark workspace as dirty when user edits the passphrase
     _cipherDirty = true;
+    // Hand-editing a loaded passphrase makes it a typed one
+    if (_cipherSource === 'loaded') _cipherSource = 'typed';
     // Re-validate the confirm field whenever the passphrase changes
     cipher_onConfirmInput();
 }
@@ -26093,10 +26175,7 @@ async function cipher_init() {
     }
 
     // Collapse generator by default
-    var genToggle = document.getElementById('cipher-gen-toggle');
-    if (genToggle) genToggle.checked = false;
-    var genPanel = document.getElementById('cipher-gen-panel');
-    if (genPanel) genPanel.style.display = 'none';
+    cipher_toggleGenerator(false);
 
     // Init the revert/print buttons based on current passphrase state
     pp_initApplySection();
@@ -26158,6 +26237,11 @@ async function cipher_open(slug) {
     }
 
     _cipherActiveSlug = slug;
+    _cipherSource = 'loaded';
+    _cipherVerified = false;
+    _cipherGenInfo = null;
+    _cipherApplySourceUI();
+    cipher_toggleGenerator(false);
     document.getElementById('cipher-nickname').value = result.nickname;
     document.getElementById('cipher-passphrase').value = result.passphrase;
     // Pre-fill confirmation for existing entries (no need to re-type what's already saved)
@@ -26195,6 +26279,9 @@ async function cipher_open(slug) {
     if (deleteBtn) {
         deleteBtn.style.display = amnesia ? 'none' : 'inline-block';
     }
+    var printBtn = document.getElementById('pp-print-btn');
+    if (printBtn) printBtn.style.display = 'inline-block';
+    _cipherUpdateUseBtn();
 
     await cipher_refreshArchive();
 }
@@ -26220,6 +26307,11 @@ async function cipher_save() {
     if (!passphrase) {
         showStatus('A passphrase is required to save.', 'error');
         document.getElementById('cipher-passphrase').focus();
+        return;
+    }
+    // Same gates as the Save button, enforced here too
+    if (!_cipherReady()) {
+        showStatus(_cipherSource === 'generated' ? 'Check your written copy of the passphrase before saving.' : 'Passphrases do not match.', 'error');
         return;
     }
 
@@ -26255,6 +26347,16 @@ async function cipher_save() {
 function cipher_new() {
     _cipherActiveSlug = null;
     _cipherDirty = true; // fresh workspace is always saveable
+    _cipherSource = 'typed';
+    _cipherVerified = false;
+    _cipherGenInfo = null;
+    // A new entry gets a fresh generator draw (also drops the old one from memory)
+    _ppDraw = null;
+    pp_config.lastPassphrase = '';
+    _cipherApplySourceUI();
+    cipher_toggleGenerator(false);
+    var printBtn = document.getElementById('pp-print-btn');
+    if (printBtn) printBtn.style.display = 'none';
     document.getElementById('cipher-nickname').value = '';
     document.getElementById('cipher-passphrase').value = '';
     document.getElementById('cipher-confirm').value = '';
@@ -26292,9 +26394,9 @@ async function cipher_delete() {
 }
 
 /**
- * Copy the generated passphrase into the Workspace passphrase field.
- * Leaves the confirmation box empty to force the user to re-type it
- * (proving they wrote it down before saving).
+ * Put the generated passphrase into the Workspace field. The field locks
+ * (Edit unlocks it) and there's no Confirm re-type; instead Save stays
+ * disabled until the user checks their written copy (cipher_startVerify).
  */
 function cipher_useGenerated() {
     if (!pp_config.lastPassphrase) {
@@ -26302,23 +26404,17 @@ function cipher_useGenerated() {
         return;
     }
     document.getElementById('cipher-passphrase').value = pp_config.lastPassphrase;
-
-    // Clear confirmation to force manual re-entry
     document.getElementById('cipher-confirm').value = '';
-    document.getElementById('cipher-match-status').textContent = '';
+    _cipherSource = 'generated';
+    _cipherVerified = false;
+    _cipherGenInfo = { passphrase: pp_config.lastPassphrase, words: pp_config.wordCount, bits: pp_entropyBits() };
+    _cipherDirty = true;
+    cipher_toggleGenerator(false);
+    _cipherApplySourceUI();
 
-    // Disable save until confirmation matches
-    var saveBtn = document.getElementById('cipher-save-btn');
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.style.opacity = '0.4'; }
-
-    // Auto-focus nickname if empty, otherwise focus confirm
     var nicknameEl = document.getElementById('cipher-nickname');
-    if (!nicknameEl.value.trim()) {
-        nicknameEl.focus();
-    } else {
-        document.getElementById('cipher-confirm').focus();
-    }
-    showStatus('Passphrase loaded into workspace. Re-type it below to confirm you wrote it down.', 'success');
+    if (!nicknameEl.value.trim()) nicknameEl.focus();
+    showStatus('Passphrase placed in the workspace. Write it down, then check your copy to unlock saving.', 'success');
 }
 
 /**
@@ -26364,6 +26460,9 @@ function cipher_onConfirmInput() {
             saveBtn.disabled = !canSave;
             saveBtn.style.opacity = canSave ? '1' : '0.4';
         }
+        var printBtn = document.getElementById('pp-print-btn');
+        if (printBtn) printBtn.style.display = 'inline-block';
+        _cipherUpdateUseBtn();
 
         // Show fingerprint preview and compute live FP
         if (fpPreview) fpPreview.style.display = 'block';
@@ -27265,13 +27364,36 @@ function xor_stopMergeQR(shareIdx) {
     if (area) area.style.display = 'none';
 }
 
+// --- Share sanity checks (Merge tab + XOR recovery) ---
+// XOR of ANY set of valid shares is itself a valid seed, so checksums can't
+// catch a share entered twice (the pair cancels out) or a set that XORs to
+// all zeros ("abandon abandon ... art"). Reject both before showing a result.
+function _xorCheckShares(entropies, combined) {
+    for (var a = 0; a < entropies.length; a++) {
+        for (var b = a + 1; b < entropies.length; b++) {
+            var same = entropies[a].length === entropies[b].length;
+            for (var i = 0; same && i < entropies[a].length; i++) same = entropies[a][i] === entropies[b][i];
+            if (same) throw new Error('Share ' + (a + 1) + ' and Share ' + (b + 1) + ' are identical — one share was probably entered twice.');
+        }
+    }
+    var zero = true;
+    for (var j = 0; zero && j < combined.length; j++) zero = combined[j] === 0;
+    if (zero) throw new Error('These shares cancel out to an all-zero seed, which is never a real wallet. Check that every share is entered correctly.');
+}
+
 // --- Merge: XOR all share entropies together ---
-function xor_handleMerge() {
+async function xor_handleMerge() {
     try {
         const bip39 = window.BtcMath?.bip39;
         const wordlist = window.BtcMath?.wordlist;
         if (!bip39 || !wordlist) throw new Error('BIP-39 library not available.');
 
+        // Hide any earlier result so a rejected merge never leaves a stale seed on screen.
+        xor_state.mergedSeed = null;
+        document.getElementById('xor-merge-results').style.display = 'none';
+        document.getElementById('xor-merge-fp').textContent = '';
+
+        const entropies = [];
         let combinedBytes = null;
         for (let s = 0; s < xor_state.mergeShares; s++) {
             const words = [];
@@ -27284,6 +27406,7 @@ function xor_handleMerge() {
             }
             const mnemonic = words.join(' ');
             const entropyBytes = bip39.mnemonicToEntropy(mnemonic, wordlist);
+            entropies.push(entropyBytes);
             if (!combinedBytes) {
                 combinedBytes = new Uint8Array(entropyBytes);
             } else {
@@ -27292,6 +27415,7 @@ function xor_handleMerge() {
                 }
             }
         }
+        _xorCheckShares(entropies, combinedBytes);
 
         const mergedMnemonic = bip39.entropyToMnemonic(combinedBytes, wordlist);
         xor_state.mergedSeed = mergedMnemonic;
@@ -27310,7 +27434,18 @@ function xor_handleMerge() {
         document.getElementById('xor-merge-qr-wrap').style.display = 'none';
         document.getElementById('xor-merge-qr-btn').textContent = 'Show QR';
         _xorHasWork = true;
-        showStatus('XOR merge complete — original seed recovered.', 'success');
+        // A missing or wrong share still yields a valid-looking seed, so the
+        // fingerprint is the only real confirmation (same as xrr_combine).
+        const fpEl = document.getElementById('xor-merge-fp');
+        try {
+            const fp = await _recoveryFingerprint(mergedMnemonic);
+            fpEl.innerHTML = 'Recovered seed fingerprint: <strong style="font-family: var(--skb-mono); letter-spacing: 0.08em;">' + fp + '</strong><br>' +
+                'Confirm it matches the Target Master Fingerprint printed on your share cards. If it does not, a share is wrong, missing, or mistyped.';
+            showStatus('Shares combined. Recovered seed fingerprint: ' + fp + ' — confirm it matches your share cards.', 'success');
+        } catch (_) {
+            fpEl.textContent = 'Confirm the fingerprint matches your share cards before using this seed.';
+            showStatus('Shares combined. Confirm the fingerprint matches your share cards before using this seed.', 'success');
+        }
     } catch (e) {
         showStatus('Merge failed: ' + e.message, 'error');
     }
@@ -27965,8 +28100,14 @@ async function xorv_testRecovery() {
         var expectedBip32FP = expectedRoot.fingerprint.toString(16).padStart(8, '0').toLowerCase();
         if (expectedSeedBytes instanceof Uint8Array) expectedSeedBytes.fill(0);
 
+        // The Vault Fingerprint cross-check only applies when SafeKeepOS could
+        // compute one at split time — preview mode's stub has no
+        // vaultFingerprint, and xor_handleSplit leaves the '--------'
+        // placeholder. Without that skip the drill could never pass there.
+        // The BIP-32 fingerprint match is always required.
         var targetVaultFP = (xor_state.targetVaultFingerprint || '').toLowerCase();
-        var vaultFpMatch = (targetVaultFP && recoveredVaultFP && recoveredVaultFP === targetVaultFP);
+        var vaultFpChecked = /^[0-9a-f]{8}$/.test(targetVaultFP);
+        var vaultFpMatch = !vaultFpChecked || recoveredVaultFP === targetVaultFP;
         var bip32FpMatch = (recoveredFP === expectedBip32FP);
 
         if (vaultFpMatch && bip32FpMatch) {
@@ -27977,7 +28118,9 @@ async function xorv_testRecovery() {
             banner.innerHTML =
                 '<div style="font-size: 2.2rem; font-weight: 900; color: #28a745; margin-bottom: 0.5rem;">VERIFICATION PASSED</div>' +
                 '<div style="font-size: 0.9375rem; color: var(--skb-text); line-height: 1.5;">' +
-                'Vault Fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredVaultFP + '</strong> matches the seed that was loaded into this tool.' +
+                (vaultFpChecked ? 'Vault Fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredVaultFP + '</strong>'
+                                : 'Master Fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredFP + '</strong>') +
+                ' matches the seed that was loaded into this tool.' +
                 '<br>Your physical XOR backup is mathematically verified &mdash; the tool has been unlocked.</div>';
 
             doneSection.style.display = 'block';
@@ -27990,7 +28133,7 @@ async function xorv_testRecovery() {
             banner.style.background = 'rgba(220, 53, 69, 0.12)';
             banner.style.border = '2px solid rgba(220, 53, 69, 0.5)';
             var detail = '';
-            if (!vaultFpMatch && targetVaultFP) {
+            if (!vaultFpMatch) {
                 detail += 'Expected Vault Fingerprint <strong style="font-family: var(--skb-mono);">' + targetVaultFP + '</strong> ' +
                           'but reconstructed <strong style="font-family: var(--skb-mono);">' + recoveredVaultFP + '</strong>.<br>';
             }
