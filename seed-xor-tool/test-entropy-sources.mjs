@@ -8,7 +8,7 @@
  *   3. Camera noise bits: lowest bit of R, G, B only, packed LSB-first.
  *   4. Camera credit: 0 without a previous frame, for a repeated or nearly
  *      repeated frame, or for an all-0 / all-1 frame; 4 bits otherwise.
- *   5. Credits: digital dice 0, mouse 0.5, dice log2(6).
+ *   5. Credits: mouse 0.5, dice log2(6), camera 4; no digital-dice source.
  *   6. boot.html wiring: no hard-coded credits left, the verifiable path skips
  *      the CSPRNG mix, the camera uses the noise bits, resets go back to Mixed.
  *
@@ -91,7 +91,7 @@ console.log('\n4. Camera credit');
 }
 
 console.log('\n5. Credits');
-ck('digital dice credit 0', ENTROPY_CREDIT.digitalDice === 0);
+ck('no digital-dice credit', !('digitalDice' in ENTROPY_CREDIT));
 ck('mouse credit 0.5', ENTROPY_CREDIT.mouseSample === 0.5);
 ck('dice credit log2(6)', ENTROPY_CREDIT.diceRoll === Math.log2(6));
 ck('camera credit 4 per frame', ENTROPY_CREDIT.cameraFrame === 4);
@@ -111,9 +111,8 @@ console.log('\n6. boot.html wiring');
     ck('boot-entry.js loads the module', entry.includes("import './shared/entropy-sources.js'"));
     ck('mode toggle and verification panel exist',
         html.includes('id="eob-mode-mixed"') && html.includes('id="eob-mode-verifiable"') && html.includes('id="eob-mode-desc-verifiable"'));
-    const digital = fn('function eob_rollDigitalDice');
-    ck('digital dice use the 0-bit credit', digital.includes("_eobCredit('digitalDice')") && !digital.includes('25.85'));
-    ck('digital dice no longer write into the hand-roll display', !digital.includes('eob-dice-display'));
+    ck('Digital Dice card and function are gone',
+        !html.includes('eob_rollDigitalDice') && !html.includes('eob-card-digital') && !html.includes('eob-digital-count') && !html.includes('_eobDigitalCount'));
     const wiggle = fn('function eob_handleWiggle');
     ck('mouse uses the 0.5-bit credit', wiggle.includes("_eobCredit('mouseSample')"));
     const cam = fn('async function eob_captureVideoNoise');
@@ -131,6 +130,14 @@ console.log('\n6. boot.html wiring');
     ck('verifiable needs exactly the roll count', canForge.includes('_eobDiceRolls.length === _eobRollsNeeded()'));
     ck('roll counts in boot.html match the module (50 / 99)', fn('function _eobRollsNeeded').includes('? 50 : 99'));
     ck('eob_init resets to Mixed', fn('function eob_init').includes("eob_setEntropyMode('mixed')"));
+    // Every Entropy Generator function must still parse (a stray quote in a
+    // string breaks the whole inline script, and eob_init with it).
+    for (const name of ['function eob_init', 'function eob_setEntropyMode', 'function _eobCanForge', 'function eob_updateMeter',
+        'function eob_handleDiceKey', 'function eob_handleWiggle', 'async function eob_captureVideoNoise', 'async function eob_forgeSeed']) {
+        let ok = true, err = '';
+        try { new Function(fn(name).replace(/^async function/, 'return async function').replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }
+        ck(`${name.replace(/^(async )?function /, '')} parses`, ok, err);
+    }
     ck('meter says "bits from you"', fn('function eob_updateMeter').includes("bits from you"));
 }
 

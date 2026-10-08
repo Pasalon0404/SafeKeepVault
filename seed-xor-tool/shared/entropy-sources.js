@@ -12,9 +12,11 @@
  *   - Camera: 4 bits per frame, and only for a frame whose sensor-noise
  *     bits (the lowest bit of each R, G and B value) actually changed from
  *     the previous frame and aren't stuck at all-0 or all-1.
- *   - Digital dice: 0. They come from the device's own random number
- *     generator, which is mixed into every seed anyway, so counting them
- *     would claim the user contributed randomness they didn't.
+ *
+ * There is deliberately no "digital dice" source: rolls drawn from the
+ * device's random number generator add nothing, because that generator is
+ * XORed into every Mixed seed anyway, and counting them let the meter fill
+ * without the user contributing any randomness.
  *
  * Verifiable dice mode turns dice into a seed exactly as SeedSigner and
  * COLDCARD do — SHA-256 of the roll digits as ASCII text, first 16 bytes for
@@ -27,7 +29,6 @@ export const ENTROPY_CREDIT = Object.freeze({
     diceRoll: Math.log2(6),
     mouseSample: 0.5,
     cameraFrame: 4,
-    digitalDice: 0,
 });
 
 export const VERIFIABLE_DICE_ROLLS = Object.freeze({ 12: 50, 24: 99 });

@@ -6045,8 +6045,8 @@
                   Generate New Seed routes through THE FORGE in its
                   'onboarding' context (eob_init('onboarding')), which
                   gives new-device setup the same premium entropy
-                  collection UI (physical dice, digital dice, keyboard
-                  mash, video noise) as the dashboard Forge tool.
+                  collection UI (physical dice, mouse movement, video
+                  noise) as the dashboard Forge tool.
                   eob_forgeSeed() still applies SHA-256(pool) ^
                   crypto.getRandomValues() and, in onboarding context,
                   hands the mnemonic to SafeKeepOS.restoreMasterSeed() →
@@ -8391,7 +8391,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <div class="tool-hero">
                 <h2 class="tool-hero-title" id="eob-title">Entropy<span>Generator</span></h2>
                 <p class="tool-hero-subtitle" id="eob-subtitle-label">Generate secure cryptographic randomness</p>
-                <p class="tool-hero-desc" id="eob-subtitle">Build your own entropy. Mix physical dice, mouse movement, digital randomness, and camera noise to create a private key.</p>
+                <p class="tool-hero-desc" id="eob-subtitle">Build your own entropy. Mix physical dice, mouse movement and camera noise to create a private key.</p>
             </div>
 
             <!-- 12/24 Toggle — default 12 words (128 bits) -->
@@ -8417,7 +8417,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <!-- ADVANCED: legacy manual physical-entropy collection. Hidden by
                  default behind a <details> accordion so standard users see the
                  one-click path above; advanced users can expand to mix physical
-                 dice, digital dice, mouse movement, and webcam noise. The forge
+                 dice, mouse movement, and webcam noise. The forge
                  button + entropy meter live inside here too, since they only
                  matter for the manual flow. -->
             <details class="eob-advanced" style="margin-bottom: 1rem;">
@@ -8455,7 +8455,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <div class="eob-meter-note" id="eob-meter-note">Counts only randomness you add. The device's random number generator is always mixed in as well.</div>
             </div>
 
-            <!-- Four Input Methods -->
+            <!-- Input methods: physical dice, mouse, camera -->
             <div class="eob-methods">
 
                 <!-- Method A: Manual Dice -->
@@ -8473,22 +8473,8 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     <div style="font-size: 0.7rem; color: var(--skb-text-muted); margin-top: 0.25rem; text-align: center;">
                         <span id="eob-dice-count">0</span> rolls
                     </div>
-                    <!-- Fairness check on the hand-entered rolls only (digital rolls come from the CSPRNG). -->
+                    <!-- Fairness check on the hand-entered rolls. -->
                     <div id="eob-dice-fairness" class="eob-dice-fairness" role="status" aria-live="polite" hidden></div>
-                </div>
-
-                <!-- Method B: Digital Dice -->
-                <div class="eob-method-card" id="eob-card-digital">
-                    <h4>Digital Dice</h4>
-                    <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
-                        Rolls from the device's random number generator. Mixed into the pool, but not counted as your entropy: the device's randomness is always added anyway.
-                    </p>
-                    <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem;" onclick="eob_rollDigitalDice()">
-                        Roll 10 Digital Dice
-                    </button>
-                    <div style="font-size: 0.7rem; color: var(--skb-text-muted); text-align: center;">
-                        <span id="eob-digital-count">0</span> digital rolls generated
-                    </div>
                 </div>
 
                 <!-- Method C: Mouse Wiggle -->
@@ -12495,8 +12481,8 @@ function clearStatus() {
 // Entropy Upgrade (1.0 hardware audit):
 // The Welcome "Generate New Seed" flow no longer uses the legacy BYOE
 // textarea; it now routes straight into THE FORGE's onboarding context
-// so new users get the same dice / digital-dice / keyboard-mash / video
-// noise entropy collection UI as the dashboard Forge tool. The old
+// so new users get the same dice / mouse / video noise entropy
+// collection UI as the dashboard Forge tool. The old
 // #generate-panel DOM is kept purely as a zero-display sink so the
 // existing `document.getElementById('generate-panel').style.display =
 // 'none'` calls scattered through the codebase remain no-ops and
@@ -16984,7 +16970,6 @@ function eob_clearAll() {
     _eobEstimatedBits = 0;
     _eobDiceCount = 0;
     _eobDiceRolls = [];
-    _eobDigitalCount = 0;
     _eobWiggleCount = 0;
     _eobCamCount = 0;
     _eobWiggleLastX = -1;
@@ -17001,7 +16986,6 @@ function eob_clearAll() {
     document.getElementById('eob-dice-input').value = '';
     document.getElementById('eob-dice-count').textContent = '0';
     eob_renderDiceFairness();
-    document.getElementById('eob-digital-count').textContent = '0';
     document.getElementById('eob-wiggle-count').textContent = '0';
     document.getElementById('eob-cam-count').textContent = '0';
     document.getElementById('eob-pool-raw').textContent = '\u2014';
@@ -38920,7 +38904,6 @@ var _activeEntropyPool = '';
 var _eobEstimatedBits = 0;
 var _eobDiceCount = 0;
 var _eobDiceRolls = [];       // hand-entered rolls only, for the fairness check
-var _eobDigitalCount = 0;
 var _eobWiggleCount = 0;
 var _eobCamCount = 0;
 var _eobWiggleLastX = -1;
@@ -38937,7 +38920,7 @@ var _eobCamPrevLsbs = null;   // previous camera frame's noise bits, to credit o
 function _eobCredit(source) {
     var c = window.EntropySources && window.EntropySources.ENTROPY_CREDIT;
     if (c) return c[source];
-    return { diceRoll: Math.log2(6), mouseSample: 0.5, cameraFrame: 4, digitalDice: 0 }[source];
+    return { diceRoll: Math.log2(6), mouseSample: 0.5, cameraFrame: 4 }[source];
 }
 function _eobRollsNeeded() {
     return _targetEntropyBits === 128 ? 50 : 99;
@@ -38968,7 +38951,6 @@ function eob_init(context) {
     _eobEstimatedBits = 0;
     _eobDiceCount = 0;
     _eobDiceRolls = [];
-    _eobDigitalCount = 0;
     _eobWiggleCount = 0;
     _eobCamCount = 0;
     _eobWiggleLastX = -1;
@@ -38993,7 +38975,7 @@ function eob_init(context) {
     if (eob_context === 'onboarding') {
         titleEl.innerHTML = 'The <span>Entropy Generator</span>';
         subtitleLabel.textContent = 'Master Seed Generation';
-        subtitleEl.textContent = 'Build your own randomness. Mix physical dice, mouse movement, digital randomness, and camera noise to create a truly unpredictable master seed.';
+        subtitleEl.textContent = 'Build your own randomness. Mix physical dice, mouse movement and camera noise with the device\'s random number generator to create a master seed.';
         if (backBtn) backBtn.textContent = '\u2190 Back to Welcome';
         forgeBtn.textContent = 'Generate Master Seed';
         // Full-screen wizard mode: hide dashboard sidebar + command center,
@@ -39004,7 +38986,7 @@ function eob_init(context) {
     } else {
         titleEl.innerHTML = 'Entropy<span>Generator</span>';
         subtitleLabel.textContent = 'Generate secure cryptographic randomness';
-        subtitleEl.textContent = 'Create 12 or 24 word seed phrases by combining various entropy sources - mixing physical dice, mouse movement, digital randomness, and camera noise.';
+        subtitleEl.textContent = 'Create 12 or 24 word seed phrases from physical dice, mouse movement and camera noise, mixed with the device\'s random number generator.';
         if (backBtn) backBtn.textContent = '\u2190 Back to Dashboard';
         forgeBtn.textContent = 'Generate Seed';
         // Ensure wizard mode is cleared when opened from dashboard
@@ -39021,7 +39003,6 @@ function eob_init(context) {
     document.getElementById('eob-dice-input').value = '';
     document.getElementById('eob-dice-count').textContent = '0';
     eob_renderDiceFairness();
-    document.getElementById('eob-digital-count').textContent = '0';
     document.getElementById('eob-wiggle-count').textContent = '0';
     document.getElementById('eob-cam-count').textContent = '0';
     document.getElementById('eob-pool-raw').textContent = '\u2014';
@@ -39058,7 +39039,7 @@ function eob_setEntropyMode(mode) {
     document.getElementById('eob-mode-verifiable').classList.toggle('active', _eobVerifiable);
     document.getElementById('eob-mode-desc-mixed').hidden = _eobVerifiable;
     document.getElementById('eob-mode-desc-verifiable').hidden = !_eobVerifiable;
-    ['eob-card-digital', 'eob-card-wiggle', 'eob-card-cam', 'eob-pool-wrap', 'eob-live-hash-wrap'].forEach(function (id) {
+    ['eob-card-wiggle', 'eob-card-cam', 'eob-pool-wrap', 'eob-live-hash-wrap'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.hidden = _eobVerifiable;
     });
@@ -39254,25 +39235,6 @@ function eob_renderDiceFairness() {
     var note = document.createElement('p');
     note.textContent = DF.describeAssessment(r);
     panel.appendChild(note);
-}
-
-// --- Method B: Digital Dice ---
-function eob_rollDigitalDice() {
-    var rolls = '';
-    var temp = new Uint8Array(1);
-    while (rolls.length < 10) {
-        crypto.getRandomValues(temp);
-        if (temp[0] < 252) {
-            rolls += ((temp[0] % 6) + 1).toString();
-        }
-    }
-
-    _eobDigitalCount += 10;
-    document.getElementById('eob-digital-count').textContent = _eobDigitalCount;
-
-    // Device randomness: mixed into the pool but credited 0 bits, since the
-    // device's generator is XORed into every seed anyway.
-    eob_addToPool('R' + rolls + Date.now().toString(36), _eobCredit('digitalDice'));
 }
 
 // --- Method C: Mouse Wiggle ---
