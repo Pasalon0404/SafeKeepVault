@@ -30161,7 +30161,10 @@ function descv_decodeCryptoOutput(cborBuffer) {
     if (!window.CBOR) throw new Error('CBOR library not available. Rebuild with Vite.');
     _cborRegisterTags();
     var decoded = window.CBOR.decode(Buffer.from(cborBuffer));
-    return _cborTagToDescriptor(decoded);
+    var desc = _cborTagToDescriptor(decoded);
+    // Add the BIP-380 checksum so the descriptor can be printed and imported as-is.
+    var cs = desc_checksum(desc);
+    return cs ? desc + '#' + cs : desc;
 }
 
 /**
@@ -30307,6 +30310,12 @@ function _cborDecodeHDKey(map) {
     if (children) {
         var childPath = _cborDecodeKeypath(children);
         suffix = childPath.path ? '/' + childPath.path : '';
+    } else if (keyData && chainCode) {
+        // No children keypath: wallet exports (Sparrow's multisig QR among
+        // them) leave it out and mean the standard receive/change chains.
+        // Without this suffix the descriptor names only the account key
+        // itself, and any address derived from it is wrong.
+        suffix = '/<0;1>/*';
     }
 
     return prefix + xpub + suffix;
@@ -34605,14 +34614,26 @@ function _wrecParseDescriptor(raw) {
         out.error = 'A key in the descriptor couldn’t be read: ' + e.message;
         return out;
     }
+    var unranged = [];
     out.keys.forEach(function(k, i) {
         if (!k.fingerprint) out.warnings.push('Key ' + (i + 1) + ' has no fingerprint in the descriptor.');
+        if (kind !== 'sp' && /^[a-zA-Z]pub/.test(k.xpub) && (k.wildcardSuffix || '').indexOf('*') === -1) unranged.push(i + 1);
         var steps = (k.wildcardSuffix || '').split('/').filter(Boolean);
         if (steps.length >= 2 && steps[steps.length - 2] === '1') {
             out.warnings.push('Key ' + (i + 1) + ' is on the change chain (…/1/*), so the address below is a change address.');
         }
     });
 
+    // An xpub with nothing after it (no …/<0;1>/*) names one fixed key, not a
+    // wallet's address chain — usually an incomplete export. Working out an
+    // address from it would give one that doesn't match the wallet, so don't.
+    if (unranged.length) {
+        out.warnings.push('Key ' + unranged.join(', ') + (unranged.length > 1 ? ' have' : ' has') +
+            ' no \u2026/<0;1>/* after the xpub, so this descriptor doesn\u2019t describe the wallet\u2019s addresses. Wallet apps normally include it \u2014 check the export.');
+        out.addressNote = 'Not worked out: the descriptor is missing the \u2026/<0;1>/* path after an xpub (see above).';
+        out.ok = true;
+        return out;
+    }
     try {
         out.firstAddress = _wrecFirstAddress(kind, node.fn === 'sortedmulti', out.msM, out.keys);
     } catch (e) {

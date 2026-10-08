@@ -8,6 +8,8 @@ import { HDKey } from '@scure/bip32';
 import * as btcSigner from '@scure/btc-signer';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import * as SP from './shared/silentpayments.js';
+import { createRequire } from 'node:module';
+const CBOR = createRequire(import.meta.url)('cbor-sync');
 /**
  * test-wallet-record.mjs — Wallet Record (wrec_*) in boot.html, descriptor-first:
  *  - _wrecParseDescriptor reads type / threshold / script / keys from every descriptor shape the
@@ -17,6 +19,8 @@ import * as SP from './shared/silentpayments.js';
  *  - The form: key rows follow the descriptor, names/passphrases feed the printed record in the
  *    same shape as before (identical document to the old Pull flow), manual fallback, Pull
  *    assigns the passphrase to the right multisig key, and nothing is saved to localStorage.
+ *  - Scanned wallet QR codes (ur:crypto-output) through the app's decoder, including Sparrow-style
+ *    exports that omit the derivation path, and the safety net for descriptors missing /<0;1>/*.
  * Run: node test-wallet-record.mjs
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,19 +69,21 @@ function makeEnv() {
   const localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { writes.push(k); store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
   const statuses = [];
   const ctx = vm.createContext({
-    window: { BtcMath: { bip39, wordlist, HDKey, btcSigner, secp256k1 }, SilentPayments: SP, SafeKeepOS: { getPassphrase: () => '' } },
-    document, localStorage, Uint8Array, Uint32Array, BigInt, Math, Number, String, parseInt, isNaN, setTimeout, clearTimeout, console,
+    window: { BtcMath: { bip39, wordlist, HDKey, btcSigner, secp256k1 }, SilentPayments: SP, SafeKeepOS: { getPassphrase: () => '' }, CBOR },
+    document, localStorage, Buffer, DataView, Uint8Array, Uint32Array, BigInt, Math, Number, String, parseInt, isNaN, setTimeout, clearTimeout, console,
     showStatus: (m, t) => statuses.push(t + ':' + m), alert: (m) => statuses.push('alert:' + m), confirm: () => true,
     lib_openDropdown: () => {}, _wrecRenderQR: () => Promise.resolve(),
   });
   vm.runInContext([
     ...['DESC_BIP32_PUBLIC_MAINNET', 'DESC_BIP32_PUBLIC_TESTNET', '_DESC_MAINNET_VERS', '_DESC_TESTNET_VERS', '_WREC_LS_KEY', '_WREC_SCRIPTS', '_sha256K', '_B58_ALPHABET'].map(extractVar),
-    'var _wrecMeta = null, _wrecKeys = [], _wrecDescDebounce = null, _wrecQrScanner = null, _wrecUrDecoder = null, _wrecScanDone = false;',
+    'var _wrecMeta = null, _wrecKeys = [], _wrecDescDebounce = null, _wrecQrScanner = null, _wrecUrDecoder = null, _wrecScanDone = false, _cborTagsRegistered = false;',
     ...['desc_checksum', 'desc_parseKeyOrigin', '_base58decode', '_base58checkDecode', '_base58check', '_base58encode', '_sha256sync', '_sha256impl', '_rr',
         '_descNormalizeXpub', '_ppFingerprint', '_wrecEscape', '_wrecSplitArgs', '_wrecCall', '_wrecParseDescriptor', '_wrecIndexZeroPubkey', '_wrecCompareBytes',
         '_wrecFirstAddress', '_wrecManualShape', '_wrecBlankKey', '_wrecResizeManualKeys', '_wrecSyncKeysToMeta', '_wrecKeyTarget', '_wrecCollectFormData',
         '_wrecRenderKeys', 'wrec_onKeyInput', 'wrec_onKeyPassphraseToggle', 'wrec_onManualShapeChange', 'wrec_onDescriptorInput', '_wrecApplyDescriptor',
-        'wrec_init', 'wrec_pullDescriptor', 'wrec_stopQR', '_wrecRenderDocument', 'wrec_buildPreview'].map(extract),
+        'wrec_init', 'wrec_pullDescriptor', 'wrec_stopQR', '_wrecRenderDocument', 'wrec_buildPreview',
+        '_cborRegisterTags', 'descv_decodeCryptoOutput', '_cborTagToDescriptor', '_cborDecodeMulti', '_cborDecodeKey', '_cborDecodeHDKey', '_cborDecodeKeypath',
+        '_cborResolveFingerprint', 'descv_reconstructXpub', '_bytesToHex'].map(extract),
   ].join('\n'), ctx);
   return { ctx, el, store, writes, statuses, last: () => statuses[statuses.length - 1] || '' };
 }
@@ -170,6 +176,52 @@ ck('sh(wsh(...)) multisig is no longer mistaken for single-sig', parse(cs(MS[2][
   ck('key without origin: read, warned, address still worked out', nofp.ok && nofp.warnings.some((w) => /no fingerprint/.test(w)) && nofp.firstAddress === VEC[0][2]);
   const hard = parse(cs(`wpkh([73c5da0a/84h/0h/0h]${root.derive("m/84'/0'/0'").publicExtendedKey}/0h/*)`));
   ck('hardened step after an xpub: read, but address left for the user to type', hard.ok && hard.firstAddress === '' && /type it in/.test(hard.addressNote)); }
+
+// ---- Scanned QR codes (ur:crypto-output, BCR-2020-010) through the app's real decoder ----
+// Minimal CBOR encoder for building wallet-export payloads.
+const cborHead = (mt, n) => n < 24 ? [mt << 5 | n] : n < 256 ? [mt << 5 | 24, n] : n < 65536 ? [mt << 5 | 25, n >> 8, n & 255]
+  : [mt << 5 | 26, (n >>> 24) & 255, (n >> 16) & 255, (n >> 8) & 255, n & 255];
+const cborEnc = (x) => {
+  if (x && x.tag !== undefined) return [...cborHead(6, x.tag), ...cborEnc(x.v)];
+  if (typeof x === 'boolean') return [x ? 0xf5 : 0xf4];
+  if (typeof x === 'number') return cborHead(0, x);
+  if (x instanceof Uint8Array) return [...cborHead(2, x.length), ...x];
+  if (Array.isArray(x)) return [...cborHead(4, x.length), ...x.flatMap(cborEnc)];
+  const ks = Object.keys(x); return [...cborHead(5, ks.length), ...ks.flatMap((k) => [...cborEnc(+k), ...cborEnc(x[k])])];
+};
+// crypto-hdkey for an account key; `children` omitted = how Sparrow exports a multisig wallet QR
+const urKey = (r, path, components, children) => {
+  const a = r.derive('m/' + path);
+  return { tag: 40303, v: Object.assign({ 3: a.publicKey, 4: a.chainCode, 6: { tag: 40304, v: { 1: components, 2: r.fingerprint, 3: components.length / 2 } }, 8: a.parentFingerprint },
+    children ? { 7: children } : {}) };
+};
+const BIP48 = [48, true, 0, true, 0, true, 2, true];
+const sortedAddr0 = btcSigner.p2wsh(btcSigner.p2ms(2, sortedPubs)).address;   // wsh(sortedmulti) receive address 0
+const scanCases = [
+  ['Sparrow-style multisig QR (no derivation path on the keys)', { tag: 401, v: { tag: 407, v: { 1: 2, 2: roots.map((r) => urKey(r, "48'/0'/0'/2'", BIP48, null)) } } }],
+  ['multisig QR with an explicit /0/* path', { tag: 401, v: { tag: 407, v: { 1: 2, 2: roots.map((r) => urKey(r, "48'/0'/0'/2'", BIP48, { tag: 40304, v: { 1: [0, false, [], false] } })) } } }],
+];
+for (const [label, payload] of scanCases) {
+  const desc = env0.ctx.descv_decodeCryptoOutput(Uint8Array.from(cborEnc(payload)));
+  const r = parse(desc);
+  ck(`${label}: decodes with a valid checksum`, r.ok && !r.warnings.some((w) => /checksum/.test(w)), desc.slice(-40) + ' ' + r.error);
+  ck(`${label}: fingerprints match the wallet`, r.keys.map((k) => k.fingerprint).join() === roots.map(fpHex).join());
+  ck(`${label}: first address is the wallet’s receive address 0`, r.firstAddress === sortedAddr0, r.firstAddress + ' vs ' + sortedAddr0);
+}
+{ const desc = env0.ctx.descv_decodeCryptoOutput(Uint8Array.from(cborEnc(scanCases[0][1])));
+  ck('missing derivation path is written out as /<0;1>/* on every key', (desc.match(/\/<0;1>\/\*/g) || []).length === 3, desc);
+  const xpubs = parse(desc).keys.map((k) => k.xpub);
+  ck('decoded xpubs are byte-identical to the wallet’s own account xpubs', xpubs.join() === roots.map((r) => r.derive("m/48'/0'/0'/2'").publicExtendedKey).join(), xpubs[0]);
+  const single = env0.ctx.descv_decodeCryptoOutput(Uint8Array.from(cborEnc({ tag: 404, v: urKey(root, "84'/0'/0'", [84, true, 0, true, 0, true], null) })));
+  ck('single-sig QR without a path gives the BIP-84 first address', parse(single).firstAddress === VEC[0][2], single + ' ' + parse(single).firstAddress); }
+// Safety net: an xpub with no …/<0;1>/* never produces an address
+{ const r = parse(cs(`wsh(sortedmulti(2,${roots.map((x) => acct(x, "48'/0'/0'/2'")).join(',')}))`));
+  ck('descriptor missing the /<0;1>/* path: read, warned, and no address worked out', r.ok && r.firstAddress === '' &&
+     r.warnings.some((w) => /no …\/<0;1>\/\* after the xpub/.test(w)) && /missing/.test(r.addressNote), JSON.stringify({ a: r.firstAddress, w: r.warnings, n: r.addressNote }));
+  const { ctx, el } = makeEnv(); ctx.wrec_init();
+  el('wrec-descriptor').value = cs(`wpkh(${acct(root, "84'/0'/0'")})`); ctx._wrecApplyDescriptor();
+  ck('…and the form leaves the address field empty and editable with the reason shown', el('wrec-first-address').value === '' && !el('wrec-first-address').readOnly &&
+     /missing/.test(el('wrec-first-address-note').textContent) && /check the export/.test(el('wrec-detected').innerHTML)); }
 
 // ---- The form ----
 const MS_DESC = cs(MS[0][1]);
