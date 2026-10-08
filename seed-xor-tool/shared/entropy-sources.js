@@ -12,6 +12,9 @@
  *   - Camera: 4 bits per frame, and only for a frame whose sensor-noise
  *     bits (the lowest bit of each R, G and B value) actually changed from
  *     the previous frame and aren't stuck at all-0 or all-1.
+ *   - Playing cards: log2(cards left in the deck) per card, so a whole
+ *     well-shuffled 52-card deck is log2(52!) ≈ 225.6 bits. The credit only
+ *     holds for a thoroughly shuffled deck, which the screen asks for.
  *
  * There is deliberately no "digital dice" source: rolls drawn from the
  * device's random number generator add nothing, because that generator is
@@ -30,6 +33,41 @@ export const ENTROPY_CREDIT = Object.freeze({
     mouseSample: 0.5,
     cameraFrame: 4,
 });
+
+export const DECK_SIZE = 52;
+export const CARD_RANKS = Object.freeze(['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']);
+export const CARD_SUITS = Object.freeze(['S', 'H', 'D', 'C']);
+const SUIT_SYMBOL = Object.freeze({ S: '\u2660', H: '\u2665', D: '\u2666', C: '\u2663' });
+
+/**
+ * Rank from a key press: A 2–9 J Q K, and T or 0 for ten (case-insensitive).
+ * Returns the canonical rank or null.
+ */
+export function cardRankFromKey(key) {
+    const k = String(key).toUpperCase();
+    if (k === '0') return 'T';
+    return CARD_RANKS.includes(k) ? k : null;
+}
+
+/** Suit from a key press: S H D C (case-insensitive). Returns it or null. */
+export function cardSuitFromKey(key) {
+    const k = String(key).toUpperCase();
+    return CARD_SUITS.includes(k) ? k : null;
+}
+
+/** Card code ("TH") as people write it ("10♥"). */
+export function cardLabel(code) {
+    return (code[0] === 'T' ? '10' : code[0]) + SUIT_SYMBOL[code[1]];
+}
+
+/**
+ * Credit for the next card from a deck that already has `drawn` cards out:
+ * log2 of the cards still in it. Zero once the deck is used up.
+ */
+export function cardCredit(drawn) {
+    const left = DECK_SIZE - drawn;
+    return left > 1 ? Math.log2(left) : 0;
+}
 
 export const VERIFIABLE_DICE_ROLLS = Object.freeze({ 12: 50, 24: 99 });
 
@@ -106,6 +144,7 @@ export function cameraFrameCredit(lsbs, prevLsbs) {
 if (typeof window !== 'undefined') {
     window.EntropySources = {
         ENTROPY_CREDIT, VERIFIABLE_DICE_ROLLS, verifiableRollsNeeded,
+        DECK_SIZE, CARD_RANKS, CARD_SUITS, cardRankFromKey, cardSuitFromKey, cardLabel, cardCredit,
         diceRollsToEntropy, cameraFrameLsbs, cameraFrameCredit,
     };
 }

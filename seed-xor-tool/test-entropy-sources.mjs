@@ -9,7 +9,9 @@
  *   4. Camera credit: 0 without a previous frame, for a repeated or nearly
  *      repeated frame, or for an all-0 / all-1 frame; 4 bits otherwise.
  *   5. Credits: mouse 0.5, dice log2(6), camera 4; no digital-dice source.
- *   6. boot.html wiring: no hard-coded credits left, the verifiable path skips
+ *   6. Playing cards: key parsing, labels, log2(cards left) per card, a full
+ *      deck worth log2(52!).
+ *   7. boot.html wiring: no hard-coded credits left, the verifiable path skips
  *      the CSPRNG mix, the camera uses the noise bits, resets go back to Mixed.
  *
  * Run:  node test-entropy-sources.mjs
@@ -18,6 +20,7 @@
 import {
     ENTROPY_CREDIT, VERIFIABLE_DICE_ROLLS, verifiableRollsNeeded,
     diceRollsToEntropy, cameraFrameLsbs, cameraFrameCredit,
+    DECK_SIZE, CARD_RANKS, CARD_SUITS, cardRankFromKey, cardSuitFromKey, cardLabel, cardCredit,
 } from './shared/entropy-sources.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -97,7 +100,25 @@ ck('dice credit log2(6)', ENTROPY_CREDIT.diceRoll === Math.log2(6));
 ck('camera credit 4 per frame', ENTROPY_CREDIT.cameraFrame === 4);
 ck('credits are frozen', Object.isFrozen(ENTROPY_CREDIT));
 
-console.log('\n6. boot.html wiring');
+console.log('\n6. Playing cards');
+{
+    ck('52 cards: 13 ranks × 4 suits', DECK_SIZE === 52 && CARD_RANKS.length * CARD_SUITS.length === 52);
+    ck('ranks from keys (case-insensitive)', ['a', 'A', '2', '9', 't', 'j', 'q', 'K'].map(cardRankFromKey).join('') === 'AA29TJQK');
+    ck('0 means ten', cardRankFromKey('0') === 'T');
+    ck('1, 10, X and suits are not ranks', ['1', '10', 'X', 'S', 'H', 'D', 'C', ' '].every(k => cardRankFromKey(k) === null));
+    ck('suits from keys (case-insensitive)', ['s', 'H', 'd', 'C'].map(cardSuitFromKey).join('') === 'SHDC');
+    ck('other keys are not suits', ['A', 'X', '1', 'K'].every(k => cardSuitFromKey(k) === null));
+    ck('labels', cardLabel('AS') === 'A\u2660' && cardLabel('TH') === '10\u2665' && cardLabel('KD') === 'K\u2666' && cardLabel('2C') === '2\u2663');
+    ck('first card log2(52)', cardCredit(0) === Math.log2(52));
+    ck('second card log2(51)', cardCredit(1) === Math.log2(51));
+    ck('last card is forced: 0 bits', cardCredit(51) === 0);
+    ck('no credit past the deck', cardCredit(52) === 0 && cardCredit(60) === 0);
+    let deck = 0; for (let i = 0; i < 52; i++) deck += cardCredit(i);
+    let lf = 0; for (let k = 2; k <= 52; k++) lf += Math.log2(k);
+    ck('full deck = log2(52!) ≈ 225.58 bits', Math.abs(deck - lf) < 1e-9 && Math.abs(deck - 225.581) < 0.001, deck);
+}
+
+console.log('\n7. boot.html wiring');
 {
     const html = readFileSync(new URL('./boot.html', import.meta.url), 'utf8');
     const entry = readFileSync(new URL('./boot-entry.js', import.meta.url), 'utf8');
@@ -120,6 +141,13 @@ console.log('\n6. boot.html wiring');
     const dice = fn('function eob_handleDiceKey');
     ck('Backspace undoes a roll', dice.includes("'Backspace'") && dice.includes('_eobDiceRolls.pop()'));
     ck('verifiable mode stops at the needed roll count', dice.includes('_eobRollsNeeded()'));
+    ck('Playing Cards card exists', html.includes('id="eob-card-cards"') && html.includes('onkeydown="eob_handleCardKey(event)"') && html.includes('onclick="eob_newDeck()"'));
+    const cards = fn('function eob_handleCardKey');
+    ck('cards credit log2(cards left) and refuse duplicates', cards.includes('ES.cardCredit(_eobDeckCards.length)') && cards.includes('_eobDeckCards.indexOf(code) !== -1'));
+    ck('cards stop at 52 per deck', cards.includes('_eobDeckCards.length >= ES.DECK_SIZE'));
+    ck('Backspace undoes a card and its credit', cards.includes('_eobDeckCards.pop()') && cards.includes('_eobEstimatedBits - ES.cardCredit(_eobDeckCards.length)'));
+    ck('cards are hidden in Verifiable mode', fn('function eob_setEntropyMode').includes("'eob-card-cards'"));
+    ck('both reset paths clear the deck', ['function eob_init', 'function eob_clearAll'].every(n => fn(n).includes('_eobDeckCards = [];') && fn(n).includes('_eobRenderCards();')));
     const forge = fn('async function eob_forgeSeed');
     const verifiableBranch = forge.slice(forge.indexOf('if (_eobVerifiable)'), forge.indexOf('BYOE discipline'));
     ck('forge gate uses _eobCanForge', forge.includes('if (!_eobCanForge()) return;'));
@@ -133,7 +161,7 @@ console.log('\n6. boot.html wiring');
     // Every Entropy Generator function must still parse (a stray quote in a
     // string breaks the whole inline script, and eob_init with it).
     for (const name of ['function eob_init', 'function eob_setEntropyMode', 'function _eobCanForge', 'function eob_updateMeter',
-        'function eob_handleDiceKey', 'function eob_handleWiggle', 'async function eob_captureVideoNoise', 'async function eob_forgeSeed']) {
+        'function eob_handleDiceKey', 'function _eobRenderCards', 'function eob_handleCardKey', 'function eob_newDeck', 'function eob_handleWiggle', 'async function eob_captureVideoNoise', 'async function eob_forgeSeed']) {
         let ok = true, err = '';
         try { new Function(fn(name).replace(/^async function/, 'return async function').replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }
         ck(`${name.replace(/^(async )?function /, '')} parses`, ok, err);
