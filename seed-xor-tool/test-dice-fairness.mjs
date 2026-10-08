@@ -90,10 +90,10 @@ console.log('\n4. boot.html wiring');
     const entry = readFileSync(new URL('./boot-entry.js', import.meta.url), 'utf8');
     ck('panel element present', html.includes('id="eob-dice-fairness"'));
     ck('boot-entry.js imports the module', entry.includes("import './shared/dice-fairness.js'"));
-    const handler = html.slice(html.indexOf('function eob_handleDiceKey('), html.indexOf('function eob_rollDigitalDice('));
+    const handler = html.slice(html.indexOf('function eob_handleDiceKey('), html.indexOf('function eob_handleWiggle('));
     ck('manual dice handler records the roll and re-renders', handler.includes('_eobDiceRolls.push(') && handler.includes('eob_renderDiceFairness()'));
-    const digital = html.slice(html.indexOf('function eob_rollDigitalDice('), html.indexOf('function eob_handleWiggle('));
-    ck('digital dice do not feed the check', !digital.includes('_eobDiceRolls'));
+    const others = html.slice(html.indexOf('function eob_handleWiggle('), html.indexOf('async function eob_captureVideoNoise(') + 2000);
+    ck('mouse and camera do not feed the check', !others.includes('_eobDiceRolls'));
     ck('both reset paths clear the rolls', (html.match(/\n {4}_eobDiceRolls = \[\];/g) || []).length === 2);
     ck('both reset paths re-render the panel', (html.match(/eob-dice-count'\)\.textContent = '0';\n\s*eob_renderDiceFairness\(\);/g) || []).length === 2);
 }
