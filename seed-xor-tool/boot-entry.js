@@ -98,6 +98,10 @@ import './shared/transfer-drive.js';
 // dice-fairness.js exposes window.DiceFairness — the chi-squared check behind
 // the Entropy Forge's Manual Dice fairness panel.
 import './shared/dice-fairness.js';
+// entropy-sources.js exposes window.EntropySources — the Entropy Generator's
+// entropy credits, Verifiable dice (SeedSigner/COLDCARD method) and camera
+// noise-bit sampling.
+import './shared/entropy-sources.js';
 // core-import.js exposes window.CoreImport — the Descriptor tool's Bitcoin Core
 // importdescriptors (watch-only) export.
 import './shared/core-import.js';
