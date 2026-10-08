@@ -7597,6 +7597,7 @@
                             </div>
                         </div>
                         <div class="bip85-out-grid" id="xor-merge-output-grid"></div>
+                        <div id="xor-merge-fp" style="margin-top: 0.75rem; font-size: 0.8125rem; color: var(--skb-text); line-height: 1.5;"></div>
                         <div id="xor-merge-qr-wrap" style="display: none; margin-top: 1rem; text-align: center;">
                             <canvas id="xor-merge-qr-canvas" style="max-width: 300px; width: 100%; height: auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);"></canvas>
                         </div>
@@ -13724,6 +13725,7 @@ async function xrr_combine() {
         if (!bip39 || !wordlist) throw new Error('BIP-39 library not available.');
 
         var combinedBytes = null;
+        var entropies = [];
 
         for (var s = 0; s < _xrrShareCount; s++) {
             var words = [];
@@ -13736,6 +13738,7 @@ async function xrr_combine() {
             }
             var mnemonic = words.join(' ');
             var entropyBytes = bip39.mnemonicToEntropy(mnemonic, wordlist);
+            entropies.push(entropyBytes);
             if (!combinedBytes) {
                 combinedBytes = new Uint8Array(entropyBytes);
             } else {
@@ -13744,6 +13747,7 @@ async function xrr_combine() {
                 }
             }
         }
+        _xorCheckShares(entropies, combinedBytes);
 
         var mergedMnemonic = bip39.entropyToMnemonic(combinedBytes, wordlist);
 
@@ -16847,6 +16851,8 @@ function xor_clearAll() {
     // Wipe merge tab DOM
     document.getElementById('xor-merge-results').style.display = 'none';
     document.getElementById('xor-merge-output-grid').innerHTML = '';
+    var mergeFp = document.getElementById('xor-merge-fp');
+    if (mergeFp) mergeFp.textContent = '';
     var mergeQrWrap = document.getElementById('xor-merge-qr-wrap');
     if (mergeQrWrap) mergeQrWrap.style.display = 'none';
     // Clear merge input grids
@@ -27213,13 +27219,36 @@ function xor_stopMergeQR(shareIdx) {
     if (area) area.style.display = 'none';
 }
 
+// --- Share sanity checks (Merge tab + XOR recovery) ---
+// XOR of ANY set of valid shares is itself a valid seed, so checksums can't
+// catch a share entered twice (the pair cancels out) or a set that XORs to
+// all zeros ("abandon abandon ... art"). Reject both before showing a result.
+function _xorCheckShares(entropies, combined) {
+    for (var a = 0; a < entropies.length; a++) {
+        for (var b = a + 1; b < entropies.length; b++) {
+            var same = entropies[a].length === entropies[b].length;
+            for (var i = 0; same && i < entropies[a].length; i++) same = entropies[a][i] === entropies[b][i];
+            if (same) throw new Error('Share ' + (a + 1) + ' and Share ' + (b + 1) + ' are identical — one share was probably entered twice.');
+        }
+    }
+    var zero = true;
+    for (var j = 0; zero && j < combined.length; j++) zero = combined[j] === 0;
+    if (zero) throw new Error('These shares cancel out to an all-zero seed, which is never a real wallet. Check that every share is entered correctly.');
+}
+
 // --- Merge: XOR all share entropies together ---
-function xor_handleMerge() {
+async function xor_handleMerge() {
     try {
         const bip39 = window.BtcMath?.bip39;
         const wordlist = window.BtcMath?.wordlist;
         if (!bip39 || !wordlist) throw new Error('BIP-39 library not available.');
 
+        // Hide any earlier result so a rejected merge never leaves a stale seed on screen.
+        xor_state.mergedSeed = null;
+        document.getElementById('xor-merge-results').style.display = 'none';
+        document.getElementById('xor-merge-fp').textContent = '';
+
+        const entropies = [];
         let combinedBytes = null;
         for (let s = 0; s < xor_state.mergeShares; s++) {
             const words = [];
@@ -27232,6 +27261,7 @@ function xor_handleMerge() {
             }
             const mnemonic = words.join(' ');
             const entropyBytes = bip39.mnemonicToEntropy(mnemonic, wordlist);
+            entropies.push(entropyBytes);
             if (!combinedBytes) {
                 combinedBytes = new Uint8Array(entropyBytes);
             } else {
@@ -27240,6 +27270,7 @@ function xor_handleMerge() {
                 }
             }
         }
+        _xorCheckShares(entropies, combinedBytes);
 
         const mergedMnemonic = bip39.entropyToMnemonic(combinedBytes, wordlist);
         xor_state.mergedSeed = mergedMnemonic;
@@ -27258,7 +27289,18 @@ function xor_handleMerge() {
         document.getElementById('xor-merge-qr-wrap').style.display = 'none';
         document.getElementById('xor-merge-qr-btn').textContent = 'Show QR';
         _xorHasWork = true;
-        showStatus('XOR merge complete — original seed recovered.', 'success');
+        // A missing or wrong share still yields a valid-looking seed, so the
+        // fingerprint is the only real confirmation (same as xrr_combine).
+        const fpEl = document.getElementById('xor-merge-fp');
+        try {
+            const fp = await _recoveryFingerprint(mergedMnemonic);
+            fpEl.innerHTML = 'Recovered seed fingerprint: <strong style="font-family: var(--skb-mono); letter-spacing: 0.08em;">' + fp + '</strong><br>' +
+                'Confirm it matches the Target Master Fingerprint printed on your share cards. If it does not, a share is wrong, missing, or mistyped.';
+            showStatus('Shares combined. Recovered seed fingerprint: ' + fp + ' — confirm it matches your share cards.', 'success');
+        } catch (_) {
+            fpEl.textContent = 'Confirm the fingerprint matches your share cards before using this seed.';
+            showStatus('Shares combined. Confirm the fingerprint matches your share cards before using this seed.', 'success');
+        }
     } catch (e) {
         showStatus('Merge failed: ' + e.message, 'error');
     }
@@ -27913,8 +27955,14 @@ async function xorv_testRecovery() {
         var expectedBip32FP = expectedRoot.fingerprint.toString(16).padStart(8, '0').toLowerCase();
         if (expectedSeedBytes instanceof Uint8Array) expectedSeedBytes.fill(0);
 
+        // The Vault Fingerprint cross-check only applies when SafeKeepOS could
+        // compute one at split time — preview mode's stub has no
+        // vaultFingerprint, and xor_handleSplit leaves the '--------'
+        // placeholder. Without that skip the drill could never pass there.
+        // The BIP-32 fingerprint match is always required.
         var targetVaultFP = (xor_state.targetVaultFingerprint || '').toLowerCase();
-        var vaultFpMatch = (targetVaultFP && recoveredVaultFP && recoveredVaultFP === targetVaultFP);
+        var vaultFpChecked = /^[0-9a-f]{8}$/.test(targetVaultFP);
+        var vaultFpMatch = !vaultFpChecked || recoveredVaultFP === targetVaultFP;
         var bip32FpMatch = (recoveredFP === expectedBip32FP);
 
         if (vaultFpMatch && bip32FpMatch) {
@@ -27925,7 +27973,9 @@ async function xorv_testRecovery() {
             banner.innerHTML =
                 '<div style="font-size: 2.2rem; font-weight: 900; color: #28a745; margin-bottom: 0.5rem;">VERIFICATION PASSED</div>' +
                 '<div style="font-size: 0.9375rem; color: var(--skb-text); line-height: 1.5;">' +
-                'Vault Fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredVaultFP + '</strong> matches the seed that was loaded into this tool.' +
+                (vaultFpChecked ? 'Vault Fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredVaultFP + '</strong>'
+                                : 'Master Fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredFP + '</strong>') +
+                ' matches the seed that was loaded into this tool.' +
                 '<br>Your physical XOR backup is mathematically verified &mdash; the tool has been unlocked.</div>';
 
             doneSection.style.display = 'block';
@@ -27938,7 +27988,7 @@ async function xorv_testRecovery() {
             banner.style.background = 'rgba(220, 53, 69, 0.12)';
             banner.style.border = '2px solid rgba(220, 53, 69, 0.5)';
             var detail = '';
-            if (!vaultFpMatch && targetVaultFP) {
+            if (!vaultFpMatch) {
                 detail += 'Expected Vault Fingerprint <strong style="font-family: var(--skb-mono);">' + targetVaultFP + '</strong> ' +
                           'but reconstructed <strong style="font-family: var(--skb-mono);">' + recoveredVaultFP + '</strong>.<br>';
             }

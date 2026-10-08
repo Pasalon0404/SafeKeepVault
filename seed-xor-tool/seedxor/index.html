@@ -171,6 +171,7 @@
           <div class="skb-alert skb-alert--warning" style="margin-bottom: 16px; font-size: 0.85rem;">
             Store ALL shares in separate secure locations. You need every share to reconstruct the original seed.
           </div>
+          <div id="split-fingerprint" style="margin-bottom: 16px; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; line-height: 1.5; background: var(--skb-primary-muted); border: 1px solid rgba(247, 147, 26, 0.15); color: var(--skb-primary);"></div>
           <div id="split-shares-container"></div>
         </div>
       </div>
@@ -193,7 +194,7 @@
       <div class="skb-card">
         <div class="skb-result">
           <div class="skb-result-header">
-            <div class="skb-result-title">Original Seed Recovered</div>
+            <div class="skb-result-title">Combined Seed</div>
             <div class="skb-result-actions">
               <button class="skb-btn-sm" onclick="copyResult('merged')">Copy</button>
               <button class="skb-btn-sm" onclick="saveResult('merged')">Save</button>
@@ -202,6 +203,7 @@
           </div>
 
           <div id="merge-output-grid"></div>
+          <div id="merge-fingerprint" style="margin-top: 16px; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; line-height: 1.5; background: var(--skb-primary-muted); border: 1px solid rgba(247, 147, 26, 0.15); color: var(--skb-primary);"></div>
 
           <div id="merge-qr-container" class="skb-qr-container">
             <canvas id="merge-qr-canvas"></canvas>
@@ -542,6 +544,41 @@ function showError(id, msg) {
 }
 
 
+// BIP-32 master fingerprint (no BIP-39 passphrase), uppercase — the value
+// printed on the split result so a later merge can be checked against it.
+async function xorMasterFingerprint(mnemonic) {
+    const { bip39, HDKey } = window.BtcMath;
+    const seed = await bip39.mnemonicToSeed(mnemonic, '');
+    const fp = (HDKey.fromMasterSeed(seed).fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase();
+    seed.fill(0);
+    return fp;
+}
+
+// XOR share mnemonics together. XOR of ANY set of valid shares is itself a
+// valid seed, so checksums can't catch a share entered twice (the pair
+// cancels out) or a set that XORs to all zeros — reject both here.
+function xorCombineShares(mnemonics) {
+    const { bip39, wordlist } = window.BtcMath;
+    const entropies = mnemonics.map(m => bip39.mnemonicToEntropy(m, wordlist));
+    for (let a = 0; a < entropies.length; a++) {
+        for (let b = a + 1; b < entropies.length; b++) {
+            if (entropies[a].length === entropies[b].length && entropies[a].every((v, i) => v === entropies[b][i])) {
+                throw new Error(`Share ${a + 1} and Share ${b + 1} are identical — one share was probably entered twice.`);
+            }
+        }
+    }
+    const combined = new Uint8Array(entropies[0]);
+    for (let s = 1; s < entropies.length; s++) {
+        for (let j = 0; j < combined.length; j++) combined[j] ^= entropies[s][j];
+    }
+    if (combined.every(v => v === 0)) {
+        throw new Error('These shares cancel out to an all-zero seed, which is never a real wallet. Check that every share is entered correctly.');
+    }
+    const mnemonic = bip39.entropyToMnemonic(combined, wordlist);
+    combined.fill(0);
+    return mnemonic;
+}
+
 // =========================================================
 // 5. SPLIT
 // =========================================================
@@ -568,6 +605,12 @@ window.handleSplit = async function() {
             }
         }
         entropies.push(rollingXor);
+
+        const targetFp = await xorMasterFingerprint(seedOriginal);
+        document.getElementById('split-fingerprint').innerHTML =
+            `All ${sharesCount} shares are required — there is no threshold recovery.<br>` +
+            `Target Master Fingerprint: <strong style="font-family: var(--skb-mono); letter-spacing: 0.08em;">${targetFp}</strong> — write it on every share card. ` +
+            'Before storing the shares, re-enter them all in the Merge tab and check it shows this same fingerprint.';
 
         const container = document.getElementById('split-shares-container');
         container.innerHTML = '';
@@ -638,27 +681,26 @@ window.toggleShareQR = function(index) {
 // =========================================================
 window.handleMerge = async function() {
     document.getElementById('merge-error').style.display = 'none';
+    // Hide any earlier result so a rejected merge never leaves a stale seed on screen.
+    document.getElementById('merge-result').style.display = 'none';
+    document.getElementById('merge-fingerprint').textContent = '';
+    window.mergedSeedOutput = null;
     try {
         if (!window.BtcMath) throw new Error("Crypto modules not loaded.");
-        const { bip39, wordlist } = window.BtcMath;
 
         const sharesCount = parseInt(document.querySelector('input[name="numShares"]:checked').value);
-        let combinedBytes = null;
+        const shares = [];
+        for (let i = 1; i <= sharesCount; i++) shares.push(getSeedFromGrid(`grid-merge-${i}`));
 
-        for (let i = 1; i <= sharesCount; i++) {
-            const seedWords = getSeedFromGrid(`grid-merge-${i}`);
-            const entropyBytes = bip39.mnemonicToEntropy(seedWords, wordlist);
-            if (!combinedBytes) {
-                combinedBytes = new Uint8Array(entropyBytes);
-            } else {
-                for (let j = 0; j < combinedBytes.length; j++) {
-                    combinedBytes[j] ^= entropyBytes[j];
-                }
-            }
-        }
-
-        const mergedMnemonic = bip39.entropyToMnemonic(combinedBytes, wordlist);
+        const mergedMnemonic = xorCombineShares(shares);
         window.mergedSeedOutput = mergedMnemonic;
+
+        // A missing or wrong share still yields a valid-looking seed, so the
+        // fingerprint is the only real confirmation.
+        const fp = await xorMasterFingerprint(mergedMnemonic);
+        document.getElementById('merge-fingerprint').innerHTML =
+            `Recovered seed fingerprint: <strong style="font-family: var(--skb-mono); letter-spacing: 0.08em;">${fp}</strong><br>` +
+            'Confirm it matches the Target Master Fingerprint written on your share cards. If it does not, a share is wrong, missing, or mistyped.';
 
         const wordsArray = mergedMnemonic.split(' ');
         let gridHtml = '<div class="skb-word-grid">';
