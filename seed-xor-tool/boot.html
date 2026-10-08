@@ -7225,21 +7225,120 @@
                                    style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-size: 0.9375rem; color: var(--skb-text);">
                         </div>
 
-                        <!-- Passphrase -->
+                        <!-- Passphrase (typed, or filled by the inline generator) -->
                         <div style="margin-bottom: 0.75rem;">
-                            <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Passphrase</label>
-                            <input type="text" id="cipher-passphrase" placeholder="Type, paste, or use the generator below" autocomplete="off" spellcheck="false"
-                                   oninput="cipher_onPassphraseInput()"
-                                   style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.9375rem; color: var(--skb-text);">
+                            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; margin-bottom: 0.35rem;">
+                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted);">Passphrase</label>
+                                <span id="cipher-pp-badge" style="display: none; font-size: 0.75rem; font-family: var(--skb-mono); color: var(--skb-primary);"></span>
+                            </div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                <input type="text" id="cipher-passphrase" placeholder="Type or paste a passphrase, or use Generate" autocomplete="off" spellcheck="false"
+                                       oninput="cipher_onPassphraseInput()"
+                                       style="flex: 1 1 220px; min-width: 0; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.9375rem; color: var(--skb-text);">
+                                <button type="button" class="skb-btn" id="cipher-gen-btn" style="flex-shrink: 0; font-size: 0.8125rem; padding: 0.4rem 0.75rem;" onclick="cipher_toggleGenerator()">Generate</button>
+                                <button type="button" class="skb-btn" id="cipher-edit-btn" style="display: none; flex-shrink: 0; font-size: 0.8125rem; padding: 0.4rem 0.75rem;" onclick="cipher_editGenerated()">Edit</button>
+                            </div>
+
+                            <!-- Generator (opens inline under the field) -->
+                            <div id="cipher-gen-panel" style="display: none; margin-top: 0.75rem; padding: 0.75rem; border: 1px dashed var(--skb-border); border-radius: var(--skb-radius-sm);">
+                                <!-- Word Count -->
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Count</label>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button type="button" class="skb-btn" id="pp-wc-4" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setWordCount(4)">4 Words</button>
+                                        <button type="button" class="skb-btn" id="pp-wc-6" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(6)">6 Words</button>
+                                        <button type="button" class="skb-btn" id="pp-wc-8" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(8)">8 Words</button>
+                                    </div>
+                                </div>
+
+                                <!-- Separator -->
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Separator</label>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button type="button" class="skb-btn" id="pp-sep-hyphen" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600; font-family: var(--skb-mono);" onclick="pp_setSeparator('-')">hyphen -</button>
+                                        <button type="button" class="skb-btn" id="pp-sep-space" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator(' ')">space</button>
+                                        <button type="button" class="skb-btn" id="pp-sep-dot" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator('.')">dot .</button>
+                                        <button type="button" class="skb-btn" id="pp-sep-none" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator('')">none</button>
+                                    </div>
+                                </div>
+
+                                <!-- Capitalization -->
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Capitalization</label>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button type="button" class="skb-btn" id="pp-cap-lower" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setCapitalization('lower')">lowercase</button>
+                                        <button type="button" class="skb-btn" id="pp-cap-title" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setCapitalization('title')">Title Case</button>
+                                        <button type="button" class="skb-btn" id="pp-cap-upper" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setCapitalization('upper')">UPPERCASE</button>
+                                    </div>
+                                </div>
+
+                                <!-- Toggles -->
+                                <div style="margin-bottom: 1rem;">
+                                    <div style="display: flex; gap: 1.5rem;">
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
+                                            <input type="checkbox" id="pp-add-num" onchange="pp_generate()"> Append Number
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
+                                            <input type="checkbox" id="pp-add-sym" onchange="pp_generate()"> Append Symbol
+                                        </label>
+                                    </div>
+                                </div>
+
+
+                                <!-- Generated Output (appears after generation) -->
+                                <div id="pp-output-card" style="display: none; margin-top: 1rem;">
+                                    <div style="padding: 1rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); margin-bottom: 0.75rem; word-break: break-all;">
+                                        <div id="pp-output" style="font-family: var(--skb-mono); font-size: 1rem; color: var(--skb-text); line-height: 1.6; min-height: 1.6em; user-select: all;"></div>
+                                    </div>
+
+                                    <!-- Entropy meter -->
+                                    <div style="margin-bottom: 1rem;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                            <span style="font-size: 0.8125rem; color: var(--skb-text-muted);">Entropy</span>
+                                            <span style="font-size: 0.8125rem; color: var(--skb-text); font-weight: 600;" id="pp-entropy-text">0 bits</span>
+                                        </div>
+                                        <div class="pp-entropy-meter">
+                                            <div class="pp-entropy-fill" id="pp-entropy-fill"></div>
+                                        </div>
+                                        <div style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 0.3rem;" id="pp-strength-label"></div>
+                                    </div>
+
+                                    <!-- Use in Workspace (fills the field above) -->
+                                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                        <button type="button" class="skb-btn" style="flex: 2; min-width: 160px; background: var(--skb-primary); color: black; font-weight: 600;" onclick="cipher_useGenerated()">Use this passphrase</button>
+                                        <button type="button" class="skb-btn" style="flex: 1; min-width: 120px;" onclick="pp_generate()">Regenerate</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- Confirm Passphrase -->
-                        <div style="margin-bottom: 0.75rem;">
+                        <!-- Confirm Passphrase (typed or loaded passphrases only) -->
+                        <div id="cipher-confirm-block" style="margin-bottom: 0.75rem;">
                             <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Confirm Passphrase</label>
                             <input type="text" id="cipher-confirm" placeholder="Re-type the passphrase exactly to confirm" autocomplete="off" spellcheck="false"
-                                   oninput="cipher_onConfirmInput()"
+                                   oninput="cipher_onConfirmInput()" onpaste="return cipher_blockPaste(event)" ondrop="return false"
                                    style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.9375rem; color: var(--skb-text);">
                             <div id="cipher-match-status" style="font-size: 0.75rem; margin-top: 0.3rem; min-height: 1.1em;"></div>
+                        </div>
+
+                        <!-- Check your written copy (generated passphrases only) -->
+                        <div id="cipher-verify-block" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(247, 147, 26, 0.06); border: 1px solid rgba(247, 147, 26, 0.2); border-radius: var(--skb-radius-sm);">
+                            <div id="cipher-verify-intro">
+                                <p style="font-size: 0.8125rem; color: var(--skb-text); margin: 0 0 0.6rem; line-height: 1.5;">Write this passphrase down exactly (or print it), then check your copy. Saving unlocks once your copy matches.</p>
+                                <button type="button" class="skb-btn" style="width: 100%; background: var(--skb-primary); color: black; font-weight: 600;" onclick="cipher_startVerify()">I've written it down &mdash; check my copy</button>
+                            </div>
+                            <div id="cipher-verify-step" style="display: none;">
+                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Type the passphrase from your written copy</label>
+                                <input type="text" id="cipher-verify-input" autocomplete="off" spellcheck="false"
+                                       onpaste="return cipher_blockPaste(event)" ondrop="return false" onkeydown="if (event.key === 'Enter') cipher_checkVerify()"
+                                       style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.9375rem; color: var(--skb-text);">
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                                    <button type="button" class="skb-btn" style="flex: 1; min-width: 120px; background: var(--skb-primary); color: black; font-weight: 600;" onclick="cipher_checkVerify()">Check</button>
+                                    <button type="button" class="skb-btn" style="flex: 1; min-width: 120px;" onclick="cipher_cancelVerify()">Show passphrase again</button>
+                                </div>
+                                <div id="cipher-verify-status" style="font-size: 0.8125rem; margin-top: 0.4rem; min-height: 1.1em; line-height: 1.5;"></div>
+                            </div>
+                            <div id="cipher-verify-done" style="display: none; font-size: 0.8125rem; font-weight: 600; color: var(--skb-secondary, #28a745);">&#10003; Your written copy matches.</div>
                         </div>
 
                         <!-- Fingerprint Preview (shown once passphrases match) -->
@@ -7285,89 +7384,9 @@
                         </div>
                     </div>
 
-                    <!-- ======== GENERATOR (collapsible, hidden by default) ======== -->
-                    <div class="skb-card" style="margin-bottom: 1rem;">
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; font-weight: 700; color: var(--skb-primary); text-transform: uppercase; letter-spacing: 0.04em;">
-                            <input type="checkbox" id="cipher-gen-toggle" onchange="cipher_toggleGenerator()" style="accent-color: var(--skb-primary);">
-                            Generator
-                        </label>
-
-                        <div id="cipher-gen-panel" style="display: none; margin-top: 0.75rem;">
-                            <!-- Word Count -->
-                            <div style="margin-bottom: 1rem;">
-                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Count</label>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <button type="button" class="skb-btn" id="pp-wc-4" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setWordCount(4)">4 Words</button>
-                                    <button type="button" class="skb-btn" id="pp-wc-6" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(6)">6 Words</button>
-                                    <button type="button" class="skb-btn" id="pp-wc-8" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(8)">8 Words</button>
-                                </div>
-                            </div>
-
-                            <!-- Separator -->
-                            <div style="margin-bottom: 1rem;">
-                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Separator</label>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <button type="button" class="skb-btn" id="pp-sep-hyphen" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600; font-family: var(--skb-mono);" onclick="pp_setSeparator('-')">hyphen -</button>
-                                    <button type="button" class="skb-btn" id="pp-sep-space" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator(' ')">space</button>
-                                    <button type="button" class="skb-btn" id="pp-sep-dot" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator('.')">dot .</button>
-                                    <button type="button" class="skb-btn" id="pp-sep-none" style="flex: 1; background: var(--skb-bg-input); font-family: var(--skb-mono);" onclick="pp_setSeparator('')">none</button>
-                                </div>
-                            </div>
-
-                            <!-- Capitalization -->
-                            <div style="margin-bottom: 1rem;">
-                                <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Capitalization</label>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <button type="button" class="skb-btn" id="pp-cap-lower" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setCapitalization('lower')">lowercase</button>
-                                    <button type="button" class="skb-btn" id="pp-cap-title" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setCapitalization('title')">Title Case</button>
-                                    <button type="button" class="skb-btn" id="pp-cap-upper" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setCapitalization('upper')">UPPERCASE</button>
-                                </div>
-                            </div>
-
-                            <!-- Toggles -->
-                            <div style="margin-bottom: 1rem;">
-                                <div style="display: flex; gap: 1.5rem;">
-                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
-                                        <input type="checkbox" id="pp-add-num" onchange="pp_generate()"> Append Number
-                                    </label>
-                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
-                                        <input type="checkbox" id="pp-add-sym" onchange="pp_generate()"> Append Symbol
-                                    </label>
-                                </div>
-                            </div>
-
-                            <!-- Generate Button -->
-                            <button type="button" class="skb-btn" style="width: 100%; background: var(--skb-primary); color: black; font-weight: 600; font-size: 0.9375rem; padding: 0.7rem;" onclick="pp_generate()">Generate Passphrase</button>
-
-                            <!-- Generated Output (appears after generation) -->
-                            <div id="pp-output-card" style="display: none; margin-top: 1rem;">
-                                <div style="padding: 1rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); margin-bottom: 0.75rem; word-break: break-all;">
-                                    <div id="pp-output" style="font-family: var(--skb-mono); font-size: 1rem; color: var(--skb-text); line-height: 1.6; min-height: 1.6em; user-select: all;"></div>
-                                </div>
-
-                                <!-- Entropy meter -->
-                                <div style="margin-bottom: 1rem;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                                        <span style="font-size: 0.8125rem; color: var(--skb-text-muted);">Entropy</span>
-                                        <span style="font-size: 0.8125rem; color: var(--skb-text); font-weight: 600;" id="pp-entropy-text">0 bits</span>
-                                    </div>
-                                    <div class="pp-entropy-meter">
-                                        <div class="pp-entropy-fill" id="pp-entropy-fill"></div>
-                                    </div>
-                                    <div style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 0.3rem;" id="pp-strength-label"></div>
-                                </div>
-
-                                <!-- Use in Workspace -->
-                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                                    <button type="button" class="skb-btn" style="flex: 2; min-width: 160px; background: var(--skb-primary); color: black; font-weight: 600;" onclick="cipher_useGenerated()">&#8593; Use in Workspace</button>
-                                    <button type="button" class="skb-btn" style="flex: 1; min-width: 120px;" onclick="pp_generate()">Regenerate</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
 
-                <!-- ======== Archive (relocated below Generator, full width) ======== -->
+                <!-- ======== Archive (below the Workspace, full width) ======== -->
                 <div class="skb-card">
                     <div style="font-size: 0.875rem; font-weight: 700; color: var(--skb-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">Archive</div>
                     <div id="cipher-archive-list">
@@ -16583,7 +16602,8 @@ var _sensitiveSelectors = [
     '#codex-title',            // Codex note title
     '#cipher-nickname',        // Cipher passphrase nickname
     '#cipher-passphrase',      // Cipher raw passphrase input
-    '#cipher-confirm'          // Cipher confirmation input
+    '#cipher-confirm',         // Cipher confirmation input
+    '#cipher-verify-input'     // Cipher written-copy check input
 ];
 
 /**
@@ -25571,17 +25591,20 @@ function pp_generate() {
     }
 }
 
-function pp_updateEntropy() {
-    var wc = pp_config.wordCount;
+// Entropy (bits) of the generator's current settings.
+function pp_entropyBits() {
     var addNum = document.getElementById('pp-add-num') && document.getElementById('pp-add-num').checked;
     var addSym = document.getElementById('pp-add-sym') && document.getElementById('pp-add-sym').checked;
 
     // BIP-39 wordlist = 2048 words → ~11 bits per word
-    var entropy = wc * Math.log2(2048);
+    var entropy = pp_config.wordCount * Math.log2(2048);
     if (addNum) entropy += Math.log2(10);   // one digit
     if (addSym) entropy += Math.log2(8);    // one of 8 symbols
+    return Math.round(entropy);
+}
 
-    var bits = Math.round(entropy);
+function pp_updateEntropy() {
+    var bits = pp_entropyBits();
     var fillEl = document.getElementById('pp-entropy-fill');
     var textEl = document.getElementById('pp-entropy-text');
     var labelEl = document.getElementById('pp-strength-label');
@@ -25675,17 +25698,18 @@ function pp_print() {
     // Fill print area — passphrase
     document.getElementById('pp-print-passphrase').textContent = text;
     var wordCount = text.trim().split(/\s+/).length;
-    document.getElementById('pp-print-words').textContent = wordCount;
-    // Entropy estimate: if it came from our generator, use the stored config; otherwise estimate from word count
+    // Entropy estimate: if it came from our generator, use the stats recorded
+    // when it was placed in the workspace (the generator's options may have
+    // changed since, and hyphen/dot/no separators defeat the word split above).
     var bits = 0;
-    if (pp_config.lastPassphrase === text) {
-        var addNum = document.getElementById('pp-add-num') && document.getElementById('pp-add-num').checked;
-        var addSym = document.getElementById('pp-add-sym') && document.getElementById('pp-add-sym').checked;
-        bits = Math.round(pp_config.wordCount * Math.log2(2048) + (addNum ? Math.log2(10) : 0) + (addSym ? Math.log2(8) : 0));
+    if (_cipherGenInfo && _cipherGenInfo.passphrase === text) {
+        wordCount = _cipherGenInfo.words;
+        bits = _cipherGenInfo.bits;
     } else {
         // Custom passphrase — rough estimate based on character entropy
         bits = Math.round(text.length * 4.7); // ~4.7 bits per random alphanumeric char
     }
+    document.getElementById('pp-print-words').textContent = wordCount;
     document.getElementById('pp-print-entropy').textContent = bits + ' bits (est.)';
     document.getElementById('pp-print-date').textContent = new Date().toLocaleDateString();
 
@@ -25989,6 +26013,12 @@ function pp_initApplySection() {
 
 var _cipherActiveSlug = null; // currently loaded entry
 var _cipherDirty = true;      // tracks whether workspace has unsaved edits
+// Where the workspace passphrase came from. Typed and loaded passphrases are
+// confirmed by re-typing (catches typos); a generated one can't be mistyped
+// in the field, so instead the user checks their WRITTEN copy against it.
+var _cipherSource = 'typed';  // 'typed' | 'loaded' | 'generated'
+var _cipherVerified = false;  // generated only: written copy checked
+var _cipherGenInfo = null;    // generated only: { passphrase, words, bits }
 
 /**
  * HTML-escape helper for nicknames.
@@ -26011,12 +26041,154 @@ function _cipherMask(raw) {
 }
 
 /**
- * Toggle the Generator panel visibility.
+ * Open/close the inline Generator under the passphrase field. Pass a boolean
+ * to force a state; with no argument it toggles. Opening it for the first
+ * time generates a passphrase straight away.
  */
-function cipher_toggleGenerator() {
-    var toggle = document.getElementById('cipher-gen-toggle');
+function cipher_toggleGenerator(open) {
     var panel = document.getElementById('cipher-gen-panel');
-    if (panel) panel.style.display = (toggle && toggle.checked) ? 'block' : 'none';
+    var btn = document.getElementById('cipher-gen-btn');
+    if (!panel) return;
+    if (typeof open !== 'boolean') open = panel.style.display === 'none';
+    panel.style.display = open ? 'block' : 'none';
+    if (btn) btn.textContent = open ? 'Close' : 'Generate';
+    if (open && !pp_config.lastPassphrase) pp_generate();
+}
+
+/**
+ * Sync the parts of the workspace that depend on where the passphrase came
+ * from: read-only field + Edit button, badge, Confirm vs. written-copy check.
+ * For a generated passphrase it also drives the action row; typed and loaded
+ * passphrases keep using cipher_onConfirmInput / cipher_open for that.
+ */
+function _cipherApplySourceUI() {
+    var generated = _cipherSource === 'generated';
+    var show = function(id, on, display) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = on ? (display || 'block') : 'none';
+    };
+
+    var field = document.getElementById('cipher-passphrase');
+    field.readOnly = generated;
+    field.type = 'text';
+    show('cipher-edit-btn', generated, 'inline-block');
+    var genBtn = document.getElementById('cipher-gen-btn');
+    if (genBtn) genBtn.disabled = false;
+
+    var badge = document.getElementById('cipher-pp-badge');
+    if (badge) {
+        badge.textContent = generated && _cipherGenInfo
+            ? 'Generated · ' + _cipherGenInfo.words + ' words · ' + _cipherGenInfo.bits + ' bits' + (_cipherVerified ? ' · copy checked' : '')
+            : '';
+        badge.style.display = generated ? 'inline' : 'none';
+    }
+
+    show('cipher-confirm-block', !generated);
+    show('cipher-verify-block', generated);
+    show('cipher-verify-intro', generated && !_cipherVerified);
+    show('cipher-verify-step', false);
+    show('cipher-verify-done', generated && _cipherVerified);
+    var verifyInput = document.getElementById('cipher-verify-input');
+    if (verifyInput) verifyInput.value = '';
+    var verifyStatus = document.getElementById('cipher-verify-status');
+    if (verifyStatus) verifyStatus.textContent = '';
+
+    if (!generated) return;
+
+    var matchEl = document.getElementById('cipher-match-status');
+    if (matchEl) matchEl.textContent = '';
+    show('cipher-action-row', true);
+    show('cipher-prematch-row', false);
+    show('pp-print-btn', true, 'inline-block');
+
+    var amnesia = typeof isAmnesiaMode === 'function' && isAmnesiaMode();
+    var saveBtn = document.getElementById('cipher-save-btn');
+    if (saveBtn) {
+        var canSave = !amnesia && _cipherVerified && _cipherDirty;
+        saveBtn.disabled = !canSave;
+        saveBtn.style.opacity = canSave ? '1' : '0.4';
+        saveBtn.title = amnesia ? 'Temporary Session: saving disabled'
+                      : (!_cipherVerified ? 'Check your written copy first' : '');
+    }
+
+    show('pp-fp-preview', true);
+    _pp_computeLiveFP(field.value);
+    var session = window.SeedSession ? window.SeedSession.get() : null;
+    var baseFpEl = document.getElementById('pp-fp-base');
+    if (baseFpEl) baseFpEl.textContent = (session && session.fingerprint) || '--------';
+}
+
+/**
+ * Turn a generated passphrase back into an editable, typed one. Editing
+ * means it no longer matches what the user wrote down, so it goes back
+ * through the normal Confirm step.
+ */
+function cipher_editGenerated() {
+    _cipherSource = 'typed';
+    _cipherVerified = false;
+    _cipherGenInfo = null;
+    _cipherDirty = true;
+    document.getElementById('cipher-confirm').value = '';
+    _cipherApplySourceUI();
+    cipher_onConfirmInput();
+    var field = document.getElementById('cipher-passphrase');
+    field.focus();
+    showStatus('Passphrase is editable. Confirm it below once you are done.', 'info');
+}
+
+/**
+ * Start the written-copy check: hide the passphrase and ask the user to
+ * type it from what they wrote down.
+ */
+function cipher_startVerify() {
+    if (_cipherSource !== 'generated') return;
+    cipher_toggleGenerator(false);
+    var genBtn = document.getElementById('cipher-gen-btn');
+    if (genBtn) genBtn.disabled = true;   // the generator output shows the passphrase
+    document.getElementById('cipher-passphrase').type = 'password';
+    document.getElementById('cipher-verify-intro').style.display = 'none';
+    document.getElementById('cipher-verify-step').style.display = 'block';
+    document.getElementById('cipher-verify-status').textContent = '';
+    var input = document.getElementById('cipher-verify-input');
+    input.value = '';
+    input.focus();
+}
+
+/**
+ * Compare what the user typed from their written copy with the passphrase.
+ */
+function cipher_checkVerify() {
+    if (_cipherSource !== 'generated') return;
+    var input = document.getElementById('cipher-verify-input');
+    var statusEl = document.getElementById('cipher-verify-status');
+    if (!input.value) { statusEl.textContent = 'Type the passphrase from your written copy first.'; statusEl.style.color = 'var(--skb-text-muted)'; return; }
+
+    if (input.value === document.getElementById('cipher-passphrase').value) {
+        _cipherVerified = true;
+        _cipherApplySourceUI();
+        showStatus('Your written copy matches. You can now save the passphrase.', 'success');
+    } else {
+        input.value = '';
+        statusEl.textContent = 'That does not match. Check your written copy carefully — capitals, separators, and any number or symbol all count. Use "Show passphrase again" to fix your copy.';
+        statusEl.style.color = 'var(--skb-danger)';
+        input.focus();
+    }
+}
+
+/**
+ * Leave the written-copy check and show the passphrase again.
+ */
+function cipher_cancelVerify() {
+    _cipherApplySourceUI();
+}
+
+/**
+ * Paste guard for the confirmation fields: a pasted copy proves nothing.
+ */
+function cipher_blockPaste(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    showStatus('Paste is turned off here — type it, so the check actually catches mistakes.', 'info');
+    return false;
 }
 
 /**
@@ -26025,6 +26197,8 @@ function cipher_toggleGenerator() {
 function cipher_onPassphraseInput() {
     // Mark workspace as dirty when user edits the passphrase
     _cipherDirty = true;
+    // Hand-editing a loaded passphrase makes it a typed one
+    if (_cipherSource === 'loaded') _cipherSource = 'typed';
     // Re-validate the confirm field whenever the passphrase changes
     cipher_onConfirmInput();
 }
@@ -26047,10 +26221,7 @@ async function cipher_init() {
     }
 
     // Collapse generator by default
-    var genToggle = document.getElementById('cipher-gen-toggle');
-    if (genToggle) genToggle.checked = false;
-    var genPanel = document.getElementById('cipher-gen-panel');
-    if (genPanel) genPanel.style.display = 'none';
+    cipher_toggleGenerator(false);
 
     // Init the revert/print buttons based on current passphrase state
     pp_initApplySection();
@@ -26112,6 +26283,11 @@ async function cipher_open(slug) {
     }
 
     _cipherActiveSlug = slug;
+    _cipherSource = 'loaded';
+    _cipherVerified = false;
+    _cipherGenInfo = null;
+    _cipherApplySourceUI();
+    cipher_toggleGenerator(false);
     document.getElementById('cipher-nickname').value = result.nickname;
     document.getElementById('cipher-passphrase').value = result.passphrase;
     // Pre-fill confirmation for existing entries (no need to re-type what's already saved)
@@ -26149,6 +26325,8 @@ async function cipher_open(slug) {
     if (deleteBtn) {
         deleteBtn.style.display = amnesia ? 'none' : 'inline-block';
     }
+    var printBtn = document.getElementById('pp-print-btn');
+    if (printBtn) printBtn.style.display = 'inline-block';
 
     await cipher_refreshArchive();
 }
@@ -26174,6 +26352,16 @@ async function cipher_save() {
     if (!passphrase) {
         showStatus('A passphrase is required to save.', 'error');
         document.getElementById('cipher-passphrase').focus();
+        return;
+    }
+    // Same gates as the Save button, enforced here too
+    if (_cipherSource === 'generated') {
+        if (!_cipherVerified) {
+            showStatus('Check your written copy of the passphrase before saving.', 'error');
+            return;
+        }
+    } else if (document.getElementById('cipher-confirm').value !== passphrase) {
+        showStatus('Passphrases do not match.', 'error');
         return;
     }
 
@@ -26209,6 +26397,13 @@ async function cipher_save() {
 function cipher_new() {
     _cipherActiveSlug = null;
     _cipherDirty = true; // fresh workspace is always saveable
+    _cipherSource = 'typed';
+    _cipherVerified = false;
+    _cipherGenInfo = null;
+    _cipherApplySourceUI();
+    cipher_toggleGenerator(false);
+    var printBtn = document.getElementById('pp-print-btn');
+    if (printBtn) printBtn.style.display = 'none';
     document.getElementById('cipher-nickname').value = '';
     document.getElementById('cipher-passphrase').value = '';
     document.getElementById('cipher-confirm').value = '';
@@ -26246,9 +26441,9 @@ async function cipher_delete() {
 }
 
 /**
- * Copy the generated passphrase into the Workspace passphrase field.
- * Leaves the confirmation box empty to force the user to re-type it
- * (proving they wrote it down before saving).
+ * Put the generated passphrase into the Workspace field. The field locks
+ * (Edit unlocks it) and there's no Confirm re-type; instead Save stays
+ * disabled until the user checks their written copy (cipher_startVerify).
  */
 function cipher_useGenerated() {
     if (!pp_config.lastPassphrase) {
@@ -26256,23 +26451,17 @@ function cipher_useGenerated() {
         return;
     }
     document.getElementById('cipher-passphrase').value = pp_config.lastPassphrase;
-
-    // Clear confirmation to force manual re-entry
     document.getElementById('cipher-confirm').value = '';
-    document.getElementById('cipher-match-status').textContent = '';
+    _cipherSource = 'generated';
+    _cipherVerified = false;
+    _cipherGenInfo = { passphrase: pp_config.lastPassphrase, words: pp_config.wordCount, bits: pp_entropyBits() };
+    _cipherDirty = true;
+    cipher_toggleGenerator(false);
+    _cipherApplySourceUI();
 
-    // Disable save until confirmation matches
-    var saveBtn = document.getElementById('cipher-save-btn');
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.style.opacity = '0.4'; }
-
-    // Auto-focus nickname if empty, otherwise focus confirm
     var nicknameEl = document.getElementById('cipher-nickname');
-    if (!nicknameEl.value.trim()) {
-        nicknameEl.focus();
-    } else {
-        document.getElementById('cipher-confirm').focus();
-    }
-    showStatus('Passphrase loaded into workspace. Re-type it below to confirm you wrote it down.', 'success');
+    if (!nicknameEl.value.trim()) nicknameEl.focus();
+    showStatus('Passphrase placed in the workspace. Write it down, then check your copy to unlock saving.', 'success');
 }
 
 /**
@@ -26318,6 +26507,8 @@ function cipher_onConfirmInput() {
             saveBtn.disabled = !canSave;
             saveBtn.style.opacity = canSave ? '1' : '0.4';
         }
+        var printBtn = document.getElementById('pp-print-btn');
+        if (printBtn) printBtn.style.display = 'inline-block';
 
         // Show fingerprint preview and compute live FP
         if (fpPreview) fpPreview.style.display = 'block';
