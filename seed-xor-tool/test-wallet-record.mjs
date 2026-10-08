@@ -247,14 +247,18 @@ const MS_DESC = cs(MS[0][1]);
   const data = ctx._wrecCollectFormData();
   const FP = roots.map((r) => fpHex(r).toUpperCase());
   ck('record type/threshold/script come from the descriptor', data.type === 'multisig' && data.msM === '2' && data.msN === '3' && data.script === 'Native Segwit (P2WSH)');
-  ck('key labels: name + fingerprint, unnamed keys keep "Set N"', JSON.stringify(data.seedSets) === JSON.stringify([
-     `Dave’s Coldcard — home safe (fingerprint ${FP[0]})`, `Set 2 (fingerprint ${FP[1]})`, `Seed plate — bank box (fingerprint ${FP[2]})`]), JSON.stringify(data.seedSets));
+  ck('key labels: the user’s name only, unnamed keys keep "Set N"', JSON.stringify(data.seedSets) === JSON.stringify([
+     'Dave’s Coldcard — home safe', 'Set 2', 'Seed plate — bank box']), JSON.stringify(data.seedSets));
+  ck('no descriptor fingerprint is printed as a key’s identity', !data.seedSets.concat(data.passphrases.map((p) => p.target)).some((t) => FP.some((f) => t.includes(f)) || /fingerprint/i.test(t)));
+  ck('on screen, each row still shows its descriptor fingerprint, labelled as including any passphrase',
+     FP.every((f) => el('wrec-keys-wrap').innerHTML.includes(f)) && /descriptor fingerprint/.test(el('wrec-keys-wrap').innerHTML) &&
+     /includes the passphrase, if this key has one/.test(el('wrec-keys-wrap').innerHTML));
   ck('passphrases point at their keys; a blank one records only that it is needed', data.ppRequired && JSON.stringify(data.passphrases) === JSON.stringify([
      { target: 'Set 2', value: '' }, { target: 'Set 3 (Seed plate — bank box)', value: 'Correct-Horse' }]), JSON.stringify(data.passphrases));
   ck('descriptor and first address go on the record', data.descriptor === MS_DESC && data.firstAddress === MS[0][3]);
   ctx.wrec_buildPreview();
   const doc = el('wrec-preview').innerHTML;
-  ck('preview shows the multisig record', /Multisignature 2-of-3/.test(doc) && /Set 1 &mdash; Dave’s Coldcard — home safe \(fingerprint/.test(doc) &&
+  ck('preview shows the multisig record', /Multisignature 2-of-3/.test(doc) && /Set 1 &mdash; Dave’s Coldcard — home safe<\/div>/.test(doc) &&
      /Passphrase required:<\/strong> Yes/.test(doc) && doc.includes('Correct-Horse') && doc.includes(MS[0][3]), doc.slice(0, 300));
 
   // Re-pasting the same descriptor (e.g. with a trailing newline) keeps the names
@@ -267,7 +271,8 @@ const MS_DESC = cs(MS[0][1]);
      el('wrec-manual').style.display === 'block' && el('wrec-detected').style.display === 'none');
   ck('nothing is ever written to browser storage', writes.length === 0, JSON.stringify(writes)); }
 
-// Same printed record as the old Pull flow for an unnamed single-sig key with a passphrase
+// Same printed layout as the old Pull flow for an unnamed single-sig key with a passphrase,
+// except the key line no longer carries the descriptor fingerprint
 { const { ctx, el } = makeEnv();
   ctx.wrec_init();
   el('wrec-descriptor').value = cs(VEC[0][1]); ctx._wrecApplyDescriptor();
@@ -275,11 +280,12 @@ const MS_DESC = cs(MS[0][1]);
   ctx.wrec_onKeyPassphraseToggle(0, true); ctx.wrec_onKeyInput(0, 'pp', 'hunter2');
   const data = ctx._wrecCollectFormData();
   const oldShape = { title: 'Jane’s wallet', purpose: '', type: 'single', msM: '1', msN: '1', script: 'Native Segwit (P2WPKH)',
-    seedSets: ['Set 1 (fingerprint 73C5DA0A)'], ppRequired: true, passphrases: [{ target: 'Set 1', value: 'hunter2' }],
+    seedSets: ['Set 1'], ppRequired: true, passphrases: [{ target: 'Set 1', value: 'hunter2' }],
     descriptor: cs(VEC[0][1]), firstAddress: VEC[0][2], notes: '' };
   const a = el('a'), b = el('b');
   ctx._wrecRenderDocument(a, data, {}); ctx._wrecRenderDocument(b, oldShape, {});
-  ck('record is identical to what the old Pull flow produced', a.innerHTML === b.innerHTML && a.innerHTML.length > 500); }
+  ck('record matches the old Pull flow’s layout, with the key shown by name only', a.innerHTML === b.innerHTML && a.innerHTML.length > 500);
+  ck('the fingerprint appears on the record only inside the descriptor', a.innerHTML.split('73c5da0a').length === 2 && !/73C5DA0A/.test(a.innerHTML)); }
 
 // Manual fallback
 { const { ctx, el } = makeEnv();
