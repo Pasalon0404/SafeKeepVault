@@ -2672,8 +2672,8 @@
     }
 
     /* Wallet Record (live UI): same cap-lift as the Message Signer above. Every
-       field already carries its own width:100% or flex:1 (and #wrec-pp-required
-       is a checkbox we must NOT stretch), so this only removes the 600px/80ch
+       field already carries its own width:100% or flex:1 (and the per-key
+       passphrase checkboxes must NOT stretch), so this only removes the 600px/80ch
        caps — no blanket width is applied. Screen-only; #wrec-print-area and the
        @media print cold-storage layout are untouched. */
     @media screen {
@@ -9144,7 +9144,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <div class="tool-hero">
                 <h2 class="tool-hero-title">Wallet<span>Record</span></h2>
                 <p class="tool-hero-subtitle">Wallet Record Builder</p>
-                <p class="tool-hero-desc">Generate a clean one-page wallet record suitable for printing as a PDF. Captures the wallet's purpose, key composition, passphrase metadata, and the output descriptor — pulled live from the Output Descriptor tool — alongside a QR code of that descriptor for import into any descriptor-aware Bitcoin wallet software.</p>
+                <p class="tool-hero-desc">Generate a clean one-page wallet record suitable for printing as a PDF. Add the wallet's output descriptor &mdash; from the Output Descriptor tool or any wallet app &mdash; and the wallet type, keys and first address are read from it. You add the plain-language parts: what the wallet is for, which seed word set is which, and any passphrases. The record includes a QR code of the descriptor for import into any descriptor-aware Bitcoin wallet software.</p>
             </div>
 
             <!-- ============================================================
@@ -9154,147 +9154,104 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                  print spooler picks up.
                  ============================================================ -->
             <div id="wrec-builder" class="skb-card" style="margin-bottom: 1rem;">
-                <h3 style="margin: 0 0 0.85rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Record Details</h3>
 
-                <!-- Wallet Title -->
-                <div style="margin-bottom: 0.75rem;">
-                    <label for="wrec-title" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Wallet Title</label>
-                    <input type="text" id="wrec-title" placeholder='e.g. Jane&apos;s wallet' style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem;">
+                <!-- ── Step 1: the wallet (descriptor first — everything technical comes from it) ── -->
+                <h3 style="margin: 0 0 0.85rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">1 &middot; Add the wallet</h3>
+                <p style="font-size: 0.8125rem; color: var(--skb-text-muted); margin: -0.35rem 0 0.75rem; line-height: 1.5;">Use the wallet you just built in the Output Descriptor tool, or paste or scan the output descriptor exported by any wallet app (Sparrow, Nunchuk, Coldcard&hellip;). The wallet type, script, keys and first address are read from it.</p>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+                    <button type="button" class="skb-btn" style="flex: 1; min-width: 180px; background: var(--skb-primary); color: black; font-weight: 600;"
+                            onclick="wrec_pullDescriptor()" title="Pull the active descriptor from the Output Descriptor tool">Use the wallet I just built</button>
+                    <button type="button" class="skb-btn" id="wrec-scan-btn" style="flex: 1; min-width: 140px;" onclick="wrec_scanQR()">Scan descriptor QR</button>
                 </div>
-
-                <!-- Wallet Purpose -->
-                <div style="margin-bottom: 0.75rem;">
-                    <label for="wrec-purpose" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Wallet Purpose</label>
-                    <textarea id="wrec-purpose" rows="2" placeholder="e.g. Main savings wallet" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem; resize: vertical;"></textarea>
+                <div id="wrec-qr-area" style="display: none; margin-bottom: 0.6rem;">
+                    <div id="wrec-qr-reader" style="width: 100%; min-height: 240px; border-radius: var(--skb-radius-sm); overflow: hidden; background: #000;"></div>
+                    <div id="wrec-scan-status" style="font-size: 0.8125rem; color: var(--skb-text-muted); margin-top: 0.35rem;"></div>
+                    <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.4rem; font-size: 0.8125rem;" onclick="wrec_stopQR()">Stop Scanner</button>
                 </div>
+                <label for="wrec-descriptor" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Output Descriptor</label>
+                <textarea id="wrec-descriptor" rows="4" placeholder='wpkh([fingerprint/path]xpub.../&lt;0;1&gt;/*)#checksum' oninput="wrec_onDescriptorInput()"
+                          spellcheck="false" autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem; font-family: var(--skb-mono); font-size: 0.8125rem;"></textarea>
+                <!-- What was read from the descriptor (or why it couldn't be) -->
+                <div id="wrec-detected" style="display: none; margin-top: 0.6rem; padding: 0.7rem 0.8rem; border-radius: var(--skb-radius-sm); font-size: 0.8125rem; line-height: 1.55;"></div>
 
-                <!-- Wallet Type + Multisig threshold -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
-                    <div>
-                        <label for="wrec-type" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Wallet Type</label>
-                        <select id="wrec-type" onchange="wrec_onTypeChange()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem;">
-                            <option value="single">Single-signature</option>
-                            <option value="multisig">Multisignature</option>
-                        </select>
-                    </div>
-                    <div id="wrec-ms-threshold-wrap" style="display: none;">
-                        <label style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Threshold</label>
-                        <div style="display: flex; gap: 0.4rem; align-items: center;">
-                            <select id="wrec-ms-m" onchange="wrec_buildPreview()" style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem;">
-                                <option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option>
-                            </select>
-                            <span style="font-size: 0.85rem; color: var(--skb-text-muted);">of</span>
-                            <select id="wrec-ms-n" onchange="wrec_onMsNChange()" style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem;">
-                                <option>2</option><option selected>3</option><option>4</option><option>5</option>
+                <!-- Manual fallback: only for wallets without a readable descriptor -->
+                <details id="wrec-manual" style="margin-top: 0.6rem;">
+                    <summary style="cursor: pointer; font-size: 0.8125rem; color: var(--skb-text-muted); padding: 0.25rem 0;">No descriptor? Enter the wallet details by hand</summary>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.6rem;">
+                        <div>
+                            <label for="wrec-type" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Wallet Type</label>
+                            <select id="wrec-type" onchange="wrec_onManualShapeChange()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;">
+                                <option value="single">Single-signature</option>
+                                <option value="multisig">Multisignature</option>
                             </select>
                         </div>
+                        <div id="wrec-ms-threshold-wrap" style="display: none;">
+                            <label style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Threshold</label>
+                            <div style="display: flex; gap: 0.4rem; align-items: center;">
+                                <select id="wrec-ms-m" onchange="wrec_onManualShapeChange()" style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;">
+                                    <option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option>
+                                </select>
+                                <span style="font-size: 0.85rem; color: var(--skb-text-muted);">of</span>
+                                <select id="wrec-ms-n" onchange="wrec_onManualShapeChange()" style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;">
+                                    <option>2</option><option selected>3</option><option>4</option><option>5</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                <!-- Script Type -->
-                <div style="margin-bottom: 0.75rem;">
-                    <label for="wrec-script" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Script Type</label>
-                    <select id="wrec-script" onchange="wrec_buildPreview()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem;">
-                        <option value="Native Segwit (P2WPKH)">Native Segwit (P2WPKH) — single-sig</option>
-                        <option value="Native Segwit (P2WSH)">Native Segwit (P2WSH) — multisig</option>
-                        <option value="Taproot (P2TR)">Taproot (P2TR)</option>
-                        <option value="Nested Segwit (P2SH-P2WPKH)">Nested Segwit (P2SH-P2WPKH)</option>
-                        <option value="Legacy (P2PKH)">Legacy (P2PKH)</option>
-                        <option value="Silent Payment (sp1q)">Silent Payment (sp1q)</option>
-                    </select>
-                </div>
-
-                <!--
-                  Keys Used — fully driven by the threshold "n" dropdown.
-                  In single-sig: one input. In multisig: exactly N inputs
-                  matching the selected total-keys value (the 'n' in
-                  'm of n'). No manual add/remove buttons; the row count
-                  is recomputed by wrec_onMsNChange() on every n change.
-                -->
-                <div style="margin-bottom: 0.75rem;">
-                    <label style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Keys Used &mdash; Seed Word Sets</label>
-                    <div id="wrec-keysets-wrap"></div>
-                </div>
-
-                <!--
-                  Passphrase block — dynamic list. When "Passphrase required"
-                  is checked, shows one or more passphrase rows. Each row
-                  pairs a Target (which seed word set the passphrase applies
-                  to) with the Passphrase value itself, plus a × button to
-                  remove the row. The "+ Add Passphrase" button appends a
-                  new empty row so users with multisig setups that require
-                  different passphrases on different keys can record all of
-                  them on one wallet record.
-                -->
-                <div style="margin-bottom: 0.75rem; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);">
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
-                        <input type="checkbox" id="wrec-pp-required" onchange="wrec_onPassphraseRequiredChange()" style="cursor: pointer;">
-                        <span style="font-weight: 600;">Passphrase required</span>
-                    </label>
-                    <div id="wrec-pp-fields" style="display: none; margin-top: 0.6rem;">
-                        <div id="wrec-passphrases-wrap"></div>
-                        <button type="button" id="wrec-add-passphrase-btn" class="skb-btn"
-                                style="margin-top: 0.4rem; padding: 0.35rem 0.75rem; font-size: 0.78rem; border: 1px dashed var(--skb-border); color: var(--skb-text-muted); background: transparent;"
-                                onclick="wrec_addPassphrase()">+ Add Passphrase</button>
+                    <div style="margin-top: 0.75rem;">
+                        <label for="wrec-script" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Script Type</label>
+                        <select id="wrec-script" onchange="wrec_buildPreview()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;">
+                            <option value="Native Segwit (P2WPKH)">Native Segwit (P2WPKH) &mdash; single-sig</option>
+                            <option value="Native Segwit (P2WSH)">Native Segwit (P2WSH) &mdash; multisig</option>
+                            <option value="Nested Segwit (P2SH-P2WSH)">Nested Segwit (P2SH-P2WSH) &mdash; multisig</option>
+                            <option value="Legacy (P2SH)">Legacy (P2SH) &mdash; multisig</option>
+                            <option value="Taproot (P2TR)">Taproot (P2TR)</option>
+                            <option value="Nested Segwit (P2SH-P2WPKH)">Nested Segwit (P2SH-P2WPKH)</option>
+                            <option value="Legacy (P2PKH)">Legacy (P2PKH)</option>
+                            <option value="Silent Payment (sp1q)">Silent Payment (sp1q)</option>
+                        </select>
                     </div>
+                </details>
+
+                <!-- First receiving address: worked out from the descriptor; typed by hand only as a fallback -->
+                <div style="margin-top: 0.75rem;">
+                    <label for="wrec-first-address" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">First Receiving Address <span style="opacity: 0.75;">(Index 0)</span></label>
+                    <input type="text" id="wrec-first-address" placeholder="Worked out from the descriptor &mdash; or type it if it can't be"
+                           autocomplete="off" spellcheck="false" oninput="wrec_buildPreview()"
+                           style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem; font-family: var(--skb-mono); font-size: 0.8125rem;">
+                    <div id="wrec-first-address-note" style="font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.25rem;"></div>
                 </div>
 
-                <!-- Output Descriptor + Pull Active button -->
+                <!-- ── Step 2: describe it in plain words ── -->
+                <h3 style="margin: 0 0 0.85rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 1.4rem;">2 &middot; Describe it</h3>
                 <div style="margin-bottom: 0.75rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; gap: 0.5rem;">
-                        <label for="wrec-descriptor" style="font-size: 0.78rem; color: var(--skb-text-muted);">Output Descriptor</label>
-                        <button type="button" class="skb-btn"
-                                style="padding: 0.25rem 0.6rem; font-size: 0.72rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; border-radius: 3px;"
-                                onclick="wrec_pullDescriptor()" title="Pull the active descriptor from the Output Descriptor tool">Pull Active Descriptor</button>
-                    </div>
-                    <textarea id="wrec-descriptor" rows="4" placeholder='wpkh([fingerprint/path]xpub.../<0;1>/*)#checksum' oninput="wrec_buildPreview()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.78rem; resize: vertical;"></textarea>
+                    <label for="wrec-title" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Wallet Title</label>
+                    <input type="text" id="wrec-title" placeholder='e.g. Jane&apos;s wallet' oninput="wrec_buildPreview()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;">
                 </div>
-
-                <!--
-                  First Receiving Address (Index 0) — the m/0/0 address the
-                  descriptor produces. Auto-populated by Pull Active
-                  Descriptor (which scrapes the address from the live
-                  Descriptor tool's verified-address list). Editable so the
-                  user can paste/correct manually if pulling didn't surface
-                  one. Renders on the printed record directly below the raw
-                  descriptor as a verification anchor for the heir.
-                -->
                 <div style="margin-bottom: 0.75rem;">
-                    <label for="wrec-first-address" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">First Receiving Address <span style="color: var(--skb-text-dim);">(Index 0 / m/0/0)</span></label>
-                    <input type="text" id="wrec-first-address"
-                           placeholder='e.g. bc1q…'
-                           autocomplete="off" spellcheck="false"
-                           oninput="wrec_buildPreview()"
-                           style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.82rem;">
+                    <label for="wrec-purpose" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Wallet Purpose</label>
+                    <textarea id="wrec-purpose" rows="2" placeholder="e.g. Main savings wallet" oninput="wrec_buildPreview()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;"></textarea>
                 </div>
+                <label style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Keys &mdash; name each seed word set so an heir knows which is which</label>
+                <div id="wrec-keys-wrap"></div>
 
-                <!--
-                  Additional Notes — short freeform text that prints just
-                  above the static boilerplate. Capped at 200 chars (and
-                  3 visible rows) so the document is guaranteed to remain
-                  on a single printed page regardless of input.
-                -->
+                <!-- ── Step 3: notes and print ── -->
+                <h3 style="margin: 0 0 0.85rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 1.4rem;">3 &middot; Notes and print</h3>
                 <div style="margin-bottom: 0.75rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
-                        <label for="wrec-notes" style="font-size: 0.78rem; color: var(--skb-text-muted);">Additional Notes <span style="color: var(--skb-text-dim);">(optional, 200 char max)</span></label>
-                        <span id="wrec-notes-count" style="font-size: 0.7rem; color: var(--skb-text-dim);">0 / 200</span>
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <label for="wrec-notes" style="display: block; font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Additional Notes <span style="opacity: 0.75;">(optional, 200 char max)</span></label>
+                        <span id="wrec-notes-count" style="font-size: 0.75rem; color: var(--skb-text-muted);">0 / 200</span>
                     </div>
                     <textarea id="wrec-notes" rows="3" maxlength="200"
                               placeholder="e.g. Hardware: Coldcard Mk4 #A12 stored in safe deposit box."
-                              oninput="wrec_buildPreview()"
-                              style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.85rem; resize: none; line-height: 1.5;"></textarea>
+                              oninput="wrec_buildPreview()" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;"></textarea>
                 </div>
-
-                <!-- Action row -->
-                <div style="display: flex; flex-direction: row; flex-wrap: nowrap; align-items: stretch; gap: 1rem; width: 100%;">
-                    <button type="button" class="skb-btn skb-btn--primary"
-                            style="flex: 1 1 auto; min-width: 10rem; box-sizing: border-box; padding: 0.65rem 1rem; min-height: 2.5rem; font-weight: 600;"
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button type="button" class="skb-btn skb-btn--primary" style="flex: 2; min-width: 160px;"
                             onclick="wrec_print()">Print Wallet Record</button>
-                    <button type="button" class="skb-btn"
-                            style="flex: 0 0 auto; flex-shrink: 0; box-sizing: border-box; padding: 0.65rem 1rem; min-height: 2.5rem;"
+                    <button type="button" class="skb-btn" style="flex: 1; min-width: 120px;"
                             onclick="wrec_buildPreview(true)">Refresh Preview</button>
-                    <button type="button" class="skb-btn"
-                            style="flex: 0 0 auto; flex-shrink: 0; box-sizing: border-box; padding: 0.65rem 1rem; min-height: 2.5rem; color: var(--skb-text-muted); border-color: var(--skb-border);"
+                    <button type="button" class="skb-btn" style="flex: 1; min-width: 120px;"
                             onclick="wrec_clearForm()">Reset Form</button>
                 </div>
             </div>
@@ -9309,7 +9266,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <div id="wrec-preview-card" class="skb-card" style="margin-bottom: 1rem;">
                 <h3 style="margin: 0 0 0.85rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Preview</h3>
                 <div id="wrec-preview" class="wrec-document" style="background: #ffffff; color: #000; padding: 1.5rem 2rem; border-radius: var(--skb-radius-sm);">
-                    <div style="text-align: center; color: #888; padding: 2rem 0; font-size: 0.85rem;">Fill in the form above, then click <strong>Refresh Preview</strong>.</div>
+                    <div style="text-align: center; color: #888; padding: 2rem 0; font-size: 0.85rem;">Add the wallet above and the record appears here.</div>
                 </div>
             </div>
 
@@ -16664,7 +16621,9 @@ var _sensitiveSelectors = [
     '#cipher-nickname',        // Cipher passphrase nickname
     '#cipher-passphrase',      // Cipher raw passphrase input
     '#cipher-confirm',         // Cipher confirmation input
-    '#cipher-verify-input'     // Cipher written-copy check input
+    '#cipher-verify-input',    // Cipher written-copy check input
+    '.wrec-key-pp',            // Wallet Record key passphrases
+    '#wrec-print-area'         // Wallet Record print copy
 ];
 
 /**
@@ -34504,20 +34463,35 @@ function archive_init() {
 //     then cleans up. @media print rules in the <style>
 //     block hide everything else and show the print area.
 //
-// STATE PERSISTENCE
-//   Form contents are written to localStorage on every change
-//   so re-entering the tool restores the user's draft. NO
-//   sensitive seed material is captured by the tool — the
-//   form's "passphrase" field is for *labelling* the printed
-//   record, never read from the live SeedSession.
+// NOTHING IS SAVED
+//   Older versions wrote a draft of the form (including any
+//   passphrases typed into it) to localStorage. The form now
+//   keeps no draft at all: wrec_init() starts fresh and removes
+//   any draft an older version left behind.
+//
+// DESCRIPTOR FIRST
+//   The output descriptor is the source of truth: wallet type,
+//   M-of-N, script type, each key's fingerprint/path and the
+//   first receiving address are all read from it
+//   (_wrecParseDescriptor). The user only adds the human parts —
+//   title, purpose, a name per key, passphrase info, notes. The
+//   Wallet Type / Threshold / Script Type selects are a manual
+//   fallback for wallets without a readable descriptor.
 // ============================================================
 
+// Draft key used by older versions (which saved passphrases in it).
 var _WREC_LS_KEY = 'safekeepWalletRecord';
 
-// Default seed-set placeholder used when the form is brand new.
-// Default-row content for a fresh form: empty so the placeholder
-// ("Set 1") is visible until the user types their own identifier.
-var _WREC_DEFAULT_SEED_LABEL = '';
+// The parsed descriptor when the Output Descriptor field holds a readable
+// one; null when it's empty or unreadable (the manual fields apply then).
+var _wrecMeta = null;
+// One entry per key / seed word set: { fp, path, name, ppOn, pp }.
+// fp and path come from the descriptor; name and passphrase from the user.
+var _wrecKeys = [];
+var _wrecDescDebounce = null;
+var _wrecQrScanner = null;
+var _wrecUrDecoder = null;
+var _wrecScanDone = false;
 
 /* HTML-escape helper used everywhere in this module so the document
    render path is XSS-safe even though all input originates locally. */
@@ -34527,473 +34501,431 @@ function _wrecEscape(s) {
     return d.innerHTML;
 }
 
-/* Persistence — write the current form state to localStorage. Wrapped
-   in try/catch because kiosk private-mode browsers can throw on write. */
-function _wrecPersist() {
-    try {
-        var data = _wrecCollectFormData();
-        localStorage.setItem(_WREC_LS_KEY, JSON.stringify(data));
-    } catch (_) { /* ignore — persistence is best-effort */ }
+/* Split a descriptor argument list on its top-level commas. */
+function _wrecSplitArgs(s) {
+    var out = [], depth = 0, cur = '';
+    for (var i = 0; i < s.length; i++) {
+        var c = s[i];
+        if (c === '(' || c === '[' || c === '{') depth++;
+        else if (c === ')' || c === ']' || c === '}') depth--;
+        if (c === ',' && depth === 0) { out.push(cur.trim()); cur = ''; }
+        else cur += c;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
 }
 
-/* Read every form field into a normalized data object that both the
-   preview renderer and the print renderer consume. */
-function _wrecCollectFormData() {
-    var rows = document.querySelectorAll('#wrec-keysets-wrap .wrec-keyset-input');
-    var seedSets = [];
-    for (var i = 0; i < rows.length; i++) {
-        var v = (rows[i].value || '').trim();
-        if (v) seedSets.push(v);
+/* "fn(arg, …)" → { fn, args }, or null when s isn't a function call. */
+function _wrecCall(s) {
+    var m = /^([a-z_]+)\((.*)\)$/i.exec((s || '').trim());
+    return m ? { fn: m[1].toLowerCase(), args: _wrecSplitArgs(m[2]) } : null;
+}
+
+// Printed Script Type for each descriptor shape (wrappers / script).
+var _WREC_SCRIPTS = {
+    'wpkh':         'Native Segwit (P2WPKH)',
+    'sh/wpkh':      'Nested Segwit (P2SH-P2WPKH)',
+    'pkh':          'Legacy (P2PKH)',
+    'tr':           'Taproot (P2TR)',
+    'sp':           'Silent Payment (sp1q)',
+    'wsh/multi':    'Native Segwit (P2WSH)',
+    'sh-wsh/multi': 'Nested Segwit (P2SH-P2WSH)',
+    'sh/multi':     'Legacy (P2SH)'
+};
+
+/* ----------------------------------------------------------------
+   _wrecParseDescriptor(raw)
+   Read everything the record needs from an output descriptor.
+   Returns { ok, error, warnings[], descriptor (newlines removed),
+   isMulti, msM, msN, script, keys[{fingerprint, path, xpub,
+   wildcardSuffix}], firstAddress, addressNote }. Covers every shape
+   the Output Descriptor tool produces plus common wallet exports:
+   wpkh, sh(wpkh), pkh, tr (key path only), sp, and multi /
+   sortedmulti inside wsh, sh(wsh) or sh.
+   ---------------------------------------------------------------- */
+function _wrecParseDescriptor(raw) {
+    var out = { ok: false, error: '', warnings: [], descriptor: '', isMulti: false, msM: 1, msN: 1,
+                script: '', keys: [], firstAddress: '', addressNote: '' };
+    var d = (raw || '').replace(/[\r\n]+/g, '').trim();
+    out.descriptor = d;
+    if (!d) return out;
+
+    // BIP-380 checksum: when present it proves every character is intact.
+    var body = d;
+    var cs = /^(.*)#([0-9a-z]{8})$/i.exec(d);
+    if (cs) {
+        body = cs[1];
+        if (desc_checksum(body) !== cs[2].toLowerCase()) {
+            out.error = 'The checksum at the end (#' + cs[2] + ') doesn’t match — a character in the descriptor is wrong or missing. Copy it again from the wallet app.';
+            return out;
+        }
+    } else {
+        out.warnings.push('No checksum (#…) at the end, so a typo can’t be detected. Make sure it was copied completely.');
     }
 
+    if (/\b[xtyzuvYZUV]prv[1-9A-HJ-NP-Za-km-z]{20,}/.test(body)) {
+        out.error = 'This descriptor contains a private key (xprv). A wallet record should hold public keys only — export the watch-only descriptor instead.';
+        return out;
+    }
+
+    var node = _wrecCall(body);
+    var wrap = [];
+    while (node && (node.fn === 'sh' || node.fn === 'wsh') && node.args.length === 1 && _wrecCall(node.args[0])) {
+        wrap.push(node.fn);
+        node = _wrecCall(node.args[0]);
+    }
+    var fn = node ? (node.fn === 'sortedmulti' ? 'multi' : node.fn) : '';
+    var kind = (wrap.length ? wrap.join('-') + '/' : '') + fn;
+    out.script = _WREC_SCRIPTS[kind] || '';
+    if (!out.script) {
+        out.error = 'This kind of descriptor isn’t supported here yet. Enter the wallet details by hand below.';
+        return out;
+    }
+    if (fn === 'tr' && node.args.length !== 1) {
+        out.error = 'Taproot descriptors with script paths aren’t supported here yet. Enter the wallet details by hand below.';
+        return out;
+    }
+
+    var keyArgs;
+    if (fn === 'multi') {
+        out.isMulti = true;
+        out.msM = parseInt(node.args[0], 10);
+        keyArgs = node.args.slice(1);
+        out.msN = keyArgs.length;
+        if (!(out.msM >= 1 && out.msM <= out.msN)) {
+            out.error = 'The multisig threshold doesn’t make sense (' + node.args[0] + ' of ' + out.msN + ').';
+            return out;
+        }
+    } else {
+        keyArgs = node.args.slice(0, 1);   // sp(key, birthday) — the birthday isn't a key
+    }
+    try {
+        out.keys = keyArgs.map(function(k) { return desc_parseKeyOrigin(k); });
+    } catch (e) {
+        out.error = 'A key in the descriptor couldn’t be read: ' + e.message;
+        return out;
+    }
+    out.keys.forEach(function(k, i) {
+        if (!k.fingerprint) out.warnings.push('Key ' + (i + 1) + ' has no fingerprint in the descriptor.');
+        var steps = (k.wildcardSuffix || '').split('/').filter(Boolean);
+        if (steps.length >= 2 && steps[steps.length - 2] === '1') {
+            out.warnings.push('Key ' + (i + 1) + ' is on the change chain (…/1/*), so the address below is a change address.');
+        }
+    });
+
+    try {
+        out.firstAddress = _wrecFirstAddress(kind, node.fn === 'sortedmulti', out.msM, out.keys);
+    } catch (e) {
+        out.addressNote = 'Couldn’t work out the first address (' + e.message + '). You can type it in.';
+    }
+    out.ok = true;
+    return out;
+}
+
+/* Public key at index 0 of a descriptor key: follow the key's own suffix
+   (/<0;1>/* → 0/0, /0/* → 0/0, /* → 0). Hardened steps can't be derived
+   from an xpub. */
+function _wrecIndexZeroPubkey(key) {
+    var node = window.BtcMath.HDKey.fromExtendedKey(_descNormalizeXpub(key.xpub));
+    var steps = (key.wildcardSuffix || '').split('/').filter(Boolean);
+    for (var i = 0; i < steps.length; i++) {
+        var st = steps[i];
+        var mp = /^<(\d+);\d+>$/.exec(st);
+        var idx = mp ? parseInt(mp[1], 10) : (st === '*' ? 0 : (/^\d+$/.test(st) ? parseInt(st, 10) : NaN));
+        if (isNaN(idx)) throw new Error('step "' + st + '" can’t be derived from a public key');
+        node = node.deriveChild(idx);
+    }
+    return node.publicKey;
+}
+
+function _wrecCompareBytes(a, b) {
+    for (var k = 0; k < Math.min(a.length, b.length); k++) {
+        if (a[k] !== b[k]) return a[k] - b[k];
+    }
+    return a.length - b.length;
+}
+
+/* First receiving address (index 0) of a parsed descriptor. */
+function _wrecFirstAddress(kind, sorted, m, keys) {
+    var B = window.BtcMath;
+    var signer = B.btcSigner;
+    if (kind === 'sp') {
+        var SP = window.SilentPayments;
+        if (!SP) throw new Error('Silent Payments module not loaded');
+        var sp = SP.decodeSpscan(keys[0].xpub);
+        return SP.encodeSilentPaymentAddress(B.secp256k1.getPublicKey(sp.scanPrivKey, true), sp.spendPubKey);
+    }
+    var pubs = keys.map(_wrecIndexZeroPubkey);
+    if (kind === 'wpkh')    return signer.p2wpkh(pubs[0]).address;
+    if (kind === 'sh/wpkh') return signer.p2sh(signer.p2wpkh(pubs[0])).address;
+    if (kind === 'pkh')     return signer.p2pkh(pubs[0]).address;
+    if (kind === 'tr')      return signer.p2tr(pubs[0].slice(1)).address;
+    if (sorted) pubs.sort(_wrecCompareBytes);
+    var ms = signer.p2ms(m, pubs);
+    if (kind === 'wsh/multi')    return signer.p2wsh(ms).address;
+    if (kind === 'sh-wsh/multi') return signer.p2sh(signer.p2wsh(ms)).address;
+    if (kind === 'sh/multi')     return signer.p2sh(ms).address;
+    throw new Error('unsupported descriptor');
+}
+
+/* Shape typed into the manual fallback fields. */
+function _wrecManualShape() {
     var type = (document.getElementById('wrec-type') || {}).value || 'single';
-    var msM  = (document.getElementById('wrec-ms-m')   || {}).value || '2';
-    var msN  = (document.getElementById('wrec-ms-n')   || {}).value || '3';
-    var script = (document.getElementById('wrec-script') || {}).value || 'Native Segwit (P2WPKH)';
-
-    // Passphrases — collected as an array of {target, value} pairs from
-    // every row currently rendered inside #wrec-passphrases-wrap. Empty
-    // rows are kept so the order/count survives a re-render; they're
-    // filtered out only at print time.
-    var ppRows = document.querySelectorAll('#wrec-passphrases-wrap .wrec-pp-row');
-    var passphrases = [];
-    for (var pi = 0; pi < ppRows.length; pi++) {
-        var t = ppRows[pi].querySelector('.wrec-pp-target-input');
-        var v = ppRows[pi].querySelector('.wrec-pp-value-input');
-        passphrases.push({
-            target: t ? (t.value || '') : '',
-            value:  v ? (v.value || '') : ''
-        });
-    }
-
     return {
-        title:          (document.getElementById('wrec-title')      || {}).value || '',
-        purpose:        (document.getElementById('wrec-purpose')    || {}).value || '',
-        type:           type,                            // 'single' | 'multisig'
-        msM:            msM,
-        msN:            msN,
-        script:         script,
-        seedSets:       seedSets,
-        ppRequired:     !!((document.getElementById('wrec-pp-required') || {}).checked),
-        passphrases:    passphrases,
-        descriptor:     ((document.getElementById('wrec-descriptor') || {}).value || '').trim(),
-        // First receiving address (m/0/0) — auto-populated by Pull Active
-        // Descriptor or hand-entered. Renders below the descriptor on the
-        // printed record so the heir has a deterministic anchor to verify
-        // their wallet reconstruction against.
-        firstAddress:   ((document.getElementById('wrec-first-address') || {}).value || '').trim(),
-        // User-supplied freeform notes — capped to 200 chars by the textarea's
-        // maxlength so the print layout cannot overflow a single page.
-        notes:          (document.getElementById('wrec-notes')      || {}).value || ''
+        isMulti: type === 'multisig',
+        msM: parseInt((document.getElementById('wrec-ms-m') || {}).value || '2', 10),
+        msN: parseInt((document.getElementById('wrec-ms-n') || {}).value || '3', 10),
+        script: (document.getElementById('wrec-script') || {}).value || 'Native Segwit (P2WPKH)'
     };
 }
 
-/* Build the <option> markup for a passphrase Target dropdown.
-   Reads the live seed-set row count from the DOM so dropdowns always
-   reflect the current "n" of the multisig threshold (or single-sig's
-   one row). The supplied `currentValue` (e.g. "Set 2") is preserved
-   if it still maps to a valid set; otherwise we fall back to "Set 1"
-   so the row never points at a non-existent target. */
-function _wrecBuildTargetOptions(currentValue) {
-    var seedCount = Math.max(1,
-        document.querySelectorAll('#wrec-keysets-wrap .wrec-keyset-input').length);
-    var safeValue = currentValue || '';
-    var html = '';
-    var matched = false;
-    for (var s = 1; s <= seedCount; s++) {
-        var label = 'Set ' + s;
-        var sel = (label === safeValue);
-        if (sel) matched = true;
-        html += '<option value="' + label + '"' + (sel ? ' selected' : '') + '>' + label + '</option>';
-    }
-    // If the saved value doesn't match any current set (e.g. user shrank
-    // the multisig N and orphaned a row), default to Set 1 by selecting
-    // the first option — done by post-pending nothing; the browser auto-
-    // selects the first <option> when none carry `selected`.
-    void matched;
-    return html;
+function _wrecBlankKey() { return { fp: '', path: '', name: '', ppOn: false, pp: '' }; }
+
+/* Manual mode: one key row for single-sig, N rows for multisig. */
+function _wrecResizeManualKeys() {
+    var shape = _wrecManualShape();
+    var n = shape.isMulti ? shape.msN : 1;
+    var keys = [];
+    for (var i = 0; i < n; i++) keys.push(_wrecKeys[i] || _wrecBlankKey());
+    _wrecKeys = keys;
 }
 
-/* Re-paint the passphrase rows from a {target, value}[] array. Always
-   renders at least one row when the wrapper is shown so the user has
-   somewhere to type. Each row carries:
-     • a × remove button (only when more than one row exists)
-     • a "Library" button bound to lib_openDropdown(valueInputId, dropdownId)
-       so the user can pick a saved passphrase from the Passphrase Library
-       store rather than retyping it. Click → dropdown lists every saved
-       passphrase → user picks one → lib_pick() injects the value into the
-       row's input and dispatches an 'input' event, which fires our
-       oninput="wrec_buildPreview()" handler so the live preview updates
-       with the chosen passphrase.
-   Both the value input id (`wrec-pp-value-{i}`) and the dropdown id
-   (`wrec-pp-lib-{i}`) are row-unique so multiple Library buttons can
-   coexist without collision.
-*/
-function _wrecRenderPassphraseRows(passphrases) {
-    var wrap = document.getElementById('wrec-passphrases-wrap');
+/* Descriptor mode: one row per descriptor key. Names and passphrases the
+   user already entered follow their key (matched by fingerprint, or by
+   position for rows typed before the descriptor was added). */
+function _wrecSyncKeysToMeta() {
+    var old = _wrecKeys;
+    _wrecKeys = _wrecMeta.keys.map(function(k, i) {
+        var prev = null;
+        for (var j = 0; j < old.length; j++) {
+            if (old[j].fp && old[j].fp === k.fingerprint) { prev = old[j]; break; }
+        }
+        if (!prev && old[i] && !old[i].fp) prev = old[i];
+        return { fp: k.fingerprint, path: k.path, name: prev ? prev.name : '', ppOn: prev ? prev.ppOn : false, pp: prev ? prev.pp : '' };
+    });
+}
+
+/* How a passphrase entry names its key on the printed record. */
+function _wrecKeyTarget(i, isMulti) {
+    var name = (_wrecKeys[i] && _wrecKeys[i].name || '').trim();
+    if (!isMulti) return name || 'Set 1';
+    return 'Set ' + (i + 1) + (name ? ' (' + name + ')' : '');
+}
+
+/* Read the form into the data object the record renderer consumes
+   (same shape as before, so the printed record is unchanged). */
+function _wrecCollectFormData() {
+    var meta = _wrecMeta;
+    var shape = meta || _wrecManualShape();
+    var isMulti = !!shape.isMulti;
+
+    var anyKeyInfo = _wrecKeys.some(function(k) { return k.fp || (k.name || '').trim(); });
+    var seedSets = !anyKeyInfo ? [] : _wrecKeys.map(function(k, i) {
+        return ((k.name || '').trim() || ('Set ' + (i + 1))) + (k.fp ? ' (fingerprint ' + k.fp.toUpperCase() + ')' : '');
+    });
+
+    var passphrases = [];
+    _wrecKeys.forEach(function(k, i) {
+        if (k.ppOn) passphrases.push({ target: _wrecKeyTarget(i, isMulti), value: k.pp || '' });
+    });
+
+    var descText = ((document.getElementById('wrec-descriptor') || {}).value || '').replace(/[\r\n]+/g, '').trim();
+    return {
+        title:        (document.getElementById('wrec-title')   || {}).value || '',
+        purpose:      (document.getElementById('wrec-purpose') || {}).value || '',
+        type:         isMulti ? 'multisig' : 'single',
+        msM:          String(isMulti ? shape.msM : 1),
+        msN:          String(isMulti ? shape.msN : 1),
+        script:       shape.script,
+        seedSets:     seedSets,
+        ppRequired:   passphrases.length > 0,
+        passphrases:  passphrases,
+        descriptor:   descText,
+        firstAddress: ((document.getElementById('wrec-first-address') || {}).value || '').trim(),
+        notes:        (document.getElementById('wrec-notes') || {}).value || ''
+    };
+}
+
+/* Paint one row per key: its fingerprint/path (when known), a name, and
+   an optional passphrase (typed or picked from the Passphrase Library). */
+function _wrecRenderKeys() {
+    var wrap = document.getElementById('wrec-keys-wrap');
     if (!wrap) return;
-    var rows = (passphrases && passphrases.length) ? passphrases.slice() : [{ target: '', value: '' }];
+    var esc = _wrecEscape;
+    var inStyle = 'width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;';
+    var n = _wrecKeys.length;
     var html = '';
-    for (var i = 0; i < rows.length; i++) {
-        var t = (rows[i] && rows[i].target) || '';
-        var v = (rows[i] && rows[i].value)  || '';
-        var valueInputId = 'wrec-pp-value-' + i;
-        var libDropdownId = 'wrec-pp-lib-' + i;
+    for (var i = 0; i < n; i++) {
+        var k = _wrecKeys[i];
+        var head = (n > 1 ? 'Key ' + (i + 1) + ' of ' + n : 'Key') +
+            (k.fp ? ' &middot; fingerprint <span style="font-family: var(--skb-mono); color: var(--skb-text);">' + esc(k.fp.toUpperCase()) + '</span>' : '') +
+            (k.path ? ' &middot; <span style="font-family: var(--skb-mono);">m/' + esc(k.path) + '</span>' : '');
         html +=
-            '<div class="wrec-pp-row" data-idx="' + i + '" style="margin-bottom: 0.6rem; padding: 0.55rem 0.6rem; background: var(--skb-bg, #1a1a1a); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);">' +
-                '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; gap: 0.5rem;">' +
-                    '<span style="font-size: 0.75rem; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Passphrase ' + (i + 1) + '</span>' +
-                    (rows.length > 1
-                        ? '<button type="button" class="skb-btn" style="padding: 0.2rem 0.55rem; font-size: 0.8125rem; color: var(--skb-text-muted); border: 1px solid var(--skb-border); background: transparent;" onclick="wrec_removePassphrase(' + i + ')" title="Remove this passphrase">&times;</button>'
-                        : '') +
+            '<div class="wrec-key-row" style="margin-bottom: 0.6rem; padding: 0.6rem 0.7rem; background: var(--skb-bg, #1a1a1a); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);">' +
+                '<div style="font-size: 0.75rem; color: var(--skb-text-muted); margin-bottom: 0.4rem; word-break: break-all;">' + head + '</div>' +
+                '<input type="text" id="wrec-key-name-' + i + '" class="wrec-key-name" value="' + esc(k.name) + '" autocomplete="off" ' +
+                    'placeholder="' + (i === 0 ? 'e.g. Dave’s Coldcard — home safe' : 'e.g. Spare seed plate — bank box') + '" ' +
+                    'oninput="wrec_onKeyInput(' + i + ', \'name\', this.value)" style="' + inStyle + '">' +
+                '<label style="display: flex; align-items: center; gap: 0.45rem; margin-top: 0.45rem; font-size: 0.8125rem; color: var(--skb-text); cursor: pointer;">' +
+                    '<input type="checkbox" id="wrec-key-ppon-' + i + '"' + (k.ppOn ? ' checked' : '') + ' onchange="wrec_onKeyPassphraseToggle(' + i + ', this.checked)">' +
+                    'This key needs a passphrase' +
+                '</label>' +
+                '<div id="wrec-key-ppwrap-' + i + '" style="display: ' + (k.ppOn ? 'block' : 'none') + '; margin-top: 0.4rem;">' +
+                    '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; gap: 0.5rem;">' +
+                        '<label for="wrec-key-pp-' + i + '" style="font-size: 0.75rem; color: var(--skb-text-muted);">Passphrase <span style="opacity: 0.8;">(leave blank to record only that one is needed)</span></label>' +
+                        '<button type="button" class="skb-btn" onclick="lib_openDropdown(\'wrec-key-pp-' + i + '\', \'wrec-key-lib-' + i + '\')" ' +
+                            'style="padding: 0.18rem 0.55rem; font-size: 0.6875rem; border: 1px dashed var(--skb-primary); color: var(--skb-primary); background: transparent; border-radius: 3px;">&#9919; Library</button>' +
+                    '</div>' +
+                    '<div id="wrec-key-lib-' + i + '" style="display: none; margin-bottom: 0.4rem; padding: 0.4rem; background: var(--skb-bg-card); border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); max-height: 160px; overflow-y: auto;"></div>' +
+                    '<input type="text" id="wrec-key-pp-' + i + '" class="wrec-key-pp" value="' + esc(k.pp) + '" autocomplete="off" spellcheck="false" ' +
+                        'placeholder="exact, case-sensitive passphrase" oninput="wrec_onKeyInput(' + i + ', \'pp\', this.value)" ' +
+                        'style="' + inStyle + ' font-family: var(--skb-mono);">' +
                 '</div>' +
-                // Target = a SELECT populated from the live seed-set count.
-                // Forces the user to pick a specific Set instead of free-typing
-                // an arbitrary label — guarantees the printed mapping
-                // ("Passphrase 1 → Set 2") is always grammatically valid and
-                // lines up with one of the rows actually in the record.
-                '<label style="display: block; font-size: 0.75rem; color: var(--skb-text-muted); margin-bottom: 0.25rem;">Applies to seed word set</label>' +
-                '<select class="wrec-pp-target-input" data-idx="' + i + '" ' +
-                    'onchange="wrec_buildPreview()" ' +
-                    'style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; margin-bottom: 0.45rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;">' +
-                    _wrecBuildTargetOptions(t) +
-                '</select>' +
-                // Passphrase value row: label on left, "Library" button on
-                // right; mirrors the BIP-85 / Descriptor Builder header
-                // pattern (see line 6546 for the canonical button shape).
-                '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; gap: 0.5rem;">' +
-                    '<label for="' + valueInputId + '" style="font-size: 0.75rem; color: var(--skb-text-muted);">Passphrase</label>' +
-                    '<button type="button" class="skb-btn" ' +
-                        'onclick="lib_openDropdown(\'' + valueInputId + '\', \'' + libDropdownId + '\')" ' +
-                        'style="padding: 0.18rem 0.55rem; font-size: 0.6875rem; border: 1px dashed var(--skb-primary); color: var(--skb-primary); background: transparent; border-radius: 3px;">' +
-                        '&#9919; Library' +
-                    '</button>' +
-                '</div>' +
-                // Library dropdown (hidden until user clicks the button).
-                // Same styling as the existing #bip85-lib-dropdown so the
-                // entries look identical across tools.
-                '<div id="' + libDropdownId + '" style="display: none; margin-bottom: 0.4rem; padding: 0.4rem; background: var(--skb-bg-card); border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); max-height: 160px; overflow-y: auto;"></div>' +
-                '<input type="text" id="' + valueInputId + '" class="wrec-pp-value-input" data-idx="' + i + '" value="' + _wrecEscape(v) + '" ' +
-                    'autocomplete="off" placeholder="exact case-sensitive passphrase" ' +
-                    'oninput="wrec_buildPreview()" ' +
-                    'style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.875rem;">' +
             '</div>';
     }
     wrap.innerHTML = html;
 }
 
-function wrec_addPassphrase() {
-    var data = _wrecCollectFormData();
-    data.passphrases.push({ target: '', value: '' });
-    _wrecRenderPassphraseRows(data.passphrases);
+function wrec_onKeyInput(i, field, value) {
+    if (!_wrecKeys[i]) return;
+    _wrecKeys[i][field] = value;
     wrec_buildPreview();
 }
 
-function wrec_removePassphrase(idx) {
-    var data = _wrecCollectFormData();
-    if (idx < 0 || idx >= data.passphrases.length) return;
-    data.passphrases.splice(idx, 1);
-    if (!data.passphrases.length) data.passphrases = [{ target: '', value: '' }];
-    _wrecRenderPassphraseRows(data.passphrases);
+function wrec_onKeyPassphraseToggle(i, on) {
+    if (!_wrecKeys[i]) return;
+    _wrecKeys[i].ppOn = !!on;
+    var w = document.getElementById('wrec-key-ppwrap-' + i);
+    if (w) w.style.display = on ? 'block' : 'none';
     wrec_buildPreview();
 }
 
-/* Re-paint the seed-set inputs from a string array. The number of rows
-   is fully determined by the array length — single-sig always passes
-   [single-value], multisig always passes an N-length array sized by
-   wrec_resizeSeedSetsForN(). No manual remove buttons: changing the
-   row count is done by changing the threshold-N dropdown. */
-function _wrecRenderKeySetInputs(seedSets) {
-    var wrap = document.getElementById('wrec-keysets-wrap');
-    if (!wrap) return;
-    var values = (seedSets && seedSets.length) ? seedSets.slice() : [''];
-    var html = '';
-    for (var i = 0; i < values.length; i++) {
-        var n = i + 1;
-        html +=
-            '<div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem;">' +
-                '<input type="text" class="wrec-keyset-input" data-idx="' + i + '" value="' + _wrecEscape(values[i]) + '" ' +
-                    'placeholder=' + JSON.stringify('Set ' + n) + ' ' +
-                    'oninput="wrec_buildPreview()" ' +
-                    'style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.875rem;">' +
-            '</div>';
-    }
-    wrap.innerHTML = html;
+/* Manual fallback fields changed (type / threshold): show the threshold
+   for multisig and, without a descriptor, size the key rows to match. */
+function wrec_onManualShapeChange() {
+    var shape = _wrecManualShape();
+    var tw = document.getElementById('wrec-ms-threshold-wrap');
+    if (tw) tw.style.display = shape.isMulti ? 'block' : 'none';
+    if (!_wrecMeta) { _wrecResizeManualKeys(); _wrecRenderKeys(); }
+    wrec_buildPreview();
 }
 
-/* Resize the seedSets array to exactly `n` entries, preserving any
-   already-typed values for indices that survive the resize. Used when
-   the user changes the multisig threshold-N dropdown. */
-function _wrecResizeSeedSetsForN(currentSeedSets, n) {
-    var size = Math.max(1, parseInt(n, 10) || 1);
-    var out = [];
-    for (var i = 0; i < size; i++) {
-        out.push((currentSeedSets && currentSeedSets[i]) || '');
+function wrec_onDescriptorInput() {
+    if (_wrecDescDebounce) clearTimeout(_wrecDescDebounce);
+    _wrecDescDebounce = setTimeout(_wrecApplyDescriptor, 250);
+}
+
+/* Read the Output Descriptor field and update everything that comes from
+   it: the detected summary, the key rows and the first receiving address. */
+function _wrecApplyDescriptor() {
+    if (_wrecDescDebounce) { clearTimeout(_wrecDescDebounce); _wrecDescDebounce = null; }
+    var esc = _wrecEscape;
+    var meta = _wrecParseDescriptor((document.getElementById('wrec-descriptor') || {}).value || '');
+    _wrecMeta = meta.ok ? meta : null;
+
+    var box = document.getElementById('wrec-detected');
+    var manual = document.getElementById('wrec-manual');
+    var fa = document.getElementById('wrec-first-address');
+    var faNote = document.getElementById('wrec-first-address-note');
+    var clearAutoAddress = function() {
+        fa.readOnly = false;
+        if (fa._wrecAuto) { fa.value = ''; fa._wrecAuto = false; }
+    };
+
+    if (!meta.descriptor) {
+        box.style.display = 'none';
+        manual.style.display = 'block';
+        clearAutoAddress();
+        faNote.textContent = '';
+    } else if (!meta.ok) {
+        box.style.display = 'block';
+        box.style.background = 'rgba(220, 53, 69, 0.08)';
+        box.style.border = '1px solid rgba(220, 53, 69, 0.35)';
+        box.innerHTML = '<span style="color: var(--skb-danger); font-weight: 600;">&#9888; ' + esc(meta.error) + '</span>';
+        manual.style.display = 'block';
+        manual.open = true;
+        clearAutoAddress();
+        faNote.textContent = '';
+    } else {
+        var typeText = meta.isMulti ? meta.msM + '-of-' + meta.msN + ' multisig' : 'Single-signature';
+        box.style.display = 'block';
+        box.style.background = 'rgba(40, 167, 69, 0.08)';
+        box.style.border = '1px solid rgba(40, 167, 69, 0.35)';
+        box.innerHTML =
+            '<div style="color: var(--skb-secondary, #28a745); font-weight: 600;">&#10003; ' + esc(typeText) + ' &middot; ' + esc(meta.script) +
+                ' &middot; ' + meta.keys.length + (meta.keys.length === 1 ? ' key' : ' keys') +
+                (meta.warnings.length && /checksum/.test(meta.warnings[0]) ? '' : ' &middot; checksum OK') + '</div>' +
+            meta.warnings.map(function(w) {
+                return '<div style="color: var(--skb-primary); margin-top: 0.25rem;">&#9888; ' + esc(w) + '</div>';
+            }).join('');
+        manual.style.display = 'none';
+        _wrecSyncKeysToMeta();
+        if (meta.firstAddress) {
+            fa.value = meta.firstAddress;
+            fa.readOnly = true;
+            fa._wrecAuto = true;
+            faNote.textContent = 'Worked out from the descriptor.';
+        } else {
+            clearAutoAddress();
+            faNote.textContent = meta.addressNote;
+        }
     }
-    return out;
+    if (!_wrecMeta) _wrecResizeManualKeys();
+    _wrecRenderKeys();
+    wrec_buildPreview();
 }
 
 /* ----------------------------------------------------------------
    wrec_init — entry point fired by showState('state-designer').
-   Hydrates the form from localStorage if present, then paints
-   the live preview so the user always lands on a non-empty page.
+   Every visit starts with an empty record.
    ---------------------------------------------------------------- */
 function wrec_init() {
-    var saved = null;
-    try {
-        var raw = localStorage.getItem(_WREC_LS_KEY);
-        if (raw) saved = JSON.parse(raw);
-    } catch (_) { saved = null; }
+    // Older versions saved a draft here, passphrases included — remove it.
+    try { localStorage.removeItem(_WREC_LS_KEY); } catch (_) {}
+    wrec_stopQR();
 
-    var data = saved || {
-        title: '', purpose: '',
-        type: 'single', msM: '2', msN: '3',
-        script: 'Native Segwit (P2WPKH)',
-        seedSets: [_WREC_DEFAULT_SEED_LABEL],
-        ppRequired: false, passphrases: [{ target: '', value: '' }],
-        descriptor: '',
-        firstAddress: '',
-        notes: ''
-    };
-
-    // Backwards-compat migration: an earlier version of the tool stored
-    // a single passphrase as { ppTarget, ppValue }. Promote any such
-    // saved drafts into the new array shape so previously-saved
-    // wallet-records keep working without the user noticing.
-    if (!Array.isArray(data.passphrases)) {
-        data.passphrases = (data.ppTarget || data.ppValue)
-            ? [{ target: data.ppTarget || '', value: data.ppValue || '' }]
-            : [{ target: '', value: '' }];
-    }
-
-    // ── Strip saved passphrase VALUES on every entry ──
-    // Targets like "Set 2" are descriptive labels worth preserving across
-    // sessions, but the secret passphrase value should never auto-populate
-    // — same rationale as the title/purpose fields above. Clearing here
-    // makes every passphrase input render with the placeholder visible
-    // ("exact case-sensitive passphrase") so the user types the secret
-    // fresh each time. If the user does nothing, _wrecPersist() will
-    // overwrite localStorage with the now-empty value on its next save.
-    data.passphrases = data.passphrases.map(function(p) {
-        return { target: (p && p.target) || '', value: '' };
+    _wrecMeta = null;
+    _wrecKeys = [_wrecBlankKey()];
+    ['wrec-title', 'wrec-purpose', 'wrec-descriptor', 'wrec-notes'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.value = '';
     });
+    var fa = document.getElementById('wrec-first-address');
+    if (fa) { fa.value = ''; fa.readOnly = false; fa._wrecAuto = false; }
+    var faNote = document.getElementById('wrec-first-address-note');
+    if (faNote) faNote.textContent = '';
+    var defaults = { 'wrec-type': 'single', 'wrec-ms-m': '2', 'wrec-ms-n': '3', 'wrec-script': 'Native Segwit (P2WPKH)' };
+    Object.keys(defaults).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.value = defaults[id];
+    });
+    var box = document.getElementById('wrec-detected');
+    if (box) box.style.display = 'none';
+    var manual = document.getElementById('wrec-manual');
+    if (manual) { manual.style.display = 'block'; manual.open = false; }
 
-    // Top-level fields.
-    //
-    // Title and Purpose are intentionally NOT rehydrated from localStorage
-    // — they always start empty on tool entry so the placeholder text is
-    // visible and non-destructive (matching the cipher-nickname field's
-    // behaviour in the Passphrase Library tool). Previously, rehydrating
-    // a saved value into `.value` made the field render as a populated
-    // input that the user had to manually clear before typing fresh
-    // content. The other fields (type, script, passphrases, descriptor,
-    // notes, etc.) DO rehydrate because they're more expensive to retype
-    // and rarely change between records.
-    var titleEl = document.getElementById('wrec-title');     if (titleEl)   titleEl.value   = '';
-    var purpEl  = document.getElementById('wrec-purpose');   if (purpEl)    purpEl.value    = '';
-    var typeEl  = document.getElementById('wrec-type');      if (typeEl)    typeEl.value    = data.type || 'single';
-    var mEl     = document.getElementById('wrec-ms-m');      if (mEl)       mEl.value       = data.msM || '2';
-    var nEl     = document.getElementById('wrec-ms-n');      if (nEl)       nEl.value       = data.msN || '3';
-    var scrEl   = document.getElementById('wrec-script');    if (scrEl)     scrEl.value     = data.script || 'Native Segwit (P2WPKH)';
-    var ppReqEl = document.getElementById('wrec-pp-required'); if (ppReqEl) ppReqEl.checked = !!data.ppRequired;
-    // Descriptor + First Receiving Address always start EMPTY on tool
-    // entry — same fresh-start treatment as title / purpose / notes — so
-    // the print preview never inherits stale or example data. The Wallet
-    // Record tool is a pure recorder: the source of truth is the Output
-    // Descriptor tool, and the user re-pulls the live descriptor each
-    // session via "Pull Active Descriptor". The HTML placeholder hints
-    // (faint example text) stay visible because we only blank the value,
-    // never the placeholder attribute.
-    var descEl  = document.getElementById('wrec-descriptor'); if (descEl)   descEl.value    = '';
-    var faEl    = document.getElementById('wrec-first-address'); if (faEl) faEl.value      = '';
-    // Additional Notes: same fresh-start treatment as title/purpose —
-    // never paint saved text into the textarea on entry, so the
-    // placeholder "e.g. Hardware: Coldcard Mk4 #A12 stored…" is always
-    // visible and the user starts with an empty field.
-    var notesEl = document.getElementById('wrec-notes');     if (notesEl)   notesEl.value   = '';
-
-    // Auto-attach persistence + character-count to fields that don't
-    // already trigger wrec_buildPreview() through inline oninput. This
-    // keeps every change in a save+repaint cycle.
-    var persistIds = ['wrec-title', 'wrec-purpose', 'wrec-pp-target', 'wrec-pp-value', 'wrec-first-address'];
-    for (var i = 0; i < persistIds.length; i++) {
-        var el = document.getElementById(persistIds[i]);
-        if (el && !el._wrecBound) {
-            el.addEventListener('input', function() { wrec_buildPreview(); });
-            el._wrecBound = true;
-        }
-    }
-
-    // Notes counter: live "X / 200" label so the user has visible
-    // feedback approaching the cap. The textarea's maxlength enforces
-    // the hard limit; this is purely informational.
+    // Notes counter: live "X / 200" label; the textarea's maxlength
+    // enforces the hard limit.
+    var notesEl = document.getElementById('wrec-notes');
     if (notesEl && !notesEl._wrecCounterBound) {
-        var updateCounter = function() {
+        notesEl.addEventListener('input', function() {
             var c = document.getElementById('wrec-notes-count');
-            if (c) c.textContent = (notesEl.value.length) + ' / 200';
-        };
-        notesEl.addEventListener('input', updateCounter);
-        updateCounter();
+            if (c) c.textContent = notesEl.value.length + ' / 200';
+        });
         notesEl._wrecCounterBound = true;
     }
+    var counter = document.getElementById('wrec-notes-count');
+    if (counter) counter.textContent = '0 / 200';
 
-    // Render the seed-set rows with EMPTY labels on entry (preserve the
-    // row count implied by the saved structure, but blank the content) so
-    // no stale "Set N (fingerprint …)" text reaches the print preview.
-    // The rows repopulate when the user pulls the active descriptor.
-    _wrecRenderKeySetInputs((data.seedSets || ['']).map(function() { return ''; }));
-    _wrecRenderPassphraseRows(data.passphrases);
-    wrec_onTypeChange(/*skipBuild*/true);
-    wrec_onPassphraseRequiredChange(/*skipBuild*/true);
-    wrec_buildPreview();
-}
-
-/* Type-change handler — toggles the multisig threshold selector
-   visibility, resizes the seed-set rows to match the selected
-   total-keys (N) value, and gates the "+ Add Passphrase" button
-   so multi-passphrase entry only exists for multisig wallets.
-   Single-sig collapses to one passphrase row; multisig keeps
-   whatever rows the user already added.
-*/
-function wrec_onTypeChange(skipBuild) {
-    var type = (document.getElementById('wrec-type') || {}).value || 'single';
-    var thresholdWrap = document.getElementById('wrec-ms-threshold-wrap');
-    if (thresholdWrap) thresholdWrap.style.display = (type === 'multisig') ? 'block' : 'none';
-
-    // ── + Add Passphrase visibility ──
-    // Single-sig wallets only ever have one BIP-39 passphrase — adding
-    // multiple makes no semantic sense. Hide the button entirely for
-    // single-sig and surface it only when the user has selected
-    // Multisignature.
-    var addPpBtn = document.getElementById('wrec-add-passphrase-btn');
-    if (addPpBtn) addPpBtn.style.display = (type === 'multisig') ? 'inline-block' : 'none';
-
-    var data = _wrecCollectFormData();
-
-    // ── Seed-set rows ──
-    if (type === 'multisig') {
-        var n = (document.getElementById('wrec-ms-n') || {}).value || '3';
-        data.seedSets = _wrecResizeSeedSetsForN(data.seedSets, n);
-    } else {
-        // Collapse to a single seed set, preserving whatever the user
-        // typed in slot 0 if anything.
-        data.seedSets = [(data.seedSets && data.seedSets[0]) || ''];
-    }
-    _wrecRenderKeySetInputs(data.seedSets);
-
-    // ── Passphrase rows ──
-    // When switching to single-sig, collapse the dynamic list to exactly
-    // one row (preserving the user's first row's typed values).
-    if (type === 'single' && data.passphrases && data.passphrases.length > 1) {
-        data.passphrases = [data.passphrases[0]];
-    }
-    // ALWAYS re-render passphrase rows after the seed-set count changes
-    // so each Target <select> rebuilds its options against the current
-    // available sets. Without this, switching from 3-of-5 to 3-of-3 (for
-    // example) would leave a passphrase row's dropdown still listing
-    // Set 4 / Set 5 — orphan options that no longer match any seed set.
-    _wrecRenderPassphraseRows(data.passphrases);
-
-    if (!skipBuild) wrec_buildPreview();
-}
-
-/* Threshold-N change handler — fires when the user changes the
-   "n" dropdown in the multisig "m of n" selector. Resizes the
-   seed-set inputs to exactly N rows (preserving already-typed
-   values for surviving indices) so the form is always aligned
-   to the wallet's actual key count. */
-function wrec_onMsNChange() {
-    var type = (document.getElementById('wrec-type') || {}).value || 'single';
-    var n    = (document.getElementById('wrec-ms-n')   || {}).value || '3';
-    if (type === 'multisig') {
-        var data = _wrecCollectFormData();
-        data.seedSets = _wrecResizeSeedSetsForN(data.seedSets, n);
-        _wrecRenderKeySetInputs(data.seedSets);
-    }
-    wrec_buildPreview();
-}
-
-function wrec_onPassphraseRequiredChange(skipBuild) {
-    var on = !!((document.getElementById('wrec-pp-required') || {}).checked);
-    var fields = document.getElementById('wrec-pp-fields');
-    if (fields) fields.style.display = on ? 'block' : 'none';
-    if (!skipBuild) wrec_buildPreview();
+    wrec_onManualShapeChange();
 }
 
 /* ----------------------------------------------------------------
-   _wrecParseDescriptor(s)
-   Parse a descriptor string into a structured summary used by the
-   deep-state-sync pull flow. Returns:
-     {
-       isMulti:  bool,
-       msM:      number      // multisig threshold (1 for single-sig)
-       msN:      number      // total keys (1 for single-sig)
-       script:   string      // human label matching the Script Type select
-       fingerprints: string[] // 8-char hex fingerprints from each [fp/path]
-     }
-   The parser only reads — never mutates state — so callers can run
-   it safely multiple times.
+   wrec_pullDescriptor — "Use the wallet I just built". Copies the
+   descriptor from the Output Descriptor tool, reads it, and records
+   the passphrase that tool used against the key it belongs to.
    ---------------------------------------------------------------- */
-function _wrecParseDescriptor(s) {
-    var out = { isMulti: false, msM: 1, msN: 1, script: 'Native Segwit (P2WPKH)', fingerprints: [] };
-    if (!s) return out;
-    var d = s.trim();
-
-    // Pull every [fingerprint/path] token in order. Each xpub in the
-    // descriptor is preceded by one such block; its 8-hex-digit prefix
-    // is the BIP-32 root fingerprint of that key's seed.
-    var fpRegex = /\[([0-9a-fA-F]{8})\/[^\]]*\]/g;
-    var match;
-    while ((match = fpRegex.exec(d)) !== null) {
-        out.fingerprints.push(match[1].toLowerCase());
-    }
-
-    // Detect multisig wsh(sortedmulti(M, …)) shape.
-    var ms = /^\s*wsh\s*\(\s*sortedmulti\s*\(\s*(\d+)\s*,/i.exec(d);
-    if (ms) {
-        out.isMulti = true;
-        out.msM = parseInt(ms[1], 10) || 1;
-        out.msN = out.fingerprints.length || out.msM;
-        out.script = 'Native Segwit (P2WSH)';
-        return out;
-    }
-
-    // Single-sig variants — match the prefix to a Script Type label.
-    if (/^\s*wpkh\s*\(/i.test(d))            { out.script = 'Native Segwit (P2WPKH)'; }
-    else if (/^\s*tr\s*\(/i.test(d))         { out.script = 'Taproot (P2TR)'; }
-    else if (/^\s*sh\s*\(\s*wpkh\s*\(/i.test(d)) { out.script = 'Nested Segwit (P2SH-P2WPKH)'; }
-    else if (/^\s*pkh\s*\(/i.test(d))        { out.script = 'Legacy (P2PKH)'; }
-    else if (/^\s*sp\s*\(/i.test(d))         { out.script = 'Silent Payment (sp1q)'; }
-    out.msM = 1;
-    out.msN = 1;
-    return out;
-}
-
-/* ----------------------------------------------------------------
-   wrec_pullDescriptor — DEEP STATE SYNC
-   Click handler for the "Pull Active Descriptor" button. Pulls EVERY
-   piece of metadata the Wallet Record needs to faithfully represent
-   the active wallet:
-
-     1. The output descriptor string (was: only this).
-     2. Wallet type (single vs multisig) parsed from the descriptor.
-     3. M-of-N threshold parsed from sortedmulti(M, …).
-     4. Script type parsed from the descriptor's outer wrapper.
-     5. Per-key seed-set hints derived from each [fingerprint/path]
-        block in the descriptor — printed as
-        "Set N (fingerprint ABC12345)" so the heir can verify each key
-        by its BIP-32 root fingerprint at restore time.
-     6. The active BIP-39 passphrase pulled from
-        SafeKeepOS.getPassphrase() — tied to "Set 1" by default,
-        which the user can re-target via the dropdown if a multisig
-        setup uses different passphrases per key.
-
-   Fires the standard wrec_onTypeChange / wrec_onPassphraseRequiredChange
-   visibility handlers afterwards so the UI re-renders to match the
-   pulled state, then repaints the preview.
-   ---------------------------------------------------------------- */
-function wrec_pullDescriptor() {
-    // ── 1. Read the descriptor from the active Descriptor Builder ──
+async function wrec_pullDescriptor() {
     var d = '';
     try {
         if (typeof desc_state !== 'undefined' && desc_state.currentDescriptor) {
@@ -35005,100 +34937,40 @@ function wrec_pullDescriptor() {
     } catch (_) { d = ''; }
 
     if (!d) {
-        // UX guardrail: the Wallet Record tool is a recorder — it can only
-        // pull a descriptor the user has already built in the Output
-        // Descriptor tool. If that global state is empty, stop here with a
-        // clear, unmissable instruction rather than silently doing nothing.
-        alert('Please generate an Output Descriptor in the Output Descriptor tool first.');
+        alert('Please generate an Output Descriptor in the Output Descriptor tool first — or paste one from your wallet app.');
         return;
     }
 
-    // ── 2. Parse the descriptor into structured metadata ──
-    var meta = _wrecParseDescriptor(d);
+    document.getElementById('wrec-descriptor').value = d;
+    _wrecApplyDescriptor();
+    if (!_wrecMeta) { showStatus('The Output Descriptor tool’s descriptor couldn’t be read here.', 'error'); return; }
 
-    // ── 3. Apply parsed metadata to the form ──
-    var ta = document.getElementById('wrec-descriptor');
-    if (ta) ta.value = d;
-
-    // ── First Receiving Address ──
-    // Scrape the first row of the Descriptor tool's verified-address list
-    // (#desc-address-list). For ordinary HD wallets desc_generateSingle /
-    // desc_generateMulti populate it with rows formatted as "m/0/0  bc1q…",
-    // so we strip the m/0/0 path prefix and any leading whitespace to leave
-    // the bare address. For a Silent Payment wallet there's no HD chain —
-    // the SP branch renders a single row formatted as "sp1q  sp1q…<address>"
-    // (a literal "sp1q" label followed by the actual sp1q address). The
-    // m/0/0 strip leaves the label in place, which produced the
-    // "sp1q sp1qq06ze…" glitch with the duplicated prefix. Detect the SP
-    // case via the descriptor's sp( prefix and instead pick the longest
-    // sp1q-prefixed token from the row — that's the real address.
-    var firstAddr = '';
-    var isSpDesc = /^\s*sp\s*\(/i.test(d);
-    try {
-        var addrList = document.getElementById('desc-address-list');
-        if (addrList) {
-            var firstRow = addrList.querySelector('div');
-            if (firstRow) {
-                var raw = (firstRow.textContent || '').trim();
-                if (isSpDesc) {
-                    // textContent flattens "<span>sp1q</span>&nbsp;…<span>sp1q…</span>"
-                    // into "sp1q  sp1q…address"; split on whitespace (incl.
-                    // from &nbsp;) and keep the longest sp1q-prefixed token.
-                    var tokens = raw.split(/\s+/).filter(function (t) { return /^sp1q/i.test(t); });
-                    firstAddr = tokens.reduce(function (a, b) { return b.length > a.length ? b : a; }, '');
-                } else {
-                    // Strip leading "m/0/0" path prefix (with surrounding
-                    // whitespace) — what's left is the bare address.
-                    firstAddr = raw.replace(/^m\/0\/0\s*/, '').trim();
-                }
+    // Fallback: if the address couldn't be worked out here, take index 0
+    // from the Output Descriptor tool's own verified list.
+    if (!_wrecMeta.firstAddress) {
+        var firstAddr = '';
+        try {
+            var firstRow = document.querySelector('#desc-address-list div');
+            var rawRow = firstRow ? (firstRow.textContent || '').trim() : '';
+            if (/^\s*sp\s*\(/i.test(d)) {
+                firstAddr = rawRow.split(/\s+/).filter(function(t) { return /^sp1q/i.test(t); })
+                    .reduce(function(a, b) { return b.length > a.length ? b : a; }, '');
+            } else {
+                firstAddr = rawRow.replace(/^m\/0\/0\s*/, '').trim();
             }
+        } catch (_) { firstAddr = ''; }
+        if (firstAddr) {
+            var fa = document.getElementById('wrec-first-address');
+            fa.value = firstAddr;
+            document.getElementById('wrec-first-address-note').textContent = 'Taken from the Output Descriptor tool.';
         }
-    } catch (_) { firstAddr = ''; }
-    var faEl = document.getElementById('wrec-first-address');
-    if (faEl) faEl.value = firstAddr;
-
-    var typeEl = document.getElementById('wrec-type');
-    if (typeEl) typeEl.value = meta.isMulti ? 'multisig' : 'single';
-
-    var mEl = document.getElementById('wrec-ms-m'); if (mEl) mEl.value = String(meta.msM);
-    var nEl = document.getElementById('wrec-ms-n'); if (nEl) nEl.value = String(meta.msN);
-
-    var scrEl = document.getElementById('wrec-script');
-    if (scrEl) scrEl.value = meta.script;
-
-    // ── 4. Build seed-set hints from the descriptor's fingerprints ──
-    // Format: "Set N (fingerprint ABC12345)" — gives the heir a verifiable
-    // anchor without leaking words. The word "fingerprint" is spelled out
-    // (rather than the "fp:" abbreviation) so it reads unambiguously on a
-    // physical paper backup. Fingerprint is uppercased to match the global
-    // capitalization standard. If no fingerprints were extracted (malformed
-    // descriptor), fall back to a blank N-row default for manual entry.
-    var seedSets;
-    if (meta.fingerprints.length) {
-        seedSets = meta.fingerprints.map(function(fp, i) {
-            return 'Set ' + (i + 1) + ' (fingerprint ' + fp.toUpperCase() + ')';
-        });
-    } else {
-        seedSets = [];
-        for (var i = 0; i < meta.msN; i++) seedSets.push('');
     }
-    _wrecRenderKeySetInputs(seedSets);
 
-    // ── 5. Pull the passphrase + automate the UI ──
-    // The Descriptor Builder uses its OWN local passphrase input
-    // (#desc-passphrase for single-sig, #desc-ms-passphrase for multisig)
-    // — see desc_generateSingle line 23264 and desc_generateMulti line
-    // 23349. THAT is the value actually applied to the BIP-39 derivation
-    // that produced the descriptor we just pulled. So we read from those
-    // local fields first; SafeKeepOS.getPassphrase() (the dashboard /
-    // global session passphrase) is only a fallback for the unlikely
-    // case where the user generated the descriptor with the dashboard
-    // passphrase pre-loaded but never touched the Descriptor tool's
-    // own input.
+    // The passphrase the Output Descriptor tool derived with: its own field
+    // first, the session passphrase as a fallback.
     var activePP = '';
     try {
-        var localId = meta.isMulti ? 'desc-ms-passphrase' : 'desc-passphrase';
-        var localEl = document.getElementById(localId);
+        var localEl = document.getElementById(_wrecMeta.isMulti ? 'desc-ms-passphrase' : 'desc-passphrase');
         if (localEl && typeof localEl.value === 'string' && localEl.value.length > 0) {
             activePP = localEl.value;
         } else if (window.SafeKeepOS && typeof window.SafeKeepOS.getPassphrase === 'function') {
@@ -35106,61 +34978,110 @@ function wrec_pullDescriptor() {
         }
     } catch (_) { activePP = ''; }
 
-    // Strict length check: a passphrase must be a non-empty string with
-    // at least one character. Falsy / empty values fall through to the
-    // "no passphrase" branch so the checkbox never gets checked for a
-    // placeholder.
-    var hasPassphrase = (typeof activePP === 'string') && activePP.length > 0;
-
-    // ── Run wrec_onTypeChange FIRST so the +Add Passphrase button, the
-    //    multisig threshold wrap, and (critically) the passphrase Target
-    //    <select> options are all rebuilt against the new seed-set count
-    //    BEFORE we render the pulled passphrase row. ──
-    wrec_onTypeChange(/*skipBuild*/true);
-
-    // ── Three-step automation per spec — uses dispatchEvent so the same
-    //    code path the user's manual click would fire is exercised. The
-    //    inline onchange="wrec_onPassphraseRequiredChange()" handler on
-    //    the checkbox flips #wrec-pp-fields display between block/none
-    //    based on the (now-updated) checked state.
-    //
-    //    Setting .checked programmatically does NOT fire a native
-    //    'change' event, so we explicitly construct one and dispatch
-    //    it. Order is critical:
-    //      (a) set the checkbox state
-    //      (b) populate the row(s) so the values are in the DOM by the
-    //          time the visibility handler runs
-    //      (c) dispatch 'change' — the handler unhides #wrec-pp-fields
-    //          AND repaints the live preview from the now-populated DOM.
-    var ppReq = document.getElementById('wrec-pp-required');
-    if (ppReq) ppReq.checked = !!hasPassphrase;
-    if (hasPassphrase) {
-        _wrecRenderPassphraseRows([{ target: 'Set 1', value: activePP }]);
-    } else {
-        _wrecRenderPassphraseRows([{ target: 'Set 1', value: '' }]);
+    if (activePP) {
+        // In a multisig, the passphrase belongs to this device's key: the one
+        // whose fingerprint matches the loaded seed + passphrase.
+        var idx = 0;
+        if (_wrecMeta.isMulti && typeof desc_state !== 'undefined' && desc_state.loadedSeed) {
+            try {
+                var localFp = await _ppFingerprint(desc_state.loadedSeed, activePP);
+                for (var i = 0; i < _wrecKeys.length; i++) {
+                    if (_wrecKeys[i].fp === localFp) { idx = i; break; }
+                }
+            } catch (_) { idx = 0; }
+        }
+        _wrecKeys[idx].ppOn = true;
+        _wrecKeys[idx].pp = activePP;
+        _wrecRenderKeys();
+        wrec_buildPreview();
     }
-    if (ppReq) {
+
+    showStatus('Wallet added: ' + (_wrecMeta.isMulti ? _wrecMeta.msM + '-of-' + _wrecMeta.msN + ' multisig' : 'single-signature') +
+        ', ' + _wrecMeta.script + (activePP ? ', passphrase included' : '') + '. Now name each key.', 'success');
+}
+
+/* ----------------------------------------------------------------
+   Descriptor QR scanner: plain-text descriptors, and animated UR
+   (crypto-output / crypto-account / bytes) as exported by hardware
+   wallets. Decoding reuses the Output Descriptor tool's CBOR helpers.
+   ---------------------------------------------------------------- */
+async function wrec_scanQR() {
+    if (!window.jsQR) { showStatus('QR scanner library not available.', 'error'); return; }
+    wrec_stopQR();
+    var area = document.getElementById('wrec-qr-area');
+    area.style.display = 'block';
+    _wrecScanDone = false;
+    _wrecUrDecoder = window.URDecoder ? new window.URDecoder() : null;
+    var statusEl = document.getElementById('wrec-scan-status');
+    if (statusEl) statusEl.textContent = 'Point the camera at the descriptor QR code…';
+    try {
+        _wrecQrScanner = SKScanner.create('wrec-qr-reader');
+        await _wrecQrScanner.start({ fps: 10 }, _wrecOnQrScanned);
+    } catch (err) {
+        showStatus('Camera failed: ' + err.message, 'error');
+        area.style.display = 'none';
+    }
+}
+
+function wrec_stopQR() {
+    if (_wrecQrScanner) { try { _wrecQrScanner.stop(); } catch (_) {} _wrecQrScanner = null; }
+    var area = document.getElementById('wrec-qr-area');
+    if (area) area.style.display = 'none';
+}
+
+function _wrecOnQrScanned(text, binaryData) {
+    if (_wrecScanDone) return;
+    var statusEl = document.getElementById('wrec-scan-status');
+    var parsed = window.QRParser ? window.QRParser.parseQRScan(text, binaryData) : text;
+    if (typeof parsed !== 'string') { if (statusEl) statusEl.textContent = 'That QR code isn’t a descriptor.'; return; }
+    var t = parsed.trim();
+    if (!t) return;
+
+    var descriptor = t;
+    if (t.toUpperCase().indexOf('UR:') === 0) {
+        if (!_wrecUrDecoder) { if (statusEl) statusEl.textContent = 'Animated QR codes aren’t supported in this build.'; return; }
         try {
-            ppReq.dispatchEvent(new Event('change', { bubbles: true }));
-        } catch (_) {
-            // Older engines without the Event constructor — fall back to
-            // a manual handler call so the visibility cascade still runs.
-            wrec_onPassphraseRequiredChange();
+            _wrecUrDecoder.receivePart(t);
+        } catch (e) {
+            _wrecUrDecoder = new window.URDecoder();
+            if (statusEl) statusEl.textContent = 'Bad frame — keep scanning…';
+            return;
+        }
+        if (statusEl) statusEl.textContent = 'Scanning animated QR… ' + Math.round(_wrecUrDecoder.getProgress() * 100) + '%';
+        if (!_wrecUrDecoder.isComplete()) return;
+        if (!_wrecUrDecoder.isSuccess()) {
+            _wrecUrDecoder = new window.URDecoder();
+            if (statusEl) statusEl.textContent = 'Couldn’t assemble the animated QR — keep scanning…';
+            return;
+        }
+        try {
+            var ur = _wrecUrDecoder.resultUR();
+            var urType = (ur.type || '').toLowerCase();
+            if (urType === 'crypto-output' || urType === 'crypto-account') {
+                descriptor = descv_decodeCryptoOutput(ur.cbor);
+            } else if (urType === 'bytes') {
+                var raw = window.CBOR.decode(Buffer.from(ur.cbor));
+                var bytes = (raw instanceof Uint8Array) ? raw : ur.cbor;
+                descriptor = '';
+                for (var i = 0; i < bytes.length; i++) descriptor += String.fromCharCode(bytes[i]);
+                descriptor = descriptor.trim();
+            } else {
+                _wrecUrDecoder = new window.URDecoder();
+                if (statusEl) statusEl.textContent = 'That QR code is a "' + urType + '", not a descriptor.';
+                return;
+            }
+        } catch (e) {
+            _wrecUrDecoder = new window.URDecoder();
+            if (statusEl) statusEl.textContent = 'Couldn’t decode the QR: ' + (e.message || e);
+            return;
         }
     }
 
-    // ── 7. Final preview repaint guard ──
-    // wrec_onPassphraseRequiredChange (fired via the change event above)
-    // already calls wrec_buildPreview, but we call it again here as a
-    // belt-and-suspenders against any path where the dispatch silently
-    // no-ops (e.g. ppReq is null in some future refactor). The repeat
-    // call is cheap and idempotent.
-    wrec_buildPreview();
-
-    var summary = meta.isMulti
-        ? meta.msM + '-of-' + meta.msN + ' multisig (' + meta.fingerprints.length + ' fingerprints'
-        : 'single-sig (' + meta.script + (meta.fingerprints.length ? ', fp: ' + meta.fingerprints[0].toUpperCase() : '');
-    showStatus('Pulled active descriptor: ' + summary + (hasPassphrase ? ', passphrase synced' : '') + ').', 'success');
+    _wrecScanDone = true;
+    wrec_stopQR();
+    document.getElementById('wrec-descriptor').value = descriptor;
+    _wrecApplyDescriptor();
+    showStatus(_wrecMeta ? 'Descriptor scanned. Now name each key.' : 'Scanned, but the descriptor couldn’t be read — see the message under it.', _wrecMeta ? 'success' : 'error');
 }
 
 /* ----------------------------------------------------------------
@@ -35239,7 +35160,7 @@ function _wrecRenderDocument(target, data, opts) {
     // wrap rather than overflow the page.
     var descHtml = data.descriptor
         ? '<div style="font-family: monospace; font-size: 0.8125rem; word-break: break-all; line-height: 1.5;">' + esc(data.descriptor) + '</div>'
-        : '<div style="color: #999; font-style: italic;">(no output descriptor — paste one above or click "Pull Active Descriptor")</div>';
+        : '<div style="color: #999; font-style: italic;">(no output descriptor — paste one above or click "Use the wallet I just built")</div>';
 
     target.innerHTML =
         // ── Top-half two-column layout ──
@@ -35351,7 +35272,6 @@ function _wrecRenderQR(canvasId, descriptor) {
    but currently the function always rebuilds — fast enough that
    debouncing isn't worth it. */
 function wrec_buildPreview(force) {
-    _wrecPersist();
     var data = _wrecCollectFormData();
     var target = document.getElementById('wrec-preview');
     if (!target) return;
@@ -35410,18 +35330,16 @@ async function wrec_print() {
             setTimeout(function() {
                 document.body.classList.remove('printing-wrec');
                 printArea.style.display = 'none';
+                printArea.innerHTML = '';   // don't leave a passphrase in the hidden copy
                 document.title = _wrecOriginalTitle;
             }, 500);
         }, 60);
     });
 }
 
-/* Reset every form field and persist the empty state. Useful when
-   the user wants to start a fresh record without manually clearing. */
+/* Reset every form field to start a fresh record. */
 function wrec_clearForm() {
     if (!confirm('Reset every Wallet Record field? This cannot be undone.')) return;
-    try { localStorage.removeItem(_WREC_LS_KEY); } catch (_) {}
-    // Re-init from defaults.
     wrec_init();
     showStatus('Wallet Record form reset.', 'success');
 }
