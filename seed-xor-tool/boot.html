@@ -7366,6 +7366,9 @@
                                 <button type="button" class="skb-btn" id="cipher-save-btn"
                                         style="flex: 1; min-width: 120px; background: var(--skb-primary); color: black; font-weight: 600;"
                                         onclick="cipher_save()">Archive (Save)</button>
+                                <button type="button" class="skb-btn" id="cipher-use-btn"
+                                        style="flex: 1; min-width: 150px;"
+                                        onclick="cipher_useNow()">Use this wallet now</button>
                                 <button type="button" class="skb-btn" style="flex: 1; min-width: 100px;" onclick="cipher_new()">Clear / New</button>
                             </div>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -14007,6 +14010,52 @@ function _dash_updatePassphraseButtons() {
  * the current seed + passphrase, update the identity badge, and push
  * the passphrase into the global session.
  */
+/**
+ * Make `passphrase` the session's active BIP-39 passphrase: derive the new
+ * master fingerprint, store the passphrase in both session layers, and update
+ * the dashboard. Shared by the Dashboard's Apply and the Passphrase Library's
+ * "Use this wallet now". Returns the new fingerprint; throws on failure.
+ */
+async function _applySessionPassphrase(passphrase) {
+    var session = window.SeedSession ? window.SeedSession.get() : null;
+    if (!session || !session.mnemonic) throw new Error('No seed loaded.');
+    if (!window.BtcMath || !window.BtcMath.bip39 || !window.BtcMath.HDKey) throw new Error('Core crypto libraries not loaded.');
+
+    // Derive root with passphrase
+    var newFP = await _ppFingerprint(session.mnemonic, passphrase);
+
+    // Store passphrase in both session layers
+    if (window.SeedSession && window.SeedSession.setPassphrase) window.SeedSession.setPassphrase(passphrase);
+    if (window.SafeKeepOS && window.SafeKeepOS.setPassphrase) window.SafeKeepOS.setPassphrase(passphrase);
+
+    // Save base fingerprint (before passphrase) for revert
+    if (typeof pp_config !== 'undefined') {
+        if (!pp_config._baseFingerprint) {
+            pp_config._baseFingerprint = session.fingerprint;
+        }
+        pp_config._lastAppliedFP = newFP;
+        pp_config._lastAppliedPassphrase = passphrase;
+        pp_config._passphraseActive = true;
+    }
+
+    // Keep the dashboard passphrase field in step when applied from elsewhere
+    var dashInput = document.getElementById('dash-pp-input');
+    if (dashInput) dashInput.value = passphrase;
+
+    // Update dashboard fingerprint badge
+    var dashFP = document.getElementById('dash-fingerprint');
+    if (dashFP) dashFP.textContent = newFP;
+
+    // Update identity label → "Passphrase Wallet Active"
+    var dashLabel = document.getElementById('dash-identity-label');
+    if (dashLabel) dashLabel.textContent = 'Passphrase Wallet Active';
+
+    // Update button states (Apply hides, Clear shows)
+    _dash_updatePassphraseButtons();
+    _globalSeedStatusUpdate();
+    return newFP;
+}
+
 async function dash_applyPassphrase() {
     var input = document.getElementById('dash-pp-input');
     var passphrase = input ? input.value : '';
@@ -14023,45 +14072,7 @@ async function dash_applyPassphrase() {
     }
 
     try {
-        var bip39 = window.BtcMath.bip39;
-        var HDKey = window.BtcMath.HDKey;
-        if (!bip39 || !HDKey) throw new Error('Core crypto libraries not loaded.');
-
-        // Derive root with passphrase
-        var seedBytes = await bip39.mnemonicToSeed(session.mnemonic, passphrase);
-        var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-        var newFP = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-
-        // Store passphrase in both session layers
-        if (window.SeedSession && window.SeedSession.setPassphrase) window.SeedSession.setPassphrase(passphrase);
-        if (window.SafeKeepOS && window.SafeKeepOS.setPassphrase) window.SafeKeepOS.setPassphrase(passphrase);
-
-        // Save base fingerprint (before passphrase) for revert
-        if (typeof pp_config !== 'undefined') {
-            if (!pp_config._baseFingerprint) {
-                pp_config._baseFingerprint = session.fingerprint;
-            }
-            pp_config._lastAppliedFP = newFP;
-            pp_config._lastAppliedPassphrase = passphrase;
-            pp_config._passphraseActive = true;
-        }
-
-        // Update dashboard fingerprint badge
-        var dashFP = document.getElementById('dash-fingerprint');
-        if (dashFP) dashFP.textContent = newFP;
-
-        // Update identity label → "Passphrase Wallet Active"
-        var dashLabel = document.getElementById('dash-identity-label');
-        if (dashLabel) dashLabel.textContent = 'Passphrase Wallet Active';
-
-        // Sync cipher workspace if it has fields
-        var cipherPP = document.getElementById('cipher-passphrase');
-        if (cipherPP) cipherPP.value = passphrase;
-
-        // Update button states (Apply hides, Clear shows)
-        _dash_updatePassphraseButtons();
-        _globalSeedStatusUpdate();
-
+        var newFP = await _applySessionPassphrase(passphrase);
         showStatus('Passphrase applied. New fingerprint: <strong>' + (newFP || '').toUpperCase() + '</strong>. All tools now derive from the passphrase wallet.', 'success');
     } catch (err) {
         showStatus('Failed to apply passphrase: ' + err.message, 'error');
@@ -25706,7 +25717,7 @@ function _skbPrintInterstitial(callback) {
     };
 }
 
-function pp_print() {
+async function pp_print() {
     // Pull the passphrase from the Cipher workspace field
     var text = document.getElementById('cipher-passphrase').value;
     if (!text) { showStatus('No passphrase in the workspace. Enter or load a passphrase first.', 'error'); return; }
@@ -25743,13 +25754,15 @@ function pp_print() {
         var seedWords = session.mnemonic.trim().split(/\s+/);
         checksumEl.textContent = seedWords[seedWords.length - 1] || '--------';
 
-        // Passphrase fingerprint — use the cached value if available
-        if (pp_config._lastAppliedFP && pp_config.lastPassphrase) {
-            ppFpEl.textContent = pp_config._lastAppliedFP;
-        } else if (pp_config._liveFP) {
-            ppFpEl.textContent = pp_config._liveFP;
-        } else {
-            ppFpEl.textContent = 'Not yet computed — apply passphrase first';
+        // Passphrase fingerprint — always derived from the exact text being
+        // printed. (A cached value could belong to a different passphrase,
+        // e.g. the wallet applied on the Dashboard, and put the wrong
+        // fingerprint on the backup sheet.)
+        try {
+            ppFpEl.textContent = await _ppFingerprint(session.mnemonic, text);
+        } catch (e) {
+            showStatus('Could not compute the passphrase fingerprint: ' + e.message, 'error');
+            return;
         }
     } else {
         parentFpEl.textContent = 'No seed loaded';
@@ -25777,58 +25790,19 @@ function pp_print() {
 
 
 // =============================================
-// Passphrase Manager: Apply / Revert / Live FP
+// Passphrase Manager: Fingerprints
 // =============================================
 
 var _ppFpDebounce = null;
 
 /**
- * Called on every keystroke in the Apply inputs.
- * Validates match, shows/hides fingerprint preview, enables Apply button.
+ * BIP-32 master fingerprint (lowercase hex) of seed + passphrase.
  */
-function pp_onApplyInput() {
-    var pass1 = document.getElementById('cipher-passphrase').value;
-    var pass2 = document.getElementById('cipher-confirm').value;
-    var matchEl = document.getElementById('cipher-match-status');
-    var fpPreview = document.getElementById('pp-fp-preview');
-
-    // Show/hide Print button based on whether passphrase field has content
-    var printBtn = document.getElementById('pp-print-btn');
-    if (printBtn) {
-        printBtn.style.display = pass1.length > 0 ? 'block' : 'none';
-    }
-
-    // Live fingerprint preview — show whenever passphrase field has content
-    if (fpPreview) {
-        if (pass1.length > 0) {
-            fpPreview.style.display = 'block';
-            _pp_computeLiveFP(pass1);
-        } else {
-            fpPreview.style.display = 'none';
-            document.getElementById('pp-fp-value').textContent = '--------';
-            pp_config._liveFP = '';
-        }
-    }
-
-    // Show base fingerprint
-    var session = window.SeedSession ? window.SeedSession.get() : null;
-    var baseFpEl = document.getElementById('pp-fp-base');
-    if (baseFpEl) baseFpEl.textContent = (session && session.fingerprint) || '--------';
-
-    // Match validation
-    if (!matchEl) return;
-    if (pass2.length === 0) {
-        matchEl.textContent = '';
-        return;
-    }
-
-    if (pass1 === pass2) {
-        matchEl.textContent = 'Passphrases match';
-        matchEl.style.color = 'var(--skb-secondary, #28a745)';
-    } else {
-        matchEl.textContent = 'Passphrases do not match';
-        matchEl.style.color = 'var(--skb-danger)';
-    }
+async function _ppFingerprint(mnemonic, passphrase) {
+    var seedBytes = await window.BtcMath.bip39.mnemonicToSeed(mnemonic, passphrase);
+    var root = window.BtcMath.HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+    if (seedBytes instanceof Uint8Array) seedBytes.fill(0);
+    return root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
 }
 
 /**
@@ -25848,11 +25822,7 @@ function _pp_computeLiveFP(passphrase) {
                 return;
             }
 
-            var bip39 = window.BtcMath.bip39;
-            var HDKey = window.BtcMath.HDKey;
-            var seedBytes = await bip39.mnemonicToSeed(session.mnemonic, passphrase);
-            var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-            var fp = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
+            var fp = await _ppFingerprint(session.mnemonic, passphrase);
 
             document.getElementById('pp-fp-value').textContent = fp;
             pp_config._liveFP = fp;
@@ -25862,142 +25832,6 @@ function _pp_computeLiveFP(passphrase) {
         }
         if (computingEl) computingEl.style.display = 'none';
     }, 300);
-}
-
-/**
- * Apply the generated passphrase to the first input only.
- * Leaves the confirm field blank and focuses it, forcing the user to
- * manually re-type the passphrase to prove they have secured it.
- */
-function pp_applyGenerated() {
-    if (!pp_config.lastPassphrase) { showStatus('Generate a passphrase first.', 'error'); return; }
-    // Inject generated passphrase into the Cipher workspace
-    document.getElementById('cipher-passphrase').value = pp_config.lastPassphrase;
-    document.getElementById('cipher-confirm').value = '';  // intentionally blank — user must re-type
-    _cipherDirty = true;
-    cipher_onConfirmInput();
-    // Scroll the workspace into view and focus the confirm field
-    var workspace = document.getElementById('cipher-confirm');
-    if (workspace) {
-        workspace.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(function() { workspace.focus(); }, 350);
-    }
-    showStatus('Passphrase loaded. Re-type it in the Confirm field to verify.', 'info');
-}
-
-/**
- * Legacy alias — kept for backward compatibility if any code references pp_useGenerated.
- */
-function pp_useGenerated() {
-    pp_applyGenerated();
-}
-
-/**
- * Apply the verified passphrase to the vault.
- * Re-derives root from seed + passphrase, updates session and header.
- */
-async function pp_applyPassphrase() {
-    // Read from consolidated workspace fields
-    var pass1 = document.getElementById('cipher-passphrase').value;
-    var pass2 = document.getElementById('cipher-confirm').value;
-
-    if (pass1 !== pass2 || pass1.length === 0) {
-        showStatus('Passphrases do not match.', 'error');
-        return;
-    }
-
-    var session = window.SeedSession ? window.SeedSession.get() : null;
-    if (!session || !session.mnemonic) {
-        showStatus('No seed loaded. Cannot apply passphrase.', 'error');
-        return;
-    }
-
-    try {
-        var bip39 = window.BtcMath.bip39;
-        var HDKey = window.BtcMath.HDKey;
-        if (!bip39 || !HDKey) throw new Error('Core crypto libraries not loaded.');
-
-        // Derive root with passphrase
-        var seedBytes = await bip39.mnemonicToSeed(session.mnemonic, pass1);
-        var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-        var newFP = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-
-        // Store passphrase in session
-        if (window.SeedSession.setPassphrase) window.SeedSession.setPassphrase(pass1);
-        if (window.SafeKeepOS.setPassphrase) window.SafeKeepOS.setPassphrase(pass1);
-
-        // Update the session fingerprint to reflect the passphrase-derived identity
-        // We store the BASE fingerprint separately so we can revert
-        pp_config._baseFingerprint = session.fingerprint;
-        pp_config._lastAppliedFP = newFP;
-        pp_config._passphraseActive = true;
-
-        // Update global header fingerprint
-        var dashFP = document.getElementById('dash-fingerprint');
-        if (dashFP) dashFP.textContent = newFP;
-
-        // Update dashboard passphrase input to match
-        var dashPP = document.getElementById('dash-pp-input');
-        if (dashPP) dashPP.value = pass1;
-
-        // Update dashboard identity label
-        var dashInfo = document.getElementById('dash-identity-label');
-        if (dashInfo) dashInfo.textContent = 'Passphrase Wallet Active';
-
-        // Also sync pp_config._lastAppliedPassphrase for dashboard Apply button logic
-        if (typeof pp_config !== 'undefined') pp_config._lastAppliedPassphrase = pass1;
-
-        // Update clear button visibility on dashboard
-        if (typeof _dash_updatePassphraseButtons === 'function') _dash_updatePassphraseButtons();
-        if (typeof _globalSeedStatusUpdate === 'function') _globalSeedStatusUpdate();
-
-        showStatus('Passphrase applied. New fingerprint: <strong>' + (newFP || '').toUpperCase() + '</strong>. All tools now derive from the passphrase wallet.', 'success');
-    } catch (err) {
-        showStatus('Failed to apply passphrase: ' + err.message, 'error');
-    }
-}
-
-/**
- * Revert to the base vault (no passphrase).
- */
-function pp_revertToBase() {
-    // Clear passphrase from session
-    if (window.SeedSession.clearPassphrase) window.SeedSession.clearPassphrase();
-    if (window.SafeKeepOS.clearPassphrase) window.SafeKeepOS.clearPassphrase();
-
-    // Restore base fingerprint to dashboard header
-    var baseFP = pp_config._baseFingerprint || '';
-    if (!baseFP) {
-        var session = window.SeedSession ? window.SeedSession.get() : null;
-        baseFP = (session && session.fingerprint) || '--------';
-    }
-    var dashFP = document.getElementById('dash-fingerprint');
-    if (dashFP) dashFP.textContent = baseFP;
-
-    // Clear dashboard passphrase input
-    var dashPP = document.getElementById('dash-pp-input');
-    if (dashPP) dashPP.value = '';
-
-    // Restore dashboard identity label
-    var dashInfo = document.getElementById('dash-identity-label');
-    if (dashInfo) dashInfo.textContent = 'Master Seed Active';
-
-    // Reset UI state
-    pp_config._passphraseActive = false;
-    pp_config._lastAppliedFP = '';
-    pp_config._lastAppliedPassphrase = '';
-
-    // Reset consolidated workspace fields
-    var fpPreview = document.getElementById('pp-fp-preview');
-    if (fpPreview) fpPreview.style.display = 'none';
-    var printBtn = document.getElementById('pp-print-btn');
-    if (printBtn) printBtn.style.display = 'none';
-
-    // Update dashboard clear button
-    if (typeof _dash_updatePassphraseButtons === 'function') _dash_updatePassphraseButtons();
-    if (typeof _globalSeedStatusUpdate === 'function') _globalSeedStatusUpdate();
-
-    showStatus('Reverted to base vault. Fingerprint: <strong>' + (baseFP || '').toUpperCase() + '</strong>', 'success');
 }
 
 /**
@@ -26127,6 +25961,8 @@ function _cipherApplySourceUI() {
                       : (!_cipherVerified ? 'Check your written copy first' : '');
     }
 
+    _cipherUpdateUseBtn();
+
     show('pp-fp-preview', true);
     _pp_computeLiveFP(field.value);
     var session = window.SeedSession ? window.SeedSession.get() : null;
@@ -26205,6 +26041,56 @@ function cipher_blockPaste(e) {
     if (e && e.preventDefault) e.preventDefault();
     showStatus('Paste is turned off here — type it, so the check actually catches mistakes.', 'info');
     return false;
+}
+
+/**
+ * Whether the workspace passphrase has passed its check: the written-copy
+ * check for a generated one, a matching Confirm for a typed or loaded one.
+ * Gates both Save and "Use this wallet now".
+ */
+function _cipherReady() {
+    var passphrase = document.getElementById('cipher-passphrase').value;
+    if (!passphrase) return false;
+    if (_cipherSource === 'generated') return _cipherVerified;
+    return document.getElementById('cipher-confirm').value === passphrase;
+}
+
+/**
+ * Sync the "Use this wallet now" button: enabled once the passphrase is
+ * ready, and shown as in use when it is already the session's passphrase.
+ */
+function _cipherUpdateUseBtn() {
+    var btn = document.getElementById('cipher-use-btn');
+    if (!btn) return;
+    var passphrase = document.getElementById('cipher-passphrase').value;
+    var ready = _cipherReady();
+    var active = (window.SeedSession && window.SeedSession.getPassphrase) ? window.SeedSession.getPassphrase() : '';
+    var inUse = ready && active === passphrase;
+    btn.disabled = !ready || inUse;
+    // "In use" is a status, not an unavailable action — keep it readable
+    btn.style.opacity = (btn.disabled && !inUse) ? '0.4' : '1';
+    btn.style.color = inUse ? 'var(--skb-secondary, #28a745)' : '';
+    btn.textContent = inUse ? '\u2713 Wallet in use' : 'Use this wallet now';
+    btn.title = !ready ? (_cipherSource === 'generated' ? 'Check your written copy first' : 'Confirm the passphrase first')
+              : (inUse ? 'Switch back to the base wallet from the Dashboard' : '');
+}
+
+/**
+ * Switch the session to this passphrase wallet without leaving the Library
+ * (same as loading it on the Dashboard and clicking Apply).
+ */
+async function cipher_useNow() {
+    if (!_cipherReady()) {
+        showStatus(_cipherSource === 'generated' ? 'Check your written copy of the passphrase first.' : 'Confirm the passphrase first.', 'error');
+        return;
+    }
+    try {
+        var newFP = await _applySessionPassphrase(document.getElementById('cipher-passphrase').value);
+        _cipherUpdateUseBtn();
+        showStatus('Now using this passphrase wallet. Fingerprint: <strong>' + newFP.toUpperCase() + '</strong>. All tools derive from it until you switch back on the Dashboard.', 'success');
+    } catch (err) {
+        showStatus('Could not use this passphrase: ' + err.message, 'error');
+    }
 }
 
 /**
@@ -26343,6 +26229,7 @@ async function cipher_open(slug) {
     }
     var printBtn = document.getElementById('pp-print-btn');
     if (printBtn) printBtn.style.display = 'inline-block';
+    _cipherUpdateUseBtn();
 
     await cipher_refreshArchive();
 }
@@ -26371,13 +26258,8 @@ async function cipher_save() {
         return;
     }
     // Same gates as the Save button, enforced here too
-    if (_cipherSource === 'generated') {
-        if (!_cipherVerified) {
-            showStatus('Check your written copy of the passphrase before saving.', 'error');
-            return;
-        }
-    } else if (document.getElementById('cipher-confirm').value !== passphrase) {
-        showStatus('Passphrases do not match.', 'error');
+    if (!_cipherReady()) {
+        showStatus(_cipherSource === 'generated' ? 'Check your written copy of the passphrase before saving.' : 'Passphrases do not match.', 'error');
         return;
     }
 
@@ -26528,6 +26410,7 @@ function cipher_onConfirmInput() {
         }
         var printBtn = document.getElementById('pp-print-btn');
         if (printBtn) printBtn.style.display = 'inline-block';
+        _cipherUpdateUseBtn();
 
         // Show fingerprint preview and compute live FP
         if (fpPreview) fpPreview.style.display = 'block';

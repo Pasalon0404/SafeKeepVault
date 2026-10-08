@@ -3,12 +3,16 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
+import * as bip39 from '@scure/bip39';
+import { HDKey } from '@scure/bip32';
 /**
  * test-passphrase-workspace.mjs — Passphrase Library workspace flow through the real cipher_* /
  * pp_* functions in boot.html: generated passphrases lock the field and skip the Confirm re-type,
  * Save stays disabled until the written-copy check passes, Edit turns it back into a typed
  * passphrase, typed passphrases still need a matching Confirm, paste is blocked in both
- * confirmation fields, and generator style options reformat the same words instead of re-rolling.
+ * confirmation fields, generator style options reformat the same words instead of re-rolling,
+ * "Use this wallet now" applies the passphrase through the same path as the Dashboard's Apply,
+ * and Print PDF puts the fingerprint of the printed passphrase on the sheet.
  * Run: node test-passphrase-workspace.mjs
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,15 +42,20 @@ function makeEnv({ amnesia = false } = {}) {
   const els = {};
   const el = (id) => (els[id] ||= { id, value: '', textContent: '', innerHTML: '', type: 'text', readOnly: false, disabled: false,
     checked: false, title: '', style: { display: '' }, focused: false, focus() { this.focused = true; } });
-  const document = { getElementById: el, createElement: () => el('_new') };
+  const document = { getElementById: el, createElement: () => el('_new'), body: { classList: { add() {}, remove() {} } } };
   const statuses = [], saved = [];
+  let activePass = '';
+  const SeedSession = { get: () => ({ mnemonic: MNEMONIC, fingerprint: 'abcd1234' }), getPassphrase: () => activePass,
+    setPassphrase: (v) => { activePass = v || ''; }, clearPassphrase: () => { activePass = ''; } };
   const ctx = vm.createContext({
-    window: { BtcMath: { wordlist }, crypto: globalThis.crypto, SeedSession: { get: () => ({ fingerprint: 'abcd1234' }) } },
+    window: { BtcMath: { wordlist, bip39, HDKey }, crypto: globalThis.crypto, SeedSession },
     document, Uint32Array, Math,
     showStatus: (m, t) => statuses.push(t + ':' + m),
     isAmnesiaMode: () => amnesia,
     _pp_computeLiveFP: () => {},
     cipher_refreshArchive: async () => {},
+    _dash_updatePassphraseButtons: () => {}, _globalSeedStatusUpdate: () => {},
+    _skbPrintInterstitial: () => {}, setTimeout: () => {},
     pp_config: { wordCount: 6, separator: '-', capitalization: 'title', lastPassphrase: '', _lastAppliedPassphrase: '' },
   });
   ctx.window.SafeKeepOS = { savePassphrase: async (nickname, passphrase) => { saved.push({ nickname, passphrase }); return { saved: true, slug: 'x' }; } };
@@ -54,11 +63,14 @@ function makeEnv({ amnesia = false } = {}) {
   vm.runInContext(['var _cipherActiveSlug = null, _cipherDirty = true, _cipherSource = "typed", _cipherVerified = false, _cipherGenInfo = null, _ppDraw = null;',
     ...['pp_cryptoRandomInt', 'pp_applyCase', 'pp_generate', 'pp_render', 'pp_setWordCount', 'pp_setSeparator', 'pp_setCapitalization', 'pp_entropyBits', 'pp_updateEntropy', 'cipher_toggleGenerator', '_cipherApplySourceUI',
         'cipher_editGenerated', 'cipher_startVerify', 'cipher_checkVerify', 'cipher_cancelVerify', 'cipher_blockPaste', 'cipher_onPassphraseInput',
-        'cipher_onConfirmInput', 'cipher_useGenerated', 'cipher_save', 'cipher_new'].map(extract),
+        'cipher_onConfirmInput', 'cipher_useGenerated', 'cipher_save', 'cipher_new', '_cipherReady', '_cipherUpdateUseBtn', 'cipher_useNow',
+        '_ppFingerprint', '_applySessionPassphrase', 'dash_applyPassphrase', 'pp_print'].map(extract),
   ].join('\n'), ctx);
-  return { ctx, el, statuses, saved, last: () => statuses[statuses.length - 1] || '' };
+  return { ctx, el, statuses, saved, last: () => statuses[statuses.length - 1] || '', active: () => activePass };
 }
 const shown = (e) => e.style.display !== 'none';
+const MNEMONIC = 'cannon opinion leader nephew found yard metal galaxy crouch between real trade';
+const fpOf = async (pass) => HDKey.fromMasterSeed(await bip39.mnemonicToSeed(MNEMONIC, pass)).fingerprint.toString(16).padStart(8, '0');
 
 // ---- Generator opens inline and generates straight away ----
 { const { ctx, el } = makeEnv();
@@ -198,6 +210,55 @@ const shown = (e) => e.style.display !== 'none';
   ck('Clear / New drops the draw', ctx._ppDraw === null && ctx.pp_config.lastPassphrase === '');
   ctx.cipher_toggleGenerator(true);
   ck('the next open makes a fresh passphrase', ctx.pp_config.lastPassphrase && ctx.pp_config.lastPassphrase !== pp); }
+
+// ---- "Use this wallet now" (applies via the Dashboard's path) ----
+{ const { ctx, el, last, active } = makeEnv();
+  ctx.cipher_new(); ctx.cipher_toggleGenerator(true); ctx.cipher_useGenerated();
+  const pp = el('cipher-passphrase').value;
+  ck('use-now is disabled before the written-copy check', el('cipher-use-btn').disabled && /written copy/.test(el('cipher-use-btn').title));
+  await ctx.cipher_useNow();
+  ck('cipher_useNow refuses an unchecked generated passphrase', active() === '' && /written copy/.test(last()), last());
+  ctx.cipher_startVerify(); el('cipher-verify-input').value = pp; ctx.cipher_checkVerify();
+  ck('use-now is enabled once the copy is checked', !el('cipher-use-btn').disabled && el('cipher-use-btn').textContent === 'Use this wallet now');
+  await ctx.cipher_useNow();
+  const fp = await fpOf(pp);
+  ck('use-now makes it the session passphrase', active() === pp);
+  ck('use-now updates the dashboard fingerprint, label and field', el('dash-fingerprint').textContent === fp &&
+     el('dash-identity-label').textContent === 'Passphrase Wallet Active' && el('dash-pp-input').value === pp, el('dash-fingerprint').textContent + ' vs ' + fp);
+  ck('use-now reports the new fingerprint', last().includes(fp.toUpperCase()), last());
+  ck('button then shows the wallet is in use', el('cipher-use-btn').disabled && /Wallet in use/.test(el('cipher-use-btn').textContent));
+  ck('use-now works in a Temporary Session too', (() => { const e = makeEnv({ amnesia: true }); e.ctx.cipher_new(); e.el('cipher-passphrase').value = 'abc';
+     e.el('cipher-confirm').value = 'abc'; e.ctx.cipher_onConfirmInput(); return !e.el('cipher-use-btn').disabled && e.el('cipher-save-btn').disabled; })()); }
+{ const { ctx, el, active } = makeEnv();
+  ctx.cipher_new();
+  el('cipher-passphrase').value = 'correct horse'; ctx.cipher_onPassphraseInput();
+  el('cipher-confirm').value = 'correct hors'; ctx.cipher_onConfirmInput();
+  await ctx.cipher_useNow();
+  ck('typed: use-now refuses without a matching Confirm', active() === '');
+  el('cipher-confirm').value = 'correct horse'; ctx.cipher_onConfirmInput();
+  ck('typed: matching Confirm enables use-now', !el('cipher-use-btn').disabled);
+  await ctx.cipher_useNow();
+  ck('typed: use-now applies it', active() === 'correct horse'); }
+
+// ---- Dashboard Apply still works through the shared helper ----
+{ const { ctx, el, last, active } = makeEnv();
+  el('dash-pp-input').value = 'dashboard pass';
+  await ctx.dash_applyPassphrase();
+  ck('dashboard Apply sets the session passphrase and fingerprint', active() === 'dashboard pass' && el('dash-fingerprint').textContent === await fpOf('dashboard pass') && /Passphrase applied/.test(last()), last()); }
+
+// ---- Print PDF fingerprint matches the printed passphrase ----
+{ const { ctx, el } = makeEnv();
+  el('dash-pp-input').value = 'wallet A'; await ctx.dash_applyPassphrase();     // a different wallet is active
+  ctx.cipher_new(); ctx.cipher_toggleGenerator(true); ctx.cipher_useGenerated();  // generator used, so lastPassphrase is set
+  const b = el('cipher-passphrase').value;
+  await ctx.pp_print();
+  ck('printed sheet carries the printed passphrase', el('pp-print-passphrase').textContent === b);
+  ck('printed fingerprint is for the printed passphrase, not the active wallet', el('pp-print-pp-fp').textContent === await fpOf(b) && el('pp-print-pp-fp').textContent !== await fpOf('wallet A'), el('pp-print-pp-fp').textContent);
+  ck('printed word count / entropy come from the generator', el('pp-print-words').textContent === 6 && /^66 bits/.test(el('pp-print-entropy').textContent), el('pp-print-words').textContent + ' ' + el('pp-print-entropy').textContent); }
+
+// ---- Unused apply/revert code is gone ----
+ck('dead pp_applyPassphrase / pp_revertToBase / pp_applyGenerated / pp_useGenerated / pp_onApplyInput removed',
+   !/function (pp_applyPassphrase|pp_revertToBase|pp_applyGenerated|pp_useGenerated|pp_onApplyInput)\s*\(/.test(SRC));
 
 // ---- Markup wiring ----
 { const ws = SRC.slice(SRC.indexOf('<div id="state-passphrase">'), SRC.indexOf('<!-- ======== Archive'));
