@@ -7276,10 +7276,10 @@
                                 <div style="margin-bottom: 1rem;">
                                     <div style="display: flex; gap: 1.5rem;">
                                         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
-                                            <input type="checkbox" id="pp-add-num" onchange="pp_generate()"> Append Number
+                                            <input type="checkbox" id="pp-add-num" onchange="pp_render()"> Append Number
                                         </label>
                                         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem; color: var(--skb-text);">
-                                            <input type="checkbox" id="pp-add-sym" onchange="pp_generate()"> Append Symbol
+                                            <input type="checkbox" id="pp-add-sym" onchange="pp_render()"> Append Symbol
                                         </label>
                                     </div>
                                 </div>
@@ -25525,7 +25525,7 @@ function pp_setSeparator(sep) {
     });
     var active = document.getElementById(map[sep]);
     if (active) { active.style.background = 'var(--skb-primary)'; active.style.color = 'black'; active.style.fontWeight = '600'; }
-    pp_generate();
+    pp_render();
 }
 
 function pp_setCapitalization(mode) {
@@ -25536,7 +25536,7 @@ function pp_setCapitalization(mode) {
     });
     var active = document.getElementById('pp-cap-' + mode);
     if (active) { active.style.background = 'var(--skb-primary)'; active.style.color = 'black'; active.style.fontWeight = '600'; }
-    pp_generate();
+    pp_render();
 }
 
 function pp_applyCase(word) {
@@ -25544,6 +25544,13 @@ function pp_applyCase(word) {
     if (pp_config.capitalization === 'title') return word.charAt(0).toUpperCase() + word.slice(1);
     return word.toLowerCase();
 }
+
+// The current random draw: the lowercase words, plus the appended digit and
+// symbol (each with the word it attaches to), drawn the first time they're
+// switched on. Separator, capitalization and the number/symbol toggles only
+// change how the draw is rendered (pp_render), so they keep the same words;
+// only Regenerate and a word-count change make a new draw (pp_generate).
+var _ppDraw = null;
 
 function pp_generate() {
     try {
@@ -25559,25 +25566,34 @@ function pp_generate() {
 
         var words = [];
         for (var i = 0; i < pp_config.wordCount; i++) {
-            var idx = pp_cryptoRandomInt(wl.length);
-            words.push(pp_applyCase(wl[idx]));
+            words.push(wl[pp_cryptoRandomInt(wl.length)]);
         }
+        _ppDraw = { words: words, num: null, sym: null };
+        pp_render();
+    } catch (err) {
+        showStatus('Generation failed: ' + err.message, 'error');
+    }
+}
 
+function pp_render() {
+    if (!_ppDraw || _ppDraw.words.length !== pp_config.wordCount) { pp_generate(); return; }
+    try {
         var addNum = document.getElementById('pp-add-num') && document.getElementById('pp-add-num').checked;
         var addSym = document.getElementById('pp-add-sym') && document.getElementById('pp-add-sym').checked;
 
-        // Inject number/symbol into a random word position
+        // Number/symbol go onto a random word; drawn once, then kept
         var NUMBERS = '0123456789';
         var SYMBOLS = '!@#$%^&*';
+        if (addNum && !_ppDraw.num) {
+            _ppDraw.num = { at: pp_cryptoRandomInt(_ppDraw.words.length), ch: NUMBERS[pp_cryptoRandomInt(NUMBERS.length)] };
+        }
+        if (addSym && !_ppDraw.sym) {
+            _ppDraw.sym = { at: pp_cryptoRandomInt(_ppDraw.words.length), ch: SYMBOLS[pp_cryptoRandomInt(SYMBOLS.length)] };
+        }
 
-        if (addNum) {
-            var ni = pp_cryptoRandomInt(words.length);
-            words[ni] = words[ni] + NUMBERS[pp_cryptoRandomInt(NUMBERS.length)];
-        }
-        if (addSym) {
-            var si = pp_cryptoRandomInt(words.length);
-            words[si] = words[si] + SYMBOLS[pp_cryptoRandomInt(SYMBOLS.length)];
-        }
+        var words = _ppDraw.words.map(pp_applyCase);
+        if (addNum) words[_ppDraw.num.at] += _ppDraw.num.ch;
+        if (addSym) words[_ppDraw.sym.at] += _ppDraw.sym.ch;
 
         var passphrase = words.join(pp_config.separator);
         pp_config.lastPassphrase = passphrase;
@@ -26042,8 +26058,8 @@ function _cipherMask(raw) {
 
 /**
  * Open/close the inline Generator under the passphrase field. Pass a boolean
- * to force a state; with no argument it toggles. Opening it for the first
- * time generates a passphrase straight away.
+ * to force a state; with no argument it toggles. Opening it shows the current
+ * draw, or generates one straight away if there is none.
  */
 function cipher_toggleGenerator(open) {
     var panel = document.getElementById('cipher-gen-panel');
@@ -26052,7 +26068,7 @@ function cipher_toggleGenerator(open) {
     if (typeof open !== 'boolean') open = panel.style.display === 'none';
     panel.style.display = open ? 'block' : 'none';
     if (btn) btn.textContent = open ? 'Close' : 'Generate';
-    if (open && !pp_config.lastPassphrase) pp_generate();
+    if (open) pp_render();   // re-shows the current draw, or makes the first one
 }
 
 /**
@@ -26400,6 +26416,9 @@ function cipher_new() {
     _cipherSource = 'typed';
     _cipherVerified = false;
     _cipherGenInfo = null;
+    // A new entry gets a fresh generator draw (also drops the old one from memory)
+    _ppDraw = null;
+    pp_config.lastPassphrase = '';
     _cipherApplySourceUI();
     cipher_toggleGenerator(false);
     var printBtn = document.getElementById('pp-print-btn');

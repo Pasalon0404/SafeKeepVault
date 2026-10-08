@@ -7,8 +7,8 @@ import { wordlist } from '@scure/bip39/wordlists/english.js';
  * test-passphrase-workspace.mjs — Passphrase Library workspace flow through the real cipher_* /
  * pp_* functions in boot.html: generated passphrases lock the field and skip the Confirm re-type,
  * Save stays disabled until the written-copy check passes, Edit turns it back into a typed
- * passphrase, typed passphrases still need a matching Confirm, and paste is blocked in both
- * confirmation fields.
+ * passphrase, typed passphrases still need a matching Confirm, paste is blocked in both
+ * confirmation fields, and generator style options reformat the same words instead of re-rolling.
  * Run: node test-passphrase-workspace.mjs
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -51,8 +51,8 @@ function makeEnv({ amnesia = false } = {}) {
   });
   ctx.window.SafeKeepOS = { savePassphrase: async (nickname, passphrase) => { saved.push({ nickname, passphrase }); return { saved: true, slug: 'x' }; } };
   ctx.SafeKeepOS = ctx.window.SafeKeepOS;
-  vm.runInContext(['var _cipherActiveSlug = null, _cipherDirty = true, _cipherSource = "typed", _cipherVerified = false, _cipherGenInfo = null;',
-    ...['pp_cryptoRandomInt', 'pp_applyCase', 'pp_generate', 'pp_entropyBits', 'pp_updateEntropy', 'cipher_toggleGenerator', '_cipherApplySourceUI',
+  vm.runInContext(['var _cipherActiveSlug = null, _cipherDirty = true, _cipherSource = "typed", _cipherVerified = false, _cipherGenInfo = null, _ppDraw = null;',
+    ...['pp_cryptoRandomInt', 'pp_applyCase', 'pp_generate', 'pp_render', 'pp_setWordCount', 'pp_setSeparator', 'pp_setCapitalization', 'pp_entropyBits', 'pp_updateEntropy', 'cipher_toggleGenerator', '_cipherApplySourceUI',
         'cipher_editGenerated', 'cipher_startVerify', 'cipher_checkVerify', 'cipher_cancelVerify', 'cipher_blockPaste', 'cipher_onPassphraseInput',
         'cipher_onConfirmInput', 'cipher_useGenerated', 'cipher_save', 'cipher_new'].map(extract),
   ].join('\n'), ctx);
@@ -159,6 +159,46 @@ const shown = (e) => e.style.display !== 'none';
      el('cipher-passphrase').value === '' && ctx._cipherSource === 'typed' && shown(el('cipher-confirm-block')) && el('cipher-verify-block').style.display === 'none' &&
      el('pp-print-btn').style.display === 'none' && el('cipher-gen-panel').style.display === 'none'); }
 
+// ---- Style options reformat the same draw; only Regenerate / word count re-roll ----
+{ const { ctx, el } = makeEnv();
+  ctx.cipher_new(); ctx.cipher_toggleGenerator(true);
+  const words = () => ctx._ppDraw.words.join(' ');
+  const base = words(), first = ctx.pp_config.lastPassphrase;     // 6 words, hyphen, Title Case
+  ctx.pp_setSeparator(' ');
+  ck('separator change keeps the words', words() === base && ctx.pp_config.lastPassphrase === first.split('-').join(' '), ctx.pp_config.lastPassphrase);
+  ctx.pp_setCapitalization('upper');
+  ck('capitalization change keeps the words', words() === base && ctx.pp_config.lastPassphrase === base.toUpperCase(), ctx.pp_config.lastPassphrase);
+  ck('output shows the reformatted passphrase', el('pp-output').textContent === ctx.pp_config.lastPassphrase);
+  el('pp-add-num').checked = true; ctx.pp_render();
+  const withNum = ctx.pp_config.lastPassphrase;
+  ck('Append Number keeps the words and adds one digit', words() === base && /^[A-Z ]+$/.test(withNum.replace(/[0-9]/, '')) && (withNum.match(/[0-9]/g) || []).length === 1, withNum);
+  ck('entropy follows the options (66 + log2(10))', el('pp-entropy-text').textContent === '69 bits', el('pp-entropy-text').textContent);
+  el('pp-add-sym').checked = true; ctx.pp_render();
+  const withBoth = ctx.pp_config.lastPassphrase;
+  ck('Append Symbol keeps the words and the digit', words() === base && withBoth.replace(/[!@#$%^&*]/, '') === withNum, withBoth);
+  ctx.pp_setSeparator('-');
+  ck('digit and symbol stay put across a separator change', ctx.pp_config.lastPassphrase === withBoth.split(' ').join('-'), ctx.pp_config.lastPassphrase);
+  el('pp-add-num').checked = false; ctx.pp_render(); el('pp-add-num').checked = true; ctx.pp_render();
+  ck('toggling Append Number off and on keeps the same digit', ctx.pp_config.lastPassphrase === withBoth.split(' ').join('-'));
+  el('pp-add-num').checked = false; el('pp-add-sym').checked = false; ctx.pp_render();
+  ck('turning both off restores the plain words', ctx.pp_config.lastPassphrase === base.toUpperCase().split(' ').join('-'));
+  ctx.pp_generate();
+  ck('Regenerate picks new words', words() !== base);
+  const before8 = words(); ctx.pp_setWordCount(8);
+  ck('word count change picks a new 8-word draw', ctx._ppDraw.words.length === 8 && !words().startsWith(before8)); }
+
+// ---- Reopening the generator re-shows the draw; Clear / New starts fresh ----
+{ const { ctx, el } = makeEnv();
+  ctx.cipher_new(); ctx.cipher_toggleGenerator(true);
+  const pp = ctx.pp_config.lastPassphrase;
+  ctx.cipher_toggleGenerator(false); el('pp-output').textContent = '';   // what the tool-exit wipe does to the output
+  ctx.cipher_toggleGenerator(true);
+  ck('reopening re-renders the current draw', el('pp-output').textContent === pp && ctx.pp_config.lastPassphrase === pp);
+  ctx.cipher_new();
+  ck('Clear / New drops the draw', ctx._ppDraw === null && ctx.pp_config.lastPassphrase === '');
+  ctx.cipher_toggleGenerator(true);
+  ck('the next open makes a fresh passphrase', ctx.pp_config.lastPassphrase && ctx.pp_config.lastPassphrase !== pp); }
+
 // ---- Markup wiring ----
 { const ws = SRC.slice(SRC.indexOf('<div id="state-passphrase">'), SRC.indexOf('<!-- ======== Archive'));
   const tag = (id) => (ws.match(new RegExp('<input[^>]*id="' + id + '"[^>]*>', 's')) || [''])[0];
@@ -167,6 +207,7 @@ const shown = (e) => e.style.display !== 'none';
   ck('generator sits inline, between the passphrase field and Confirm',
      ws.indexOf('id="cipher-passphrase"') < ws.indexOf('id="cipher-gen-panel"') && ws.indexOf('id="cipher-gen-panel"') < ws.indexOf('id="cipher-confirm-block"'));
   ck('old Generator card / checkbox is gone', !SRC.includes('cipher-gen-toggle'));
+  ck('number/symbol toggles reformat instead of re-rolling', /id="pp-add-num" onchange="pp_render\(\)"/.test(ws) && /id="pp-add-sym" onchange="pp_render\(\)"/.test(ws));
   ck('copy-check input is wiped on tool exit', /'#cipher-verify-input'/.test(SRC.slice(SRC.indexOf('var _sensitiveSelectors'), SRC.indexOf('var _sensitiveSelectors') + 3000))); }
 
 console.log(`\nPASSPHRASE WORKSPACE: ${pass} passed, ${fail} failed`);
