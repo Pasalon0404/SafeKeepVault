@@ -4608,6 +4608,27 @@
       margin-top: 0.25rem;
       font-family: var(--skb-mono);
     }
+    .eob-meter-note {
+      font-size: 0.7rem;
+      color: var(--skb-text-muted);
+      margin-top: 0.25rem;
+    }
+    .eob-mode-toggle { margin-top: 0.25rem; }
+    .eob-mode-desc {
+      font-size: 0.78rem;
+      color: var(--skb-text-muted);
+      margin: 0 0 1rem;
+      line-height: 1.5;
+    }
+    .eob-verify-panel {
+      color: var(--skb-text);
+      padding: 0.75rem 0.9rem;
+      border: 1px solid var(--skb-primary);
+      border-radius: var(--skb-radius-sm);
+      background: var(--skb-bg-input);
+    }
+    .eob-verify-panel ul { margin: 0.5rem 0; padding-left: 1.2rem; }
+    .eob-verify-panel li { margin: 0.2rem 0; }
     .eob-methods {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -8402,16 +8423,36 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <details class="eob-advanced" style="margin-bottom: 1rem;">
                 <summary style="cursor: pointer; font-weight: 600; padding: 0.6rem 0; color: var(--skb-text-muted); font-size: 0.85rem;">Advanced: Provide Manual Physical Entropy</summary>
 
+            <!-- Mode: Mixed (all sources + device randomness) or Verifiable dice
+                 (SeedSigner/COLDCARD method, dice only, nothing mixed in).
+                 Switched by eob_setEntropyMode(). -->
+            <div class="eob-word-toggle eob-mode-toggle" role="group" aria-label="Entropy mode">
+                <button type="button" id="eob-mode-mixed" class="active" onclick="eob_setEntropyMode('mixed')">Mixed (recommended)</button>
+                <button type="button" id="eob-mode-verifiable" onclick="eob_setEntropyMode('verifiable')">Verifiable Dice</button>
+            </div>
+            <p id="eob-mode-desc-mixed" class="eob-mode-desc">
+                Your dice, mouse and camera input is hashed and mixed with the device's random number generator. The seed is safe if either is good, but it can't be reproduced on another device.
+            </p>
+            <div id="eob-mode-desc-verifiable" class="eob-mode-desc eob-verify-panel" hidden>
+                <strong>Dice only, nothing else mixed in.</strong> The seed is the SHA-256 of your rolls, the same method SeedSigner and COLDCARD use, so you can check it on one of them. Roll exactly <span id="eob-verify-needed">50</span> times. Press Backspace to undo a typo.
+                <ul>
+                    <li><strong>SeedSigner:</strong> Tools &rarr; New seed &rarr; Dice rolls, then pick the same word count.</li>
+                    <li><strong>COLDCARD:</strong> New Seed Words &rarr; Advanced / Tools &rarr; Dice Rolls (wording varies by model and firmware).</li>
+                </ul>
+                Enter the same rolls in the same order. If the words don't match exactly, don't use this seed. The security depends entirely on your dice: use a fair die, and never let anyone see or record the rolls.
+            </div>
+
             <!-- Entropy Meter -->
             <div class="eob-meter-wrap">
                 <div class="eob-meter-header">
-                    <span class="eob-meter-label">Entropy Pool</span>
+                    <span class="eob-meter-label" id="eob-meter-label">Your Entropy</span>
                     <span class="eob-meter-pct" id="eob-meter-pct">0%</span>
                 </div>
                 <div class="eob-meter-track">
                     <div class="eob-meter-fill" id="eob-meter-fill"></div>
                 </div>
-                <div class="eob-meter-bits" id="eob-meter-bits">0 / 256 bits collected</div>
+                <div class="eob-meter-bits" id="eob-meter-bits">0 / 128 bits from you</div>
+                <div class="eob-meter-note" id="eob-meter-note">Counts only randomness you add. The device's random number generator is always mixed in as well.</div>
             </div>
 
             <!-- Four Input Methods -->
@@ -8422,6 +8463,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     <h4>Manual Dice</h4>
                     <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
                         Roll physical dice and press 1-6. Each roll adds ~2.58 bits.
+                        Backspace removes the last roll.
                     </p>
                     <div class="eob-dice-display" id="eob-dice-display"></div>
                     <input type="text" id="eob-dice-input" placeholder="Tap here, then press 1-6..."
@@ -8436,10 +8478,10 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 </div>
 
                 <!-- Method B: Digital Dice -->
-                <div class="eob-method-card">
+                <div class="eob-method-card" id="eob-card-digital">
                     <h4>Digital Dice</h4>
                     <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
-                        Use the secure random number generator. 10 rolls = ~25.8 bits.
+                        Rolls from the device's random number generator. Mixed into the pool, but not counted as your entropy: the device's randomness is always added anyway.
                     </p>
                     <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem;" onclick="eob_rollDigitalDice()">
                         Roll 10 Digital Dice
@@ -8450,10 +8492,10 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 </div>
 
                 <!-- Method C: Mouse Wiggle -->
-                <div class="eob-method-card">
+                <div class="eob-method-card" id="eob-card-wiggle">
                     <h4>Mouse Wiggle</h4>
                     <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
-                        Move your cursor inside the zone. Movement coordinates add entropy.
+                        Move your cursor inside the zone. Each sample counts as 0.5 bits, since hand movement is partly predictable.
                     </p>
                     <div class="eob-wiggle-zone" id="eob-wiggle-zone">
                         Move cursor here
@@ -8464,10 +8506,10 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 </div>
 
                 <!-- Method D: Webcam Noise -->
-                <div class="eob-method-card">
+                <div class="eob-method-card" id="eob-card-cam">
                     <h4>Video Noise</h4>
                     <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
-                        Capture random noise from the webcam sensor.
+                        Captures sensor noise (the lowest bit of each pixel's color). A frame counts as 4 bits only if its noise changed since the last frame.
                     </p>
                     <button type="button" class="skb-btn" id="eob-cam-btn" style="width: 100%; margin-bottom: 0.5rem;" onclick="eob_captureVideoNoise()">
                         Capture Video Noise
@@ -8482,13 +8524,13 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             </div>
 
             <!-- Raw pool preview (collapsed) -->
-            <details style="margin-bottom: 1rem;">
+            <details id="eob-pool-wrap" style="margin-bottom: 1rem;">
                 <summary style="font-size: 0.8rem; color: var(--skb-text-muted); cursor: pointer;">Show raw entropy pool</summary>
                 <div class="eob-pool-raw" id="eob-pool-raw">—</div>
             </details>
 
             <!-- Live Hash Visualizer -->
-            <div class="eob-live-hash">
+            <div class="eob-live-hash" id="eob-live-hash-wrap">
                 <div class="eob-live-hash-label">
                     <span class="eob-hash-dot" id="eob-hash-dot"></span>
                     Live Pool Hash (SHA-256)
@@ -16948,6 +16990,7 @@ function eob_clearAll() {
     _eobWiggleLastX = -1;
     _eobWiggleLastY = -1;
     _eobCamStream = null;
+    _eobCamPrevLsbs = null;
     _eobForgedMnemonic = '';
     _eobHasWork = false;
 
@@ -38886,6 +38929,19 @@ var _eobWiggleThrottle = 0;
 var _eobCamStream = null;
 var _eobForgedMnemonic = '';  // stored for copy/set-as-master in forge mode
 var _eobHasWork = false;      // Tracks whether The Forge has entropy/result state to preserve
+var _eobVerifiable = false;   // Verifiable dice mode: seed = SHA-256(rolls), nothing mixed in
+var _eobCamPrevLsbs = null;   // previous camera frame's noise bits, to credit only changing frames
+
+// Entropy credits live in shared/entropy-sources.js; the fallback mirrors it
+// for preview mode, where the module bundle isn't loaded.
+function _eobCredit(source) {
+    var c = window.EntropySources && window.EntropySources.ENTROPY_CREDIT;
+    if (c) return c[source];
+    return { diceRoll: Math.log2(6), mouseSample: 0.5, cameraFrame: 4, digitalDice: 0 }[source];
+}
+function _eobRollsNeeded() {
+    return _targetEntropyBits === 128 ? 50 : 99;
+}
 
 function eob_init(context) {
     // Soft init: if the Forge already has work in progress (entropy pool or forged result),
@@ -38918,7 +38974,9 @@ function eob_init(context) {
     _eobWiggleLastX = -1;
     _eobWiggleLastY = -1;
     _eobCamStream = null;
+    _eobCamPrevLsbs = null;
     _eobForgedMnemonic = '';
+    _eobVerifiable = false;
     // Default to 12 words (128 bits). eob_setWordCount syncs both the
     // _targetEntropyBits state AND the toggle button active-classes, so a
     // re-entry after the user previously picked 24 words snaps back to the
@@ -38972,7 +39030,7 @@ function eob_init(context) {
     document.getElementById('eob-hash-dot').classList.remove('pulse');
     document.getElementById('eob-forge-result').style.display = 'none';
 
-    eob_updateMeter();
+    eob_setEntropyMode('mixed');   // also refreshes the meter
 
     // Attach wiggle listener
     var wiggleZone = document.getElementById('eob-wiggle-zone');
@@ -38989,6 +39047,33 @@ function eob_setWordCount(count) {
     document.getElementById('eob-btn-12').classList.toggle('active', count === 12);
     document.getElementById('eob-btn-24').classList.toggle('active', count === 24);
     eob_updateMeter();
+}
+
+// Mixed: every source plus the device's random number generator.
+// Verifiable: physical dice only, seed = SHA-256 of the rolls (SeedSigner /
+// COLDCARD method), so the user can reproduce it on one of those devices.
+function eob_setEntropyMode(mode) {
+    _eobVerifiable = mode === 'verifiable';
+    document.getElementById('eob-mode-mixed').classList.toggle('active', !_eobVerifiable);
+    document.getElementById('eob-mode-verifiable').classList.toggle('active', _eobVerifiable);
+    document.getElementById('eob-mode-desc-mixed').hidden = _eobVerifiable;
+    document.getElementById('eob-mode-desc-verifiable').hidden = !_eobVerifiable;
+    ['eob-card-digital', 'eob-card-wiggle', 'eob-card-cam', 'eob-pool-wrap', 'eob-live-hash-wrap'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.hidden = _eobVerifiable;
+    });
+    // Verifiable mode hides the camera card, so stop a running camera too.
+    if (_eobVerifiable && _eobCamStream) {
+        _eobCamStream.getTracks().forEach(function (t) { t.stop(); });
+        _eobCamStream = null;
+        document.getElementById('eob-cam-preview').style.display = 'none';
+    }
+    eob_updateMeter();
+}
+
+function _eobCanForge() {
+    if (_eobVerifiable) return _eobDiceRolls.length === _eobRollsNeeded();
+    return _eobEstimatedBits >= _targetEntropyBits;
 }
 
 function eob_addToPool(data, estimatedBits) {
@@ -39039,7 +39124,10 @@ async function eob_updateLiveHash() {
 }
 
 function eob_updateMeter() {
-    var pct = Math.min(100, (_eobEstimatedBits / _targetEntropyBits) * 100);
+    var needed = _eobRollsNeeded();
+    var have = _eobVerifiable ? _eobDiceRolls.length : _eobEstimatedBits;
+    var target = _eobVerifiable ? needed : _targetEntropyBits;
+    var pct = Math.min(100, (have / target) * 100);
     var pctRounded = Math.floor(pct);
 
     var fill = document.getElementById('eob-meter-fill');
@@ -39051,42 +39139,73 @@ function eob_updateMeter() {
     }
     var pctEl = document.getElementById('eob-meter-pct');
     if (pctEl) pctEl.textContent = pctRounded + '%';
+    var labelEl = document.getElementById('eob-meter-label');
+    if (labelEl) labelEl.textContent = _eobVerifiable ? 'Dice Rolls' : 'Your Entropy';
+    var noteEl = document.getElementById('eob-meter-note');
+    if (noteEl) noteEl.hidden = _eobVerifiable;
+    var neededEl = document.getElementById('eob-verify-needed');
+    if (neededEl) neededEl.textContent = needed;
     var bitsEl = document.getElementById('eob-meter-bits');
-    if (bitsEl) bitsEl.textContent =
-        Math.floor(_eobEstimatedBits) + ' / ' + _targetEntropyBits + ' bits collected';
+    if (bitsEl) bitsEl.textContent = _eobVerifiable
+        ? have + ' / ' + needed + ' rolls'
+        : Math.floor(have) + ' / ' + _targetEntropyBits + ' bits from you';
 
     var forgeBtn = document.getElementById('eob-forge-btn');
     var forgeHint = document.getElementById('eob-forge-hint');
-    if (_eobEstimatedBits >= _targetEntropyBits) {
-        if (forgeBtn) forgeBtn.disabled = false;
-        if (forgeHint) {
-            forgeHint.textContent = 'Entropy pool is full. Ready to forge!';
-            forgeHint.style.color = 'var(--skb-primary, #34d399)';
-        }
+    var ready = _eobCanForge();
+    if (forgeBtn) forgeBtn.disabled = !ready;
+    if (!forgeHint) return;
+    if (ready) {
+        forgeHint.textContent = _eobVerifiable
+            ? 'All ' + needed + ' rolls entered. Ready to generate.'
+            : 'Entropy pool is full. Ready to forge!';
+        forgeHint.style.color = 'var(--skb-primary, #34d399)';
     } else {
-        if (forgeBtn) forgeBtn.disabled = true;
-        if (forgeHint) {
-            var remaining = Math.ceil(_targetEntropyBits - _eobEstimatedBits);
-            forgeHint.textContent = remaining + ' more bits needed. Keep adding entropy.';
-            forgeHint.style.color = 'var(--skb-text-muted, #888)';
+        if (_eobVerifiable && have > needed) {
+            forgeHint.textContent = 'Too many rolls for ' + (needed === 50 ? 12 : 24) + ' words: press Backspace to remove ' + (have - needed) + '.';
+        } else if (_eobVerifiable) {
+            forgeHint.textContent = (needed - have) + ' more rolls needed.';
+        } else {
+            forgeHint.textContent = Math.ceil(_targetEntropyBits - have) + ' more bits needed. Keep adding entropy.';
         }
+        forgeHint.style.color = 'var(--skb-text-muted, #888)';
     }
 }
 
 // --- Method A: Manual Dice ---
+function _eobRenderDiceRolls() {
+    var display = document.getElementById('eob-dice-display');
+    display.textContent = _eobDiceRolls.join('');
+    display.scrollTop = display.scrollHeight;
+    document.getElementById('eob-dice-count').textContent = _eobDiceCount;
+    document.getElementById('eob-dice-input').value = '';
+    eob_renderDiceFairness();
+}
+
 function eob_handleDiceKey(e) {
     e.preventDefault();
     var key = e.key;
+    if (key === 'Backspace') {
+        // Undo the last roll. Its text stays in the mixed pool (extra data
+        // never hurts a hash), but it no longer counts, feeds the fairness
+        // check, or goes into a verifiable seed.
+        if (!_eobDiceRolls.length) return;
+        _eobDiceRolls.pop();
+        _eobDiceCount--;
+        _eobEstimatedBits = Math.max(0, _eobEstimatedBits - _eobCredit('diceRoll'));
+        _eobRenderDiceRolls();
+        eob_updateMeter();
+        return;
+    }
     if (key >= '1' && key <= '6') {
+        if (_eobVerifiable && _eobDiceRolls.length >= _eobRollsNeeded()) {
+            showStatus('All ' + _eobRollsNeeded() + ' rolls are in. Press Backspace to change the last one.', 'info');
+            return;
+        }
         _eobDiceCount++;
-        var display = document.getElementById('eob-dice-display');
-        display.textContent += key;
-        display.scrollTop = display.scrollHeight;
-        document.getElementById('eob-dice-count').textContent = _eobDiceCount;
-        document.getElementById('eob-dice-input').value = '';
         _eobDiceRolls.push(Number(key));
-        eob_renderDiceFairness();
-        eob_addToPool('D' + key + Date.now().toString(36), 2.585);
+        _eobRenderDiceRolls();
+        eob_addToPool('D' + key + Date.now().toString(36), _eobCredit('diceRoll'));
     }
 }
 
@@ -39151,11 +39270,9 @@ function eob_rollDigitalDice() {
     _eobDigitalCount += 10;
     document.getElementById('eob-digital-count').textContent = _eobDigitalCount;
 
-    var display = document.getElementById('eob-dice-display');
-    display.textContent += (display.textContent ? ' ' : '') + '[' + rolls + ']';
-    display.scrollTop = display.scrollHeight;
-
-    eob_addToPool('R' + rolls + Date.now().toString(36), 25.85);
+    // Device randomness: mixed into the pool but credited 0 bits, since the
+    // device's generator is XORed into every seed anyway.
+    eob_addToPool('R' + rolls + Date.now().toString(36), _eobCredit('digitalDice'));
 }
 
 // --- Method C: Mouse Wiggle ---
@@ -39184,7 +39301,7 @@ function eob_handleWiggle(e) {
     clearTimeout(zone._fadeTimer);
     zone._fadeTimer = setTimeout(function() { zone.classList.remove('active'); }, 200);
 
-    eob_addToPool('M' + x + ',' + y + ',' + (now % 100000).toString(36), 2);
+    eob_addToPool('M' + x + ',' + y + ',' + (now % 100000).toString(36), _eobCredit('mouseSample'));
 }
 
 // --- Method D: Webcam Noise ---
@@ -39209,15 +39326,24 @@ async function eob_captureVideoNoise() {
             await new Promise(function(r) { setTimeout(r, 100); });
             ctx.drawImage(video, 0, 0, 64, 64);
             var imageData = ctx.getImageData(0, 0, 64, 64);
-            var pixels = imageData.data;
 
+            // Sensor noise lives in the lowest bit of each color value, so
+            // keep those (R, G, B; alpha is always 255) and credit the frame
+            // only if they changed since the last one.
+            var ES = window.EntropySources;
+            if (!ES) throw new Error('entropy module not loaded');
+            var lsbs = ES.cameraFrameLsbs(imageData.data);
+            var credit = ES.cameraFrameCredit(lsbs, _eobCamPrevLsbs);
+            imageData.data.fill(0);
+            if (_eobCamPrevLsbs) _eobCamPrevLsbs.fill(0);
+            _eobCamPrevLsbs = lsbs;
             var sample = '';
-            for (var i = 0; i < pixels.length; i += 17) {
-                sample += pixels[i].toString(16);
+            for (var i = 0; i < lsbs.length; i++) {
+                sample += (lsbs[i] < 16 ? '0' : '') + lsbs[i].toString(16);
             }
 
             _eobCamCount++;
-            eob_addToPool('V' + sample + Date.now().toString(36), 16);
+            eob_addToPool('V' + sample + Date.now().toString(36), credit);
         }
 
         document.getElementById('eob-cam-count').textContent = _eobCamCount;
@@ -39387,7 +39513,7 @@ var _eobForging = false;
 var _eobEntropyMode = 'manual';
 
 async function eob_forgeSeed() {
-    if (_eobEstimatedBits < _targetEntropyBits) return;
+    if (!_eobCanForge()) return;
     _eobEntropyMode = 'manual';   // manual Forge path — never shows the hybrid badge
     if (_eobForging) return;
     _eobForging = true;
@@ -39399,6 +39525,22 @@ async function eob_forgeSeed() {
         var bip39 = window.BtcMath?.bip39;
         var wordlist = window.BtcMath?.wordlist;
         if (!bip39 || !wordlist) throw new Error('BIP-39 library not available');
+
+        if (_eobVerifiable) {
+            // Verifiable dice: SHA-256 of the rolls and nothing else, so the
+            // same rolls give the same words on SeedSigner and COLDCARD.
+            var diceEntropy = await window.EntropySources.diceRollsToEntropy(_eobDiceRolls, _targetEntropyBits === 128 ? 12 : 24);
+            var diceCommitted = await _eobFinalizeEntropy(diceEntropy);
+            if (!diceCommitted) {
+                if (forgeBtn) { forgeBtn.disabled = false; forgeBtn.textContent = 'Generate Master Seed'; }
+                return;
+            }
+            if (eob_context === 'forge' && forgeBtn) {
+                forgeBtn.textContent = 'Generate Seed';
+                forgeBtn.disabled = true;
+            }
+            return;
+        }
 
         // ----------------------------------------------------------------
         // BYOE discipline for The Forge:
