@@ -3,11 +3,17 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import { createHash } from 'crypto';
 import { execFileSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// `npm run build:demo` (--demo) builds the public online demo
+// (demo.safekeepbitcoin.com) into dist-demo/ instead of the release
+// boot.html in dist/. See DEMO BUILD below and shared/demo-mode.js.
+const DEMO = process.argv.includes('--demo');
+const OUT_DIR = DEMO ? 'dist-demo' : 'dist';
 
 // SafeKeep OS ships a single self-contained entry point.
 // boot.html is the entire app — Vite inlines all scripts, styles,
@@ -29,7 +35,7 @@ async function buildOfflineSuite() {
             plugins: [nodePolyfills(), viteSingleFile()],
             build: {
                 emptyOutDir: i === 0, // Only wipe the dist folder on the first run
-                outDir: 'dist',
+                outDir: OUT_DIR,
                 // Kill the modulepreload polyfill and crossorigin attributes —
                 // they inject fetch() calls that break on file:// (USB boot drive)
                 modulePreload: false,
@@ -61,8 +67,15 @@ async function buildOfflineSuite() {
     // MUST run before the integrity manifest is computed so the
     // attestation hash reflects the bytes Chromium will actually load.
     // ------------------------------------------------------------------
-    const BOOT_HTML_PATH = join(resolve(__dirname, 'dist'), 'boot.html');
-    if (existsSync(BOOT_HTML_PATH)) {
+    const BOOT_HTML_PATH = join(resolve(__dirname, OUT_DIR), 'boot.html');
+    if (DEMO) {
+        // The demo runs the dev mock (in-memory vault, Transfer Drive,
+        // Coldcard/Trezor simulators), so the wrapper stays in.
+        if (!existsSync(BOOT_HTML_PATH) || !/_SKB_DevModeWrapper/.test(readFileSync(BOOT_HTML_PATH, 'utf8'))) {
+            console.error('[DEMO] ✗ dev-mode wrapper missing from dist-demo/boot.html.');
+            process.exit(1);
+        }
+    } else if (existsSync(BOOT_HTML_PATH)) {
         const original = readFileSync(BOOT_HTML_PATH, 'utf8');
 
         // Comment block: the HTML comment whose body contains the exact
@@ -99,6 +112,11 @@ async function buildOfflineSuite() {
         // Post-strip paranoia — confirm no trace of the wrapper survives.
         if (/_SKB_DevModeWrapper|_SKB_DEV_URL_MODE/.test(stripped)) {
             console.error('[DEV-STRIP] ✗ residual dev-mode identifiers still present after strip.');
+            process.exit(1);
+        }
+        // The release must never carry the online-demo switch.
+        if (DEMO_FLAG_RE.test(stripped)) {
+            console.error('[DEV-STRIP] ✗ the online-demo flag (window.SKV_DEMO = true) is in the release build.');
             process.exit(1);
         }
 
@@ -145,7 +163,7 @@ async function buildOfflineSuite() {
     // "+ shallow clone" one whose commit count (build number) is incomplete.
     // Fills every element marked data-skv-version (welcome screen, dashboard
     // footer). Runs BEFORE the integrity manifest so the hash covers it.
-    const stamp = versionStamp();
+    const stamp = versionStamp() + (DEMO ? ' \u00b7 demo' : '');
     {
         const html = readFileSync(BOOT_HTML_PATH, 'utf8');
         const SKV_RE = /(<[^>]*\bdata-skv-version\b[^>]*>)[^<]*(<)/g;
@@ -157,6 +175,11 @@ async function buildOfflineSuite() {
         const esc = stamp.replace(/&/g, '&amp;').replace(/</g, '&lt;');
         writeFileSync(BOOT_HTML_PATH, html.replace(SKV_RE, (m, open, close) => open + esc + close), { encoding: 'utf8' });
         console.log(`\n🏷  Version: ${stamp}`);
+    }
+
+    if (DEMO) {
+        finishDemo(BOOT_HTML_PATH);
+        return;
     }
 
     const ATTESTED = ['boot.html'];
@@ -186,6 +209,53 @@ async function buildOfflineSuite() {
     const manifestPath = join(distDir, 'manifest.json');
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', { encoding: 'utf8' });
     console.log(`\n🔒 Integrity manifest written to ${manifestPath}`);
+}
+
+// ----------------------------------------------------------------------
+// DEMO BUILD — the public online demo (demo.safekeepbitcoin.com)
+// ----------------------------------------------------------------------
+// Adds to the top of <head>:
+//   - a Content-Security-Policy that forbids every network connection
+//     (connect-src 'none'), so the page can't send anything anywhere;
+//   - window.SKV_DEMO = true, which switches on the demo safeguards
+//     (shared/demo-mode.js) and the in-memory dev mock;
+// and writes dist-demo/index.html, the file the demo site serves.
+// The release build never gets these (and refuses to ship the flag).
+const DEMO_FLAG_RE = /window\.SKV_DEMO\s*=\s*true/;
+const DEMO_CSP = [
+    "default-src 'none'",
+    "script-src 'unsafe-inline' 'wasm-unsafe-eval'",
+    "style-src 'unsafe-inline'",
+    "img-src data: blob:",
+    "font-src data:",
+    "media-src data: blob: mediastream:",
+    "connect-src 'none'",
+    "worker-src blob:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+].join('; ');
+
+function finishDemo(bootHtmlPath) {
+    const html = readFileSync(bootHtmlPath, 'utf8');
+    const HEAD_RE = /<head>/i;
+    if (!HEAD_RE.test(html)) {
+        console.error('[DEMO] ✗ no <head> in dist-demo/boot.html.');
+        process.exit(1);
+    }
+    const inject =
+        '<head>\n    <meta http-equiv="Content-Security-Policy" content="' + DEMO_CSP + '">\n' +
+        '    <meta name="description" content="SafeKeepVault online demo. Runs in your browser with public demo seeds only. Not for real bitcoin.">\n' +
+        '    <script>window.SKV_DEMO = true;</script>';
+    const out = html.replace(HEAD_RE, inject);
+    const dir = dirname(bootHtmlPath);
+    writeFileSync(join(dir, 'index.html'), out, { encoding: 'utf8' });
+    // boot.html has no demo flag: served online it would run without the
+    // safeguards, so it must not be published next to index.html.
+    unlinkSync(bootHtmlPath);
+    // public/CNAME names the main site; the demo has its own domain.
+    writeFileSync(join(dir, 'CNAME'), 'demo.safekeepbitcoin.com\n', { encoding: 'utf8' });
+    console.log('\n🧪 Demo build written to ' + join(dir, 'index.html'));
 }
 
 function commitTime() {

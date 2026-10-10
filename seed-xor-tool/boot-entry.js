@@ -36,6 +36,9 @@ import CBOR from 'cbor-sync';
 // SLIP-39: Shamir's Secret Sharing for mnemonic backup
 import { generateMnemonics, combineMnemonics } from 'shamir-mnemonic-ts';
 
+// Online demo safeguards (inactive unless the demo page sets window.SKV_DEMO)
+import { isDemoActive, isDemoSeed, replaceGenerated, wrapBip39, installDemoUi, noticeRefused, REFUSAL_MESSAGE } from './shared/demo-mode.js';
+
 // Miniscript: policy compilation for advanced custody (wsh(miniscript(...)))
 // @bitcoinerlab/miniscript compiles policies → witness scripts
 // Uses WASM internally — Vite must be configured to inline the .wasm asset.
@@ -65,8 +68,18 @@ for (const [family, url] of [['SKB Inter', _skbInterUrl], ['SKB JetBrains Mono',
   } catch (_) { /* no FontFace support — system fonts remain */ }
 }
 
-// Expose to window so boot.js and inline scripts can use them
-window.BtcMath = { bip39, wordlist, HDKey, btcSigner, secp256k1, schnorr };
+// Expose to window so boot.js and inline scripts can use them.
+// In the online demo (shared/demo-mode.js) bip39 is wrapped so only the
+// public demo seeds can become keys; the start-up self-check below still
+// tests the unwrapped libraries.
+const realBtcMath = { bip39, wordlist, HDKey, btcSigner, secp256k1, schnorr };
+const demoActive = isDemoActive();
+window.BtcMath = demoActive ? { ...realBtcMath, bip39: wrapBip39(bip39) } : realBtcMath;
+window.SKVDemo = Object.freeze({ active: demoActive, isDemoSeed, replaceGenerated, refusalMessage: REFUSAL_MESSAGE, noticeRefused });
+if (demoActive) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installDemoUi);
+  else installDemoUi();
+}
 window.SLIP39 = { generateMnemonics, combineMnemonics };
 window.Miniscript = Miniscript;
 window.QRCode = QRCode;
@@ -143,7 +156,7 @@ function showSelfTestFailure(failed) {
 
 // Run the boot sequence once the DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
-  const failed = await selfTestGate(document.documentElement, buildSelfTests(window.BtcMath, {
+  const failed = await selfTestGate(document.documentElement, buildSelfTests(realBtcMath, {
     subtle: window.crypto && window.crypto.subtle,
     getRandomValues: (u8) => window.crypto.getRandomValues(u8),
     sp: { selfTestDleqOfficialVector },

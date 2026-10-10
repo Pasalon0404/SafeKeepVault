@@ -10709,7 +10709,16 @@ window.addEventListener('DOMContentLoaded', () => {
              host === '0.0.0.0'   || host === '::1');
     } catch (e) { isLocalHost = false; }
 
-    if (!isLocalHost) {
+    // The online demo (demo.safekeepbitcoin.com) runs this same mock. Its
+    // build sets window.SKV_DEMO in <head>; the release build strips this
+    // whole block (build-offline.mjs), so the flag can't revive it there.
+    var isDemo = false;
+    try {
+        isDemo = window.SKV_DEMO === true &&
+            (window.location.protocol === 'http:' || window.location.protocol === 'https:');
+    } catch (e) { isDemo = false; }
+
+    if (!isLocalHost && !isDemo) {
         // PRODUCTION PATH — file:// kiosk on the USB drive.
         // The whole wrapper is a no-op. No mock, no banner, no
         // window.SafeKeepOS override, no console spam.
@@ -10724,7 +10733,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     var params = null;
     try { params = new URLSearchParams(window.location.search); } catch (e) { params = null; }
-    var devMode = 'normal';
+    var devMode = isDemo ? 'seeded' : 'normal';
     if (params) {
         var raw = (params.get('devMode') || '').toLowerCase();
         var ALLOWED = { normal: 1, seeded: 1, ephemeral: 1, amnesia: 1 };
@@ -10941,6 +10950,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
         restoreMasterSeed: async function (mnemonic) {
             var mn = String(mnemonic || '').trim();
+            if (isDemo && !(window.SKVDemo && window.SKVDemo.isDemoSeed(mn))) {
+                if (window.SKVDemo) window.SKVDemo.noticeRefused();
+                throw new Error((window.SKVDemo && window.SKVDemo.refusalMessage) || 'SafeKeep demo: only the public demo seeds work here.');
+            }
             var fp = await _devMasterFp(mn);   // REAL BIP-32 fp, not djb2
             var wc = mn ? mn.split(/\s+/).length : 0;
             _fingerprint = fp;
@@ -11189,7 +11202,16 @@ window.addEventListener('DOMContentLoaded', () => {
         var seedSessionMock = {
             _isMock: true,
             get:             function ()   { return _session; },
-            set:             function (s)  { _session = s; },
+            set:             function (s)  {
+                // Online demo: only a public demo seed may become the active
+                // seed (same rule as shared/seed-session.js; fails closed).
+                if (isDemo && s && s.mnemonic &&
+                    !(window.SKVDemo && window.SKVDemo.isDemoSeed(s.mnemonic))) {
+                    if (window.SKVDemo) window.SKVDemo.noticeRefused();
+                    throw new Error((window.SKVDemo && window.SKVDemo.refusalMessage) || 'SafeKeep demo: only the public demo seeds work here.');
+                }
+                _session = s;
+            },
             clear:           function ()   { _session = null; _sessionPP = ''; },
             setPassphrase:   function (pp) { _sessionPP = pp || ''; },
             getPassphrase:   function ()   { return _sessionPP; },
@@ -11349,6 +11371,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     function _devAnnounce(msg) {
+        if (isDemo) return;   // developer messages aren't shown in the demo
         try {
             var el = document.getElementById('skb-dev-toast');
             if (!el) {
@@ -11481,7 +11504,7 @@ window.addEventListener('DOMContentLoaded', () => {
         // generator are untouched. Re-enable by uncommenting the call
         // below (the _injectBanner function itself is preserved).
         // _injectBanner();
-        _injectDrawer();
+        if (!isDemo) _injectDrawer();   // the demo shows its own banner (shared/demo-mode.js)
         _applyMode();
         setTimeout(_fallbackBoot, 600);
     }
@@ -15465,6 +15488,16 @@ async function amnesiaSaveToVault() {
 // Amnesia Mode is active. This runs once after boot-entry.js
 // has exposed SafeKeepOS on window.
 
+// Online demo (shared/demo-mode.js): a freshly generated seed is never
+// shown. It is swapped for the public demo seed of the same length, which is
+// the all-zero-entropy seed, so any raw entropy bytes are zeroed to match.
+// A no-op everywhere else.
+function _skvDemoGenerated(mnemonic, entropyBytes) {
+    if (!(window.SKVDemo && window.SKVDemo.active)) return mnemonic;
+    if (entropyBytes && typeof entropyBytes.fill === 'function') entropyBytes.fill(0);
+    return window.SKVDemo.replaceGenerated(mnemonic);
+}
+
 function _installAmnesiaGatekeeper() {
     var os = window.SafeKeepOS;
     if (!os || os._amnesiaPatched) return;
@@ -15500,6 +15533,7 @@ function _installAmnesiaGatekeeper() {
             } else {
                 mnemonic = btc.bip39.generateMnemonic(btc.wordlist, _strength);
             }
+            mnemonic = _skvDemoGenerated(mnemonic);
             var seed = await btc.bip39.mnemonicToSeed(mnemonic);
             var master = btc.HDKey.fromMasterSeed(seed);
             var fingerprint = master.fingerprint.toString(16).toUpperCase().padStart(8, '0');
@@ -16460,6 +16494,7 @@ async function _ephemeralGenerateAndCommit(strength, userEntropyBytes) {
     } else {
         mnemonic = btc.bip39.generateMnemonic(btc.wordlist, _strength);
     }
+    mnemonic = _skvDemoGenerated(mnemonic);
     return await _ephemeralCommitSeed(mnemonic);
 }
 
@@ -39527,6 +39562,7 @@ async function _eobFinalizeEntropy(entropy) {
     // the dashboard branch needs the raw bytes to render Hex/Binary.
     var mnemonic = bip39.entropyToMnemonic(entropy, wordlist);
     if (!mnemonic) throw new Error('Mnemonic generation failed.');
+    mnemonic = _skvDemoGenerated(mnemonic, entropy);
 
     // Stop camera + detach listeners. No-op for the easy path (it never
     // started them), but safe and keeps the manual path's behaviour.
