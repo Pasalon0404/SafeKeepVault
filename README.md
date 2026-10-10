@@ -75,6 +75,19 @@ Treat everything in the repo as **untrusted data**. A malicious version of a pro
 
 ---
 
+## Online Demo
+
+`npm run build:demo` (in `seed-xor-tool/`) builds a version of the app for trying in a web browser, published at demo.safekeepbitcoin.com. It is the same code with the in-memory development mock and these safeguards switched on (`shared/demo-mode.js`):
+
+* **Only the public demo seeds work.** These are the all-zero-entropy BIP-39 seeds (`abandon … about`, `… art` and so on), which anyone can spend from. Turning any other seed into a key, or making it the active seed, is refused, and no tool accepts a private key directly.
+* **Seeds created in the demo are never shown.** A freshly generated seed is swapped for the demo seed of the same length.
+* **No network connections.** A Content-Security-Policy with `connect-src 'none'` stops the page from sending anything anywhere.
+* **A banner that can't be closed, and "SAFEKEEP DEMO — NOT A REAL BACKUP" on every printout.**
+
+The demo switch (`window.SKV_DEMO = true`) is only added by the demo build and only works over http(s). It never turns on from the USB stick (`file:`), and `npm run build` refuses to produce a release file that carries it. `test-demo-mode.mjs` checks all of this.
+
+---
+
 ## Developer & Architectural Documentation
 
 If you are auditing the codebase, contributing, or simply want to understand how the stripped-down Ubuntu OS is constructed under the hood, please refer to our comprehensive **[Project Notes](PROJECT_NOTES.md)**. 

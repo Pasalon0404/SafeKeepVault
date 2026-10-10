@@ -58,6 +58,13 @@ const SeedSession = (() => {
    */
   function set(seedData) {
     if (!seedData || !seedData.mnemonic) return;
+    // Online demo: only a public demo seed may become the active seed
+    // (shared/demo-mode.js). Fails closed if the demo helpers are missing.
+    if (window.SKV_DEMO === true && window.location.protocol !== 'file:' &&
+        !(window.SKVDemo && window.SKVDemo.isDemoSeed(seedData.mnemonic))) {
+      if (window.SKVDemo) window.SKVDemo.noticeRefused();
+      throw new Error((window.SKVDemo && window.SKVDemo.refusalMessage) || 'SafeKeep demo: only the public demo seeds work here.');
+    }
 
     const payload = {
       type: seedData.type || 'seed',
