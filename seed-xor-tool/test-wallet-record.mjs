@@ -79,7 +79,7 @@ function makeEnv() {
     'var _wrecMeta = null, _wrecKeys = [], _wrecDescDebounce = null, _wrecQrScanner = null, _wrecUrDecoder = null, _wrecScanDone = false, _cborTagsRegistered = false;',
     ...['desc_checksum', 'desc_parseKeyOrigin', '_base58decode', '_base58checkDecode', '_base58check', '_base58encode', '_sha256sync', '_sha256impl', '_rr',
         '_descNormalizeXpub', '_ppFingerprint', '_wrecEscape', '_wrecSplitArgs', '_wrecCall', '_wrecParseDescriptor', '_wrecIndexZeroPubkey', '_wrecCompareBytes',
-        '_wrecFirstAddress', '_wrecManualShape', '_wrecBlankKey', '_wrecResizeManualKeys', '_wrecSyncKeysToMeta', '_wrecKeyTarget', '_wrecCollectFormData',
+        '_wrecFirstAddress', '_wrecAddressFromPubkeys', '_wrecManualShape', '_wrecBlankKey', '_wrecResizeManualKeys', '_wrecSyncKeysToMeta', '_wrecKeyTarget', '_wrecCollectFormData',
         '_wrecRenderKeys', 'wrec_onKeyInput', 'wrec_onKeyPassphraseToggle', 'wrec_onManualShapeChange', 'wrec_onDescriptorInput', '_wrecApplyDescriptor',
         'wrec_init', 'wrec_pullDescriptor', 'wrec_stopQR', '_wrecRenderDocument', 'wrec_buildPreview',
         '_cborRegisterTags', 'descv_decodeCryptoOutput', '_cborTagToDescriptor', '_cborDecodeMulti', '_cborDecodeKey', '_cborDecodeHDKey', '_cborDecodeKeypath',

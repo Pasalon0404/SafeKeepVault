@@ -2210,7 +2210,15 @@
       .xfr-settings-row { grid-template-columns: 1fr; }
     }
 
-    /* ---- Cards (skb-card global override) ---- */
+    /* ---- Output Descriptor: address export row ---- */
+#desc-addr-export { margin-top: 0.5rem; }
+/* The count field drops below the button when there isn't room for both. */
+.desc-addr-export-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch; }
+.desc-addr-export-row .skb-btn { flex: 1 1 11.5rem; font-size: 0.8125rem; white-space: nowrap; padding-left: 0.5rem; padding-right: 0.5rem; }
+.desc-addr-count-label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--skb-text-muted); white-space: nowrap; }
+.desc-addr-count-label input { width: 5rem; font-family: var(--skb-mono); font-size: 0.8125rem; padding: 0.4rem 0.5rem; margin: 0; }
+
+/* ---- Cards (skb-card global override) ---- */
     .skb-card {
       border-radius: 0;
       border: 2px solid var(--skb-border);
@@ -8304,6 +8312,20 @@
 
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 1rem; font-size: 0.8125rem; border: 1px dashed var(--skb-border);" onclick="desc_printPDF()">Print PDF</button>
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_exportTxt()">Export Descriptor (.txt)</button>
+                    <!-- Address list export (CSV). Hidden for Silent Payments, which have one static address. -->
+                    <div id="desc-addr-export">
+                        <div class="desc-addr-export-row">
+                            <button type="button" class="skb-btn" id="desc-addr-export-btn" onclick="desc_exportAddresses()">Export Addresses (.csv)</button>
+                            <label class="desc-addr-count-label" for="desc-addr-count">How many
+                                <input type="number" id="desc-addr-count" class="skb-input" min="1" max="10000" step="1" value="100" inputmode="numeric" aria-describedby="desc-addr-export-hint">
+                            </label>
+                        </div>
+                        <label style="display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="desc-addr-change" style="margin-top: 0.15rem;">
+                            <span>Also export the same number of change addresses</span>
+                        </label>
+                        <div id="desc-addr-export-hint" style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 0.25rem;">Always starts at the wallet's first address (index 0). Up to 10,000. Saved as a .csv list (index, chain, path, address) for spreadsheets and watch-only tools. Holds addresses only, no keys.</div>
+                    </div>
                     <!-- Bitcoin Core watch-only export (importdescriptors JSON) -->
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_exportCore()">Export for Bitcoin Core (.json)</button>
                     <label style="display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.5rem; cursor: pointer;">
@@ -29514,6 +29536,7 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
         // address only.
         document.getElementById('desc-address-list').innerHTML =
             '<div style="margin-bottom: 0.3rem; word-break: break-all;">' + spAddress + '</div>';
+        _descShowAddrExport(false);
         document.getElementById('desc-output').style.display = 'block';
         document.getElementById('desc-qr-wrap').style.display = 'none';
         document.getElementById('desc-qr-toggle-btn').textContent = 'Show QR';
@@ -29582,6 +29605,7 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
         addrHtml = '<div style="color: var(--skb-text-muted); font-size: 0.8125rem;">Address preview requires btcSigner library.</div>';
     }
     document.getElementById('desc-address-list').innerHTML = addrHtml;
+    _descShowAddrExport(true);
 
     document.getElementById('desc-output').style.display = 'block';
     document.getElementById('desc-qr-wrap').style.display = 'none';
@@ -29762,6 +29786,7 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
         addrHtml = '<div style="color: var(--skb-text-muted); font-size: 0.8125rem;">Address preview requires btcSigner library and all co-signer keys.</div>';
     }
     document.getElementById('desc-address-list').innerHTML = addrHtml;
+    _descShowAddrExport(true);
 
     document.getElementById('desc-output').style.display = 'block';
     document.getElementById('desc-qr-wrap').style.display = 'none';
@@ -29887,6 +29912,125 @@ function desc_exportCore() {
     var help = document.getElementById('desc-core-help');
     if (help) help.open = true;
     _descSaveFile(filename, JSON.stringify(requests, null, 2) + '\n', 'application/json');
+}
+
+// Address list export: the first N receive (and optionally change) addresses
+// of the current descriptor as CSV. Addresses are worked out from the
+// descriptor itself with the Wallet Record's parser, so every shape the
+// tool builds is covered, and the first ones are checked against the list
+// on screen before anything is saved.
+var DESC_ADDR_EXPORT_MAX = 10000;
+
+function _descShowAddrExport(show) {
+    var box = document.getElementById('desc-addr-export');
+    if (box) box.style.display = show ? 'block' : 'none';
+}
+
+/* Account-level nodes of a parsed descriptor, walked down to one chain
+   (0 = receive, 1 = change) so each address is a single deriveChild(i).
+   Returns null if a key's path has no such chain (e.g. fixed …/0/*). */
+function _descChainNodes(keys, chain) {
+    var HDKey = window.BtcMath.HDKey;
+    var nodes = [];
+    for (var k = 0; k < keys.length; k++) {
+        var node = HDKey.fromExtendedKey(_descNormalizeXpub(keys[k].xpub));
+        var steps = (keys[k].wildcardSuffix || '').split('/').filter(Boolean);
+        if (steps[steps.length - 1] !== '*') throw new Error('key ' + (k + 1) + ' has no …/* address range');
+        for (var i = 0; i < steps.length - 1; i++) {
+            var mp = /^<(\d+);(\d+)>$/.exec(steps[i]);
+            var idx;
+            if (mp) idx = parseInt(chain === 0 ? mp[1] : mp[2], 10);
+            else if (/^\d+$/.test(steps[i])) {
+                idx = parseInt(steps[i], 10);
+                // A fixed …/0/* is the receive chain only.
+                if (i === steps.length - 2 && chain !== 0) return null;
+            } else throw new Error('step "' + steps[i] + '" can’t be derived from a public key');
+            node = node.deriveChild(idx);
+        }
+        nodes.push(node);
+    }
+    return nodes;
+}
+
+/* Rows [index, chain, path, address] for indexes 0 … count-1 of one chain. */
+async function _descChainAddresses(parsed, chain, count, onProgress) {
+    var nodes = _descChainNodes(parsed.keys, chain);
+    if (!nodes) return null;
+    var rows = [];
+    for (var i = 0; i < count; i++) {
+        var pubs = nodes.map(function(n) { return n.deriveChild(i).publicKey; });
+        rows.push([i, chain === 0 ? 'receive' : 'change', chain + '/' + i,
+                   _wrecAddressFromPubkeys(parsed.kind, parsed.sorted, parsed.msM, pubs)]);
+        if (i % 200 === 199) {
+            if (onProgress) onProgress(rows.length);
+            await new Promise(function(r) { setTimeout(r, 0); });   // keep the page responsive
+        }
+    }
+    return rows;
+}
+
+/* Addresses on screen ("m/0/i  address" rows), in order. */
+function _descScreenAddresses() {
+    var list = document.getElementById('desc-address-list');
+    if (!list) return [];
+    return Array.prototype.map.call(list.querySelectorAll('div'), function(d) {
+        var parts = d.textContent.trim().split(/\s+/);
+        return parts[parts.length - 1];
+    });
+}
+
+async function desc_exportAddresses() {
+    if (!desc_state.currentDescriptor) {
+        showStatus('No descriptor to export. Generate one first.', 'error');
+        return;
+    }
+    var countEl = document.getElementById('desc-addr-count');
+    var raw = countEl ? String(countEl.value).trim() : '';
+    var count = /^\d+$/.test(raw) ? parseInt(raw, 10) : NaN;
+    if (!(count >= 1 && count <= DESC_ADDR_EXPORT_MAX)) {
+        showStatus('Enter how many addresses to export: a whole number from 1 to 10,000.', 'error');
+        if (countEl) countEl.focus();
+        return;
+    }
+    var withChange = !!(document.getElementById('desc-addr-change') || {}).checked;
+
+    var parsed = _wrecParseDescriptor(desc_state.currentDescriptor);
+    if (!parsed.ok) { showStatus(parsed.error || 'This descriptor couldn’t be read.', 'error'); return; }
+    if (parsed.kind === 'sp') { showStatus('A Silent Payment wallet has a single static address, shown above. There is no list to export.', 'error'); return; }
+    if (parsed.addressNote) { showStatus(parsed.addressNote, 'error'); return; }
+
+    var btn = document.getElementById('desc-addr-export-btn');
+    var label = btn ? btn.textContent : '';
+    var total = count * (withChange ? 2 : 1);
+    if (btn) btn.disabled = true;
+    try {
+        var done = 0;
+        var progress = function(n) { if (btn) btn.textContent = 'Working out addresses… ' + Math.floor((done + n) / total * 100) + '%'; };
+        var receive = await _descChainAddresses(parsed, 0, count, progress);
+        done = count;
+        var change = [];
+        if (withChange) {
+            change = await _descChainAddresses(parsed, 1, count, progress);
+            if (!change) throw new Error('This descriptor has no change chain (its keys end in a fixed …/0/*). Untick the change addresses option.');
+        }
+
+        // Safety net: the first receive addresses must match the ones on screen.
+        var screen = _descScreenAddresses();
+        for (var s = 0; s < Math.min(screen.length, receive.length); s++) {
+            if (screen[s] !== receive[s][3]) {
+                throw new Error('Address ' + s + ' doesn’t match the one shown above, so nothing was saved. Generate the descriptor again and retry.');
+            }
+        }
+
+        var lines = ['index,chain,path,address'];
+        receive.concat(change).forEach(function(r) { lines.push(r.join(',')); });
+        var ts = new Date().toISOString().replace(/[:\-T]/g, '').slice(0, 14);
+        _descSaveFile('SAFEKEEP-ADDRESSES-' + ts + '.csv', lines.join('\n') + '\n', 'text/csv');
+    } catch (e) {
+        showStatus('Address export failed: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+    }
 }
 
 function desc_toggleQR() {
@@ -34772,14 +34916,15 @@ var _WREC_SCRIPTS = {
    Read everything the record needs from an output descriptor.
    Returns { ok, error, warnings[], descriptor (newlines removed),
    isMulti, msM, msN, script, keys[{fingerprint, path, xpub,
-   wildcardSuffix}], firstAddress, addressNote }. Covers every shape
+   wildcardSuffix}], firstAddress, addressNote, kind (key of
+   _WREC_SCRIPTS), sorted (sortedmulti) }. Covers every shape
    the Output Descriptor tool produces plus common wallet exports:
    wpkh, sh(wpkh), pkh, tr (key path only), sp, and multi /
    sortedmulti inside wsh, sh(wsh) or sh.
    ---------------------------------------------------------------- */
 function _wrecParseDescriptor(raw) {
     var out = { ok: false, error: '', warnings: [], descriptor: '', isMulti: false, msM: 1, msN: 1,
-                script: '', keys: [], firstAddress: '', addressNote: '' };
+                script: '', keys: [], firstAddress: '', addressNote: '', kind: '', sorted: false };
     var d = (raw || '').replace(/[\r\n]+/g, '').trim();
     out.descriptor = d;
     if (!d) return out;
@@ -34859,8 +35004,10 @@ function _wrecParseDescriptor(raw) {
         out.ok = true;
         return out;
     }
+    out.kind = kind;
+    out.sorted = node.fn === 'sortedmulti';
     try {
-        out.firstAddress = _wrecFirstAddress(kind, node.fn === 'sortedmulti', out.msM, out.keys);
+        out.firstAddress = _wrecFirstAddress(kind, out.sorted, out.msM, out.keys);
     } catch (e) {
         out.addressNote = 'Couldn’t work out the first address (' + e.message + '). You can type it in.';
     }
@@ -34901,12 +35048,17 @@ function _wrecFirstAddress(kind, sorted, m, keys) {
         var sp = SP.decodeSpscan(keys[0].xpub);
         return SP.encodeSilentPaymentAddress(B.secp256k1.getPublicKey(sp.scanPrivKey, true), sp.spendPubKey);
     }
-    var pubs = keys.map(_wrecIndexZeroPubkey);
+    return _wrecAddressFromPubkeys(kind, sorted, m, keys.map(_wrecIndexZeroPubkey));
+}
+
+/* Address for one set of child public keys (one per descriptor key). */
+function _wrecAddressFromPubkeys(kind, sorted, m, pubs) {
+    var signer = window.BtcMath.btcSigner;
     if (kind === 'wpkh')    return signer.p2wpkh(pubs[0]).address;
     if (kind === 'sh/wpkh') return signer.p2sh(signer.p2wpkh(pubs[0])).address;
     if (kind === 'pkh')     return signer.p2pkh(pubs[0]).address;
     if (kind === 'tr')      return signer.p2tr(pubs[0].slice(1)).address;
-    if (sorted) pubs.sort(_wrecCompareBytes);
+    if (sorted) pubs = pubs.slice().sort(_wrecCompareBytes);
     var ms = signer.p2ms(m, pubs);
     if (kind === 'wsh/multi')    return signer.p2wsh(ms).address;
     if (kind === 'sh-wsh/multi') return signer.p2sh(signer.p2wsh(ms)).address;
