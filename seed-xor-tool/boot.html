@@ -8316,7 +8316,7 @@
                     <div id="desc-addr-export">
                         <div class="desc-addr-export-row">
                             <button type="button" class="skb-btn" id="desc-addr-export-btn" onclick="desc_exportAddresses()">Export Addresses (.csv)</button>
-                            <label class="desc-addr-count-label" for="desc-addr-count">First
+                            <label class="desc-addr-count-label" for="desc-addr-count">How many
                                 <input type="number" id="desc-addr-count" class="skb-input" min="1" max="10000" step="1" value="100" inputmode="numeric" aria-describedby="desc-addr-export-hint">
                             </label>
                         </div>
@@ -8324,7 +8324,7 @@
                             <input type="checkbox" id="desc-addr-change" style="margin-top: 0.15rem;">
                             <span>Also export the same number of change addresses</span>
                         </label>
-                        <div id="desc-addr-export-hint" style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 0.25rem;">Receive addresses from index 0, up to 10,000. Saved as a .csv list (index, chain, path, address) for spreadsheets and watch-only tools. Holds addresses only, no keys.</div>
+                        <div id="desc-addr-export-hint" style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 0.25rem;">Always starts at the wallet's first address (index 0). Up to 10,000. Saved as a .csv list (index, chain, path, address) for spreadsheets and watch-only tools. Holds addresses only, no keys.</div>
                     </div>
                     <!-- Bitcoin Core watch-only export (importdescriptors JSON) -->
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_exportCore()">Export for Bitcoin Core (.json)</button>
