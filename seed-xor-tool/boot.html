@@ -2035,6 +2035,181 @@
       color: var(--skb-text);
     }
 
+    /* ---- Transfer Hub: transmit controls (same design as the online Courier) ---- */
+    .xfr-mode-select {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+    }
+    .xfr-mode-option {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+      padding: 0.8rem 0.95rem;
+      text-align: left;
+      font: inherit;
+      color: var(--skb-text);
+      background: var(--skb-bg-input);
+      border: 2px solid var(--skb-border);
+      border-radius: var(--skb-radius-sm);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .xfr-mode-option:hover { border-color: var(--skb-text-dim); }
+    .xfr-mode-option.active {
+      border-color: var(--skb-primary);
+      background: color-mix(in srgb, var(--skb-primary) 9%, var(--skb-bg-input));
+    }
+    .xfr-mode-option:focus-visible { outline: 2px solid var(--skb-primary); outline-offset: 2px; }
+    .xfr-mode-icon { width: 20px; height: 20px; flex-shrink: 0; color: var(--skb-text-dim); transition: color 0.15s; }
+    .xfr-mode-option.active .xfr-mode-icon { color: var(--skb-primary); }
+    .xfr-mode-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+    .xfr-mode-title { font-size: 0.92rem; font-weight: 600; }
+    .xfr-mode-sub { font-size: 0.78rem; color: var(--skb-text-muted); }
+
+    .xfr-file-drop {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: 1rem 1.1rem;
+      background: var(--skb-bg-input);
+      border: 2px dashed var(--skb-border);
+      border-radius: var(--skb-radius-sm);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .xfr-file-drop:hover,
+    .xfr-file-drop.is-dragover {
+      border-color: var(--skb-primary);
+      background: color-mix(in srgb, var(--skb-primary) 6%, var(--skb-bg-input));
+    }
+    .xfr-file-drop:focus-within { outline: 2px solid var(--skb-primary); outline-offset: 2px; }
+    .xfr-file-drop.has-file { border-style: solid; }
+    .xfr-file-drop input[type="file"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .xfr-file-drop-icon {
+      width: 40px;
+      height: 40px;
+      box-sizing: border-box;
+      flex-shrink: 0;
+      padding: 10px;
+      border-radius: 50%;
+      color: var(--skb-primary);
+      background: color-mix(in srgb, var(--skb-primary) 14%, transparent);
+    }
+    .xfr-file-drop-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+    .xfr-file-drop-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--skb-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .xfr-file-drop-sub { font-size: 0.78rem; color: var(--skb-text-muted); }
+
+    .xfr-settings-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    .xfr-slider-field {
+      padding: 0.85rem 1rem 0.75rem;
+      background: var(--skb-bg-input);
+      border: 1px solid var(--skb-border);
+      border-radius: var(--skb-radius-sm);
+    }
+    .xfr-slider-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.7rem;
+    }
+    .xfr-slider-head label {
+      margin: 0;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--skb-text-muted);
+    }
+    .xfr-slider-value {
+      font-family: var(--skb-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--skb-primary);
+      background: color-mix(in srgb, var(--skb-primary) 14%, transparent);
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    /* Range slider: orange fill up to the thumb (--fill is set by script) */
+    .xfr-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      display: block;
+      width: 100%;
+      max-width: none;
+      height: 22px;
+      margin: 0;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      --fill: 50%;
+    }
+    .xfr-slider:focus { outline: none; }
+    .xfr-slider::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(to right, var(--skb-primary) 0, var(--skb-primary) var(--fill), var(--skb-border) var(--fill));
+    }
+    .xfr-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      margin-top: -6px;
+      border-radius: 50%;
+      background: #fff;
+      border: 3px solid var(--skb-primary);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .xfr-slider:hover::-webkit-slider-thumb { transform: scale(1.1); }
+    .xfr-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--skb-primary) 35%, transparent); }
+    .xfr-slider::-moz-range-track { height: 6px; border-radius: 999px; background: var(--skb-border); }
+    .xfr-slider::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--skb-primary); }
+    .xfr-slider::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      border: 3px solid var(--skb-primary);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    }
+    .xfr-slider-scale {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-top: 0.45rem;
+      font-size: 0.72rem;
+      color: var(--skb-text-dim);
+    }
+    @media (max-width: 600px) {
+      .xfr-settings-row { grid-template-columns: 1fr; }
+    }
+
     /* ---- Cards (skb-card global override) ---- */
     .skb-card {
       border-radius: 0;
@@ -8644,10 +8819,16 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <!-- ======== TRANSMIT TAB ======== -->
             <div id="xfr-tab-transmit" class="tool-tab-content active">
 
-                <!-- Mode Toggle -->
-                <div style="display: flex; gap: 0; margin-bottom: 1rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;">
-                    <button type="button" id="xfr-mode-file" class="tool-tab-btn active" style="flex: 1;" onclick="xfr_setMode('file')">File (Animated)</button>
-                    <button type="button" id="xfr-mode-text" class="tool-tab-btn" style="flex: 1;" onclick="xfr_setMode('text')">Text (Static)</button>
+                <!-- Mode Toggle (same design as the online Courier) -->
+                <div class="xfr-mode-select" role="group" aria-label="Transmit mode">
+                    <button type="button" id="xfr-mode-file" class="xfr-mode-option active" aria-pressed="true" onclick="xfr_setMode('file')">
+                        <svg class="xfr-mode-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span class="xfr-mode-text"><span class="xfr-mode-title">File</span><span class="xfr-mode-sub">Animated QR loop</span></span>
+                    </button>
+                    <button type="button" id="xfr-mode-text" class="xfr-mode-option" aria-pressed="false" onclick="xfr_setMode('text')">
+                        <svg class="xfr-mode-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <span class="xfr-mode-text"><span class="xfr-mode-title">Text / password</span><span class="xfr-mode-sub">Single static QR</span></span>
+                    </button>
                 </div>
 
                 <!-- FILE MODE -->
@@ -8658,9 +8839,18 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                              .pdf added so the Courier can shuttle scanned recovery sheets / printed
                              cosigner descriptors across the air gap. application/pdf MIME is
                              ALSO listed because some browsers honor MIME over extension. -->
-                        <input type="file" id="xfr-file-input" accept=".7z,.psbt,.txt,.json,.pdf,application/x-7z-compressed,application/pdf,application/octet-stream"
-                               style="width: 100%; padding: 0.75rem; background: var(--skb-bg-input); border: 1px dashed var(--skb-primary); border-radius: var(--skb-radius-sm); cursor: pointer; color: var(--skb-text); font-size: 0.85rem;">
-                        <div id="xfr-file-info" style="display: none; margin-top: 0.5rem; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-success, #00c896); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.82rem; color: var(--skb-success, #00c896);"></div>
+                        <!-- The real file input covers the zone invisibly, so clicking and
+                             dropping a file both use the browser's own file handling. -->
+                        <div class="xfr-file-drop" id="xfr-file-drop">
+                            <input type="file" id="xfr-file-input" accept=".7z,.psbt,.txt,.json,.pdf,application/x-7z-compressed,application/pdf,application/octet-stream">
+                            <svg class="xfr-file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            <span class="xfr-file-drop-text">
+                                <span class="xfr-file-drop-title" id="xfr-file-drop-title">Choose a file or drop it here</span>
+                                <span class="xfr-file-drop-sub" id="xfr-file-drop-sub">PSBT, 7z, TXT, JSON or PDF</span>
+                            </span>
+                        </div>
+                        <!-- Large-file warning (shown only when there is one) -->
+                        <div id="xfr-file-info" style="display: none; margin-top: 0.5rem; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-warning, #f59e0b); border-radius: var(--skb-radius-sm); font-size: 0.82rem; line-height: 1.5; color: var(--skb-warning, #f59e0b);"></div>
 
                         <!-- Unified File System: quick-pick from mounted transfer drive -->
                         <div id="xfr-drive-files" style="display: none; margin-top: 0.75rem;">
@@ -8679,30 +8869,28 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                              inversion math is needed here (unlike the PSBT
                              Signer's ms-based slider). Readouts update live on
                              both oninput (drag) and onchange (release). -->
-                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-                            <div style="flex: 1; min-width: 200px;">
-                                <label style="font-size: 0.75rem; color: var(--skb-text-dim); display: block; margin-bottom: 0.25rem;">Density (bytes/chunk)</label>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <input type="range" id="xfr-chunk-size" value="500" min="50" max="800" step="50"
-                                           oninput="xfr_updateDensityReadout(this.value)"
-                                           onchange="xfr_updateDensityReadout(this.value)"
-                                           aria-label="QR fragment size in bytes per chunk"
-                                           style="flex: 1; min-width: 80px;">
-                                    <span id="xfr-chunk-size-value"
-                                          style="font-family: var(--skb-mono); color: var(--skb-text); min-width: 5.5em; text-align: right;">500 bytes</span>
+                        <div class="xfr-settings-row">
+                            <div class="xfr-slider-field">
+                                <div class="xfr-slider-head">
+                                    <label for="xfr-chunk-size">Density</label>
+                                    <span class="xfr-slider-value" id="xfr-chunk-size-value">500 bytes</span>
                                 </div>
+                                <input type="range" class="xfr-slider" id="xfr-chunk-size" value="500" min="50" max="800" step="50"
+                                       oninput="xfr_updateDensityReadout(this.value)"
+                                       onchange="xfr_updateDensityReadout(this.value)"
+                                       aria-label="QR fragment size in bytes per chunk">
+                                <div class="xfr-slider-scale" aria-hidden="true"><span>Easier to scan</span><span>Fewer frames</span></div>
                             </div>
-                            <div style="flex: 1; min-width: 200px;">
-                                <label style="font-size: 0.75rem; color: var(--skb-text-dim); display: block; margin-bottom: 0.25rem;">Speed (FPS)</label>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <input type="range" id="xfr-fps" value="7" min="1" max="10" step="1"
-                                           oninput="xfr_updateSpeedReadout(this.value)"
-                                           onchange="xfr_updateSpeedReadout(this.value)"
-                                           aria-label="QR animation speed in frames per second"
-                                           style="flex: 1; min-width: 80px;">
-                                    <span id="xfr-fps-value"
-                                          style="font-family: var(--skb-mono); color: var(--skb-text); min-width: 5.5em; text-align: right;">7 FPS</span>
+                            <div class="xfr-slider-field">
+                                <div class="xfr-slider-head">
+                                    <label for="xfr-fps">Speed</label>
+                                    <span class="xfr-slider-value" id="xfr-fps-value">7 FPS</span>
                                 </div>
+                                <input type="range" class="xfr-slider" id="xfr-fps" value="7" min="1" max="10" step="1"
+                                       oninput="xfr_updateSpeedReadout(this.value)"
+                                       onchange="xfr_updateSpeedReadout(this.value)"
+                                       aria-label="QR animation speed in frames per second">
+                                <div class="xfr-slider-scale" aria-hidden="true"><span>More reliable</span><span>Faster</span></div>
                             </div>
                         </div>
                     </div>
@@ -31808,6 +31996,8 @@ function xfr_setMode(mode) {
     xfr_state.mode = mode;
     document.getElementById('xfr-mode-file').classList.toggle('active', mode === 'file');
     document.getElementById('xfr-mode-text').classList.toggle('active', mode === 'text');
+    document.getElementById('xfr-mode-file').setAttribute('aria-pressed', String(mode === 'file'));
+    document.getElementById('xfr-mode-text').setAttribute('aria-pressed', String(mode === 'text'));
     document.getElementById('xfr-file-section').style.display = mode === 'file' ? 'block' : 'none';
     document.getElementById('xfr-text-section').style.display = mode === 'text' ? 'block' : 'none';
 
@@ -31836,6 +32026,27 @@ function xfr_togglePwd(inputId, btn) {
     }
 }
 
+// Make `file` the one to transmit and show it in the drop zone. Shared by
+// the file picker, the Transfer Drive quick-pick and hand-offs from other
+// tools. The box under the zone appears only for a large-file warning.
+function _xfrShowLoadedFile(file) {
+    xfr_state.originalFile = file;
+    var startBtn = document.getElementById('xfr-start-btn');
+    if (startBtn) startBtn.disabled = false;
+    var title = document.getElementById('xfr-file-drop-title');
+    if (title) title.textContent = file.name;
+    var sub = document.getElementById('xfr-file-drop-sub');
+    if (sub) sub.textContent = (file.size / 1024).toFixed(2) + ' KB \u00b7 click or drop to change';
+    var drop = document.getElementById('xfr-file-drop');
+    if (drop) drop.classList.add('has-file');
+    var infoBox = document.getElementById('xfr-file-info');
+    if (infoBox) {
+        var warn = _xfrSizeWarning(file);
+        infoBox.textContent = warn.trim();
+        infoBox.style.display = warn ? 'block' : 'none';
+    }
+}
+
 // --- File input handler ---
 (function() {
     var fileInput = document.getElementById('xfr-file-input');
@@ -31843,23 +32054,16 @@ function xfr_togglePwd(inputId, btn) {
         fileInput.addEventListener('change', function(e) {
             var file = e.target.files[0];
             if (!file) return;
-            xfr_state.originalFile = file;
-            document.getElementById('xfr-start-btn').disabled = false;
-            var infoBox = document.getElementById('xfr-file-info');
-            var sizeKB = (file.size / 1024).toFixed(2);
-            var warn = _xfrSizeWarning(file);
-            infoBox.textContent = 'Loaded: ' + file.name + ' (' + sizeKB + ' KB)' + warn;
-            // Tint the info box amber when we're warning the user; reset to
-            // green-success styling otherwise so the visual cue tracks state.
-            if (warn) {
-                infoBox.style.borderColor = 'var(--skb-warning, #f59e0b)';
-                infoBox.style.color = 'var(--skb-warning, #f59e0b)';
-            } else {
-                infoBox.style.borderColor = 'var(--skb-success, #00c896)';
-                infoBox.style.color = 'var(--skb-success, #00c896)';
-            }
-            infoBox.style.display = 'block';
+            _xfrShowLoadedFile(file);
         });
+    }
+    // Highlight the drop zone while a file is dragged over it
+    var drop = document.getElementById('xfr-file-drop');
+    if (drop) {
+        var depth = 0;
+        drop.addEventListener('dragenter', function() { depth++; drop.classList.add('is-dragover'); });
+        drop.addEventListener('dragleave', function() { if (--depth <= 0) { depth = 0; drop.classList.remove('is-dragover'); } });
+        drop.addEventListener('drop', function() { depth = 0; drop.classList.remove('is-dragover'); });
     }
 })();
 
@@ -31954,20 +32158,7 @@ async function xfr_populateDriveFiles() {
 
             try {
                 var file = await entry.handle.getFile();
-                xfr_state.originalFile = file;
-                document.getElementById('xfr-start-btn').disabled = false;
-                var infoBox = document.getElementById('xfr-file-info');
-                var sizeKB = (file.size / 1024).toFixed(2);
-                var warn = _xfrSizeWarning(file);
-                infoBox.textContent = 'Loaded: ' + file.name + ' (' + sizeKB + ' KB)' + warn;
-                if (warn) {
-                    infoBox.style.borderColor = 'var(--skb-warning, #f59e0b)';
-                    infoBox.style.color = 'var(--skb-warning, #f59e0b)';
-                } else {
-                    infoBox.style.borderColor = 'var(--skb-success, #00c896)';
-                    infoBox.style.color = 'var(--skb-success, #00c896)';
-                }
-                infoBox.style.display = 'block';
+                _xfrShowLoadedFile(file);
 
                 // Visual highlight on the selected button
                 var allBtns = listDiv.querySelectorAll('[data-xfr-drive-idx]');
@@ -32116,12 +32307,27 @@ function xfr_sendChunk(chunk, index, total) {
 function xfr_updateDensityReadout(v) {
     var el = document.getElementById('xfr-chunk-size-value');
     if (el) el.textContent = v + ' bytes';
+    _xfrUpdateSliderFill(document.getElementById('xfr-chunk-size'));
 }
 
 function xfr_updateSpeedReadout(v) {
     var el = document.getElementById('xfr-fps-value');
     if (el) el.textContent = v + ' FPS';
+    _xfrUpdateSliderFill(document.getElementById('xfr-fps'));
 }
+
+// Orange fill from the left end of a range slider up to its thumb
+function _xfrUpdateSliderFill(el) {
+    if (!el) return;
+    var min = parseFloat(el.min) || 0, max = parseFloat(el.max) || 100;
+    el.style.setProperty('--fill', ((el.value - min) / (max - min) * 100) + '%');
+}
+function _xfrInitSliderFills() {
+    _xfrUpdateSliderFill(document.getElementById('xfr-chunk-size'));
+    _xfrUpdateSliderFill(document.getElementById('xfr-fps'));
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _xfrInitSliderFills);
+else _xfrInitSliderFills();
 
 // Start the animated loop
 async function xfr_startTransmit() {
@@ -34437,23 +34643,7 @@ async function archive_transmit(idx) {
 
         // Inject the payload — mirrors xfr_populateDriveFiles click
         // handler so the Courier Tool is ready to press "START".
-        xfr_state.originalFile = file;
-        var startBtn = document.getElementById('xfr-start-btn');
-        if (startBtn) startBtn.disabled = false;
-        var infoBox = document.getElementById('xfr-file-info');
-        if (infoBox) {
-            var sizeKB = (file.size / 1024).toFixed(2);
-            var warn = (typeof _xfrSizeWarning === 'function') ? _xfrSizeWarning(file) : '';
-            infoBox.textContent = 'Loaded: ' + file.name + ' (' + sizeKB + ' KB)' + warn;
-            if (warn) {
-                infoBox.style.borderColor = 'var(--skb-warning, #f59e0b)';
-                infoBox.style.color = 'var(--skb-warning, #f59e0b)';
-            } else {
-                infoBox.style.borderColor = 'var(--skb-success, #00c896)';
-                infoBox.style.color = 'var(--skb-success, #00c896)';
-            }
-            infoBox.style.display = 'block';
-        }
+        _xfrShowLoadedFile(file);
     } catch (err) {
         showStatus('Transmit failed: ' + err.message, 'error');
     }
