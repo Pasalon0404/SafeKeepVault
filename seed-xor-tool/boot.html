@@ -8188,9 +8188,15 @@
                         <label style="font-size: 0.875rem; font-weight: 600; color: var(--skb-primary);">Key 1 — This Device</label>
                         <span style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted);" id="desc-ms-local-fp"></span>
                     </div>
-                    <div id="desc-ms-local-status" style="font-size: 0.8125rem; color: var(--skb-text-muted); padding: 0.75rem; background: var(--skb-bg-input); border-radius: var(--skb-radius-sm); border: 1px solid var(--skb-border); font-family: var(--skb-mono); word-break: break-all;">
-                        No master seed loaded. Key 1 will be auto-derived from your session seed.
+                    <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Extended Public Key</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: stretch;">
+                        <div id="desc-ms-local-status" style="flex: 1; min-width: 0; font-size: 0.8125rem; color: var(--skb-text-muted); padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border-radius: var(--skb-radius-sm); border: 1px solid var(--skb-border); font-family: var(--skb-mono); word-break: break-all;">
+                            No master seed loaded. Key 1 will be auto-derived from your session seed.
+                        </div>
+                        <button type="button" class="skb-btn" id="desc-ms-local-copy" onclick="desc_copyLocalKey()" disabled
+                                style="font-size: 0.75rem; padding: 0.3rem 0.75rem;">Copy</button>
                     </div>
+                    <div style="margin-top: 0.35rem; font-size: 0.75rem; color: var(--skb-text-muted);">Worked out from your seed (and passphrase, if any). Give this to the other cosigners' wallets.</div>
                     <div style="margin-top: 0.75rem;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
                             <label style="font-size: 0.8125rem; color: var(--skb-text-muted);">Optional Passphrase (BIP-39)</label>
@@ -8205,9 +8211,9 @@
                         </div>
                         <div id="desc-ms-lib-dropdown" style="display: none; margin-bottom: 0.5rem; padding: 0.5rem; background: var(--skb-bg-card); border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); max-height: 180px; overflow-y: auto;"></div>
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <input type="password" id="desc-ms-passphrase" autocomplete="off" spellcheck="false"
+                            <input type="password" id="desc-ms-passphrase" autocomplete="off" spellcheck="false" oninput="desc_updateLocalKeyStatus()"
                                    style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.875rem; color: var(--skb-text);">
-                            <button type="button" class="skb-btn" onclick="document.getElementById('desc-ms-passphrase').value=''"
+                            <button type="button" class="skb-btn" onclick="document.getElementById('desc-ms-passphrase').value=''; desc_updateLocalKeyStatus()"
                                     style="padding: 0.4rem 0.75rem; font-size: 0.75rem; font-family: var(--skb-mono); border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); white-space: nowrap;">CLEAR</button>
                         </div>
                     </div>
@@ -29304,37 +29310,68 @@ function desc_updateMsAddrType() {
     var pathEl = document.getElementById('desc-ms-deriv-path');
     if (pathEl) pathEl.textContent = "m/48'/0'/0'/" + suffixMap[addrType];
     document.getElementById('desc-output').style.display = 'none';
+    desc_updateLocalKeyStatus();
 }
 
 // =============================================
 // MULTI-SIG: Show Key 1 (local device) status
 // =============================================
+var _descLocalKeySeq = 0;
+var _descLocalKey = '';
+
+// Key 1 = this device's BIP-48 account key, shown as the key origin string
+// that goes into the descriptor ([fingerprint/48'/0'/0'/2']xpub…).
+async function _descLocalKeyOrigin(seed, passphrase, addrType) {
+    var B = window.BtcMath;
+    var suffix = { '44': "0'", '49': "1'", '84': "2'" }[addrType] || "2'";
+    var path = "m/48'/0'/0'/" + suffix;
+    var root = B.HDKey.fromMasterSeed(await B.bip39.mnemonicToSeed(seed, passphrase), { public: 0x0488b21e, private: 0x0488ade4 });
+    var fp = root.fingerprint.toString(16).padStart(8, '0');
+    return { fingerprint: fp, origin: '[' + fp + '/' + path.replace('m/', '') + ']' + _descNormalizeXpub(root.derive(path).publicExtendedKey) };
+}
+
 function desc_updateLocalKeyStatus() {
     var seed = window.SeedSession?.get()?.mnemonic;
     var statusEl = document.getElementById('desc-ms-local-status');
     var fpEl = document.getElementById('desc-ms-local-fp');
+    var copyBtn = document.getElementById('desc-ms-local-copy');
     if (!statusEl) return;
+    var seq = ++_descLocalKeySeq;
+    _descLocalKey = '';
+    if (copyBtn) copyBtn.disabled = true;
 
-    if (seed) {
-        // Show a preview — derive the xpub asynchronously
-        statusEl.innerHTML = '<span style="color: var(--skb-secondary);">Session seed loaded (' + seed.trim().split(/\s+/).length + ' words). xpub will be auto-derived at generation time.</span>';
-        // Async fingerprint preview
-        (async function() {
-            try {
-                var bip39 = window.BtcMath?.bip39;
-                var HDKey = window.BtcMath?.HDKey;
-                if (!bip39 || !HDKey) return;
-                var pp = document.getElementById('desc-ms-passphrase')?.value || ''; // exact — never trim a BIP-39 passphrase
-                var seedBytes = await bip39.mnemonicToSeed(seed, pp);
-                var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-                var fp = root.fingerprint.toString(16).padStart(8, '0').toUpperCase();
-                if (fpEl) fpEl.textContent = fp;
-            } catch(_e2) {}
-        })();
-    } else {
-        statusEl.innerHTML = 'No master seed loaded. Generate or restore a seed first, then return here.';
+    if (!seed) {
+        statusEl.textContent = 'No master seed loaded. Generate or restore a seed first, then return here.';
+        statusEl.style.color = 'var(--skb-text-muted)';
         if (fpEl) fpEl.textContent = '';
+        return;
     }
+    statusEl.textContent = 'Working out your key\u2026';
+    statusEl.style.color = 'var(--skb-text-muted)';
+    (async function() {
+        try {
+            if (!window.BtcMath?.bip39 || !window.BtcMath?.HDKey) return;
+            var pp = document.getElementById('desc-ms-passphrase')?.value || ''; // exact — never trim a BIP-39 passphrase
+            var key = await _descLocalKeyOrigin(seed, pp, desc_state.msAddrType || document.getElementById('desc-ms-addr-type')?.value || '84');
+            if (seq !== _descLocalKeySeq) return;   // a newer passphrase / address type is being worked out
+            _descLocalKey = key.origin;
+            statusEl.textContent = key.origin;
+            statusEl.style.color = 'var(--skb-text)';
+            if (fpEl) fpEl.textContent = key.fingerprint.toUpperCase();
+            if (copyBtn) copyBtn.disabled = false;
+        } catch (e) {
+            if (seq !== _descLocalKeySeq) return;
+            statusEl.textContent = 'Couldn\u2019t work out your key: ' + e.message;
+            statusEl.style.color = 'var(--skb-danger)';
+        }
+    })();
+}
+
+function desc_copyLocalKey() {
+    if (!_descLocalKey) return;
+    navigator.clipboard.writeText(_descLocalKey).then(function() {
+        showStatus('Key 1 copied to clipboard.', 'success');
+    });
 }
 
 // =============================================
@@ -29682,6 +29719,14 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
         var fpInput = document.getElementById('desc-ms-fp-' + i);
         var userFP = fpInput ? fpInput.value.trim().toLowerCase().replace(/[^0-9a-f]/g, '') : '';
 
+        // Some wallets add the address path after the key (…/<0;1>/* or …/0/*).
+        // The descriptor adds /<0;1>/* itself, so drop it here; anything else
+        // after the xpub can't be used.
+        rawVal = rawVal.replace(/\/(?:<0;1>|0)\/\*$/, '');
+        if (/^(\[[^\]]*\])?[A-Za-z0-9]+[/]/.test(rawVal)) {
+            throw new Error('Co-signer Key ' + i + ' has a path after the xpub that can\u2019t be used. Enter just [fingerprint/path]xpub.');
+        }
+
         // Parse the key origin format: [fp/path]xpub...
         // If the user just pasted a bare xpub, wrap it with fingerprint (user-provided or placeholder)
         var keyOriginStr = '';
@@ -29722,6 +29767,20 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
             accountNodes.push(cosignerNode);
         } catch (decErr) {
             throw new Error('Co-signer Key ' + i + ': invalid xpub — ' + decErr.message);
+        }
+    }
+
+    // === Every key must be different ===
+    // The same key twice (the same QR scanned for two cosigners, or a
+    // cosigner that is this device's own key) makes a multisig whose
+    // addresses can't be built, and wallets read it as fewer keys.
+    for (var da = 0; da < accountNodes.length; da++) {
+        for (var db = da + 1; db < accountNodes.length; db++) {
+            if (desc_arraysEqual(accountNodes[da].publicKey, accountNodes[db].publicKey)) {
+                throw new Error(da === 0
+                    ? 'Key ' + (db + 1) + ' is the same key as Key 1 (this device). Scan Key ' + (db + 1) + '\u2019s xpub from the other cosigner\u2019s wallet.'
+                    : 'Key ' + (da + 1) + ' and Key ' + (db + 1) + ' are the same key. Each cosigner needs its own seed \u2014 scan Key ' + (db + 1) + ' again from the right wallet.');
+            }
         }
     }
 
@@ -29779,7 +29838,8 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
                 }
                 addrHtml += '<div style="margin-bottom: 0.3rem;"><span style="color: var(--skb-text-muted);">m/0/' + ai + '</span> &nbsp; ' + addr + '</div>';
             } catch (ae) {
-                addrHtml += '<div style="margin-bottom: 0.3rem; color: var(--skb-danger);">m/0/' + ai + ' — error</div>';
+                // Don't report a descriptor whose addresses can't be built as a success.
+                throw new Error('Address ' + ai + ' couldn\u2019t be worked out from these keys (' + ae.message + '). Check each co-signer\u2019s xpub.');
             }
         }
     } else {
