@@ -65,7 +65,7 @@ function makeEnv(cosigners, extra = {}) {
   const ctx = vm.createContext({
     window: { BtcMath: { bip39, wordlist, HDKey, btcSigner }, SeedSession: { get: () => ({ mnemonic: ABANDON }) } },
     document: { getElementById: el }, Uint8Array, Math, Number, String, parseInt, setTimeout, console, Promise,
-    showStatus: (m, t) => statuses.push(t + ':' + m), _descShowAddrExport() {},
+    showStatus: (m, t) => statuses.push(t + ':' + m), _descShowAddrExport() {}, desc_recvReset() {},
   });
   vm.runInContext([
     ...['DESC_BIP32_PUBLIC_MAINNET', 'DESC_BIP32_PUBLIC_TESTNET', '_DESC_MAINNET_VERS', '_DESC_TESTNET_VERS', '_sha256K', '_B58_ALPHABET'].map(extractVar),

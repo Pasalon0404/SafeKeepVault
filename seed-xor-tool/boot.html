@@ -2210,7 +2210,31 @@
       .xfr-settings-row { grid-template-columns: 1fr; }
     }
 
-    /* ---- Output Descriptor: address export row ---- */
+    /* ---- Output Descriptor: receive address (show + check) ---- */
+.desc-recv { margin-top: 1rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.85rem 1rem; }
+.desc-recv-head { font-size: 0.875rem; font-weight: 600; color: var(--skb-text); }
+.desc-recv-note { font-size: 0.75rem; color: var(--skb-text-muted); margin: 0.35rem 0 0; line-height: 1.5; }
+.desc-recv-block { margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--skb-border); }
+.desc-recv-sub { font-size: 0.8125rem; color: var(--skb-text-muted); margin-bottom: 0.5rem; }
+.desc-recv-index { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: var(--skb-text-muted); }
+.desc-recv-index .skb-btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+.desc-recv-index input { width: 8rem; font-family: var(--skb-mono); font-size: 0.875rem; padding: 0.35rem 0.5rem; margin: 0; }
+.desc-recv-show { display: flex; gap: 1.25rem; align-items: center; margin-top: 0.75rem; }
+.desc-recv-show canvas { width: 220px; height: 220px; flex: none; background: #fff; border: 1px solid var(--skb-border); }
+.desc-recv-text { min-width: 0; }
+.desc-recv-label { font-size: 0.75rem; color: var(--skb-text-muted); margin-bottom: 0.35rem; }
+.desc-recv-addr { font-family: var(--skb-mono); font-size: 1.15rem; line-height: 1.7; color: var(--skb-text); word-spacing: 0.15em; overflow-wrap: anywhere; }
+.desc-recv-addr span:nth-child(even) { color: var(--skb-primary); }
+.desc-recv-hint { font-size: 0.7rem; color: var(--skb-text-dim); margin-top: 0.35rem; }
+.desc-recv-check { display: flex; gap: 0.5rem; }
+.desc-recv-check input { flex: 1; min-width: 0; font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0; }
+.desc-recv-check .skb-btn { font-size: 0.8125rem; white-space: nowrap; }
+.desc-recv-result { margin-top: 0.6rem; padding: 0.6rem 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-size: 0.8125rem; line-height: 1.5; }
+.desc-recv-result.is-ok { border-color: var(--skb-success, #00c896); color: var(--skb-success, #00c896); }
+.desc-recv-result.is-bad { border-color: var(--skb-danger); color: var(--skb-danger); }
+.desc-recv-result.is-busy { color: var(--skb-text-muted); }
+
+/* ---- Output Descriptor: address export row ---- */
 #desc-addr-export { margin-top: 0.5rem; }
 /* The count field drops below the button when there isn't room for both. */
 .desc-addr-export-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch; }
@@ -8314,6 +8338,45 @@
                     <div>
                         <label style="font-size: 0.875rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Address Verification (first 5 receive)</label>
                         <div id="desc-address-list" style="background: var(--skb-bg-input); border-radius: var(--skb-radius-sm); padding: 0.75rem; font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); overflow-x: auto;"></div>
+                    </div>
+
+                    <!-- Receive: show one address (with QR) from this offline device, and check an address another wallet gives you -->
+                    <div id="desc-receive" class="desc-recv">
+                        <div class="desc-recv-head">Receive</div>
+                        <p class="desc-recv-note">Worked out here, offline, from the descriptor &mdash; so malware on an online computer can&rsquo;t swap it. This device can&rsquo;t see which addresses have been used: let your watch-only wallet pick the next unused one, then check it below.</p>
+
+                        <div class="desc-recv-block">
+                            <div class="desc-recv-sub">Show a receive address</div>
+                            <div class="desc-recv-index" id="desc-recv-index-row">
+                                <button type="button" class="skb-btn" onclick="desc_recvStep(-1)" aria-label="Previous address">&#8592;</button>
+                                <label for="desc-recv-index">Address #</label>
+                                <input type="number" id="desc-recv-index" class="skb-input" min="0" max="2147483647" step="1" value="0" inputmode="numeric" onchange="desc_recvShow()">
+                                <button type="button" class="skb-btn" onclick="desc_recvStep(1)" aria-label="Next address">&#8594;</button>
+                            </div>
+                            <div class="desc-recv-show">
+                                <canvas id="desc-recv-qr" width="220" height="220"></canvas>
+                                <div class="desc-recv-text">
+                                    <div class="desc-recv-label" id="desc-recv-label"></div>
+                                    <div class="desc-recv-addr" id="desc-recv-addr"></div>
+                                    <div class="desc-recv-hint">Compare every group with the sender&rsquo;s screen, not just the first and last few characters.</div>
+                                    <button type="button" class="skb-btn" id="desc-recv-copy" onclick="desc_recvCopy()" style="font-size: 0.75rem; padding: 0.3rem 0.75rem; margin-top: 0.5rem;">Copy address</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="desc-recv-block">
+                            <div class="desc-recv-sub">Check an address</div>
+                            <div class="desc-recv-check">
+                                <input type="text" id="desc-recv-check-input" class="skb-input" placeholder="Paste or scan the address your wallet wants to use" autocomplete="off" spellcheck="false" onkeydown="if (event.key === 'Enter') desc_recvCheck()">
+                                <button type="button" class="skb-btn" onclick="desc_recvScan()">Scan QR</button>
+                                <button type="button" class="skb-btn skb-btn--primary" id="desc-recv-check-btn" onclick="desc_recvCheck()">Check</button>
+                            </div>
+                            <div id="desc-recv-qr-area" style="display: none; margin-top: 0.75rem;">
+                                <div id="desc-recv-qr-reader" style="width: 100%; max-width: 480px; min-height: 240px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>
+                                <button type="button" class="skb-btn" style="margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_recvStopScan()">Stop Scanner</button>
+                            </div>
+                            <div id="desc-recv-result" class="desc-recv-result" role="status" style="display: none;"></div>
+                        </div>
                     </div>
 
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 1rem; font-size: 0.8125rem; border: 1px dashed var(--skb-border);" onclick="desc_printPDF()">Print PDF</button>
@@ -29574,6 +29637,7 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
         document.getElementById('desc-address-list').innerHTML =
             '<div style="margin-bottom: 0.3rem; word-break: break-all;">' + spAddress + '</div>';
         _descShowAddrExport(false);
+        desc_recvReset();
         document.getElementById('desc-output').style.display = 'block';
         document.getElementById('desc-qr-wrap').style.display = 'none';
         document.getElementById('desc-qr-toggle-btn').textContent = 'Show QR';
@@ -29643,6 +29707,7 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
     }
     document.getElementById('desc-address-list').innerHTML = addrHtml;
     _descShowAddrExport(true);
+    desc_recvReset();
 
     document.getElementById('desc-output').style.display = 'block';
     document.getElementById('desc-qr-wrap').style.display = 'none';
@@ -29847,6 +29912,7 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
     }
     document.getElementById('desc-address-list').innerHTML = addrHtml;
     _descShowAddrExport(true);
+    desc_recvReset();
 
     document.getElementById('desc-output').style.display = 'block';
     document.getElementById('desc-qr-wrap').style.display = 'none';
@@ -30110,6 +30176,212 @@ async function desc_exportAddresses() {
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = label; }
     }
+}
+
+// =============================================
+// Receive: show one address (with QR) and check an address
+// =============================================
+// Both work from the descriptor alone, on this offline device. "Show" puts
+// one receive address on screen by index; "Check" finds a pasted or scanned
+// address among the first DESC_RECV_SEARCH receive and change addresses.
+var DESC_RECV_SEARCH = 1000;
+var _descRecv = { parsed: null, nodes: {}, address: '' };
+var _descRecvScanner = null;
+
+/* Parsed current descriptor plus per-chain nodes (cached until it changes). */
+function _descRecvWallet() {
+    var d = desc_state.currentDescriptor;
+    if (!d) throw new Error('No descriptor yet. Generate one first.');
+    if (!_descRecv.parsed || _descRecv.parsed.descriptor !== d.replace(/[\r\n]+/g, '').trim()) {
+        var p = _wrecParseDescriptor(d);
+        if (!p.ok) throw new Error(p.error || 'This descriptor couldn’t be read.');
+        if (p.kind !== 'sp' && p.addressNote) throw new Error(p.addressNote);
+        _descRecv.parsed = p;
+        _descRecv.nodes = {};
+    }
+    return _descRecv.parsed;
+}
+
+function _descRecvAddressAt(p, chain, index) {
+    if (!(chain in _descRecv.nodes)) _descRecv.nodes[chain] = _descChainNodes(p.keys, chain);
+    var nodes = _descRecv.nodes[chain];
+    if (!nodes) return null;   // e.g. a receive-only (…/0/*) descriptor has no change chain
+    var pubs = nodes.map(function(n) { return n.deriveChild(index).publicKey; });
+    return _wrecAddressFromPubkeys(p.kind, p.sorted, p.msM, pubs);
+}
+
+/* "bc1qcr8te4kr…" → groups of four, for character-by-character comparison. */
+function _descRecvGroups(addr) {
+    return (addr.match(/.{1,4}/g) || []).map(function(g) { return '<span>' + g + '</span>'; }).join(' ');
+}
+
+function desc_recvReset() {
+    _descRecv = { parsed: null, nodes: {}, address: '' };
+    desc_recvStopScan();
+    var idx = document.getElementById('desc-recv-index');
+    if (idx) idx.value = '0';
+    var input = document.getElementById('desc-recv-check-input');
+    if (input) input.value = '';
+    var res = document.getElementById('desc-recv-result');
+    if (res) { res.style.display = 'none'; res.textContent = ''; }
+    desc_recvShow();
+}
+
+function desc_recvStep(delta) {
+    var el = document.getElementById('desc-recv-index');
+    var i = parseInt(el.value, 10);
+    el.value = String(Math.max(0, (isNaN(i) ? 0 : i) + delta));
+    desc_recvShow();
+}
+
+function desc_recvShow() {
+    var addrEl = document.getElementById('desc-recv-addr');
+    var labelEl = document.getElementById('desc-recv-label');
+    var canvas = document.getElementById('desc-recv-qr');
+    var idxEl = document.getElementById('desc-recv-index');
+    var row = document.getElementById('desc-recv-index-row');
+    if (!addrEl || !idxEl) return;
+    _descRecv.address = '';
+    try {
+        var p = _descRecvWallet();
+        var addr, label;
+        if (p.kind === 'sp') {
+            // One static address; reusing it is fine — every payment lands at a different output.
+            if (row) row.style.display = 'none';
+            addr = p.firstAddress;
+            label = 'Silent Payment address · the same one is used for every payment';
+        } else {
+            if (row) row.style.display = 'flex';
+            var raw = String(idxEl.value).trim();
+            var index = /^\d+$/.test(raw) ? parseInt(raw, 10) : NaN;
+            if (!(index >= 0 && index <= 2147483647)) throw new Error('Enter an address number from 0 up.');
+            addr = _descRecvAddressAt(p, 0, index);
+            // Safety net: the first addresses must match the list shown above.
+            var screen = _descScreenAddresses();
+            if (index < screen.length && screen[index] !== addr) {
+                throw new Error('This address doesn’t match address ' + index + ' in the list above. Generate the descriptor again.');
+            }
+            label = 'Receive #' + index + ' · path 0/' + index + ' · ' +
+                (p.isMulti ? p.msM + '-of-' + p.msN + ' multisig' : 'single-sig') +
+                ' · ' + p.keys.map(function(k) { return (k.fingerprint || '????????').toUpperCase(); }).join(', ');
+        }
+        _descRecv.address = addr;
+        labelEl.textContent = label;
+        addrEl.innerHTML = _descRecvGroups(addr);
+        addrEl.style.color = '';
+        if (canvas && window.QRCode) {
+            // The bare address: every wallet and exchange can read it.
+            QRCode.toCanvas(canvas, addr, { width: 220, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
+        }
+    } catch (e) {
+        labelEl.textContent = '';
+        addrEl.textContent = e.message;
+        addrEl.style.color = 'var(--skb-danger)';
+        if (canvas) { var c = canvas.getContext('2d'); c.clearRect(0, 0, canvas.width, canvas.height); }
+    }
+}
+
+function desc_recvCopy() {
+    if (!_descRecv.address) return;
+    navigator.clipboard.writeText(_descRecv.address).then(function() {
+        showStatus('Address copied to clipboard.', 'success');
+    });
+}
+
+/* Clean a pasted / scanned address: trims, drops a bitcoin: prefix and ?params.
+   Returns { address } or { error }. */
+function _descRecvNormalize(raw) {
+    var a = String(raw || '').trim();
+    a = a.replace(/^bitcoin:/i, '').split('?')[0].trim();
+    if (!a) return { error: 'Paste or scan an address first.' };
+    if (/^(tb1|bcrt1|[mn2])/i.test(a) && !/^bc1/i.test(a)) {
+        return { error: 'That’s a testnet address. This tool works with mainnet (bc1…, 1…, 3…) wallets.' };
+    }
+    if (/^sp1/i.test(a)) return { address: a.toLowerCase(), sp: true };
+    var B = window.BtcMath && window.BtcMath.btcSigner;
+    if (B && typeof B.Address === 'function') {
+        try { B.Address(B.NETWORK).decode(a); }
+        catch (e) { return { error: 'That isn’t a valid Bitcoin address: a character is wrong or missing. Copy or scan it again.' }; }
+    }
+    // Bech32 is case-insensitive; base58 isn't.
+    return { address: /^bc1/i.test(a) ? a.toLowerCase() : a };
+}
+
+function _descRecvResult(kind, html) {
+    var res = document.getElementById('desc-recv-result');
+    if (!res) return;
+    res.className = 'desc-recv-result' + (kind ? ' is-' + kind : '');
+    res.innerHTML = html;
+    res.style.display = 'block';
+}
+
+async function desc_recvCheck() {
+    var input = document.getElementById('desc-recv-check-input');
+    var n = _descRecvNormalize(input ? input.value : '');
+    if (n.error) { _descRecvResult('bad', n.error); return; }
+    var p;
+    try { p = _descRecvWallet(); } catch (e) { _descRecvResult('bad', e.message); return; }
+
+    if (p.kind === 'sp' || n.sp) {
+        if (p.kind === 'sp' && n.address === p.firstAddress) _descRecvResult('ok', '&#10004; This is this wallet&rsquo;s Silent Payment address.');
+        else _descRecvResult('bad', '&#10008; Not this wallet&rsquo;s address. Don&rsquo;t use it.');
+        return;
+    }
+
+    var btn = document.getElementById('desc-recv-check-btn');
+    if (btn) btn.disabled = true;
+    _descRecvResult('busy', 'Checking the first ' + DESC_RECV_SEARCH.toLocaleString('en-US') + ' receive and change addresses…');
+    try {
+        for (var i = 0; i < DESC_RECV_SEARCH; i++) {
+            for (var chain = 0; chain <= 1; chain++) {
+                var a = _descRecvAddressAt(p, chain, i);
+                if (a && a === n.address) {
+                    _descRecvResult('ok', '&#10004; This wallet&rsquo;s <strong>' + (chain === 0 ? 'receive' : 'change') + ' address #' + i + '</strong> (path ' + chain + '/' + i + '). ' +
+                        (chain === 0 ? 'Safe to give out.' : 'It belongs to you, but change addresses are normally used by your wallet, not given out.'));
+                    if (chain === 0) {
+                        document.getElementById('desc-recv-index').value = String(i);
+                        desc_recvShow();
+                    }
+                    return;
+                }
+            }
+            if (i % 100 === 99) {
+                _descRecvResult('busy', 'Checking the first ' + DESC_RECV_SEARCH.toLocaleString('en-US') + ' receive and change addresses… ' + Math.round((i + 1) / DESC_RECV_SEARCH * 100) + '%');
+                await new Promise(function(r) { setTimeout(r, 0); });
+            }
+        }
+        _descRecvResult('bad', '&#10008; <strong>Not found</strong> in this wallet&rsquo;s first ' + DESC_RECV_SEARCH.toLocaleString('en-US') +
+            ' receive or change addresses. Don&rsquo;t send to it until you know where it came from &mdash; it may belong to a different wallet, or be an address swapped in by malware.');
+    } catch (e) {
+        _descRecvResult('bad', 'Check failed: ' + e.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function desc_recvScan() {
+    if (!window.jsQR) { showStatus('QR scanner not available.', 'error'); return; }
+    var area = document.getElementById('desc-recv-qr-area');
+    desc_recvStopScan();
+    area.style.display = 'block';
+    try {
+        _descRecvScanner = SKScanner.create('desc-recv-qr-reader');
+        await _descRecvScanner.start({ fps: 10 }, function(text, binaryData) {
+            desc_recvStopScan();
+            var parsed = window.QRParser ? window.QRParser.parseQRScan(text, binaryData) : text;
+            document.getElementById('desc-recv-check-input').value = String(parsed || '').trim();
+            desc_recvCheck();
+        });
+    } catch (err) {
+        showStatus('Camera failed: ' + err.message, 'error');
+        area.style.display = 'none';
+    }
+}
+
+function desc_recvStopScan() {
+    if (_descRecvScanner) { _descRecvScanner.stop(); _descRecvScanner = null; }
+    var area = document.getElementById('desc-recv-qr-area');
+    if (area) area.style.display = 'none';
 }
 
 function desc_toggleQR() {
