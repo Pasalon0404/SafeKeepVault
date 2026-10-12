@@ -8864,11 +8864,11 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <!-- The real file input covers the zone invisibly, so clicking and
                              dropping a file both use the browser's own file handling. -->
                         <div class="xfr-file-drop" id="xfr-file-drop">
-                            <input type="file" id="xfr-file-input" accept=".7z,.psbt,.txt,.json,.pdf,application/x-7z-compressed,application/pdf,application/octet-stream">
+                            <input type="file" id="xfr-file-input" accept=".7z,.psbt,.txt,.json,.pdf,.csv,application/x-7z-compressed,application/pdf,text/csv,application/octet-stream">
                             <svg class="xfr-file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                             <span class="xfr-file-drop-text">
                                 <span class="xfr-file-drop-title" id="xfr-file-drop-title">Choose a file or drop it here</span>
-                                <span class="xfr-file-drop-sub" id="xfr-file-drop-sub">PSBT, 7z, TXT, JSON or PDF</span>
+                                <span class="xfr-file-drop-sub" id="xfr-file-drop-sub">PSBT, 7z, TXT, JSON, CSV or PDF</span>
                             </span>
                         </div>
                         <!-- Large-file warning (shown only when there is one) -->
@@ -29856,35 +29856,54 @@ function desc_exportTxt() {
     _descSaveFile('CUSTOM-DESCRIPTOR-' + ts + '.txt', content, 'text/plain');
 }
 
-// Save an export: silently to the vault on the boot drive, otherwise as a
-// browser download. Success is reported through the global toast.
-function _descSaveFile(filename, content, mimeType) {
-    if (typeof _silentDownload === 'function' && typeof isBootDrive === 'function' && isBootDrive()) {
-        _silentDownload(filename, content);
-        // Sprint 22: route success through the global toast overlay
-        // instead of injecting into desc-export-status inline.
-        var s = document.getElementById('desc-export-status');
-        if (s) { s.textContent = ''; s.style.display = 'none'; }
-        showStatus('Exported ' + filename + ' to vault. Copy it to your transfer drive.', 'success');
-    } else {
-        var blob = new Blob([content], { type: mimeType });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.rel = 'noopener';
-        a.style.display = 'none';
-        document.body.appendChild(a);
+// Save an export to the Transfer Drive, where the Transfer Hub and the
+// Archive can see it. On the boot drive the drive must be mounted: the file
+// is never written into the vault, where nothing could send it on. Without
+// the boot drive (dev / demo build) and no drive mounted, it's a browser
+// download. An earlier file with the same name is never overwritten.
+async function _descSaveFile(filename, content, mimeType) {
+    var s = document.getElementById('desc-export-status');
+    if (s) { s.textContent = ''; s.style.display = 'none'; }
+    var drive = window.vaultTransferDriveHandle;
+    if (drive) {
         try {
-            a.click();
-        } finally {
-            if (a.parentNode) a.parentNode.removeChild(a);
-            setTimeout(function() { URL.revokeObjectURL(url); }, 0);
+            var name = (typeof _armResolveUniqueFilename === 'function')
+                ? await _armResolveUniqueFilename(drive, filename) : filename;
+            var fh = await drive.getFileHandle(name, { create: true });
+            var w = await fh.createWritable();
+            await w.write(content);
+            await w.close();
+            showStatus('Saved ' + name + ' to the Transfer Drive. Send it from the Transfer Hub.', 'success');
+            if (typeof archive_refresh === 'function') {
+                try { await archive_refresh(); } catch (_) { /* non-fatal */ }
+            }
+            return true;
+        } catch (e) {
+            showStatus('Saving to the Transfer Drive failed: ' + (e && e.message ? e.message : String(e)), 'error');
+            return false;
         }
-        var s2 = document.getElementById('desc-export-status');
-        if (s2) { s2.textContent = ''; s2.style.display = 'none'; }
-        showStatus('Download started: ' + filename, 'success');
     }
+    var os = window.SafeKeepOS;
+    if (os && typeof os.isBootDrive === 'function' && os.isBootDrive()) {
+        showStatus('Transfer Drive not mounted. Go back to the Dashboard, click Mount Transfer Drive, then export again.', 'error');
+        return false;
+    }
+    var blob = new Blob([content], { type: mimeType });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    try {
+        a.click();
+    } finally {
+        if (a.parentNode) a.parentNode.removeChild(a);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 0);
+    }
+    showStatus('Download started: ' + filename, 'success');
+    return true;
 }
 
 // Bitcoin Core watch-only export: an `importdescriptors` JSON array with the
@@ -30025,7 +30044,7 @@ async function desc_exportAddresses() {
         var lines = ['index,chain,path,address'];
         receive.concat(change).forEach(function(r) { lines.push(r.join(',')); });
         var ts = new Date().toISOString().replace(/[:\-T]/g, '').slice(0, 14);
-        _descSaveFile('SAFEKEEP-ADDRESSES-' + ts + '.csv', lines.join('\n') + '\n', 'text/csv');
+        await _descSaveFile('SAFEKEEP-ADDRESSES-' + ts + '.csv', lines.join('\n') + '\n', 'text/csv');
     } catch (e) {
         showStatus('Address export failed: ' + e.message, 'error');
     } finally {
@@ -32215,7 +32234,7 @@ function _xfrShowLoadedFile(file) {
 // When the transfer drive is mounted via The Archive, populate a quick-pick
 // list so the user can select files without opening the OS dialog at all.
 // .pdf added (kept in sync with the file-input `accept` attribute above).
-var XFR_ALLOWED_EXT = /\.(7z|psbt|txt|json|pdf)$/i;
+var XFR_ALLOWED_EXT = /\.(7z|psbt|txt|json|pdf|csv)$/i;
 
 // Soft size thresholds for the size-warning logic in the file-load handlers.
 // No hard cap — the chunker is purely byte-based and any size in principle
