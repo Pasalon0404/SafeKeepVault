@@ -16,7 +16,9 @@ const CBOR = createRequire(import.meta.url)('cbor-sync');
  *    builds (wpkh, tr, sh(wpkh), pkh; sortedmulti in wsh, sh(wsh), sh) and plain multi, checked
  *    against the BIP-84/86 test vectors and an independent derivation;
  *  - desc_exportAddresses: CSV layout, count limits, the change-chain option, Silent Payments and
- *    unranged descriptors refused, and nothing saved if the on-screen addresses don't match.
+ *    unranged descriptors refused, and nothing saved if the on-screen addresses don't match;
+ *  - _descSaveFile: exports land on the Transfer Drive (never in the vault), with unique names,
+ *    and the Transfer Hub lists and accepts .csv files.
  * Run: node test-address-export.mjs
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -213,6 +215,47 @@ for (const bad of ['0', '-5', '10001', '2.5', 'abc', '']) {
   const d = cs(`wsh(sortedmulti(2,${roots.map((r) => `${acct(r, "48'/0'/0'/2'")}/<0;1>/*`).join(',')}))`);
   const f = await run(d, 20, true);
   ck('2-of-3 multisig export: 40 rows', f && f.content.trimEnd().split('\n').length === 41);
+}
+
+
+// ---- _descSaveFile: exports go to the Transfer Drive, never into the vault ----
+{
+  const files = new Map();
+  const nf = () => { const e = new Error('nf'); e.name = 'NotFoundError'; return e; };
+  const drive = {
+    async getFileHandle(name, opts) {
+      if (!files.has(name) && !(opts && opts.create)) throw nf();
+      return { async createWritable() { let buf = ''; return { async write(d) { buf += d; }, async close() { files.set(name, buf); } }; } };
+    },
+  };
+  const statuses = [];
+  let anchors = 0;
+  const ctx = vm.createContext({
+    window: {}, Blob, URL: { createObjectURL: () => 'blob:x', revokeObjectURL() {} }, setTimeout, Date, String,
+    document: { getElementById: () => null, createElement: () => ({ style: {}, click() { anchors++; } }), body: { appendChild() {} } },
+    showStatus: (m, t) => statuses.push(t + ':' + m),
+  });
+  vm.runInContext([extract('_armResolveUniqueFilename'), extract('_descSaveFile')].join('\n'), ctx);
+  const last = () => statuses[statuses.length - 1] || '';
+
+  ctx.window.vaultTransferDriveHandle = drive;
+  ctx.window.SafeKeepOS = { isBootDrive: () => true };
+  ck('drive mounted: file written to the Transfer Drive', await ctx._descSaveFile('A.csv', 'x,y\n', 'text/csv') === true && files.get('A.csv') === 'x,y\n' && /Transfer Drive/.test(last()), last());
+  ck('same name again: saved as A-1.csv, first file kept', await ctx._descSaveFile('A.csv', 'z\n', 'text/csv') === true && files.get('A.csv') === 'x,y\n' && files.get('A-1.csv') === 'z\n', [...files.keys()].join());
+  ck('drive mounted: no browser download', anchors === 0);
+
+  ctx.window.vaultTransferDriveHandle = null;
+  ck('boot drive, drive not mounted: refused, nothing downloaded into the vault',
+    await ctx._descSaveFile('B.csv', 'b\n', 'text/csv') === false && anchors === 0 && /not mounted/.test(last()), last());
+
+  ctx.window.SafeKeepOS = { isBootDrive: () => false };
+  ck('not the boot drive, no drive mounted: browser download', await ctx._descSaveFile('C.csv', 'c\n', 'text/csv') === true && anchors === 1, last());
+}
+{
+  // The Transfer Hub lists and accepts .csv files.
+  const ext = new Function(extractVar('XFR_ALLOWED_EXT') + ' return XFR_ALLOWED_EXT;')();
+  ck('Transfer Hub lists .csv files', ext.test('SAFEKEEP-ADDRESSES-20261012.csv') && ext.test('a.PSBT') && !ext.test('a.exe'));
+  ck('Transfer Hub file picker accepts .csv', /id="xfr-file-input" accept="[^"]*\.csv/.test(SRC));
 }
 
 console.log(`\nADDRESS EXPORT: ${pass} passed, ${fail} failed`);
