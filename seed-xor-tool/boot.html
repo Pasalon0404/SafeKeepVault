@@ -7123,7 +7123,7 @@
                         <button type="button" class="psbt-ingest-btn" onclick="psbtStartCameraScan()">
                             <div>
                                 <div class="psbt-ingest-label">Scan Unsigned PSBT</div>
-                                <div class="psbt-ingest-sub">Supports static and animated QR codes (UR and BBQr formats).</div>
+                                <div class="psbt-ingest-sub">Supports static and animated QR codes (UR and BBQr formats), and .psbt files sent with The Courier.</div>
                             </div>
                         </button>
                         <button type="button" class="psbt-ingest-btn" onclick="psbtLoadFromTransfer()">
@@ -15435,6 +15435,7 @@ function _wipeAllVolatileSeedState() {
     try { _psbtBbqrParts = {}; } catch (_) {}
     try { _psbtBbqrTotal = 0; } catch (_) {}
     try { _psbtBbqrEncoding = ''; } catch (_) {}
+    try { if (_psbtCourier) _psbtCourier.reset(); _psbtCourier = null; } catch (_) {}
 
     // --- PSBT temp-seed textarea + predictive grid (paranoid overwrite) ---
     try {
@@ -17450,6 +17451,7 @@ let _psbtCameraTarget = 'psbt';  // 'psbt' = Phase 1 PSBT ingest, 'seed' = Phase
 let _psbtBbqrParts = {};          // BBQr accumulated frame data by part number
 let _psbtBbqrTotal = 0;           // BBQr expected total parts
 let _psbtBbqrEncoding = '';       // BBQr encoding type (H, 2, Z)
+let _psbtCourier = null;          // Courier file collector (animated file frames), in memory only
 
 // Blue Wallet (and other watch-only wallets without xpub fingerprint data)
 // hardcode the master fingerprint as 00000000. Treat as a wildcard match.
@@ -18209,6 +18211,7 @@ async function psbtStartCameraScan() {
     _psbtBbqrParts = {};
     _psbtBbqrTotal = 0;
     _psbtBbqrEncoding = '';
+    _psbtCourier = (window.QRParser && window.QRParser.createCourierCollector) ? window.QRParser.createCourierCollector() : null;
 
     try {
         if (_psbtCameraScanner) { _psbtCameraScanner.stop(); _psbtCameraScanner = null; }
@@ -18254,6 +18257,14 @@ function _psbtOnQrScanned(text, binaryData) {
     // Route 2: BBQr animated QR (Sparrow BBQr, Blue Wallet BBQr)
     if (trimmed.startsWith('B$')) {
         _psbtHandleBbqrFrame(trimmed);
+        return;
+    }
+
+    // Route 2b: a file sent with The Courier (animated file frames)
+    const courierFrame = window.QRParser && window.QRParser.parseCourierFrame
+        ? window.QRParser.parseCourierFrame(trimmed) : null;
+    if (courierFrame) {
+        _psbtHandleCourierFrame(courierFrame);
         return;
     }
 
@@ -18317,6 +18328,43 @@ function _psbtHandleUrFrame(text) {
         _psbtUrDecoder = new (window.URDecoder)();
         document.getElementById('psbt-scan-status').textContent = 'Bad UR frame — keep scanning...';
     }
+}
+
+// ---- Courier Route Handler ----
+// A file sent with The Courier (from a computer's screen, or relayed by a
+// phone): collect every chunk (each one checksum-verified, any order, from
+// any point in the loop), put the file back together in memory and load it
+// exactly like a file picked from the Transfer Drive. Nothing is written.
+function _psbtHandleCourierFrame(frame) {
+    if (!_psbtCourier) _psbtCourier = window.QRParser.createCourierCollector();
+    const r = _psbtCourier.add(frame);
+    // The name comes from the QR code: keep it to a plain file name (it is
+    // reused for the signed export) and never insert it as HTML.
+    const name = _psbtCourierFileName(r.filename);
+    const statusEl = document.getElementById('psbt-scan-status');
+    if (statusEl) {
+        statusEl.textContent = 'Receiving file \u201c' + name + '\u201d \u2014 chunk ' + r.received + ' / ' + r.total +
+            (r.status === 'bad-checksum' ? ' (a damaged chunk was skipped, keep scanning)' : '');
+    }
+    if (!r.done) return;
+
+    _psbtScanProcessing = true;
+    psbtStopCameraScan();
+    // Same handling as a file from the Transfer Drive: binary, base64 or hex.
+    const bytes = _psbtNormalizeIngestBytes(r.bytes);
+    const isPsbt = bytes && bytes.length >= 5 && bytes[0] === 0x70 && bytes[1] === 0x73 &&
+        bytes[2] === 0x62 && bytes[3] === 0x74 && bytes[4] === 0xff;
+    if (!isPsbt) {
+        psbtShowStatus('Received \u201c' + _psbtEscape(name) + '\u201d (' + r.bytes.length + ' bytes), but it isn\u2019t a PSBT. ' +
+            'Send the unsigned transaction file (.psbt) from your wallet, then scan again.', 'error');
+        return;
+    }
+    _psbtIngestComplete(bytes, name);
+}
+
+function _psbtCourierFileName(raw) {
+    const name = String(raw || '').replace(/[\/\\\u0000-\u001f\u007f]/g, '_').replace(/^[.\s]+/, '').slice(0, 80).trim();
+    return name || 'courier-file.psbt';
 }
 
 // ---- BBQr Route Handler ----
@@ -18556,6 +18604,7 @@ function psbtStopCameraScan() {
     _psbtBbqrParts = {};
     _psbtBbqrTotal = 0;
     _psbtBbqrEncoding = '';
+    if (_psbtCourier) { _psbtCourier.reset(); _psbtCourier = null; }
     document.getElementById('psbt-camera-wrap').classList.remove('visible');
 }
 
