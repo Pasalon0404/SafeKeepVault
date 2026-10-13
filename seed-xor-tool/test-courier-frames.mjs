@@ -156,5 +156,29 @@ for (const [label, text] of [['base64 text file', Buffer.from(PSBT).toString('ba
   ck('file name cleaned before use (no path, no control chars)', e.calls.ingest.length === 1 && e.calls.ingest[0].name === '_.._etc_evil_name.psbt', e.calls.ingest[0] && e.calls.ingest[0].name);
 }
 
+// ---- boot.html: the return trip (signed PSBT as a Courier file) ----
+{
+  const ctx = vm.createContext({ btoa: (b) => Buffer.from(b, 'binary').toString('base64'), Uint8Array, Math, String, encodeURIComponent });
+  vm.runInContext(['let _psbtLoadedFilename = "";', extract('_psbtCourierFrames'), extract('_psbtCourierExportName'), extract('_psbtStripExt')].join('\n'), ctx);
+  const signed = new Uint8Array([0x70, 0x73, 0x62, 0x74, 0xff, ...body.slice(0, 1200)]);
+  const out = ctx._psbtCourierFrames(signed, 'trezor-unsigned-signed.psbt', 500);
+  const ref = courierFrames('trezor-unsigned-signed.psbt', 'application/octet-stream', signed, 500, 0);
+  ck('vault frames are exactly what the Courier itself would send', out.length === ref.length && out.every((f, i) => f === ref[i]), out[0].slice(0, 80) + ' vs ' + ref[0].slice(0, 80));
+  const back = collect(out);
+  ck('vault frames reassemble to the signed bytes and name', back.done && eq(back.bytes, signed) && back.filename === 'trezor-unsigned-signed.psbt');
+  for (const size of [50, 137, 800]) {
+    const fr = ctx._psbtCourierFrames(signed, 'x-signed.psbt', size);
+    const r = collect([...fr].reverse());
+    ck(`chunk size ${size}: ${fr.length} frames, reassembles (reversed order)`, fr.length === Math.ceil(signed.length / size) && r.done && eq(r.bytes, signed));
+  }
+  ck('small file: a single frame', ctx._psbtCourierFrames(signed.slice(0, 30), 'a-signed.psbt', 500).length === 1);
+  const names = [['trezor-unsigned.psbt', 'trezor-unsigned-signed.psbt'], ['scanned-psbt.psbt', 'scanned-psbt-signed.psbt'], ['', 'transaction-signed.psbt'],
+                 ['weird~na<me>.txt', 'weird_na_me_-signed.psbt'], ['..hidden.psbt', 'hidden-signed.psbt']];
+  for (const [loaded, want] of names) {
+    vm.runInContext('_psbtLoadedFilename = ' + JSON.stringify(loaded), ctx);
+    ck(`export name for "${loaded}" → ${want}`, ctx._psbtCourierExportName() === want, ctx._psbtCourierExportName());
+  }
+}
+
 console.log(`\nCOURIER FRAMES: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

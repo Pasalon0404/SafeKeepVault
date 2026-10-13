@@ -7305,6 +7305,7 @@
                                 <option value="ur">UR (ur:crypto-psbt)</option>
                                 <option value="nunchuk-hex">Raw Hex Type 1 (Nunchuk)</option>
                                 <option value="electrum-hex">Raw Hex Type 2 (Electrum)</option>
+                                <option value="courier-file">File (Courier)</option>
                             </select>
                         </div>
                     </div>
@@ -18359,7 +18360,7 @@ function _psbtHandleCourierFrame(frame) {
             'Send the unsigned transaction file (.psbt) from your wallet, then scan again.', 'error');
         return;
     }
-    _psbtIngestComplete(bytes, name);
+    _psbtIngestComplete(bytes, name, 'courier');
 }
 
 function _psbtCourierFileName(raw) {
@@ -19383,7 +19384,10 @@ let _psbtDietAcknowledged = false;
 // "hijack detected" false positive across rapid sequential tests).
 let _psbtIngestGeneration = 0;
 
-async function _psbtIngestComplete(psbtBytes, filename) {
+let _psbtIngestVia = '';   // 'courier' when the unsigned PSBT arrived as a Courier file
+
+async function _psbtIngestComplete(psbtBytes, filename, via) {
+    _psbtIngestVia = via || '';
     // ------------------------------------------------------------------
     // HARD STATE RESET — first line of the function.
     // ------------------------------------------------------------------
@@ -24984,8 +24988,9 @@ let _psbtQrAutoUr = false;             // UR was picked automatically (shown in 
 function _psbtApplyAutoQrFormat() {
     if (_psbtQrFormatUserChosen) return;
     const big = !!(_psbtSignedBytes && _psbtSignedBytes.length > _PSBT_UR_AUTO_BYTES);
-    const fmt = big ? 'ur' : 'standard';
-    _psbtQrAutoUr = big;
+    // A PSBT that arrived as a Courier file goes back the same way.
+    const fmt = _psbtIngestVia === 'courier' ? 'courier-file' : (big ? 'ur' : 'standard');
+    _psbtQrAutoUr = big && fmt === 'ur';
     const formatSelect = document.getElementById('psbt-qr-format');
     if (_psbtQrFormat === fmt && (!formatSelect || formatSelect.value === fmt)) return;
     _psbtQrFormat = fmt;
@@ -25016,7 +25021,8 @@ var _PSBT_DENSITY_CONFIGS = {
     'ur':           { min:  50, max:  400, step:  25, unit: ' bytes', stateName: '_psbtUrFragmentSize' },
     'standard':     { min: 400, max: 1800, step: 100, unit: ' chars',  stateName: 'PSBT_QR_CHUNK_SIZE' },
     'nunchuk-hex':  { min: 400, max: 1800, step: 100, unit: ' chars',  stateName: 'PSBT_QR_CHUNK_SIZE' },
-    'electrum-hex': { min: 400, max: 1800, step: 100, unit: ' chars',  stateName: 'PSBT_QR_CHUNK_SIZE' }
+    'electrum-hex': { min: 400, max: 1800, step: 100, unit: ' chars',  stateName: 'PSBT_QR_CHUNK_SIZE' },
+    'courier-file': { min:  50, max:  800, step:  50, unit: ' bytes', stateName: '_psbtCourierChunkSize' }
 };
 
 function _psbtReconfigureDensitySlider(fmt) {
@@ -25026,8 +25032,8 @@ function _psbtReconfigureDensitySlider(fmt) {
     if (!slider || !label) return;
     // Read the format-appropriate live state value (named indirection
     // so future formats just add an entry to _PSBT_DENSITY_CONFIGS).
-    var currentValue = (cfg.stateName === '_psbtUrFragmentSize')
-        ? _psbtUrFragmentSize
+    var currentValue = (cfg.stateName === '_psbtUrFragmentSize') ? _psbtUrFragmentSize
+        : (cfg.stateName === '_psbtCourierChunkSize') ? _psbtCourierChunkSize
         : PSBT_QR_CHUNK_SIZE;
     slider.min   = String(cfg.min);
     slider.max   = String(cfg.max);
@@ -25076,6 +25082,8 @@ function psbtSetQrDensity(v) {
     // in characters (PSBT_QR_CHUNK_SIZE).
     if (_psbtQrFormat === 'ur') {
         _psbtUrFragmentSize = n;
+    } else if (_psbtQrFormat === 'courier-file') {
+        _psbtCourierChunkSize = n;
     } else {
         PSBT_QR_CHUNK_SIZE = n;
     }
@@ -25290,6 +25298,39 @@ async function _psbtRenderQr() {
         }
         return;
 
+    } else if (_psbtQrFormat === 'courier-file') {
+        // ---- FILE (COURIER) — animated file loop ----
+        // For wallets that only take files (e.g. Trezor Suite): The Courier
+        // on the computer receives this loop and saves it as a .psbt file.
+        if (!_psbtSignedBytes) {
+            counterEl.textContent = 'No signed PSBT available';
+            return;
+        }
+        const fileName = _psbtCourierExportName();
+        const frames = _psbtCourierFrames(_psbtSignedBytes, fileName, _psbtCourierChunkSize);
+        titleEl.textContent = 'Signed PSBT \u2014 File (Courier)';
+        hintEl.textContent = 'Plays the signed PSBT as a file. On the computer, open The Courier \u2192 Receive and point it at this screen, ' +
+            'then save the file (' + fileName + ') and open it in your wallet.';
+        const opts = { width: 580, margin: 4, errorCorrectionLevel: 'L', color: { dark: '#000000', light: '#ffffff' } };
+        const counter = function(st) {
+            return 'Courier file \u2014 chunk ' + st.frame + ' of ' + st.total + ' (' + fileName + ', ' +
+                _psbtSignedBytes.length.toLocaleString() + ' bytes, ' + _psbtCourierChunkSize + ' B/chunk)';
+        };
+        try {
+            if (frames.length === 1) {
+                await window.QRCode.toCanvas(canvas, frames[0], opts);
+                _psbtStripCanvasInlineSize(canvas);
+                counterEl.textContent = counter({ frame: 1, total: 1 });
+                _psbtSetPlaybackControlsAnimated(false);
+                return;
+            }
+            _psbtSetPlaybackControlsAnimated(true);
+            await _psbtAnimateFrames(canvas, frames, opts, counterEl, counter, 0);
+        } catch (eCf) {
+            counterEl.textContent = 'Courier file encoding failed: ' + eCf.message;
+        }
+        return;
+
     } else if (_psbtQrFormat === 'electrum-hex') {
         // ---- ELECTRUM RAW HEX QR ----
         // Live-fire finding (Dave): Electrum's camera parser rejects
@@ -25442,6 +25483,32 @@ async function _psbtRenderQr() {
     });
 }
 
+// Name of the signed file sent with The Courier: "<loaded name>-signed.psbt".
+function _psbtCourierExportName() {
+    const stem = _psbtStripExt(_psbtLoadedFilename).replace(/[^A-Za-z0-9._ -]/g, '_').replace(/^[.\s]+/, '').slice(0, 60).trim();
+    return (stem || 'transaction') + '-signed.psbt';
+}
+
+// The Courier's file frames: loop/index/total~name~ext~mime~base64~checksum
+// (see shared/qr-parser.js). The loop number is 0 throughout: receivers
+// collect chunks by index and ignore it.
+function _psbtCourierFrames(bytes, fileName, chunkSize) {
+    const dot = fileName.lastIndexOf('.');
+    const base = dot > 0 ? fileName.substring(0, dot) : fileName;
+    const ext = dot > 0 ? fileName.substring(dot + 1) : '';
+    const size = Math.max(1, chunkSize | 0);
+    const total = Math.max(1, Math.ceil(bytes.length / size));
+    const frames = [];
+    for (let i = 0; i < total; i++) {
+        const chunk = bytes.subarray(i * size, (i + 1) * size);
+        let bin = '', sum = 0;
+        for (let j = 0; j < chunk.length; j++) { bin += String.fromCharCode(chunk[j]); sum += chunk[j]; }
+        frames.push('0/' + i + '/' + total + '~' + encodeURIComponent(base) + '~' + encodeURIComponent(ext) +
+            '~application/octet-stream~' + btoa(bin) + '~' + sum.toString(16).padStart(8, '0'));
+    }
+    return frames;
+}
+
 function _psbtStopQrAnimation() {
     if (_psbtQrAnimTimer) {
         clearInterval(_psbtQrAnimTimer);
@@ -25513,6 +25580,7 @@ var PSBT_QR_FRAME_MS = 300;      // user-tunable via Speed slider   (range 100..
 // the UR format is the active selection. The slider is reconfigured by
 // psbtQrFormatChange() each time the user picks a different format.
 var _psbtUrFragmentSize = 200;
+var _psbtCourierChunkSize = 500;   // bytes per Courier file chunk (the Courier's own default)
 
 // Format chosen for animated frames: `pNofM <chunk>`. This is the
 // legacy multipart format first popularised by Specter-Desktop and
