@@ -158,10 +158,117 @@ function _compactSeedQrToWords(binaryData) {
     }
 }
 
+/* =====================================================================
+ * The Courier — animated file frames
+ * =====================================================================
+ * The Courier (and the vault's QR Transfer tool) send a file as a loop of
+ * QR frames:
+ *
+ *     loop/index/total~name~ext~mime~base64data~checksum
+ *
+ *   - loop: which pass of the loop (ignored when collecting)
+ *   - index: 0-based chunk number; total: number of chunks
+ *   - name, ext: URI-encoded file name and extension
+ *   - checksum: sum of the chunk's bytes, as hex, zero-padded to 8 digits
+ *
+ * Frames repeat, so they can be picked up from any point in the loop and
+ * in any order. These helpers are separate from parseQRScan, which is
+ * unchanged: callers that want Courier files ask for them explicitly.
+ */
+
+/**
+ * Parse one Courier frame. Returns
+ *   { loop, index, total, name, ext, mime, data, checksum }
+ * or null if the text isn't a Courier frame. Fields are read from both
+ * ends, so a '~' inside the file name (encodeURIComponent leaves it as
+ * is) doesn't break the frame.
+ */
+function parseCourierFrame(text) {
+    if (typeof text !== 'string') return null;
+    var parts = text.split('~');
+    if (parts.length < 6) return null;
+    var head = /^(\d+)\/(\d+)\/(\d+)$/.exec(parts[0]);
+    if (!head) return null;
+    var index = parseInt(head[2], 10), total = parseInt(head[3], 10);
+    if (!(total >= 1) || !(index >= 0) || index >= total) return null;
+    var n = parts.length;
+    var checksum = parts[n - 1], data = parts[n - 2], mime = parts[n - 3], ext = parts[n - 4];
+    if (!/^[0-9a-f]{8,}$/i.test(checksum)) return null;
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) return null;
+    function dec(s) { try { return decodeURIComponent(s); } catch (_) { return s; } }
+    return {
+        loop: parseInt(head[1], 10), index: index, total: total,
+        name: dec(parts.slice(1, n - 4).join('~')), ext: dec(ext), mime: mime,
+        data: data, checksum: checksum.toLowerCase()
+    };
+}
+
+function _courierChecksum(bytes) {
+    var sum = 0;
+    for (var i = 0; i < bytes.length; i++) sum += bytes[i];
+    var s = sum.toString(16);
+    while (s.length < 8) s = '0' + s;
+    return s;
+}
+
+function _courierBase64ToBytes(b64) {
+    var bin = atob(b64);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+}
+
+/**
+ * Collects the chunks of one Courier file. add(frame) takes a frame from
+ * parseCourierFrame and returns
+ *   { status, received, total, filename, done, bytes }
+ * status: 'added' | 'duplicate' | 'bad-checksum' | 'new-file' (a frame from
+ * a different file arrived: collection restarted with it).
+ * When every chunk is in, done is true and bytes holds the whole file.
+ */
+function createCourierCollector() {
+    var cur = null;
+    function start(f) {
+        cur = { key: f.total + '~' + f.name + '~' + f.ext + '~' + f.mime, total: f.total,
+                filename: f.ext ? f.name + '.' + f.ext : f.name, mime: f.mime, chunks: {}, count: 0 };
+    }
+    function report(status) {
+        var done = cur.count === cur.total, bytes = null;
+        if (done) {
+            var len = 0, i;
+            for (i = 0; i < cur.total; i++) len += cur.chunks[i].length;
+            bytes = new Uint8Array(len);
+            var off = 0;
+            for (i = 0; i < cur.total; i++) { bytes.set(cur.chunks[i], off); off += cur.chunks[i].length; }
+        }
+        return { status: status, received: cur.count, total: cur.total, filename: cur.filename, mime: cur.mime, done: done, bytes: bytes };
+    }
+    return {
+        add: function(f) {
+            var status = 'added';
+            var key = f.total + '~' + f.name + '~' + f.ext + '~' + f.mime;
+            if (!cur) start(f);
+            else if (cur.key !== key) { start(f); status = 'new-file'; }
+            if (cur.chunks[f.index]) return report('duplicate');
+            var bytes;
+            try { bytes = _courierBase64ToBytes(f.data); } catch (_) { return report('bad-checksum'); }
+            if (_courierChecksum(bytes) !== f.checksum) return report('bad-checksum');
+            cur.chunks[f.index] = bytes;
+            cur.count++;
+            return report(status);
+        },
+        reset: function() { cur = null; }
+    };
+}
+
 // Expose globally for inline scripts in boot.html (same pattern as
 // SKScanner, BtcMath, SafeKeepOS, etc.). Inline ES module syntax isn't
 // used inside boot.html — everything reaches the bundled libraries via
 // window globals.
 if (typeof window !== 'undefined') {
-    window.QRParser = { parseQRScan: parseQRScan };
+    window.QRParser = {
+        parseQRScan: parseQRScan,
+        parseCourierFrame: parseCourierFrame,
+        createCourierCollector: createCourierCollector
+    };
 }
