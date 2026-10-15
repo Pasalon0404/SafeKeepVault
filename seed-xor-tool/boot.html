@@ -8257,7 +8257,7 @@
                 <div class="skb-card" style="margin-bottom: 1rem;">
                     <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Paste Output Descriptor</div>
                     <p style="font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0 0 0.75rem;">
-                        Paste an output descriptor from Sparrow, Specter, or any coordinator. This tool will check whether your active seed can sign for it.
+                        Paste an output descriptor from Sparrow, Specter, or any coordinator. SafeKeep checks it, shows its addresses and, if a seed is loaded, whether that seed can sign for it. Then use it here as a watch-only wallet.
                     </p>
                     <textarea id="desc-verify-input" rows="4" placeholder="wpkh([fingerprint/84'/0'/0']xpub.../0/*)#checksum&#10;or: tr([fingerprint/86'/0'/0']xpub.../0/*)#checksum&#10;or: wsh(sortedmulti(2,[fp/48'/0'/0'/2']xpub...,...))"
                               spellcheck="false" autocomplete="off"
@@ -8289,7 +8289,7 @@
                     </div>
                 </div>
 
-                <button type="button" class="skb-btn skb-btn--primary" style="width: 100%; margin-bottom: 1rem;" id="desc-verify-btn" onclick="desc_verify()">Verify Descriptor Against Seed</button>
+                <button type="button" class="skb-btn skb-btn--primary" style="width: 100%; margin-bottom: 1rem;" id="desc-verify-btn" onclick="desc_verify()">Check Descriptor</button>
 
                 <!-- Verification Result -->
                 <div id="desc-verify-result" style="display: none;">
@@ -8313,6 +8313,8 @@
                             <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Change Addresses (first 3)</label>
                             <div id="desc-verify-change-addrs" style="background: var(--skb-bg-input); border-radius: var(--skb-radius-sm); padding: 0.6rem; font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); overflow-x: auto;"></div>
                         </div>
+                        <button type="button" class="skb-btn skb-btn--primary" id="desc-verify-use-btn" style="width: 100%; margin-top: 1rem;" onclick="desc_useVerified()">Use This Descriptor (watch-only)</button>
+                        <div style="font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.4rem;">Opens it below with Receive (show and check addresses), address export, Bitcoin Core export, QR and Print PDF.</div>
                     </div>
                 </div>
             </div>
@@ -29857,6 +29859,7 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
         if (!spChecksum) throw new Error('BIP-380 checksum computation failed.');
         var spDescriptor = spBody + '#' + spChecksum;
         desc_state.currentDescriptor = spDescriptor;
+        desc_state.imported = null;
         document.getElementById('desc-descriptor-text').textContent = spDescriptor;
         // Address verification override: ONE static sp1q address (no m/0/i
         // chain, so there's no path/index label — the row is just the bare
@@ -29912,6 +29915,7 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
     if (!checksum) throw new Error('BIP-380 checksum computation failed.');
     var finalDescriptor = descriptorBody + '#' + checksum;
     desc_state.currentDescriptor = finalDescriptor;
+    desc_state.imported = null;
 
     document.getElementById('desc-descriptor-text').textContent = finalDescriptor;
 
@@ -30109,6 +30113,7 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
     if (!checksum) throw new Error('BIP-380 checksum failed — descriptor may contain invalid characters.');
     var finalDescriptor = descriptorBody + '#' + checksum;
     desc_state.currentDescriptor = finalDescriptor;
+    desc_state.imported = null;
 
     document.getElementById('desc-descriptor-text').textContent = finalDescriptor;
 
@@ -30654,7 +30659,8 @@ async function desc_printPDF() {
     var printArea = document.getElementById('desc-print-area');
     if (!printArea) return;
 
-    var isMulti = desc_state.mode === 'multi';
+    var imported = desc_state.imported;   // descriptor from another wallet: no seed of ours behind it
+    var isMulti = imported ? imported.isMulti : desc_state.mode === 'multi';
 
     // Date
     var dateEl = document.getElementById('desc-print-date');
@@ -30664,8 +30670,8 @@ async function desc_printPDF() {
     var seedRow = document.getElementById('desc-print-seed-row');
     var ppBlock = document.getElementById('desc-print-passphrase-block');
 
-    if (isMulti) {
-        // Multi-sig: hide seed/fingerprint and passphrase rows
+    if (isMulti || imported) {
+        // Multi-sig or imported: hide seed/fingerprint and passphrase rows
         if (seedRow) seedRow.style.display = 'none';
         if (ppBlock) ppBlock.style.display = 'none';
     } else {
@@ -30773,102 +30779,10 @@ function desc_autoFillMasterSeed() {
 }
 
 // =============================================
-// THE VALIDATOR — Seed-to-Descriptor Verification
-// Parses a pasted output descriptor, derives keys from
-// the active seed, checks fingerprint + xpub ownership,
-// and generates receive/change address previews.
+// Verify tab: descriptors from other wallets are read by
+// _wrecParseDescriptor (desc_verify / desc_useVerified above);
+// this key-origin reader is shared by both parsers.
 // =============================================
-
-/**
- * Parse an output descriptor string into its components.
- * Supports: wpkh(), tr(), sh(wpkh()), pkh(), wsh(sortedmulti()), wsh(multi())
- * Returns: { type, keys: [{ fingerprint, path, xpub }], threshold (for multi) }
- */
-function desc_parseDescriptor(raw) {
-    // === SANITIZATION ===
-    // 1. Strip whitespace, newlines, carriage returns (QR scanners inject these)
-    var desc = raw.replace(/[\r\n]+/g, '').trim();
-    // 2. Strip URI prefixes: bitcoin:, bitcoin://, BITCOIN:
-    desc = desc.replace(/^bitcoin:\/\/|^bitcoin:/i, '');
-    // 3. Strip checksum (case-insensitive — uppercase QR mode produces uppercase hex)
-    desc = desc.replace(/#[a-zA-Z0-9]+$/, '');
-    // 4. Normalize the descriptor wrapper to lowercase for type detection,
-    //    but PRESERVE the case of the payload (Base58 xpubs are case-sensitive).
-    //    Strategy: find the first '(' to locate the wrapper prefix, lowercase only that.
-    var firstParen = desc.indexOf('(');
-    if (firstParen !== -1) {
-        desc = desc.slice(0, firstParen).toLowerCase() + desc.slice(firstParen);
-    } else {
-        desc = desc.toLowerCase();
-    }
-    // For nested wrappers like sh(wpkh(...)) or wsh(sortedmulti(...)),
-    // we also need to lowercase the second-level wrapper up to its '('.
-    // Re-apply: after the first '(' find the next wrapper and lowercase it too.
-    desc = desc.replace(/^((?:sh|wsh|pk|pkh|wpkh|tr)\()(\s*)((?:wpkh|multi|sortedmulti|pk|pkh)\()/i,
-        function(match, outer, space, inner) {
-            return outer + space + inner.toLowerCase();
-        });
-
-    // Detect type and extract inner content
-    var type = '';
-    var inner = '';
-    if (desc.startsWith('wpkh(')) {
-        type = 'wpkh'; inner = desc.slice(5, -1);
-    } else if (desc.startsWith('tr(')) {
-        type = 'tr'; inner = desc.slice(3, -1);
-    } else if (desc.startsWith('sh(wpkh(')) {
-        type = 'sh-wpkh'; inner = desc.slice(8, -2);
-    } else if (desc.startsWith('pkh(')) {
-        type = 'pkh'; inner = desc.slice(4, -1);
-    } else if (desc.startsWith('wsh(sortedmulti(')) {
-        type = 'wsh-sortedmulti'; inner = desc.slice(16, -2);
-    } else if (desc.startsWith('wsh(multi(')) {
-        type = 'wsh-multi'; inner = desc.slice(10, -2);
-    } else {
-        throw new Error('Unsupported descriptor type. Supported: wpkh, tr, sh(wpkh), pkh, wsh(sortedmulti), wsh(multi).');
-    }
-
-    var keys = [];
-    var threshold = null;
-
-    if (type === 'wsh-sortedmulti' || type === 'wsh-multi') {
-        // Format: M,key1,key2,...
-        // Split on comma, but be careful with key origin brackets
-        var parts = desc_splitMultiKeys(inner);
-        threshold = parseInt(parts[0], 10);
-        if (isNaN(threshold) || threshold < 1) throw new Error('Invalid multisig threshold.');
-        for (var i = 1; i < parts.length; i++) {
-            keys.push(desc_parseKeyOrigin(parts[i]));
-        }
-    } else {
-        // Single-sig: inner is the key expression
-        keys.push(desc_parseKeyOrigin(inner));
-    }
-
-    return { type: type, keys: keys, threshold: threshold };
-}
-
-/**
- * Split multisig key list by commas, respecting brackets.
- */
-function desc_splitMultiKeys(inner) {
-    var parts = [];
-    var depth = 0;
-    var current = '';
-    for (var i = 0; i < inner.length; i++) {
-        var ch = inner[i];
-        if (ch === '[') depth++;
-        if (ch === ']') depth--;
-        if (ch === ',' && depth === 0) {
-            parts.push(current.trim());
-            current = '';
-        } else {
-            current += ch;
-        }
-    }
-    if (current.trim()) parts.push(current.trim());
-    return parts;
-}
 
 /**
  * Parse a key origin expression: [fingerprint/path]xpub/derivation
@@ -31565,141 +31479,105 @@ function _bytesToHex(bytes) {
 /**
  * Main verification flow: parse descriptor, derive from seed, compare.
  */
+var _descVerified = null;   // { descriptor, parsed } from the last successful Verify
+
+/* Receive / change address rows for the Verify card (count per chain). */
+function _descVerifyAddrRows(p, chain, count) {
+    if (p.kind === 'sp') {
+        return chain === 0
+            ? '<div style="margin-bottom: 0.3rem; word-break: break-all;">' + p.firstAddress + '</div>'
+            : '<div style="color: var(--skb-text-muted);">Silent Payments use one static address — no change chain.</div>';
+    }
+    if (p.addressNote) return '<div style="color: var(--skb-warning, #f59e0b);">' + _wrecEscape(p.addressNote) + '</div>';
+    var nodes = _descChainNodes(p.keys, chain);
+    if (!nodes) return '<div style="color: var(--skb-text-muted);">This descriptor has no change chain (its keys end in a fixed …/0/*).</div>';
+    var html = '';
+    for (var i = 0; i < count; i++) {
+        var pubs = nodes.map(function(n) { return n.deriveChild(i).publicKey; });
+        var addr = _wrecAddressFromPubkeys(p.kind, p.sorted, p.msM, pubs);
+        html += '<div style="margin-bottom: 0.3rem;"><span style="color: var(--skb-text-muted);">m/' + chain + '/' + i + '</span> &nbsp; ' + addr + '</div>';
+    }
+    return html;
+}
+
 async function desc_verify() {
     var btn = document.getElementById('desc-verify-btn');
     var resultDiv = document.getElementById('desc-verify-result');
     var bannerDiv = document.getElementById('desc-verify-banner');
     var detailsDiv = document.getElementById('desc-verify-details');
+    var useBtn = document.getElementById('desc-verify-use-btn');
+    _descVerified = null;
+    if (useBtn) useBtn.style.display = 'none';
 
     try {
-        if (btn) { btn.disabled = true; btn.textContent = 'Verifying...'; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
         resultDiv.style.display = 'none';
 
-        var rawDesc = document.getElementById('desc-verify-input').value.trim();
-        if (!rawDesc) throw new Error('Paste an output descriptor to verify.');
+        var rawDesc = document.getElementById('desc-verify-input').value.trim().replace(/^bitcoin:(\/\/)?/i, '');
+        if (!rawDesc) throw new Error('Paste or scan an output descriptor first.');
 
-        // Parse the descriptor
-        var parsed = desc_parseDescriptor(rawDesc);
-
-        // Get active seed
-        var seed = window.SeedSession ? window.SeedSession.get() : null;
-        if (!seed || !seed.mnemonic) throw new Error('No master seed loaded. Return to Dashboard and load a seed first.');
+        // Same reader as the Wallet Record: checksum checked, private keys
+        // refused, every single-sig and multisig shape the app supports.
+        var parsed = _wrecParseDescriptor(rawDesc);
+        if (!parsed.ok) throw new Error(parsed.error || 'This descriptor couldn’t be read.');
+        (parsed.warnings || []).forEach(function(w) { showStatus(w, 'warning'); });
 
         var bip39 = window.BtcMath.bip39;
-        var wordlist = window.BtcMath.wordlist;
         var HDKey = window.BtcMath.HDKey;
-        var btcSigner = window.BtcMath.btcSigner;
-        if (!bip39 || !HDKey || !btcSigner) throw new Error('Core crypto libraries not loaded.');
+        if (!bip39 || !HDKey || !window.BtcMath.btcSigner) throw new Error('Core crypto libraries not loaded.');
 
-        // Exact passphrase — no trim (see desc-passphrase note above).
-        var passphrase = document.getElementById('desc-verify-passphrase').value || '';
-        var seedBytes = await bip39.mnemonicToSeed(seed.mnemonic, passphrase);
-        var rootNode = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-        var myFingerprint = rootNode.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-
-        // Check each key in the descriptor against our seed
-        var matchFound = false;
-        var matchedKeyIdx = -1;
-        var descriptorNodes = []; // HDKey nodes for each key in descriptor (for address gen)
-
-        for (var ki = 0; ki < parsed.keys.length; ki++) {
-            var key = parsed.keys[ki];
-
-            // Try to resolve this key from our seed
-            if (key.fingerprint && key.fingerprint === myFingerprint && key.path) {
-                // Fingerprint matches — derive the account node
-                var derivPath = "m/" + key.path;
-                try {
-                    var accountNode = rootNode.derive(derivPath);
-                    // Compare the derived xpub with the descriptor's xpub
-                    // Try multiple version bytes to match
-                    var versionSets = [
-                        { public: 0x0488b21e },  // xpub
-                        { public: 0x04b24746 },  // zpub
-                        { public: 0x049d7cb2 },  // ypub
-                        { public: 0x02aa7ed3 },  // Zpub
-                    ];
-                    for (var vi = 0; vi < versionSets.length; vi++) {
-                        accountNode.versions = versionSets[vi];
-                        if (accountNode.publicExtendedKey === key.xpub) {
-                            matchFound = true;
-                            matchedKeyIdx = ki;
-                            break;
-                        }
-                    }
-                    // Even if xpub string didn't match (version prefix), decode the descriptor xpub
-                    // and compare raw public keys
-                    if (!matchFound) {
-                        try {
-                            var descNode = HDKey.fromExtendedKey(key.xpub);
-                            if (desc_arraysEqual(accountNode.publicKey, descNode.publicKey) &&
-                                desc_arraysEqual(accountNode.chainCode, descNode.chainCode)) {
-                                matchFound = true;
-                                matchedKeyIdx = ki;
-                            }
-                        } catch (e) { /* ignore decode errors */ }
-                    }
-                } catch (e) { /* derivation failed — not a match */ }
-            }
-
-            // Regardless of match, try to decode the xpub for address generation
-            try {
-                descriptorNodes.push(HDKey.fromExtendedKey(key.xpub));
-            } catch (e) {
-                descriptorNodes.push(null);
-            }
-        }
-
-        // If fingerprint didn't match any key, try brute-force: derive common paths
-        // and compare xpubs for the case where fingerprint is wrong/missing
-        if (!matchFound) {
-            var commonPaths = ["84'/0'/0'", "86'/0'/0'", "49'/0'/0'", "44'/0'/0'", "48'/0'/0'/2'"];
-            for (var ci = 0; ci < commonPaths.length && !matchFound; ci++) {
-                try {
-                    var tryNode = rootNode.derive("m/" + commonPaths[ci]);
-                    for (var ki2 = 0; ki2 < parsed.keys.length && !matchFound; ki2++) {
-                        try {
-                            var descNode2 = HDKey.fromExtendedKey(parsed.keys[ki2].xpub);
-                            if (desc_arraysEqual(tryNode.publicKey, descNode2.publicKey) &&
-                                desc_arraysEqual(tryNode.chainCode, descNode2.chainCode)) {
-                                matchFound = true;
-                                matchedKeyIdx = ki2;
-                            }
-                        } catch (e) { /* skip */ }
-                    }
-                } catch (e) { /* skip */ }
-            }
-        }
-
-        // Generate addresses (receive: chain 0, change: chain 1)
-        var recvHtml = '';
-        var changeHtml = '';
-        for (var addrIdx = 0; addrIdx < 3; addrIdx++) {
-            try {
-                var recvPubkeys = [];
-                var changePubkeys = [];
-                for (var ni = 0; ni < descriptorNodes.length; ni++) {
-                    if (!descriptorNodes[ni]) throw new Error('Missing key');
-                    recvPubkeys.push(descriptorNodes[ni].deriveChild(0).deriveChild(addrIdx).publicKey);
-                    changePubkeys.push(descriptorNodes[ni].deriveChild(1).deriveChild(addrIdx).publicKey);
+        // ---- Optional: can the loaded seed sign for it? ----
+        var seed = window.SeedSession ? window.SeedSession.get() : null;
+        var haveSeed = !!(seed && seed.mnemonic) && parsed.kind !== 'sp';
+        var matchFound = false, matchedKeyIdx = -1, myFingerprint = '';
+        if (haveSeed) {
+            // Exact passphrase — no trim (see desc-passphrase note above).
+            var passphrase = document.getElementById('desc-verify-passphrase').value || '';
+            var rootNode = HDKey.fromMasterSeed(await bip39.mnemonicToSeed(seed.mnemonic, passphrase), { public: 0x0488b21e, private: 0x0488ade4 });
+            myFingerprint = rootNode.fingerprint.toString(16).padStart(8, '0').toLowerCase();
+            var descNodes = parsed.keys.map(function(k) {
+                try { return HDKey.fromExtendedKey(_descNormalizeXpub(k.xpub)); } catch (e) { return null; }
+            });
+            var sameKey = function(a, b) {
+                return a && b && desc_arraysEqual(a.publicKey, b.publicKey) && desc_arraysEqual(a.chainCode, b.chainCode);
+            };
+            // 1. The key whose fingerprint is ours, at its own path.
+            for (var ki = 0; ki < parsed.keys.length && !matchFound; ki++) {
+                var key = parsed.keys[ki];
+                if (key.fingerprint === myFingerprint && key.path) {
+                    try {
+                        if (sameKey(rootNode.derive('m/' + key.path.replace(/h/g, "'")), descNodes[ki])) { matchFound = true; matchedKeyIdx = ki; }
+                    } catch (e) { /* not derivable — not a match */ }
                 }
-                var recvAddr = desc_deriveAddress(parsed.type, recvPubkeys, parsed.threshold, btcSigner);
-                var changeAddr = desc_deriveAddress(parsed.type, changePubkeys, parsed.threshold, btcSigner);
-                recvHtml += '<div style="margin-bottom: 0.3rem;"><span style="color: var(--skb-text-muted);">m/0/' + addrIdx + '</span> &nbsp; ' + recvAddr + '</div>';
-                changeHtml += '<div style="margin-bottom: 0.3rem;"><span style="color: var(--skb-text-muted);">m/1/' + addrIdx + '</span> &nbsp; ' + changeAddr + '</div>';
-            } catch (ae) {
-                recvHtml += '<div style="margin-bottom: 0.3rem; color: var(--skb-danger);">m/0/' + addrIdx + ' — derivation error</div>';
-                changeHtml += '<div style="margin-bottom: 0.3rem; color: var(--skb-danger);">m/1/' + addrIdx + ' — derivation error</div>';
+            }
+            // 2. Fingerprint missing or wrong: try the common account paths.
+            var commonPaths = ["84'/0'/0'", "86'/0'/0'", "49'/0'/0'", "44'/0'/0'", "48'/0'/0'/2'", "48'/0'/0'/1'", "48'/0'/0'/0'"];
+            for (var ci = 0; ci < commonPaths.length && !matchFound; ci++) {
+                var tryNode;
+                try { tryNode = rootNode.derive('m/' + commonPaths[ci]); } catch (e) { continue; }
+                for (var kj = 0; kj < descNodes.length && !matchFound; kj++) {
+                    if (sameKey(tryNode, descNodes[kj])) { matchFound = true; matchedKeyIdx = kj; }
+                }
             }
         }
 
-        // Render result
-        var descType = parsed.type.replace('-', ' ').toUpperCase();
-        if (parsed.threshold) descType += ' (' + parsed.threshold + '-of-' + parsed.keys.length + ')';
+        // ---- Addresses (worked out from the descriptor alone) ----
+        var recvHtml = _descVerifyAddrRows(parsed, 0, 3);
+        var changeHtml = _descVerifyAddrRows(parsed, 1, 3);
 
-        var descFps = parsed.keys.map(function(k) { return k.fingerprint || '?'; }).join(', ');
+        var descType = parsed.script + (parsed.isMulti ? ' (' + parsed.msM + '-of-' + parsed.msN + ')' : '');
+        var descFps = parsed.keys.map(function(k) { return (k.fingerprint || '?').toUpperCase(); }).join(', ');
 
-        if (matchFound) {
+        if (!haveSeed) {
+            bannerDiv.style.background = 'var(--skb-bg-input)';
+            bannerDiv.style.border = '2px solid var(--skb-border)';
+            bannerDiv.innerHTML =
+                '<div style="font-size: 1.6rem; font-weight: 800; color: var(--skb-text); letter-spacing: 3px; margin-bottom: 0.4rem;">WATCH-ONLY</div>' +
+                '<div style="font-size: 0.85rem; color: var(--skb-text-muted);">' +
+                (parsed.kind === 'sp' ? 'Silent Payment descriptors aren’t checked against a seed here.'
+                                      : 'No seed is loaded, so SafeKeep can’t check whether it can sign for this wallet.') +
+                ' You can still use it to show and check receive addresses.</div>';
+        } else if (matchFound) {
             bannerDiv.style.background = 'rgba(3,218,198,0.15)';
             bannerDiv.style.border = '3px solid var(--skb-accent)';
             bannerDiv.innerHTML =
@@ -31716,19 +31594,48 @@ async function desc_verify() {
         }
 
         document.getElementById('desc-verify-type').textContent = descType;
-        document.getElementById('desc-verify-fp').textContent = descFps.toUpperCase();
-        document.getElementById('desc-verify-my-fp').textContent = myFingerprint.toUpperCase();
+        document.getElementById('desc-verify-fp').textContent = descFps;
+        document.getElementById('desc-verify-my-fp').textContent = haveSeed ? myFingerprint.toUpperCase() : '— (no seed loaded)';
         document.getElementById('desc-verify-recv-addrs').innerHTML = recvHtml;
         document.getElementById('desc-verify-change-addrs').innerHTML = changeHtml;
 
+        _descVerified = { descriptor: parsed.descriptor, parsed: parsed };
+        if (useBtn) useBtn.style.display = parsed.addressNote ? 'none' : '';
         detailsDiv.style.display = 'block';
         resultDiv.style.display = 'block';
 
     } catch (e) {
-        showStatus('Verification failed: ' + e.message, 'error');
+        showStatus('Descriptor check failed: ' + e.message, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Verify Descriptor Against Seed'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Check Descriptor'; }
     }
+}
+
+// Load the checked descriptor into the output card, as watch-only: the
+// Receive panel, address export, Bitcoin Core export, QR and Print PDF then
+// work for a wallet built in another app. No keys are involved.
+function desc_useVerified() {
+    var v = _descVerified;
+    if (!v || v.parsed.addressNote) return;
+    var p = v.parsed;
+    desc_state.currentDescriptor = v.descriptor;
+    desc_state.imported = { isMulti: !!p.isMulti };
+    document.getElementById('desc-descriptor-text').textContent = v.descriptor;
+
+    var addrHtml = p.kind === 'sp'
+        ? '<div style="margin-bottom: 0.3rem; word-break: break-all;">' + p.firstAddress + '</div>'
+        : _descVerifyAddrRows(p, 0, 5);
+    document.getElementById('desc-address-list').innerHTML = addrHtml;
+    _descShowAddrExport(p.kind !== 'sp');
+    desc_recvReset();
+
+    var out = document.getElementById('desc-output');
+    out.style.display = 'block';
+    document.getElementById('desc-qr-wrap').style.display = 'none';
+    document.getElementById('desc-qr-toggle-btn').textContent = 'Show QR';
+    showStatus('Loaded as a watch-only wallet: ' + p.script + (p.isMulti ? ', ' + p.msM + '-of-' + p.msN : '') +
+               '. Use Receive below to show or check its addresses.', 'success');
+    try { out.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
 }
 
 /**
