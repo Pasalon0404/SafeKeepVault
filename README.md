@@ -56,6 +56,24 @@ sudo bash flash-new-stick.sh /dev/sdb
 
 This **erases the whole stick**. The script refuses system disks, asks you to type the device name to confirm, and reads the stick back afterwards to verify the write. To update a stick you already use without wiping its vault, use `sudo bash quick-update.sh --usb /dev/sdb` instead.
 
+**Developer builds.** A normal image has no terminal and no file manager. The session runs as root, so either one would be a root shell, from which the network lock-down could be undone by hand. For troubleshooting only, `sudo SAFEKEEP_DEV_SHELL=1 bash build.sh` adds both: Ctrl+Alt+T for a terminal, Ctrl+Alt+F for the file manager. `quick-update.sh` reminds you when the OS tree is a developer build. Never give a developer build to anyone else.
+
+### What the OS does to stay offline
+
+* **No network drivers.** Every network, Wi-Fi, Bluetooth, NFC, USB-network (including phone tethering) and USB-gadget driver is deleted from the image. The build stops if one is left behind, or if a driver the stick needs is missing.
+* **No network services.** NetworkManager, systemd-networkd and wpa_supplicant are masked. Radios are rfkill-blocked.
+* **A firewall that drops everything** except loopback, as a last line of defense.
+* **No compilers.** gcc, binutils, kernel headers and DKMS are removed once the camera driver is built, so a new driver can't be compiled on the stick.
+* **A watchdog.** If a network interface ever appears, or the firewall isn't loaded, SafeKeep switches the interface off and shows a red warning across the top of the app.
+
+### Preparing the computer
+
+The stick controls the operating system, not the computer's firmware. For the strongest air gap:
+
+* **Unplug the network cable**, and don't plug in USB network adapters or phones.
+* **Turn off Intel AMT / vPro** (on business laptops such as HP ZBook, Dell Latitude and Lenovo ThinkPad) in the BIOS/UEFI setup. AMT runs in the computer's management chip, separately from any operating system, and can use the built-in Intel Ethernet (and on some models Wi-Fi) by itself.
+* **Turn off Wi-Fi and Bluetooth in the BIOS/UEFI** too, if it offers the option, or use a computer whose wireless card has been removed.
+
 ### What building it yourself does and doesn't prove
 
 * It removes the risk of a tampered release download: the image contains the code you cloned.

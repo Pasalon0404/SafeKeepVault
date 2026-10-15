@@ -259,7 +259,16 @@ rm -f "$CHROOT_DIR/etc/resolv.conf"
 cp -L /etc/resolv.conf "$CHROOT_DIR/etc/resolv.conf"
 
 # Run the chroot configuration script
-chroot "$CHROOT_DIR" /bin/bash -c "/chroot-setup.sh"
+# SAFEKEEP_DEV_SHELL=1 adds the Terminal and File Explorer (troubleshooting
+# only — a release image must never have them). Anything else means off.
+SAFEKEEP_DEV_SHELL="${SAFEKEEP_DEV_SHELL:-0}"
+[ "$SAFEKEEP_DEV_SHELL" = "1" ] || SAFEKEEP_DEV_SHELL=0
+if [ "$SAFEKEEP_DEV_SHELL" = "1" ]; then
+    echo ""
+    echo "!!! DEVELOPER BUILD: Terminal (Ctrl+Alt+T) and File Explorer enabled — NOT for release !!!"
+    echo ""
+fi
+chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" /bin/bash -c "/chroot-setup.sh"
 
 # Run OS hardening inside the chroot.
 # This bakes module blacklists (/etc/modprobe.d/), udev rules, polkit/dconf
