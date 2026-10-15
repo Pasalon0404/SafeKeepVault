@@ -531,6 +531,73 @@ for _m in "${BANNED_MODULES[@]}"; do
 done
 echo "  Deleted ${_deleted} banned driver file(s) from /lib/modules"
 
+# --- Whole driver families, not just a list of names ---
+# The list above names the common chips, but Ubuntu ships ~630 network
+# drivers: an unlisted one (Killer/Atheros "alx" Ethernet, "ipheth" iPhone
+# USB tethering, an old USB Ethernet dongle, PPP, WireGuard …) could still
+# create a network interface. SafeKeep needs NONE of them, so every driver
+# in these families is deleted. Loopback ("lo") is built into the kernel and
+# is not affected; nor is netfilter (nf_tables), which the firewall uses.
+NET_DRIVER_DIRS=(
+    kernel/drivers/net             # every Ethernet, Wi-Fi, USB-net, cellular, PPP, VPN, virtual NIC
+    kernel/drivers/bluetooth       # Bluetooth adapters
+    kernel/drivers/nfc             # NFC
+    kernel/drivers/infiniband      # InfiniBand / IP-over-IB
+    kernel/drivers/isdn            # ISDN
+    kernel/drivers/atm             # ATM / DSL modems
+    kernel/drivers/usb/gadget      # the computer posing as a USB network device
+    kernel/drivers/staging/wlan-ng kernel/drivers/staging/ks7010
+    kernel/drivers/staging/vt6655  kernel/drivers/staging/vt6656
+    kernel/drivers/staging/rtl8723bs kernel/drivers/staging/rtl8192e
+    kernel/drivers/staging/rtl8712 kernel/drivers/staging/gdm724x
+    kernel/drivers/staging/most/net kernel/drivers/staging/pi433
+    kernel/net/wireless kernel/net/mac80211 kernel/net/bluetooth kernel/net/nfc
+    kernel/net/ieee802154 kernel/net/mac802154 kernel/net/6lowpan kernel/net/can
+    kernel/net/atm kernel/net/appletalk kernel/net/ax25 kernel/net/netrom
+    kernel/net/rose kernel/net/x25 kernel/net/lapb kernel/net/phonet kernel/net/caif
+    kernel/net/batman-adv kernel/net/bridge kernel/net/8021q kernel/net/hsr
+    kernel/net/dsa kernel/net/l2tp kernel/net/openvswitch kernel/net/qrtr
+    kernel/net/vmw_vsock kernel/net/9p   # virtual-machine host channels
+)
+NET_DRIVER_FILES=(
+    firewire-net cdc-wdm                # FireWire networking, cellular-modem control
+)
+_family_deleted=0
+for _kdir in /lib/modules/*/; do
+    for _d in "${NET_DRIVER_DIRS[@]}"; do
+        [ -d "${_kdir}${_d}" ] || continue
+        _n=$(find "${_kdir}${_d}" -type f -name '*.ko*' | wc -l)
+        rm -rf "${_kdir:?}${_d:?}"
+        _family_deleted=$((_family_deleted + _n))
+    done
+    for _m in "${NET_DRIVER_FILES[@]}"; do
+        while IFS= read -r _f; do
+            [ -n "$_f" ] && rm -f "$_f" && _family_deleted=$((_family_deleted + 1))
+        done < <(find "$_kdir" -type f -name "${_m}.ko*" 2>/dev/null)
+    done
+done
+echo "  Deleted ${_family_deleted} more driver file(s) (all network, Bluetooth, NFC, USB-gadget families)"
+
+# Fail the build if any network driver survived, or if a driver the stick
+# needs was caught by mistake (it must still exist as a file or be built in).
+for _kdir in /lib/modules/*/; do
+    _left=$(find "${_kdir}kernel/drivers/net" "${_kdir}kernel/net/wireless" "${_kdir}kernel/net/bluetooth" \
+                 -type f -name '*.ko*' 2>/dev/null | wc -l || true)
+    if [ "$_left" -ne 0 ]; then
+        echo "ERROR: ${_left} network driver file(s) still present under ${_kdir}" >&2
+        exit 1
+    fi
+    for _need in usb-storage uas sd_mod xhci-pci xhci-hcd ehci-hcd ext4 exfat vfat squashfs overlay \
+                 loop dm-crypt dm-mod nf_tables usbhid hid-generic uvcvideo; do
+        if [ -z "$(find "$_kdir" -type f -name "${_need}.ko*" -print -quit)" ] \
+           && ! grep -q "/${_need}\.ko\$" "${_kdir}modules.builtin" 2>/dev/null; then
+            echo "ERROR: required driver '${_need}' is missing from ${_kdir} — refusing to build an unbootable image" >&2
+            exit 1
+        fi
+    done
+done
+echo "  Checked: no network driver left; boot, USB, vault, camera and firewall drivers present."
+
 # Rebuild dependency maps so the kernel no longer references deleted files.
 depmod -a 2>/dev/null || true
 echo "  Rebuilt module dependency maps (depmod)."
@@ -1317,6 +1384,85 @@ echo "  Both are fully selectable. No duplicates, no Recent, no Other Locations.
 
 
 # ============================================================================
+# SECTION 6b: REMOVE BUILD TOOLS (compilers, kernel headers, DKMS)
+# ============================================================================
+# THREAT MODEL:
+#   chroot-setup.sh installs gcc, kernel headers and DKMS to build the
+#   FaceTime HD camera driver. Left in the image, they let a root shell
+#   compile a kernel driver from source carried in on another USB stick —
+#   e.g. one of the network drivers deleted above.
+#
+# STRATEGY:
+#   Purge them once the build is done (the camera driver is already built
+#   and installed), then prove nothing the stick needs went with them.
+# ============================================================================
+echo ""
+echo "[6b] REMOVE BUILD TOOLS"
+echo "-------------------------------------------"
+
+_BUILD_PKGS=()
+for _p in build-essential gcc g++ gcc-13 g++-13 make dkms git binutils binutils-common \
+          binutils-x86-64-linux-gnu libc6-dev libc-dev-bin linux-libc-dev libgcc-13-dev \
+          libstdc++-13-dev linux-headers-generic $(dpkg-query -W -f='${Package}\n' 'linux-headers-*' 2>/dev/null); do
+    if [ "$(dpkg-query -W -f='${Status}' "$_p" 2>/dev/null)" = "install ok installed" ]; then
+        _BUILD_PKGS+=("$_p")
+    fi
+done
+
+if [ "${#_BUILD_PKGS[@]}" -gt 0 ]; then
+    # Dry run first: refuse to continue if removing the build tools would
+    # also take away anything the stick runs on.
+    _PROTECTED='^(xserver-xorg-core|xinit|openbox|xterm|x11-xserver-utils|cryptsetup|cryptsetup-bin|zbar-tools|ungoogled-chromium|nftables|python3|python3-venv|kmod|udev|initramfs-tools|casper|linux-image-.*|linux-modules-.*|exfatprogs|gdisk|parted|alsa-utils|p7zip-full|jq|zenity|v4l-utils|libcamera-.*|libusb-1.0-0|squashfs-tools|util-linux|systemd)$'
+    _would_go=$(apt-get -s purge "${_BUILD_PKGS[@]}" 2>/dev/null | awk '/^Purg /{print $2}')
+    _hit=$(printf '%s\n' "$_would_go" | grep -E "$_PROTECTED" || true)
+    if [ -n "$_hit" ]; then
+        echo "ERROR: removing the build tools would also remove: $(echo $_hit)" >&2
+        exit 1
+    fi
+
+    # Keep a copy of the FaceTime HD driver in case a package hook removes it.
+    _FT_SAVE=$(mktemp -d)
+    find /lib/modules -path '*/updates/*' -name 'facetimehd.ko*' -exec cp --parents {} "$_FT_SAVE" \; 2>/dev/null || true
+
+    apt-get purge -y "${_BUILD_PKGS[@]}"
+    apt-get autoremove --purge -y || true
+    rm -rf /usr/src/facetimehd-* /var/lib/dkms 2>/dev/null || true
+
+    # Put the camera driver back if it went missing.
+    if [ -d "$_FT_SAVE/lib" ]; then
+        cp -an "$_FT_SAVE/lib/." /lib/ 2>/dev/null || true
+        depmod -a 2>/dev/null || true
+    fi
+    rm -rf "$_FT_SAVE"
+    echo "  Purged: ${_BUILD_PKGS[*]}"
+fi
+
+# Prove it: no compiler, assembler, linker or module builder left …
+for _tool in gcc cc c++ g++ as ld make dkms git; do
+    if command -v "$_tool" >/dev/null 2>&1; then
+        echo "ERROR: build tool '$_tool' is still installed ($(command -v "$_tool"))" >&2
+        exit 1
+    fi
+done
+# … and everything the stick runs on still works.
+for _cmd in Xorg xinit openbox xterm xrdb xrandr xset ungoogled-chromium cryptsetup zbarimg zenity \
+            7z jq nft python3 modprobe depmod udevadm update-initramfs mkfs.exfat sgdisk parted amixer; do
+    if ! command -v "$_cmd" >/dev/null 2>&1; then
+        echo "ERROR: '$_cmd' went missing while removing the build tools" >&2
+        exit 1
+    fi
+done
+/opt/safekeep-ckcc/bin/python3 -c "import hid, ckcc.client, ckcc.protocol" \
+    || { echo "ERROR: Coldcard library no longer imports" >&2; exit 1; }
+/opt/safekeep-hwi/bin/python3 -c "import usb1, hwilib.commands, hwilib.devices.trezor" \
+    || { echo "ERROR: Trezor library no longer imports" >&2; exit 1; }
+if ! find /lib/modules -path '*/updates/*' -name 'facetimehd.ko*' | grep -q .; then
+    echo "  Warning: FaceTime HD camera driver not found (older MacBook cameras won't work)."
+fi
+echo "  Build tools removed; X, browser, vault, camera, QR, hardware-wallet tools verified."
+
+
+# ============================================================================
 # SECTION 7: INITRAMFS REBUILD
 # ============================================================================
 #
@@ -1352,7 +1498,10 @@ echo "========================================"
 echo " SafeKeep Hardening Complete"
 echo "========================================"
 echo ""
-echo " NETWORK:     All daemons masked, radios killed, drivers banned"
+echo " NETWORK:     All daemons masked, radios killed, every network /"
+echo "              Bluetooth / USB-net / USB-gadget driver deleted,"
+echo "              deny-all firewall"
+echo " BUILD TOOLS: gcc, binutils, kernel headers, DKMS purged"
 echo " PRINTERS:    CUPS + Ghostscript purged, USB printer drivers banned"
 echo " HOST DRIVES: AHCI + NVMe + eMMC + SAS drivers banned"
 echo " USB:         Automount disabled, unknown devices quarantined,"

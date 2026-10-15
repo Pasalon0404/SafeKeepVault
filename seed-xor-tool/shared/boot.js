@@ -2638,6 +2638,63 @@ const SafeKeepOS = (() => {
 
 
   // =============================================
+  //  NETWORK WATCHDOG WARNING
+  // =============================================
+  // The OS has no network drivers and a drop-everything firewall. Its network
+  // watchdog (safekeep-boot.sh) switches off any interface that appears anyway
+  // and writes NETWORK_ALERT.json; while that file exists, a red warning sits
+  // across the top of every screen. No file → no warning.
+  const NETWORK_ALERT_URL = 'file:///tmp/safekeep-signals/NETWORK_ALERT.json';
+
+  function _networkAlertText(alert) {
+    const names = Array.isArray(alert.interfaces)
+      ? alert.interfaces.filter(n => typeof n === 'string' && /^[A-Za-z0-9_.@-]{1,32}$/.test(n)) : [];
+    const parts = [];
+    if (names.length) {
+      parts.push('Network hardware appeared (' + names.join(', ') + '). SafeKeep switched it off.');
+    }
+    if (alert.firewall === false) {
+      parts.push('The SafeKeep firewall is not loaded.');
+    }
+    if (!parts.length) return '';
+    return '⚠ ' + parts.join(' ') +
+      ' Unplug any network cable, USB network adapter or phone, and don’t load or sign anything until this warning goes away. If it stays, power off and restart from the SafeKeep stick.';
+  }
+
+  function _showNetworkAlert(text) {
+    let bar = document.getElementById('sk-network-alert');
+    if (!text) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'sk-network-alert';
+      bar.setAttribute('role', 'alert');
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;padding:0.8rem 1.2rem;' +
+        'background:#b00020;color:#fff;font:700 1rem/1.4 system-ui,sans-serif;text-align:center;' +
+        'box-shadow:0 2px 12px rgba(0,0,0,0.5);';
+      (document.body || document.documentElement).appendChild(bar);
+    }
+    if (bar.textContent !== text) bar.textContent = text;
+  }
+
+  async function checkNetworkAlert() {
+    let alert = null;
+    try {
+      const resp = await fetch(NETWORK_ALERT_URL, { cache: 'no-store' });
+      if (resp.ok) alert = await resp.json();
+    } catch (e) { /* no file: all clear */ }
+    const text = alert && typeof alert === 'object' ? _networkAlertText(alert) : '';
+    _showNetworkAlert(text);
+    return text;
+  }
+
+  if (isBootDrive() && typeof document !== 'undefined') {
+    const start = () => { checkNetworkAlert(); setInterval(checkNetworkAlert, 5000); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+  }
+
+
+  // =============================================
   //  PUBLIC API
   // =============================================
 
@@ -2673,6 +2730,7 @@ const SafeKeepOS = (() => {
     vaultFingerprint,
     isBootDrive,
     isVaultMounted: _isVaultMounted,
+    checkNetworkAlert,
 
     // Codex — Note Storage
     saveNote,

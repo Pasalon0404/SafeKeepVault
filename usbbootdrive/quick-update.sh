@@ -97,6 +97,13 @@ if ! cmp -s safekeep-harden.sh "$CHROOT_DIR/usr/local/bin/safekeep-harden"; then
     die "safekeep-harden.sh has changed since the last full build — it must RUN to take effect. Use: sudo bash build.sh"
 fi
 
+if [ -f "$CHROOT_DIR/etc/safekeep-dev-shell" ]; then
+    echo ""
+    echo "!!! This OS tree is a DEVELOPER BUILD (Terminal and File Explorer enabled) — not for release."
+    echo "!!! For a normal stick, run the full build without SAFEKEEP_DEV_SHELL=1 first."
+    echo ""
+fi
+
 [ -f src/dist/boot.html ] || die "src/dist/boot.html missing — copy the compiled app over first."
 command -v mksquashfs >/dev/null || die "mksquashfs not installed (sudo apt install squashfs-tools)."
 

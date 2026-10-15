@@ -248,6 +248,50 @@ cat > /run/safekeep-integrity.json 2>/dev/null << INTEOF || true
 }
 INTEOF
 
+# ---- NETWORK WATCHDOG ----
+# The OS has no network drivers, no network services and a drop-everything
+# firewall, so no network interface other than loopback ("lo") should ever
+# exist. This checks every 3 seconds. If one appears it is switched off at
+# once, and NETWORK_ALERT.json is written to the signal dir so the app shows
+# a red warning. It also warns if the firewall rules are not loaded.
+# One instance per boot (the session script can restart; the watchdog stays).
+NETWATCH_PIDFILE="/run/safekeep-netwatch.pid"
+if ! { [ -f "$NETWATCH_PIDFILE" ] && kill -0 "$(cat "$NETWATCH_PIDFILE" 2>/dev/null)" 2>/dev/null; }; then
+    (
+        NET_SIGNAL_DIR="/tmp/safekeep-signals"
+        NET_ALERT="$NET_SIGNAL_DIR/NETWORK_ALERT.json"
+        while true; do
+            mkdir -p "$NET_SIGNAL_DIR" 2>/dev/null && chmod 1777 "$NET_SIGNAL_DIR" 2>/dev/null
+            IFACES=""
+            for IF_PATH in /sys/class/net/*; do
+                [ -e "$IF_PATH" ] || continue
+                IF_NAME=$(basename "$IF_PATH" | tr -cd 'A-Za-z0-9_.@-')
+                [ "$IF_NAME" = "lo" ] && continue
+                command -v ip >/dev/null 2>&1 && ip link set dev "$IF_NAME" down 2>/dev/null
+                IFACES="$IFACES${IFACES:+,}\"$IF_NAME\""
+            done
+            FIREWALL_OK=true
+            if command -v nft >/dev/null 2>&1; then
+                nft list table inet safekeep >/dev/null 2>&1 || FIREWALL_OK=false
+            fi
+            if [ -n "$IFACES" ] || [ "$FIREWALL_OK" = "false" ]; then
+                printf '{"interfaces":[%s],"firewall":%s,"time":"%s"}\n' \
+                    "$IFACES" "$FIREWALL_OK" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$NET_ALERT.tmp" \
+                    && mv -f "$NET_ALERT.tmp" "$NET_ALERT"
+                STATE="$IFACES/$FIREWALL_OK"
+                [ "$STATE" != "${LAST_STATE:-}" ] && echo "NETWORK WATCHDOG: interfaces [$IFACES] switched off; firewall loaded: $FIREWALL_OK"
+                LAST_STATE="$STATE"
+            else
+                LAST_STATE=""
+                rm -f "$NET_ALERT" 2>/dev/null
+            fi
+            sleep 3
+        done
+    ) &
+    echo $! > "$NETWATCH_PIDFILE"
+    echo "Network watchdog started (PID $!)"
+fi
+
 DATA_LABEL="safekeep-data"
 DATA_MOUNT="/mnt/safekeep-data"
 VAULT_FILE=".vault.luks"

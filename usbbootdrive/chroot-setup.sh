@@ -507,8 +507,7 @@ cat > /etc/xdg/openbox/rc.xml << 'EOF'
     <keybind key="C-A-s"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e setup-vault</command></action></keybind>
     <keybind key="C-A-u"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e unlock-vault</command></action></keybind>
     <keybind key="C-A-m"><action name="ShowMenu"><menu>root-menu</menu></action></keybind>
-    <keybind key="C-A-t"><action name="Execute"><command>xterm -fa 'Monospace' -fs 28</command></action></keybind>
-    <keybind key="C-A-f"><action name="Execute"><command>pcmanfm /media/transfer</command></action></keybind>
+    <!--SAFEKEEP_DEV_KEYBINDS-->
   </keyboard>
   <mouse>
     <context name="Root">
@@ -541,14 +540,34 @@ cat > /etc/xdg/openbox/menu.xml << 'EOF'
   <separator />
   <item label="Unlock Vault (Ctrl+Alt+U)"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e unlock-vault</command></action></item>
   <item label="Setup Vault - First Time (Ctrl+Alt+S)"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e setup-vault</command></action></item>
-  <separator />
-  <item label="Terminal (Ctrl+Alt+T)"><action name="Execute"><command>xterm -fa 'Monospace' -fs 28</command></action></item>
-  <item label="File Explorer (Ctrl+Alt+F)"><action name="Execute"><command>pcmanfm /media/transfer</command></action></item>
+  <!--SAFEKEEP_DEV_MENU-->
   <separator />
   <item label="Power Off"><action name="Execute"><command>xterm -fa 'Monospace' -fs 14 -e bash -c 'echo "Shutting down SafeKeep OS..."; sync; poweroff'</command></action></item>
 </menu>
 </openbox_menu>
 EOF
+
+# Terminal and File Explorer: developer builds only.
+# The whole session runs as root, so a terminal (or PCManFM, whose "Open in
+# Terminal" and "Open With…" run any command) is a root shell — from there the
+# network hardening could be undone by hand. A working SafeKeep needs neither:
+# the app's Transfer Hub lists the transfer drive. Release builds leave both
+# out; for troubleshooting, build with:  sudo SAFEKEEP_DEV_SHELL=1 bash build.sh
+if [ "${SAFEKEEP_DEV_SHELL:-0}" = "1" ]; then
+    echo "  DEVELOPER BUILD: adding Terminal (Ctrl+Alt+T) and File Explorer (Ctrl+Alt+F)."
+    sed -i "s#^    <!--SAFEKEEP_DEV_KEYBINDS-->\$#    <keybind key=\"C-A-t\"><action name=\"Execute\"><command>xterm -fa 'Monospace' -fs 28</command></action></keybind>\n    <keybind key=\"C-A-f\"><action name=\"Execute\"><command>pcmanfm /media/transfer</command></action></keybind>#" /etc/xdg/openbox/rc.xml
+    sed -i "s#^  <!--SAFEKEEP_DEV_MENU-->\$#  <separator />\n  <item label=\"Terminal (Ctrl+Alt+T)\"><action name=\"Execute\"><command>xterm -fa 'Monospace' -fs 28</command></action></item>\n  <item label=\"File Explorer (Ctrl+Alt+F)\"><action name=\"Execute\"><command>pcmanfm /media/transfer</command></action></item>#" /etc/xdg/openbox/menu.xml
+    echo "SafeKeep developer build: Terminal and File Explorer enabled. Not for release." > /etc/safekeep-dev-shell
+else
+    sed -i '/<!--SAFEKEEP_DEV_KEYBINDS-->/d' /etc/xdg/openbox/rc.xml
+    sed -i '/<!--SAFEKEEP_DEV_MENU-->/d' /etc/xdg/openbox/menu.xml
+    rm -f /etc/safekeep-dev-shell
+    # Belt and braces: no shell or file-manager launcher may remain.
+    if grep -qE 'pcmanfm|xterm -fa .Monospace. -fs 28' /etc/xdg/openbox/rc.xml /etc/xdg/openbox/menu.xml; then
+        echo "ERROR: a Terminal or File Explorer entry is still in the Openbox config." >&2
+        exit 1
+    fi
+fi
 
 # 7. Configure tint2 taskbar
 echo "Configuring tint2 taskbar..."
@@ -820,7 +839,9 @@ exit 0
 MIRROREOF
 chmod +x /usr/local/bin/safekeep-mirror-displays
 
-# Create .desktop file for file manager launcher in tint2
+# Create .desktop file for file manager launcher in tint2 (developer builds
+# only — see the Terminal / File Explorer note in the Openbox section).
+if [ "${SAFEKEEP_DEV_SHELL:-0}" = "1" ]; then
 cat > /usr/share/applications/safekeep-files.desktop << 'DESKEOF'
 [Desktop Entry]
 Name=File Explorer
@@ -830,6 +851,9 @@ Icon=system-file-manager
 Type=Application
 Categories=System;
 DESKEOF
+else
+    rm -f /usr/share/applications/safekeep-files.desktop
+fi
 
 # 9. Hide internal partitions from the file manager
 # The udev rules in config/99-hide-drives.rules are copied into the image
