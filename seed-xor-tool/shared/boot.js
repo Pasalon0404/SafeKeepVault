@@ -2376,6 +2376,18 @@ const SafeKeepOS = (() => {
     return r;
   }
 
+  /**
+   * Read the connected Coldcard's fingerprint and its multisig account key
+   * at a BIP-48 path ("m/48'/0'/0'/2'", 1' or 0') — for adding it as a
+   * cosigner. Read-only: no pairing needed, nothing is saved.
+   * ok → { xfp (upper case), deriv, xpub }
+   */
+  async function coldcardXpub(deriv) {
+    const r = await _coldcardRequest({ action: 'xpub', deriv: String(deriv || '') }, 30000);
+    if (r.ok && r.xfp) r.xfp = String(r.xfp).toUpperCase();
+    return r;
+  }
+
   // ===================================================================
   //  TREZOR ONE — USB signing (Trezor Watcher in safekeep-boot.sh)
   // ===================================================================
@@ -2500,6 +2512,15 @@ const SafeKeepOS = (() => {
       delete r.psbt_b64;
     }
     return r;
+  }
+
+  /**
+   * Read the unlocked Trezor's fingerprint and its multisig account key at a
+   * BIP-48 path — for adding it as a cosigner. Unlock it first (PIN grid).
+   * ok → { xfp (upper case), deriv, xpub, passphrase_protection }
+   */
+  async function trezorXpub(deriv) {
+    return _tzUpper(await _trezorRequest({ action: 'xpub', deriv: String(deriv || '') }, TREZOR_SHORT_WAIT_MS));
   }
 
   function _twofaKey(a) {
@@ -2688,6 +2709,7 @@ const SafeKeepOS = (() => {
     coldcardPair,
     coldcardUnpair,
     coldcardSign,
+    coldcardXpub,
 
     // Trezor One — USB signing via the Trezor Watcher
     trezorGetPairing,
@@ -2697,6 +2719,7 @@ const SafeKeepOS = (() => {
     trezorPair,
     trezorUnpair,
     trezorSign,
+    trezorXpub,
 
     // Constants (for tooling/tests)
     MASTER_SEED_PATH,

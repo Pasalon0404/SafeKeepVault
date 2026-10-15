@@ -7,6 +7,7 @@
 #    1. "detect"  — finds the Coldcard, shows its fingerprint
 #    1b. "pair"   — saves that Coldcard as paired (to a TEMPORARY file
 #                   for this test only; SafeKeep's real pairing is untouched)
+#    1c. "xpub"   — reads its multisig key at m/48'/0'/0'/2' (cosigner import)
 #    2. "sign"    — (only if you give a PSBT) sends it to the Coldcard,
 #                   you approve or decline ON THE COLDCARD, and the result
 #                   is saved next to the input as <name>-safekeep-signed.psbt
@@ -57,6 +58,13 @@ json.dump({'action': 'pair', 'expected_xfp': d['xfp'], 'expected_xpub': d['maste
 EOF
 "$PY" "$HELPER" "$W/req.json" "$W/pair.json"
 python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print('   status : %s' % r.get('status')); r.get('ok') or print('   error  : %s' % r.get('error'))" "$W/pair.json"
+
+echo
+echo "== 1c. xpub (multisig cosigner key, m/48'/0'/0'/2')"
+echo '{"action":"xpub","deriv":"m/48'"'"'/0'"'"'/0'"'"'/2'"'"'"}' > "$W/req.json"
+"$PY" "$HELPER" "$W/req.json" "$W/xpub.json"
+python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print('   status : %s' % r.get('status')); print('   xfp    : %s' % r.get('xfp')) if r.get('ok') else None; print('   xpub   : %s...%s' % (r['xpub'][:12], r['xpub'][-6:])) if r.get('ok') else print('   error  : %s' % r.get('error'))" "$W/xpub.json"
+echo "   Compare with the Coldcard: Advanced/Tools > Export Wallet > Generic JSON (bip48_2), or Sparrow."
 
 [ -n "$PSBT" ] || { echo; echo "Detect worked. Give a PSBT file to also test signing."; exit 0; }
 

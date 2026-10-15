@@ -11184,6 +11184,15 @@ window.addEventListener('DOMContentLoaded', () => {
     function _sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
     var _devCcPairing = null;   // dev-mock Coldcard pairing (in memory)
+    async function _devMockXpub(mnemonic, deriv) {
+        if (["m/48'/0'/0'/0'", "m/48'/0'/0'/1'", "m/48'/0'/0'/2'"].indexOf(deriv) < 0) {
+            return { ok: false, status: 'bad_request', error: '[DEV MOCK] Only the BIP-48 multisig paths can be read.' };
+        }
+        var B = window.BtcMath;
+        var root = B.HDKey.fromMasterSeed(await B.bip39.mnemonicToSeed(mnemonic, ''));
+        return { ok: true, status: 'xpub', deriv: deriv, xfp: root.fingerprint.toString(16).padStart(8, '0').toUpperCase(),
+                 xpub: root.derive(deriv).publicExtendedKey };
+    }
     var _devTzPairing = null;   // dev-mock Trezor pairing (in memory)
     var _devTzUnlocked = false; // dev-mock Trezor: PIN already entered?
     var _devTzPinShown = false; // dev-mock Trezor: grid showing (reset by detect, like the real one)
@@ -11448,6 +11457,22 @@ window.addEventListener('DOMContentLoaded', () => {
             if (window._devTrezor === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Trezor found.' };
             // A mock cannot produce a real signature: return the PSBT unchanged.
             return { ok: true, status: 'signed', psbtBytes: bytes, changed: false };
+        },
+        // Cosigner import: real keys from fixed TEST seeds (never use them for
+        // funds), so a multisig built in dev mode has valid addresses.
+        //   window._devColdcard / window._devTrezor = 'absent' to simulate no device
+        coldcardXpub: async function (deriv) {
+            await new Promise(function (r) { setTimeout(r, 600); });
+            if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on.' };
+            return _devMockXpub('legal winner thank year wave sausage worth useful legal winner thank yellow', deriv);
+        },
+        trezorXpub: async function (deriv) {
+            await new Promise(function (r) { setTimeout(r, 600); });
+            if (window._devTrezor === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Trezor found.' };
+            if (!(_devTzUnlocked || window._devTrezor === 'unlocked')) return { ok: false, status: 'locked', error: '[DEV MOCK] The Trezor is locked.' };
+            var r = await _devMockXpub('letter advice cage absurd amount doctor acoustic avoid letter advice cage above', deriv);
+            if (r.ok) r.passphrase_protection = false;
+            return r;
         },
         listTransfer: async function () { return []; }
     };
@@ -29591,9 +29616,12 @@ function desc_renderCosignerInputs(n) {
                     'autocomplete="off" spellcheck="false" ' +
                     'style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text);">' +
             '</div>' +
-            '<div style="display: flex; gap: 0.5rem;">' +
+            '<div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">' +
                 '<button type="button" class="skb-btn" style="flex: 1; border: 1px dashed var(--skb-border); font-size: 0.8125rem;" onclick="desc_scanCosignerQR(' + i + ')">Scan QR</button>' +
+                '<button type="button" class="skb-btn" style="flex: 1; font-size: 0.8125rem;" id="desc-ms-cc-btn-' + i + '" onclick="desc_importCosignerFromDevice(' + i + ', \'coldcard\')" title="Read this cosigner\'s key from a Coldcard plugged in by USB">Coldcard (USB)</button>' +
+                '<button type="button" class="skb-btn" style="flex: 1; font-size: 0.8125rem;" id="desc-ms-tz-btn-' + i + '" onclick="desc_importCosignerFromDevice(' + i + ', \'trezor\')" title="Read this cosigner\'s key from a Trezor One plugged in by USB">Trezor (USB)</button>' +
             '</div>' +
+            '<div id="desc-ms-hw-status-' + i + '" role="status" style="display: none; margin-top: 0.5rem; font-size: 0.8125rem; line-height: 1.5;"></div>' +
             '<div id="desc-ms-qr-area-' + i + '" style="display: none; margin-top: 0.75rem;">' +
                 '<div id="desc-ms-qr-reader-' + i + '" style="width: 100%; min-height: 280px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>' +
                 '<button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; font-size: 0.8125rem;" onclick="desc_stopCosignerQR(' + i + ')">Stop Scanner</button>' +
@@ -29671,6 +29699,91 @@ async function desc_scanCosignerQR(idx) {
     } catch (err) {
         showStatus('Camera failed: ' + err.message, 'error');
         area.style.display = 'none';
+    }
+}
+
+// =============================================
+// MULTI-SIG: import a cosigner's key from a USB hardware wallet
+// =============================================
+// Reads the device's fingerprint and its BIP-48 multisig account key for the
+// selected address type (read-only: nothing is paired or saved). The device
+// is plugged into THIS offline computer, so the key never touches an
+// online machine.
+var _DESC_MS_DERIV = { '84': "m/48'/0'/0'/2'", '49': "m/48'/0'/0'/1'", '44': "m/48'/0'/0'/0'" };
+var _descHwBusy = false;
+
+function _descHwStatus(idx, text, kind) {
+    var el = document.getElementById('desc-ms-hw-status-' + idx);
+    if (!el) return;
+    el.style.display = text ? 'block' : 'none';
+    el.style.color = kind === 'error' ? 'var(--skb-danger)' : kind === 'ok' ? 'var(--skb-success, #00c896)' : 'var(--skb-text-muted)';
+    el.textContent = text || '';
+}
+
+async function desc_importCosignerFromDevice(idx, kind) {
+    var os = window.SafeKeepOS;
+    var name = kind === 'trezor' ? 'Trezor' : 'Coldcard';
+    var fn = kind === 'trezor' ? 'trezorXpub' : 'coldcardXpub';
+    if (_descHwBusy) return;
+    if (!os || typeof os[fn] !== 'function') {
+        _descHwStatus(idx, name + ' import only works when SafeKeep is running from its USB stick.', 'error');
+        return;
+    }
+    var addrType = desc_state.msAddrType || (document.getElementById('desc-ms-addr-type') || {}).value || '84';
+    var deriv = _DESC_MS_DERIV[addrType] || _DESC_MS_DERIV['84'];
+    _descHwBusy = true;
+    var btns = document.querySelectorAll('[id^="desc-ms-cc-btn-"], [id^="desc-ms-tz-btn-"]');
+    btns.forEach(function(b) { b.disabled = true; });
+    try {
+        var r;
+        if (kind === 'trezor') {
+            var u = await tzEnsureUnlocked(function(t) { _descHwStatus(idx, t); });
+            if (!u || !u.ok) {
+                _descHwStatus(idx, (u && u.error) || 'The Trezor could not be unlocked.', 'error');
+                return;
+            }
+            _descHwStatus(idx, 'Reading the Trezor\u2019s key at ' + deriv + '\u2026');
+            r = await os.trezorXpub(deriv);
+        } else {
+            _descHwStatus(idx, 'Reading the Coldcard\u2019s key at ' + deriv + '\u2026 (plugged in by USB, unlocked)');
+            r = await os.coldcardXpub(deriv);
+        }
+        if (!r || !r.ok) {
+            _descHwStatus(idx, (r && r.error) || ('Could not read the key from the ' + name + '.'), 'error');
+            return;
+        }
+        var xfp = String(r.xfp || '').toLowerCase();
+        var xpub = String(r.xpub || '');
+        if (!/^[0-9a-f]{8}$/.test(xfp) || !/^xpub[1-9A-HJ-NP-Za-km-z]{100,112}$/.test(xpub) || r.deriv !== deriv) {
+            _descHwStatus(idx, 'The ' + name + ' returned something SafeKeep cannot use.', 'error');
+            return;
+        }
+        var originPath = deriv.replace(/^m\//, '');   // same notation as Key 1 in the descriptor
+        document.getElementById('desc-ms-xpub-' + idx).value = '[' + xfp + '/' + originPath + ']' + xpub;
+        document.getElementById('desc-ms-fp-' + idx).value = xfp;
+        document.getElementById('desc-output').style.display = 'none';
+
+        // Same device already used for another key? (Building would refuse it too.)
+        var clash = '';
+        var localFp = (document.getElementById('desc-ms-local-fp') || {}).textContent || '';
+        if (localFp && localFp.toLowerCase() === xfp) clash = 'Key 1 (this device)';
+        for (var k = 2; k <= desc_state.msN && !clash; k++) {
+            if (k === idx) continue;
+            var other = document.getElementById('desc-ms-fp-' + k);
+            if (other && other.value.trim().toLowerCase() === xfp) clash = 'Key ' + k;
+        }
+        var msg = '\u2714 Read from the ' + name + ': fingerprint ' + xfp.toUpperCase() + ', ' + deriv + '.';
+        if (r.passphrase_protection) msg += ' This Trezor has passphrase protection on: SafeKeep reads its standard wallet (no passphrase).';
+        if (clash) {
+            _descHwStatus(idx, msg + ' But ' + clash + ' already has this fingerprint \u2014 each cosigner needs its own seed.', 'error');
+        } else {
+            _descHwStatus(idx, msg, 'ok');
+        }
+    } catch (e) {
+        _descHwStatus(idx, 'Unexpected error: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+        _descHwBusy = false;
+        btns.forEach(function(b) { b.disabled = false; });
     }
 }
 
@@ -29937,6 +30050,15 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
             var prefix = keyOriginStr.slice(0, bracketEnd + 1);
             var xpubPart = keyOriginStr.slice(bracketEnd + 1);
             keyOriginStr = prefix + _descNormalizeXpub(xpubPart);
+        }
+
+        // A key from a different BIP-48 script type (e.g. read at …/2' for
+        // Native SegWit) would make a wallet other wallets can't match.
+        var originMatch = /^\[[0-9a-fA-F]{8}\/48['h]\/0['h]\/0['h]\/([0-2])['h]\]/.exec(keyOriginStr);
+        if (originMatch && originMatch[1] + "'" !== bip48Suffix) {
+            var typeNames = { "0'": 'Legacy (P2SH)', "1'": 'Nested SegWit (P2SH-P2WSH)', "2'": 'Native SegWit (P2WSH)' };
+            throw new Error('Co-signer Key ' + i + ' is a ' + typeNames[originMatch[1] + "'"] + ' key (m/48\'/0\'/0\'/' + originMatch[1] +
+                '\'), but the address type is ' + typeNames[bip48Suffix] + '. Re-import the key for this address type, or change the address type.');
         }
 
         keyOrigins.push(keyOriginStr);

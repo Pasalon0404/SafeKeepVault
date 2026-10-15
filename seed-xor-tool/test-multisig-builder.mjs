@@ -12,7 +12,8 @@ import * as btcSigner from '@scure/btc-signer';
  *    into the descriptor;
  *  - a 2-of-3 builds the right descriptor and first addresses (checked against an independent
  *    derivation), with cosigners given as [fp/path]xpub, bare xpub, or with a trailing /<0;1>/* or /0/*;
- *  - the same key twice (two cosigners, or a cosigner equal to Key 1) is refused, as is an unusable path;
+ *  - the same key twice (two cosigners, or a cosigner equal to Key 1) is refused, as is an unusable path
+ *    and a key from another BIP-48 script type than the chosen address type;
  *  - nothing is reported as a success when an address can't be worked out.
  * Run: node test-multisig-builder.mjs
  */
@@ -127,6 +128,17 @@ for (const [name, cos] of Object.entries(formats)) {
   const env = makeEnv([origin(r2) + '/1/*', origin(r3)]);
   await env.ctx.desc_generate();
   ck('unusable path after the xpub: refused', /^error:.*path after the xpub/.test(env.last()), env.last());
+}
+{
+  // A cosigner key from another BIP-48 script type is refused.
+  const nested = (r) => `[${fpHex(r)}/48h/0h/0h/1h]${r.derive("m/48'/0'/0'/1'").publicExtendedKey}`;
+  const env = makeEnv([nested(r2), origin(r3)]);
+  await env.ctx.desc_generate();
+  ck('Nested SegWit key (…/1h) in a Native SegWit wallet: refused', /^error:.*Key 2 is a Nested SegWit \(P2SH-P2WSH\) key.*address type is Native SegWit/.test(env.last()), env.last());
+  const apo = (r) => `[${fpHex(r)}/48'/0'/0'/2']${r.derive('m/' + PATH).publicExtendedKey}`;
+  const env2 = makeEnv([apo(r2), origin(r3)]);
+  await env2.ctx.desc_generate();
+  ck("matching key written with ' (as imported from a device): accepted", /^success:/.test(env2.last()) && env2.el('desc-address-list').innerHTML.includes(expectAddr(0)), env2.last());
 }
 {
   // Address derivation failure is never reported as success.

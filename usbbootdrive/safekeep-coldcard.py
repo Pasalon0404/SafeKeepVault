@@ -18,6 +18,10 @@ SECURITY MODEL
                 (expected_xfp + expected_xpub), and SAVE the pairing.
       unpair -> delete the saved pairing.
       sign   -> send a PSBT to the PAIRED Coldcard and return the result.
+      xpub   -> read the connected Coldcard's fingerprint and its multisig
+                account key at ONE of the three BIP-48 paths
+                (m/48'/0'/0'/0', /1' or /2'), for building a multisig
+                descriptor. Read-only, no pairing needed, nothing stored.
   * The pairing is stored by THIS helper (path in SAFEKEEP_CC_PAIRING: the
     vault's settings folder, or RAM in a temporary session). "sign" trusts
     only that stored pairing — never device identity sent by the browser.
@@ -31,7 +35,7 @@ SECURITY MODEL
   * The result is always written (ok or error) so the app never hangs.
 
 Result JSON: {"ok": true/false, "status": "...", ...}
-  ok statuses   : detected, paired, unpaired, signed
+  ok statuses   : detected, paired, unpaired, signed, xpub
   error statuses: bad_request, not_installed, not_paired, not_connected,
                   multiple_devices, no_seed, wrong_device, mitm_failed,
                   refused, busy, timeout, rejected, error
@@ -58,6 +62,8 @@ XFP_RE = re.compile(r'^[0-9a-f]{8}$')
 XPUB_RE = re.compile(r'^[xt]pub[1-9A-HJ-NP-Za-km-z]{100,112}$')
 SERIAL_RE = re.compile(r'^[0-9A-Za-z]{1,64}$')
 REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+# The only paths "xpub" will read: BIP-48 multisig accounts (mainnet, account 0).
+MULTISIG_DERIVS = ("m/48'/0'/0'/0'", "m/48'/0'/0'/1'", "m/48'/0'/0'/2'")
 DEFAULT_PAIRING = '/media/.safekeep-vault/settings/coldcard-pairing.json'
 
 MSG_NOT_CONNECTED = ('No Coldcard found. Plug it in, unlock it with your PIN, and make '
@@ -117,6 +123,13 @@ def field_xpub(data):
     v = data.get('expected_xpub')
     if not isinstance(v, str) or not XPUB_RE.match(v):
         raise Fail('bad_request', 'Request is missing the paired Coldcard master key.')
+    return v
+
+
+def field_deriv(data):
+    v = data.get('deriv')
+    if not isinstance(v, str) or v not in MULTISIG_DERIVS:
+        raise Fail('bad_request', 'Only the BIP-48 multisig paths can be read (m/48\'/0\'/0\'/0\', 1\' or 2\').')
     return v
 
 
@@ -293,7 +306,28 @@ def do_sign(data):
         dev.close()
 
 
-ACTIONS = {'detect': do_detect, 'pair': do_pair, 'unpair': do_unpair, 'sign': do_sign}
+def do_xpub(data):
+    deriv = field_deriv(data)
+    hid, ColdcardDevice, protocol = load_ckcc()
+    dev = open_single_device(hid, ColdcardDevice)
+    try:
+        xfp = xfp_to_str(dev.master_fingerprint)
+        try:
+            xpub = dev.send_recv(protocol.CCProtocolPacker.get_xpub(deriv), timeout=None)
+        except protocol.CCBusyError:
+            raise Fail('busy', 'The Coldcard is busy. Finish or cancel what is on its screen, then try again.')
+        except protocol.CCProtoError as e:
+            raise Fail('rejected', 'The Coldcard would not give the key: %s' % str(e)[:200])
+    finally:
+        dev.close()
+    if isinstance(xpub, str) and xpub.startswith('tpub'):
+        raise Fail('error', 'The Coldcard is set to Testnet. Switch it to Mainnet (Bitcoin) and try again.')
+    if not isinstance(xpub, str) or not xpub.startswith('xpub') or not XPUB_RE.match(xpub):
+        raise Fail('error', 'The Coldcard returned a key SafeKeep cannot use (it must be a mainnet xpub).')
+    return {'ok': True, 'status': 'xpub', 'xfp': xfp, 'deriv': deriv, 'xpub': xpub}
+
+
+ACTIONS = {'detect': do_detect, 'pair': do_pair, 'unpair': do_unpair, 'sign': do_sign, 'xpub': do_xpub}
 
 
 def main(argv):

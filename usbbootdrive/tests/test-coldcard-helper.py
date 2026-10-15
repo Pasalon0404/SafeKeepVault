@@ -37,6 +37,9 @@ class CCProtocolPacker:
     @staticmethod
     def get_signed_txn():
         return ('stok',)
+    @staticmethod
+    def get_xpub(subpath='m'):
+        return ('xpub', subpath)
 '''
 
 FAKE_CLIENT = '''
@@ -62,6 +65,11 @@ class ColdcardDevice:
         log('upload %%d' %% len(data)); self.data = data
         return len(data), hashlib.sha256(data).digest()
     def send_recv(self, msg, timeout=Ellipsis, **kw):
+        if msg[0] == 'xpub':
+            log('getxpub ' + msg[1])
+            if CFG.get('xpub_mode') == 'busy': raise CCBusyError()
+            if CFG.get('xpub_mode') == 'proto': raise CCProtoError('bad path')
+            return CFG.get('ms_xpub', 'xpub' + 'M' * 107)
         if msg[0] == 'stxn':
             log('sign'); return None
         mode = CFG.get('sign', 'approve')
@@ -135,6 +143,30 @@ def main():
         check('two Coldcards -> multiple_devices', r.get('status') == 'multiple_devices', str(r))
         rc, r, *_ = run(tmp, {'action': 'detect'}, {'no_seed': True})
         check('locked / no seed -> no_seed', r.get('status') == 'no_seed', str(r))
+
+        print('xpub (multisig cosigner import)')
+        MS = 'xpub' + 'M' * 107
+        for deriv in ("m/48'/0'/0'/2'", "m/48'/0'/0'/1'", "m/48'/0'/0'/0'"):
+            rc, r, log, left = run(tmp, {'action': 'xpub', 'deriv': deriv})
+            check('xpub %s: fingerprint + key' % deriv,
+                  r.get('status') == 'xpub' and r.get('xfp') == PAIRED_XFP and r.get('xpub') == MS and r.get('deriv') == deriv
+                  and ('getxpub ' + deriv) in log and 'close' in log and rc == 0 and not left, str(r) + ' ' + str(log))
+        check('xpub needs no pairing and saves nothing', read_pairing(tmp) is None)
+        for bad in ("m/84'/0'/0'", "m/48'/0'/1'/2'", "m/48'/1'/0'/2'", 'm/48h/0h/0h/2h', "m/48'/0'/0'/2'/0", '', None, 5):
+            rc, r, log, left = run(tmp, {'action': 'xpub', 'deriv': bad})
+            check('xpub refuses path %r' % (bad,), r.get('status') == 'bad_request' and not any(l.startswith('getxpub') for l in log), str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'devices': 0})
+        check('xpub with no Coldcard -> not_connected', r.get('status') == 'not_connected', str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'no_seed': True})
+        check('xpub on a locked Coldcard -> no_seed', r.get('status') == 'no_seed', str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'ms_xpub': 'tpub' + 'M' * 107})
+        check('xpub on a testnet Coldcard -> clear error', r.get('status') == 'error' and 'Testnet' in r.get('error', ''), str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'ms_xpub': 'not-a-key'})
+        check('xpub refuses a malformed key', r.get('status') == 'error', str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'xpub_mode': 'busy'})
+        check('xpub while busy -> busy', r.get('status') == 'busy', str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'xpub_mode': 'proto'})
+        check('xpub refused by the Coldcard -> rejected', r.get('status') == 'rejected', str(r))
 
         print('pairing')
         set_pairing(tmp, None)
