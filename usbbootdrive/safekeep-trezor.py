@@ -32,6 +32,10 @@ SECURITY MODEL
                     (expected_xfp + expected_xpub) and SAVE the pairing.
       unpair     -> delete the saved pairing.
       sign       -> send a PSBT to the PAIRED Trezor and return the result.
+      xpub       -> read the unlocked Trezor's fingerprint and its multisig
+                    account key at ONE of the three BIP-48 paths
+                    (m/48'/0'/0'/0', /1' or /2'), for building a multisig
+                    descriptor. Read-only, no pairing needed, nothing stored.
   * The pairing is stored by THIS helper (path in SAFEKEEP_TZ_PAIRING: the
     vault's settings folder, or RAM in a temporary session). "sign" trusts
     only that stored pairing — never device identity sent by the browser.
@@ -47,7 +51,7 @@ SECURITY MODEL
   * The result is always written (ok or error) so the app never hangs.
 
 Result JSON: {"ok": true/false, "status": "...", ...}
-  ok statuses   : detected, pin_requested, unlocked, paired, unpaired, signed
+  ok statuses   : detected, pin_requested, unlocked, paired, unpaired, signed, xpub
   error statuses: bad_request, not_installed, not_paired, not_connected,
                   multiple_devices, unsupported_model, no_seed, locked,
                   wrong_pin, wrong_device, outdated_firmware, refused, busy,
@@ -81,6 +85,11 @@ PATH_RE = re.compile(r'^(webusb|hid):[A-Za-z0-9:._/-]{1,128}$')
 PIN_POS_RE = re.compile(r'^[1-9]{1,9}$')
 REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 DEFAULT_PAIRING = '/media/.safekeep-vault/settings/trezor-pairing.json'
+# The only paths "xpub" will read: BIP-48 multisig accounts (mainnet, account 0)
+# for P2SH (0'), P2SH-P2WSH (1') and P2WSH (2').
+MULTISIG_DERIVS = {"m/48'/0'/0'/0'": 'm/48h/0h/0h/0h',
+                   "m/48'/0'/0'/1'": 'm/48h/0h/0h/1h',
+                   "m/48'/0'/0'/2'": 'm/48h/0h/0h/2h'}
 IDENTITY_PATH = 'm/0h'   # the same key HWI reads to get the fingerprint
 
 MSG_NOT_CONNECTED = ('No Trezor found. Plug it in and try again. If it is plugged in, '
@@ -150,6 +159,13 @@ def field_path(data):
     v = data.get('path')
     if not isinstance(v, str) or not PATH_RE.match(v):
         raise Fail('bad_request', 'Request is missing the Trezor USB connection.')
+    return v
+
+
+def field_deriv(data):
+    v = data.get('deriv')
+    if not isinstance(v, str) or v not in MULTISIG_DERIVS:
+        raise Fail('bad_request', 'Only the BIP-48 multisig paths can be read (m/48\'/0\'/0\'/0\', 1\' or 2\').')
     return v
 
 
@@ -459,6 +475,23 @@ def do_sign(hwi, data):
             'psbt_b64': base64.b64encode(out).decode('ascii')}
 
 
+def do_xpub(hwi, data):
+    deriv = field_deriv(data)
+    client, path, info = open_unlocked(hwi)
+    try:
+        xfp, _ = identity(client)
+        key = client.get_pubkey_at_path(MULTISIG_DERIVS[deriv])
+    finally:
+        client.close()
+    xpub = key.to_string()
+    if not isinstance(xpub, str) or not xpub.startswith('xpub') or not XPUB_RE.match(xpub):
+        raise Fail('error', 'The Trezor returned a key SafeKeep cannot use (it must be a mainnet xpub).')
+    if getattr(key, 'depth', None) != 4:
+        raise Fail('error', 'The Trezor returned a key from the wrong level of the wallet.')
+    return {'ok': True, 'status': 'xpub', 'xfp': xfp, 'deriv': deriv, 'xpub': xpub,
+            'passphrase_protection': info['passphrase_protection']}
+
+
 ACTIONS = {
     'detect': (do_detect, SHORT_TIMEOUT_S),
     'prompt_pin': (do_prompt_pin, SHORT_TIMEOUT_S),
@@ -466,6 +499,7 @@ ACTIONS = {
     'pair': (do_pair, SHORT_TIMEOUT_S),
     'unpair': (do_unpair, SHORT_TIMEOUT_S),
     'sign': (do_sign, SIGN_TIMEOUT_S),
+    'xpub': (do_xpub, SHORT_TIMEOUT_S),
 }
 
 

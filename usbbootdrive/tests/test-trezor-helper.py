@@ -95,7 +95,7 @@ def get_path_transport(path, hid_ids, webusb_ids, sim_path):
 
 class _Features: pass
 class _Key:
-    def __init__(self, fp, xpub): self.parent_fingerprint = bytes.fromhex(fp); self._x = xpub
+    def __init__(self, fp, xpub, depth): self.parent_fingerprint = bytes.fromhex(fp); self._x = xpub; self.depth = depth
     def to_string(self): return self._x
 class _Inner:
     def cancel(self): log('cancel')
@@ -118,7 +118,9 @@ class TrezorClient:
         self._prepare_device()
         if CFG.get('locked'): raise DeviceNotReadyError('Trezor is locked')
         log('getxpub ' + path)
-        return _Key(CFG.get('xfp', '%s'), CFG.get('xpub', '%s'))
+        if path.startswith('m/48h/'):
+            return _Key('00000000', CFG.get('ms_xpub', 'xpub' + 'M' * 107), CFG.get('ms_depth', 4))
+        return _Key(CFG.get('xfp', '%s'), CFG.get('xpub', '%s'), 1)
     def prompt_pin(self):
         self._prepare_device()
         if not CFG.get('locked'): raise DeviceAlreadyUnlockedError('already')
@@ -307,6 +309,30 @@ def main():
         set_pairing(tmp, raw='{"xfp": "c0ffee01", "master_xpub": "' + PAIRED_XPUB + '"}')
         rc, r, *_ = run(tmp, good)
         check('Coldcard-style pairing file is not accepted', r.get('status') == 'error', str(r))
+        print('xpub (multisig cosigner import)')
+        MS = 'xpub' + 'M' * 107
+        for deriv, dev_path in (("m/48'/0'/0'/2'", 'm/48h/0h/0h/2h'), ("m/48'/0'/0'/1'", 'm/48h/0h/0h/1h'), ("m/48'/0'/0'/0'", 'm/48h/0h/0h/0h')):
+            rc, r, log, *_ = run(tmp, {'action': 'xpub', 'deriv': deriv})
+            check('xpub %s: fingerprint + key, read at %s' % (deriv, dev_path),
+                  r.get('status') == 'xpub' and r.get('xfp') == PAIRED_XFP and r.get('xpub') == MS and r.get('deriv') == deriv
+                  and ('getxpub ' + dev_path) in log and rc == 0 and no_network(log), str(r) + ' ' + str(log))
+        before = read_pairing(tmp)
+        rc, r, log, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"})
+        check('xpub leaves the pairing untouched', read_pairing(tmp) == before and r.get('status') == 'xpub', str(r))
+        for bad in ("m/84'/0'/0'", "m/48'/0'/1'/2'", "m/48'/1'/0'/2'", 'm/48h/0h/0h/2h', "m/48'/0'/0'/2'/0", '', None, 5):
+            rc, r, log, *_ = run(tmp, {'action': 'xpub', 'deriv': bad})
+            check('xpub refuses path %r' % (bad,), r.get('status') == 'bad_request' and not any(l.startswith('getxpub') for l in log), str(r))
+        rc, r, log, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'locked': True})
+        check('xpub on a locked Trezor -> locked, no key read', r.get('status') == 'locked' and not any(l.startswith('getxpub') for l in log), str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'devices': 0})
+        check('xpub with no Trezor -> not_connected', r.get('status') == 'not_connected', str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'ms_xpub': 'tpub' + 'M' * 107})
+        check('xpub refuses a testnet key', r.get('status') == 'error' and 'mainnet' in r.get('error', ''), str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'ms_depth': 3})
+        check('xpub refuses a key at the wrong depth', r.get('status') == 'error' and 'wrong level' in r.get('error', ''), str(r))
+        rc, r, *_ = run(tmp, {'action': 'xpub', 'deriv': "m/48'/0'/0'/2'"}, {'passphrase': True})
+        check('xpub reports passphrase protection', r.get('status') == 'xpub' and r.get('passphrase_protection') is True, str(r))
+
         rc, r, *_ = run(tmp, dict(good, request_id='abc-123'))
         check('request_id echoed', r.get('request_id') == 'abc-123', str(r))
         rc, r, *_ = run(tmp, dict(good, request_id='bad id $(x)'))

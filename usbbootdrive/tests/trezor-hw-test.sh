@@ -104,6 +104,13 @@ echo "== 4. pair (temporary, test only)"
 python3 -c "import json,sys; d=json.load(open(sys.argv[1])); json.dump({'action':'pair','expected_xfp':d['xfp'],'expected_xpub':d['id_xpub']}, open(sys.argv[2],'w'))" "$W/detect2.json" "$W/req.json"
 run pair
 
+echo
+echo "== 4b. xpub (multisig cosigner key, m/48'/0'/0'/2')"
+echo '{"action":"xpub","deriv":"m/48'"'"'/0'"'"'/0'"'"'/2'"'"'"}' > "$W/req.json"
+run xpub
+[ "$(field xpub status)" = "xpub" ] && echo "   xfp    : $(field xpub xfp)" && \
+    python3 -c "import json,sys; x=json.load(open(sys.argv[1]))['xpub']; print('   xpub   : %s...%s' % (x[:12], x[-6:]))" "$W/xpub.json"
+
 if [ -z "$PSBT" ]; then
     echo
     echo "Unlock and pairing worked. Give a PSBT file to also test signing."
