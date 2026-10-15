@@ -37375,7 +37375,7 @@ async function arm_deriveWallet() {
         if (isMulti) {
             // Multi-sig: addresses require all cosigner keys — show notice
             const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="2" style="color: var(--skb-text-muted); font-size: 0.8125rem; padding: 0.75rem 0;">Multi-sig addresses require all co-signer xpubs. Use The Script tool to generate addresses.</td>';
+            row.innerHTML = '<td colspan="2" style="color: var(--skb-text-muted); font-size: 0.8125rem; padding: 0.75rem 0;">Multi-sig addresses need every co-signer\u2019s xpub. Use the Output Descriptor tool to build the wallet and see its addresses.</td>';
             addrBody.appendChild(row);
         } else {
             for (let i = 0; i < 5; i++) {
