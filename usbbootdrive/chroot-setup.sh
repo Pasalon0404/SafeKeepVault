@@ -747,7 +747,7 @@ cat > /usr/local/bin/safekeep-mirror-displays << 'MIRROREOF'
 # guarantees the unlock UI is reachable regardless of which physical
 # port the firmware enumerated first.
 #
-# Behavior contract — all of these are "exit 0, do nothing":
+# Behaviour contract — all of these are "exit 0, do nothing":
 #   * xrandr binary not on PATH (e.g. a future Wayland kiosk build)
 #   * DISPLAY unset (we are not actually inside an X session)
 #   * xrandr returns no connected outputs (headless / no monitors)
@@ -1131,7 +1131,7 @@ if [ -f /etc/systemd/system.conf ]; then
 
     echo "  Patched /etc/systemd/system.conf: DefaultTimeoutStopSec=1s, DefaultTimeoutAbortSec=1s"
 else
-    # system.conf missing entirely (extreme minimal chroot) — synthesize it.
+    # system.conf missing entirely (extreme minimal chroot) — synthesise it.
     # systemd reads an absent file as "all defaults", so creating a minimal
     # file with just our overrides is sufficient.
     mkdir -p /etc/systemd

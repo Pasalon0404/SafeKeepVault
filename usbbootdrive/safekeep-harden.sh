@@ -85,7 +85,7 @@ NETWORK_SERVICES=(
     "systemd-timesyncd.service"     # NTP time sync (requires network)
     # --- Casper live-boot MD5 check ---
     # Not network-related, but masked here (earliest hardening loop) so the
-    # unit is neutralized before any casper.target dependency can pull it in.
+    # unit is neutralised before any casper.target dependency can pull it in.
     # Casper's md5check assumes ISO layout (md5sum.txt at image root). Our
     # build emits a raw GPT .img with casper/ on an ext4 partition — no
     # md5sum.txt ever exists, so the check hard-fails and blocks boot on
@@ -1225,7 +1225,7 @@ fi
 # CRITICAL: we do NOT touch /media/safekeep-transfer here. The transfer
 # partition is mounted by safekeep-boot.sh (label TRANSFER) and appears
 # in the sidebar's "Devices" section as a single, selectable entry. With
-# the XDG shortcuts gone, nothing aliases it and nothing grays out the
+# the XDG shortcuts gone, nothing aliases it and nothing greys out the
 # Open/Select Folder button.
 
 # Release the old chattr lock (if a previous image baked one in) so we
