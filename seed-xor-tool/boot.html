@@ -9980,9 +9980,9 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
     <div id="state-slip39">
         <div class="tool-hero">
             <h2 class="tool-hero-title">Shamir<span>Backup</span></h2>
-            <p class="tool-hero-subtitle">SLIP-39 Shamir Backup</p>
-            <p class="tool-hero-desc">Split your master seed into threshold shares using Shamir's Secret Sharing. You can recover your master seed phase with fewer than all shares — e.g., any 2-of-3 or 3-of-5. Each share alone reveals nothing about the original seed.</p>
-            <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>SafeKeepVault&rsquo;s Shamir Recovery tool. These shares encode your BIP-39 seed &mdash; restoring them directly on a Trezor or other SLIP-39 wallet opens a <em>different, empty</em> wallet.</span></p>
+            <p class="tool-hero-subtitle">SLIP-39 Shares of Your Seed Phrase</p>
+            <p class="tool-hero-desc">Split your 12/24-word seed phrase into SLIP-39 shares using Shamir&rsquo;s Secret Sharing &mdash; any 2 of 3, 3 of 5&hellip; Fewer shares than that reveal nothing. Recovering gives your words back.</p>
+            <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>SafeKeepVault&rsquo;s Shamir Recovery tool. These shares hold your seed phrase, not a standard SLIP-39 wallet. Recover them with SafeKeep: on a Trezor or in Sparrow they open a <em>different, empty</em> wallet.</span></p>
         </div>
 
         <!-- ======= SPLIT TAB ======= -->
