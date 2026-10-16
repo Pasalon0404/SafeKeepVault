@@ -31749,13 +31749,72 @@ function _descImportSingleKey(text) {
              label: 'Built from a single extended public key (' + k.p + ')', notes: notes, assumed: !byPrefix && !byPath };
 }
 
+/* Text that arrived as hex (some wallets put the setup file's bytes in a QR
+   as hex digits) → the text itself, else null. */
+function _descImportFromHex(text) {
+    var h = text.replace(/\s+/g, '');
+    if (h.length < 40 || h.length % 2 || !/^[0-9a-fA-F]+$/.test(h)) return null;
+    var bytes = new Uint8Array(h.length / 2);
+    for (var i = 0; i < bytes.length; i++) bytes[i] = parseInt(h.substr(i * 2, 2), 16);
+    var s;
+    try { s = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (_) { return null; }
+    return /[\u0000-\u0008\u000e-\u001f]/.test(s) ? null : s;
+}
+
+/* A multisig setup file whose line breaks were lost ("…2026Policy: 2 of
+   3Derivation: m/48'/0'/0'/2'Format: P2WSH# derivation: …8C466A54: xpub…")
+   → the same file with its lines back. Only used when the text has no line
+   breaks at all and clearly is such a file. */
+function _descImportRestoreLines(text) {
+    if (text.indexOf('\n') !== -1 || !/Policy\s*:/i.test(text) || !/[0-9A-Fa-f]{8}\s*:\s*[A-Za-z]pub/.test(text)) return text;
+    return text
+        .replace(/\s*(#)/g, '\n$1')
+        .replace(/\s*(Name|Policy|Derivation|Format|seed|passphrase)\s*:/gi, '\n$1:')
+        .replace(/(#\s*)\n(derivation:)/gi, '$1$2')
+        .replace(/\s*([0-9A-Fa-f]{8})\s*:\s*(?=[xyzYZtuvUV]pub)/g, '\n$1: ')
+        .replace(/^\n+/, '');
+}
+
+/* A single-key JSON export ({"xfp","xpub","path"}, as BlueWallet / Coldcard
+   share one cosigner) → "[xfp/path]xpub", else null. */
+function _descImportJsonKey(text) {
+    if (!/^\x7b/.test(text)) return null;
+    var j;
+    try { j = JSON.parse(text); } catch (_) { return null; }
+    if (!j || typeof j !== 'object') return null;
+    var key = j.xpub || j.Zpub || j.zpub || j.Ypub || j.ypub;
+    var fp = j.xfp || j.fingerprint || j.master_fingerprint;
+    var path = j.path || j.deriv || j.derivation;
+    if (typeof key !== 'string') {
+        if (j.bip84 || j.bip49 || j.bip44 || j.bip48_2 || j.bip48_1) {
+            throw new Error('This is a hardware wallet’s key export with several accounts in it. Export the wallet itself instead (a multisig setup file or descriptor from your wallet app).');
+        }
+        return null;
+    }
+    if (typeof fp === 'string' && /^[0-9A-Fa-f]{8}$/.test(fp) && typeof path === 'string') {
+        var p = _descImportPath(path);
+        if (p === null) throw new Error('The key path “' + path + '” in this file isn’t a valid path.');
+        return '[' + fp.toLowerCase() + (p ? '/' + p : '') + ']' + key.trim();
+    }
+    return key.trim();
+}
+
 /* Main entry: raw Verify input → { ok, error, converted, descriptor, label, notes, expectFirstAddress }. */
 function _descImportConvert(raw) {
-    var text = String(raw || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim().replace(/^bitcoin:(\/\/)?/i, '');
+    var text = String(raw || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n')
+        .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().replace(/^bitcoin:(\/\/)?/i, '');
     if (!text) return { ok: false, error: 'Paste, scan or load an output descriptor or wallet export first.' };
+    var fromHex = _descImportFromHex(text);
+    if (fromHex) text = fromHex.replace(/\r\n?/g, '\n').trim();
+    text = _descImportRestoreLines(text);
     var priv = _descImportPrivateCheck(text);
     if (priv) return { ok: false, error: priv };
     try {
+        var jsonKey = _descImportJsonKey(text);
+        if (jsonKey) {
+            var fromJson = _descImportSingleKey(jsonKey);
+            if (fromJson) { fromJson.label += ', from a key export (JSON)'; return fromJson; }
+        }
         var isSetup = /^\s*policy\s*:/im.test(text) || /^\s*format\s*:/im.test(text) ||
                       /^\s*[0-9A-Fa-f]{8}\s*:\s*[a-zA-Z]{4}[1-9A-HJ-NP-Za-km-z]{100,}\s*$/m.test(text);
         if (isSetup) return _descImportSetup(text);
@@ -31771,7 +31830,9 @@ function _descImportConvert(raw) {
     } catch (e) {
         return { ok: false, error: e.message };
     }
-    return { ok: false, error: 'SafeKeep doesn’t recognise this. Paste an output descriptor, a multisig setup file (BlueWallet, Coldcard, Sparrow…), a BSMS record, or an extended public key (xpub / ypub / zpub).' };
+    var head = text.slice(0, 40).replace(/\s+/g, ' ');
+    return { ok: false, error: 'SafeKeep doesn’t recognise this. Paste an output descriptor, a multisig setup file (BlueWallet, Coldcard, Sparrow…), a BSMS record, or an extended public key (xpub / ypub / zpub). ' +
+             'Received ' + text.length + ' characters, starting “' + head + (text.length > 40 ? '…' : '') + '”.' };
 }
 
 /* Show (or hide, with null) the "converted from …" card above the result. */

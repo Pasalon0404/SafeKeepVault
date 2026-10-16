@@ -72,7 +72,7 @@ function makeEnv(seedPhrase) {
         '_descChainNodes', '_descScreenAddresses', '_descRecvWallet', '_descRecvAddressAt', '_descRecvGroups', 'desc_recvReset', 'desc_recvStep', 'desc_recvShow',
         '_descRecvNormalize', '_descRecvResult', 'desc_recvCheck', 'desc_recvStopScan', '_descShowAddrExport', 'desc_arraysEqual',
         '_descImportPrivateCheck', '_descImportKey', '_descImportPath', '_descImportWithChecksum', '_descImportSetup', '_descImportBsms',
-        '_descImportDescriptorList', '_descImportSingleKey', '_descImportConvert', '_descShowConverted', '_descVerifyFromBytes',
+        '_descImportDescriptorList', '_descImportSingleKey', '_descImportFromHex', '_descImportRestoreLines', '_descImportJsonKey', '_descImportConvert', '_descShowConverted', '_descVerifyFromBytes',
         '_descVerifyAddrRows', 'desc_verify', 'desc_useVerified'].map(extract),
   ].join('\n'), ctx);
   const verify = async (text) => {
@@ -274,6 +274,27 @@ const CORE_JSON = JSON.stringify({ wallet_name: 'vault', descriptors: [
   await ref('testnet cosigner (tpub)', BLUE.replace(W[1], reversion(W[1], TPUB)), /testnet key \(tpub\)/);
   await ref('unrecognised text', 'hello world', /doesn’t recognise this/);
   await ref('markup in a refused field is not inserted as HTML', BLUE.replace('Format: P2WSH', 'Format: <img src=x onerror=alert(1)>'), /&lt;img src=x/);
+}
+
+// ---- 5b. Scanned or copied text that lost its form ----
+{
+  const e = makeEnv(null);
+  let r = await e.verify(BLUE.replace(/\n/g, ''));
+  ck('setup file with all line breaks lost (as in the pasted sample): addresses match', has(r, REF.wsh) && r.convLabel === 'Converted from BlueWallet multisig setup file', r.status);
+  ck('… and the per-key paths and wallet name are kept', r.convText.includes("[28645006/48'/0'/0'/2']") && /Wallet name: Master vault 2026$|Wallet name: Master vault 2026 \|/.test(r.convNotes), r.convNotes);
+  r = await e.verify(BLUE.replace(/\n+/g, ' '));
+  ck('setup file with line breaks turned into spaces: addresses match', has(r, REF.wsh), r.status);
+  r = await e.verify(Buffer.from(BLUE, 'utf8').toString('hex'));
+  ck('setup file received as hex digits: decoded, addresses match', has(r, REF.wsh), r.status);
+  r = await e.verify(BLUE.replace(`${FP(2)}: ${W[2]}`, `# warning! sensitive information ↓\nseed: letter advice cage absurd amount doctor acoustic avoid letter advice cage above`).replace(/\n/g, ''));
+  ck('collapsed file with a seed line: still refused as private', !r.shown && /seed phrase/.test(r.status), r.status);
+  r = await e.verify(JSON.stringify({ xfp: '73C5DA0A', xpub: reversion(W[0], ZPUB), path: "m/48'/0'/0'/2'" }));
+  ck('one cosigner\'s key export (JSON): clear refusal, not "unrecognised"', !r.shown && /multisig cosigner key/.test(r.status), r.status);
+  const k84 = roots[0].derive("m/84'/0'/0'").publicExtendedKey;
+  r = await e.verify(JSON.stringify({ xfp: '73C5DA0A', xpub: k84, path: "m/84'/0'/0'" }));
+  ck('single-sig key export (JSON) → wpkh with origin', r.recv.includes(REF.wpkh.recv0) && /JSON/.test(r.convLabel), r.convLabel + r.status);
+  r = await e.verify('hello world, not a wallet');
+  ck('unrecognised text: the message shows what was received', /Received 25 characters, starting “hello world, not a wallet”/.test(r.status), r.status);
 }
 
 // ---- 6. Plain descriptors keep working exactly as before ----
