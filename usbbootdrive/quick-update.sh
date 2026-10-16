@@ -75,12 +75,12 @@ echo "========================================="
 
 # The chroot must come from a build that FINISHED. build.sh copies the app and
 # scripts into the chroot BEFORE it installs packages and hardens the OS, so a
-# cancelled build leaves a tree that looks complete but is not set up or
+# canceled build leaves a tree that looks complete but is not set up or
 # hardened. Proof of completion: the marker build.sh writes after hardening,
 # or (for builds made before the marker existed) safekeep.img — which build.sh
 # deletes at the START of every build and only recreates at the very end.
 if [ ! -f "$WORKSPACE/.chroot-complete" ] && [ ! -f "$OUTPUT_IMG" ]; then
-    die "the last full build did not finish (cancelled or failed), so the OS tree is incomplete and unhardened. Run: sudo bash build.sh"
+    die "the last full build did not finish (canceled or failed), so the OS tree is incomplete and unhardened. Run: sudo bash build.sh"
 fi
 
 for m in proc sys dev run var/cache/apt/archives var/lib/apt/lists; do
@@ -121,16 +121,16 @@ if [ -n "$TARGET_USB" ]; then
     case "$TARGET_USB" in *[0-9]) P=p ;; *) P="" ;; esac
     OS_PART="${TARGET_USB}${P}3"
     [ "$(lsblk -no LABEL "$OS_PART" 2>/dev/null)" = "safekeep-os" ] \
-        || die "$OS_PART is not labelled 'safekeep-os' — this does not look like a SafeKeep stick. Flash it with the full image instead."
+        || die "$OS_PART is not labeled 'safekeep-os' — this does not look like a SafeKeep stick. Flash it with the full image instead."
     [ "$(lsblk -no LABEL "${TARGET_USB}${P}4" 2>/dev/null)" = "safekeep-data" ] \
-        || die "${TARGET_USB}${P}4 is not labelled 'safekeep-data' — unexpected layout. Refusing."
+        || die "${TARGET_USB}${P}4 is not labeled 'safekeep-data' — unexpected layout. Refusing."
     echo ""
     lsblk -o NAME,SIZE,MODEL,TRAN,LABEL "$TARGET_USB"
     echo ""
     echo "Will REPLACE the operating system on $OS_PART (SafeKeep OS partition)."
     echo "The vault (partition 4) and transfer drive (partition 5) are NOT touched."
     read -r -p "Type YES to continue: " ok
-    [ "$ok" = "YES" ] || die "cancelled."
+    [ "$ok" = "YES" ] || die "canceled."
 fi
 
 # ---------------------------------------------------------------------

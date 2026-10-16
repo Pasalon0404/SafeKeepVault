@@ -632,7 +632,7 @@ launch_browser() {
 
     # --- Generate Archive Index for Reliquary Restore UI ---
     # The browser cannot list directory contents via file:// protocol.
-    # We pre-generate a JSON index of all archive artefacts on the
+    # We pre-generate a JSON index of all archive artifacts on the
     # transfer drive so SafeKeepOS.listBackups() can fetch it.
     #
     # The index includes two file kinds:
@@ -641,7 +641,7 @@ launch_browser() {
     #              produced by The Armory's "Download JSON" button)
     # The index file itself (.backups-index.json) is excluded by the
     # leading-dot filter since it is a hidden dotfile and should never
-    # be listed as a user artefact.
+    # be listed as a user artifact.
     #
     # The browser-side UI classifies each entry by extension and
     # renders .json files as read-only "Export" rows (no unlock prompt).
@@ -2613,7 +2613,7 @@ except Exception as e:
                 POWER_ACTION="$REQUESTED"
                 ;;
             *)
-                echo "Power-action file contained unrecognised value '$REQUESTED' — defaulting to lock (never auto-poweroff)."
+                echo "Power-action file contained unrecognized value '$REQUESTED' — defaulting to lock (never auto-poweroff)."
                 ;;
         esac
         # Shred and remove the signal file so nothing persists. On tmpfs
@@ -3026,7 +3026,7 @@ if [ ! -f "$DATA_MOUNT/$SETUP_MARKER" ]; then
     # on a successful run control NEVER returns from the call below.
     setup-vault || true
 
-    # If we reach here, setup-vault exited without rebooting (cancelled/error).
+    # If we reach here, setup-vault exited without rebooting (canceled/error).
     # Re-mount and check if the vault was at least created.
     if ! mountpoint -q "$DATA_MOUNT"; then
         sudo mount "$DATA_PART" "$DATA_MOUNT" || {
@@ -3065,7 +3065,7 @@ else
     # (infinite loop with zenity prompts). It only exits with:
     #   0 = vault unlocked and mounted
     #   1 = fatal error (no partition, no vault file, loop device failure)
-    #   2 = user explicitly cancelled (clicked X on method-choice dialog)
+    #   2 = user explicitly canceled (clicked X on method-choice dialog)
     #
     # We still wrap this in a loop so that if the user cancels (exit 2),
     # we give them one more chance rather than halting immediately.
@@ -3091,9 +3091,9 @@ else
                 echo "Warning: unlock-vault exited 0 but vault not at $VAULT_MOUNT"
             fi
         elif [ "$UNLOCK_EXIT" -eq 2 ]; then
-            # Non-fatal: user cancelled the method-choice dialog.
+            # Non-fatal: user canceled the method-choice dialog.
             # Loop back — they might have fat-fingered the X button.
-            echo "User cancelled unlock dialog. Retrying..."
+            echo "User canceled unlock dialog. Retrying..."
             continue
         elif [ "$UNLOCK_EXIT" -eq 3 ]; then
             # ---- EPHEMERAL BOOT PATH ----

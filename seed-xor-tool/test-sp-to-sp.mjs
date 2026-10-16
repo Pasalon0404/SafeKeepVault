@@ -2,7 +2,7 @@
  * test-sp-to-sp.mjs
  *
  * SP -> SP signing scenario: an input that's itself a Silent Payment UTXO
- * (P2TR keyed by B_spend + t_k·G, signalled with the proprietary 0x1f/0x20
+ * (P2TR keyed by B_spend + t_k·G, signaled with the proprietary 0x1f/0x20
  * PSBT fields) AND an unresolved Silent Payment output (PSBT_OUT_SP_V0_INFO).
  *
  * The bug: downgradePSBTv2's derive-and-fill calls _psbtDeriveInputKeyForSP,
@@ -37,7 +37,7 @@ let pass = 0, fail = 0;
 const ck = (n, c, x) => { (c ? pass++ : fail++); console.log(`  [${c ? 'PASS' : 'FAIL'}] ${n}${x && !c ? '  ' + x : ''}`); };
 
 // ---------------------------------------------------------------------------
-// 1.  Mirror of the existing _psbtDeriveInputKeyForSP behaviour. It walks
+// 1.  Mirror of the existing _psbtDeriveInputKeyForSP behavior. It walks
 //     bip32Derivation / tapBip32Derivation only — exactly the codepath that
 //     fails for SP inputs.
 // ---------------------------------------------------------------------------
@@ -176,9 +176,9 @@ const inputMaps = [
 ];
 
 // ---------------------------------------------------------------------------
-// 4.  Confirm the CURRENT behaviour: SP input -> null -> downgrade would throw.
+// 4.  Confirm the CURRENT behavior: SP input -> null -> downgrade would throw.
 // ---------------------------------------------------------------------------
-console.log('\n[1] CURRENT behaviour: SP input is unrecoverable by the existing matcher');
+console.log('\n[1] CURRENT behavior: SP input is unrecoverable by the existing matcher');
 {
     const k0 = deriveInputKey_currentBehaviour(master, inputMaps[0]);
     const k1 = deriveInputKey_currentBehaviour(master, inputMaps[1]);
@@ -191,7 +191,7 @@ console.log('\n[1] CURRENT behaviour: SP input is unrecoverable by the existing 
 // 5.  The FIX: SP input now resolves via the 0x1f/0x20 helper, with the
 //     correct tweaked private key d = b_spend + t_k.
 // ---------------------------------------------------------------------------
-console.log('\n[2] FIXED behaviour: tryDeriveSpInputKey recovers d = b_spend + t_k');
+console.log('\n[2] FIXED behavior: tryDeriveSpInputKey recovers d = b_spend + t_k');
 {
     const k = tryDeriveSpInputKey(master, fpNum, inputMaps[0]);
     ck('SP input now resolves to a (privKey, isTaproot) pair', !!k);
@@ -236,4 +236,4 @@ console.log('\n[3] End-to-end SP -> SP: sender output == receiver-derived output
 console.log('\n--------------------------------------------------');
 console.log(`RESULT: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
-console.log('SP -> SP derivation works once the input matcher recognises 0x1f/0x20.');
+console.log('SP -> SP derivation works once the input matcher recognizes 0x1f/0x20.');

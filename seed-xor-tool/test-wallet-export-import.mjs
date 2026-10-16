@@ -132,7 +132,7 @@ ${FP(2)}: ${W[2]}
   const e = makeEnv(null);
   const r = await e.verify(BLUE);
   ck('BlueWallet: first receive and change addresses match embit', has(r, REF.wsh), r.status + ' ' + r.recv.slice(0, 200));
-  ck('BlueWallet: labelled as converted from a BlueWallet setup file', r.conv && r.convLabel === 'Converted from BlueWallet multisig setup file', r.convLabel);
+  ck('BlueWallet: labeled as converted from a BlueWallet setup file', r.conv && r.convLabel === 'Converted from BlueWallet multisig setup file', r.convLabel);
   ck('BlueWallet: descriptor shown, with origins and <0;1>', /^wsh\(sortedmulti\(2,\[73c5da0a\/48'\/0'\/0'\/2'\]xpub6DkFAX.*\/<0;1>\/\*,.*\)\)#[0-9a-z]{8}$/.test(r.convText), r.convText);
   ck('BlueWallet: type 2-of-3 P2WSH', r.type === 'Native Segwit (P2WSH) (2-of-3)', r.type);
   ck('BlueWallet: wallet name and policy noted', /Wallet name: Master vault 2026/.test(r.convNotes) && /2 of 3, Native SegWit multisig/.test(r.convNotes), r.convNotes);
@@ -161,7 +161,7 @@ ${ref.keys.map(([fp, x]) => fp.toUpperCase() + ': ' + x).join('\n')}
   const e = makeEnv(null);
   let r = await e.verify(CC('P2WSH', REF.wsh));
   ck('Coldcard P2WSH: addresses match embit', has(r, REF.wsh), r.status);
-  ck('Coldcard: labelled', r.convLabel === 'Converted from Coldcard multisig setup file', r.convLabel);
+  ck('Coldcard: labeled', r.convLabel === 'Converted from Coldcard multisig setup file', r.convLabel);
   r = await e.verify(CC('P2WSH-P2SH', REF.shwsh));
   ck('Coldcard nested (P2WSH-P2SH): addresses match embit', has(r, REF.shwsh) && /^sh\(wsh\(sortedmulti/.test(r.convText), r.status + r.convText.slice(0, 30));
   r = await e.verify(CC('P2SH-P2WSH', REF.shwsh));
@@ -216,7 +216,7 @@ const CORE_JSON = JSON.stringify({ wallet_name: 'vault', descriptors: [
   const e = makeEnv(null);
   let r = await e.verify(SPARROW_CC);
   ck('Sparrow (Coldcard-format export): addresses match embit', has(r, REF.wsh), r.status);
-  ck('Sparrow: labelled as exported from Sparrow', r.convLabel === 'Converted from Coldcard multisig setup file (exported from Sparrow)', r.convLabel);
+  ck('Sparrow: labeled as exported from Sparrow', r.convLabel === 'Converted from Coldcard multisig setup file (exported from Sparrow)', r.convLabel);
   r = await e.verify(SPARROW_DESC);
   ck('Sparrow descriptor file: takes the <0;1> line, addresses match', has(r, REF.wsh) && /receive-and-change/.test(r.convLabel), r.convLabel + r.status);
   r = await e.verify(BSMS(REF.wsh.recv0));
@@ -272,7 +272,7 @@ const CORE_JSON = JSON.stringify({ wallet_name: 'vault', descriptors: [
   await ref('seed line (BlueWallet backup with a seed)', BLUE.replace(`${FP(2)}: ${W[2]}`, `# warning! sensitive information, do not disclose ↓\nseed: letter advice cage absurd amount doctor acoustic avoid letter advice cage above\n# warning! sensitive information, do not disclose ↑`), /seed phrase/);
   await ref('WIF private key', 'wpkh(KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn)', /private key \(WIF\)/);
   await ref('testnet cosigner (tpub)', BLUE.replace(W[1], reversion(W[1], TPUB)), /testnet key \(tpub\)/);
-  await ref('unrecognised text', 'hello world', /doesn’t recognise this/);
+  await ref('unrecognized text', 'hello world', /doesn’t recognize this/);
   await ref('markup in a refused field is not inserted as HTML', BLUE.replace('Format: P2WSH', 'Format: <img src=x onerror=alert(1)>'), /&lt;img src=x/);
 }
 
@@ -289,12 +289,12 @@ const CORE_JSON = JSON.stringify({ wallet_name: 'vault', descriptors: [
   r = await e.verify(BLUE.replace(`${FP(2)}: ${W[2]}`, `# warning! sensitive information ↓\nseed: letter advice cage absurd amount doctor acoustic avoid letter advice cage above`).replace(/\n/g, ''));
   ck('collapsed file with a seed line: still refused as private', !r.shown && /seed phrase/.test(r.status), r.status);
   r = await e.verify(JSON.stringify({ xfp: '73C5DA0A', xpub: reversion(W[0], ZPUB), path: "m/48'/0'/0'/2'" }));
-  ck('one cosigner\'s key export (JSON): clear refusal, not "unrecognised"', !r.shown && /multisig cosigner key/.test(r.status), r.status);
+  ck('one cosigner\'s key export (JSON): clear refusal, not "unrecognized"', !r.shown && /multisig cosigner key/.test(r.status), r.status);
   const k84 = roots[0].derive("m/84'/0'/0'").publicExtendedKey;
   r = await e.verify(JSON.stringify({ xfp: '73C5DA0A', xpub: k84, path: "m/84'/0'/0'" }));
   ck('single-sig key export (JSON) → wpkh with origin', r.recv.includes(REF.wpkh.recv0) && /JSON/.test(r.convLabel), r.convLabel + r.status);
   r = await e.verify('hello world, not a wallet');
-  ck('unrecognised text: the message shows what was received', /Received 25 characters, starting “hello world, not a wallet”/.test(r.status), r.status);
+  ck('unrecognized text: the message shows what was received', /Received 25 characters, starting “hello world, not a wallet”/.test(r.status), r.status);
 }
 
 // ---- 6. Plain descriptors keep working exactly as before ----

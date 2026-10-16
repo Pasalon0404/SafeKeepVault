@@ -25,7 +25,7 @@
  *   prompt out of the picture.
  *
  * Names are hex-encoded (UTF-8) in the download filename so Chromium's
- * filename sanitiser can never alter them; the watcher re-validates every
+ * filename sanitizer can never alter them; the watcher re-validates every
  * name (no "/", no leading ".", no control characters).
  *
  * A memory backend is provided for the localhost dev server so the

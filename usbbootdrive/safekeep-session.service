@@ -90,7 +90,7 @@ ExecStartPre=/bin/chown 0:0 /run/user/0
 #   vt7             bind X to /dev/tty7 (matches TTYPath= below)
 #   -keeptty        if X crashes, do NOT take down the unit's stdin TTY —
 #                   essential for systemd Restart= to actually work
-#   -nolisten tcp   defence-in-depth: no network X even though the kiosk
+#   -nolisten tcp   defense-in-depth: no network X even though the kiosk
 #                   is air-gapped
 # ---------------------------------------------------------------------------
 ExecStart=/usr/bin/startx -- :0 vt7 -keeptty -nolisten tcp

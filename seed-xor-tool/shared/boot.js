@@ -1486,7 +1486,7 @@ const SafeKeepOS = (() => {
   }
 
   /**
-   * List archive artefacts on the Transfer Drive.
+   * List archive artifacts on the Transfer Drive.
    *
    * Includes two file kinds:
    *   • `*.7z`   — encrypted Reliquary backup archives (restorable)
@@ -1972,7 +1972,7 @@ const SafeKeepOS = (() => {
   // way (tmpfs for ephemeral; explicit `rm` at start of safekeep-boot.sh
   // for normal mode) so no stale signals can survive a power cycle.
   //
-  // Filename is all-caps and prefixed "POWER_ACTION" so it is recognised
+  // Filename is all-caps and prefixed "POWER_ACTION" so it is recognized
   // as a system trigger file by _isSystemFile() (see _SYSTEM_TRIGGER_PREFIXES).
 
   const POWER_ACTION_FILE = 'POWER_ACTION.txt';

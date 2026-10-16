@@ -58,7 +58,7 @@ const SeedManager = (() => {
    * Save a seed to a user-chosen location via Save As dialog.
    * @param {string} mnemonic - Space-separated BIP-39 words
    * @param {object} meta - Optional metadata { label, passphrase, keyFormat, addressType, source }
-   * @returns {{ fingerprint: string }} or null if cancelled
+   * @returns {{ fingerprint: string }} or null if canceled
    */
   async function saveSeed(mnemonic, meta = {}) {
     const words = mnemonic.trim().split(/\s+/);
@@ -130,7 +130,7 @@ const SeedManager = (() => {
    * Save a passphrase to its own file.
    * @param {string} passphrase
    * @param {object} meta - Optional { label }
-   * @returns {boolean} true if saved, false if cancelled
+   * @returns {boolean} true if saved, false if canceled
    */
   async function savePassphrase(passphrase, meta = {}) {
     const label = (meta.label || '').trim();

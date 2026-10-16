@@ -42,7 +42,7 @@ const master = HDKey.fromMasterSeed(seed);
 const fp = master.fingerprint >>> 0;
 const fpBytes = beBytes(BigInt(fp), 4); // big-endian master fingerprint
 
-// Base spend key at the path Sparrow signalled in the diagnostic: m/352'/0'/0'/0/0
+// Base spend key at the path Sparrow signaled in the diagnostic: m/352'/0'/0'/0/0
 const pathComps = [0x80000160, 0x80000000, 0x80000000, 0x00000000, 0x00000000];
 let node = master;
 for (const c of pathComps) node = node.deriveChild(c);
