@@ -6448,6 +6448,7 @@
                     <h3>Recover from Shamir Shares</h3>
                     <p style="font-size: 0.875rem; color: var(--skb-text-muted); margin: 0 0 1rem;">
                         Enter your SLIP-39 shares one at a time. You need the minimum threshold (e.g., 2 of 3) to recover your master seed. Shares use a different wordlist than BIP-39.
+                        <strong>Shares made on a Trezor</strong> (or another SLIP-39 wallet) can be checked here, but SafeKeep can&rsquo;t open them as that wallet yet: SafeKeep&rsquo;s own shares hold a 12/24-word phrase, a Trezor&rsquo;s don&rsquo;t. You&rsquo;ll see both readings before anything is saved.
                     </p>
 
                     <!-- Share entry area -->
@@ -6502,6 +6503,9 @@
                     </div>
 
                     <!-- Status display -->
+                    <!-- Both readings of the combined shares, shown before anything is saved -->
+                    <div id="s39r-choice" style="display: none; margin-bottom: 0.75rem;"></div>
+
                     <div id="s39r-status" style="display: none; font-size: 0.8125rem; padding: 0.5rem 0.75rem; border-radius: var(--skb-radius-sm); margin-bottom: 0.75rem;"></div>
 
                     <!-- Action buttons -->
@@ -41109,6 +41113,7 @@ function showShamirRecoveryPanel() {
  * Hide the Shamir recovery panel, return to welcome buttons.
  */
 function hideShamirRecoveryPanel() {
+    _s39rClearChoice();
     document.getElementById('shamir-recovery-panel').style.display = 'none';
     document.getElementById('welcome-buttons').style.display = 'flex';
     s39r_stopQR();
@@ -41120,6 +41125,7 @@ function hideShamirRecoveryPanel() {
  */
 function s39r_reset() {
     _s39rShares = [];
+    _s39rClearChoice();
     var input = document.getElementById('s39r-share-input');
     if (input) input.value = '';
     var pp = document.getElementById('s39r-passphrase');
@@ -41311,6 +41317,7 @@ function s39r_stopQR() {
 async function s39r_recover() {
     var btn = document.getElementById('s39r-recover-btn');
     try {
+        _s39rClearChoice();
         if (btn) { btn.disabled = true; btn.textContent = 'Recovering...'; }
         s39r_showLocalStatus('Combining shares and deriving master secret...', 'info');
 
@@ -41375,15 +41382,83 @@ async function s39r_recover() {
         // re-computed from that secret, so it always passes. A typo would
         // silently install a different (empty) wallet as the master seed. The
         // only real check is the Master Fingerprint printed on the share cards.
-        var recFp = await _recoveryFingerprint(mnemonic);
-        if (!confirm('Recovered seed fingerprint: ' + recFp + '\n\n' +
-                     'Does this match the "Master Fingerprint" printed on your SLIP-39 share cards?\n\n' +
-                     'If it does NOT match, the passphrase is almost certainly wrong (SLIP-39 cannot ' +
-                     'detect a wrong passphrase). Press Cancel and re-enter it.')) {
-            s39r_showLocalStatus('Recovery canceled — fingerprint ' + recFp + ' was not confirmed. Nothing was written. Check the SLIP-39 passphrase and try again.', 'error');
-            return;
-        }
+        // ── Both readings, BEFORE anything is saved ──
+        // SafeKeep's own shares hold BIP-39 entropy (secret → 12/24 words →
+        // wallet). Shares made on a Trezor or another SLIP-39 wallet use the
+        // secret itself as the wallet's master seed (the SLIP-39 standard),
+        // which has no 12/24 words: a different wallet. The shares can't tell
+        // which, so the user picks by fingerprint / first address. Only the
+        // SafeKeep reading can be restored.
+        var readings = await _s39rReadings(mnemonic, new Uint8Array(recoveredSecret));
+        if (recoveredSecret.fill) recoveredSecret.fill(0);
+        entropyBytes.fill(0);
+        _s39rPending = { mnemonic: mnemonic, wordCount: wordCount, safekeepFp: readings.safekeep.fp };
+        _s39rShowChoice(readings, wordCount);
+        s39r_showLocalStatus('Shares combined. Check which wallet these shares belong to below. Nothing has been saved yet.', 'info');
 
+    } catch (e) {
+        s39r_showLocalStatus(e.message, 'error');
+        showStatus('SLIP-39 recovery failed: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = (_s39rShares.length < 2); btn.textContent = 'Combine & Recover'; }
+    }
+}
+
+var _s39rPending = null;    // { mnemonic, wordCount, safekeepFp } between Combine and Restore
+
+/* Fingerprint and first Native SegWit receive address (m/84'/0'/0'/0/0) for
+   both ways of reading a SLIP-39 secret. Zeroes the secret. */
+async function _s39rReadings(mnemonic, secret) {
+    var B = window.BtcMath;
+    var describe = function(root) {
+        var node = root.derive("m/84'/0'/0'/0/0");
+        return { fp: (root.fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase(),
+                 address: B.btcSigner.p2wpkh(node.publicKey).address };
+    };
+    var seed = await B.bip39.mnemonicToSeed(mnemonic, '');
+    var safekeep = describe(B.HDKey.fromMasterSeed(seed));
+    if (seed instanceof Uint8Array) seed.fill(0);
+    var standard = describe(B.HDKey.fromMasterSeed(secret));
+    secret.fill(0);
+    return { safekeep: safekeep, standard: standard };
+}
+
+function _s39rShowChoice(r, wordCount) {
+    var box = document.getElementById('s39r-choice');
+    if (!box) return;
+    var card = function(title, sub, rd, extra) {
+        return '<div class="skb-card" style="margin-bottom: 0.6rem;">' +
+            '<div style="font-size: 0.875rem; font-weight: 700; color: var(--skb-text); margin-bottom: 0.2rem;">' + title + '</div>' +
+            '<div style="font-size: 0.8125rem; color: var(--skb-text-muted); margin-bottom: 0.5rem;">' + sub + '</div>' +
+            '<div style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text);">Fingerprint: <strong>' + rd.fp + '</strong></div>' +
+            '<div style="font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); word-break: break-all; margin-top: 0.2rem;">First Native SegWit address: ' + rd.address + '</div>' +
+            extra + '</div>';
+    };
+    box.innerHTML =
+        '<div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.5rem;">Which wallet are these shares from?</div>' +
+        '<div style="font-size: 0.8125rem; color: var(--skb-text-muted); margin-bottom: 0.6rem;">The same shares open a different wallet depending on what made them. Compare the fingerprint with the master fingerprint on your SafeKeep share cards, or the first receive address with your wallet app (Trezor Suite, Sparrow&hellip;). ' +
+        'If neither matches, the passphrase is probably wrong: SLIP-39 can&rsquo;t detect that.</div>' +
+        card('Made with SafeKeep', 'SafeKeep&rsquo;s shares hold a ' + wordCount + '-word BIP-39 phrase.', r.safekeep,
+             '<button type="button" class="skb-btn skb-btn--primary" id="s39r-restore-btn" style="width: 100%; margin-top: 0.6rem;" onclick="s39r_restorePending()">Restore This Wallet (' + r.safekeep.fp + ')</button>') +
+        card('Made on a Trezor or another SLIP-39 wallet', 'The standard SLIP-39 wallet. It has no 12/24-word phrase.', r.standard,
+             '<div style="font-size: 0.8125rem; color: var(--skb-warning, #f59e0b); margin-top: 0.5rem; font-weight: 600;">SafeKeep can&rsquo;t open this wallet yet, so nothing will be saved for it. Your funds are safe: keep using the Trezor (or the wallet that made the shares) for this wallet.</div>');
+    box.style.display = 'block';
+}
+
+function _s39rClearChoice() {
+    _s39rPending = null;
+    var box = document.getElementById('s39r-choice');
+    if (box) { box.innerHTML = ''; box.style.display = 'none'; }
+}
+
+/* Restore the SafeKeep reading (the 12/24-word wallet) picked in the choice panel. */
+async function s39r_restorePending() {
+    var pend = _s39rPending;
+    if (!pend) return;
+    var btn = document.getElementById('s39r-restore-btn');
+    try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Restoring...'; }
+        var mnemonic = pend.mnemonic, wordCount = pend.wordCount;
         s39r_showLocalStatus('Valid ' + wordCount + '-word BIP-39 mnemonic recovered. Writing to vault...', 'info');
 
         // Hand off to the hardened disk-write pipeline (same as rst_doRestore).
@@ -41408,14 +41483,14 @@ async function s39r_recover() {
 
         // Clean up and transition to dashboard
         _s39rShares = [];
+        _s39rClearChoice();
         hideShamirRecoveryPanel();
         transitionToDashboard(result);
-
     } catch (e) {
         s39r_showLocalStatus(e.message, 'error');
         showStatus('SLIP-39 recovery failed: ' + e.message, 'error');
     } finally {
-        if (btn) { btn.disabled = (_s39rShares.length < 2); btn.textContent = 'Combine & Recover'; }
+        if (btn && _s39rPending) { btn.disabled = false; btn.textContent = 'Restore This Wallet (' + _s39rPending.safekeepFp + ')'; }
     }
 }
 
