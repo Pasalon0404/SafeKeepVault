@@ -4,7 +4,7 @@
 # Exit codes:
 #   0 = vault successfully unlocked and mounted at VAULT_MOUNT
 #   1 = fatal error (no partition, no vault file)
-#   2 = user cancelled or all attempts exhausted (non-fatal, caller can retry)
+#   2 = user canceled or all attempts exhausted (non-fatal, caller can retry)
 #   3 = user chose "Boot Temporary Session (RAM Only)" — skip the vault entirely.
 #       Parent (safekeep-boot.sh) must bypass mountpoint checks and launch
 #       Chromium with ?ephemeral=true appended to the boot.html URL.
@@ -167,7 +167,7 @@ while true; do
     # ERR_FILE_NOT_FOUND in Chromium).
     if [ "$INPUT_METHOD" = "Boot Temporary Session (RAM Only)" ]; then
         sudo umount "$DATA_MOUNT" 2>/dev/null || true
-        echo "SafeKeep: User selected temporary session boot — signalling parent (exit 3)"
+        echo "SafeKeep: User selected temporary session boot — signaling parent (exit 3)"
         exit 3
     fi
 

@@ -9,7 +9,7 @@
  * library would otherwise produce wrong seeds, keys or addresses silently; a
  * fixed vector turns that into a visible failure.
  *
- * What this cannot catch: a targeted exploit that recognises these inputs, or a
+ * What this cannot catch: a targeted exploit that recognizes these inputs, or a
  * bug confined to inputs no vector exercises. It is a floor under the host, not
  * a proof about it.
  *

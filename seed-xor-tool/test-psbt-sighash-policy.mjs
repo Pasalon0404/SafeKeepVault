@@ -5,7 +5,7 @@
  * NONE, SINGLE and the ANYONECANPAY variants give a signature that does not
  * cover every input and output, so its holder can change the transaction
  * afterwards. btc-signer's signIdx refuses them by default, but the Silent
- * Payment spend signer signs directly and used to honour whatever the PSBT
+ * Payment spend signer signs directly and used to honor whatever the PSBT
  * asked for. These tests extract the real functions from boot.html and check:
  *   - the SP signer still signs with no sighash, 0x00 and 0x01 (and the
  *     signature verifies), and refuses 0x02, 0x03, 0x81, 0x82, 0x83 without

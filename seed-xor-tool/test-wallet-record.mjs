@@ -250,7 +250,7 @@ const MS_DESC = cs(MS[0][1]);
   ck('key labels: the user’s name only, unnamed keys keep "Set N"', JSON.stringify(data.seedSets) === JSON.stringify([
      'Dave’s Coldcard — home safe', 'Set 2', 'Seed plate — bank box']), JSON.stringify(data.seedSets));
   ck('no descriptor fingerprint is printed as a key’s identity', !data.seedSets.concat(data.passphrases.map((p) => p.target)).some((t) => FP.some((f) => t.includes(f)) || /fingerprint/i.test(t)));
-  ck('on screen, each row still shows its descriptor fingerprint, labelled as including any passphrase',
+  ck('on screen, each row still shows its descriptor fingerprint, labeled as including any passphrase',
      FP.every((f) => el('wrec-keys-wrap').innerHTML.includes(f)) && /descriptor fingerprint/.test(el('wrec-keys-wrap').innerHTML) &&
      /includes the passphrase, if this key has one/.test(el('wrec-keys-wrap').innerHTML));
   ck('passphrases point at their keys; a blank one records only that it is needed', data.ppRequired && JSON.stringify(data.passphrases) === JSON.stringify([

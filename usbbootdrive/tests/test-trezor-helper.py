@@ -5,7 +5,7 @@ Tests for usbbootdrive/safekeep-trezor.py using a FAKE Trezor.
     PYTHONDONTWRITEBYTECODE=1 python3 usbbootdrive/tests/test-trezor-helper.py
 
 No hardware needed. A fake `hwilib` package is generated in a temp dir and
-put first on PYTHONPATH; its behaviour is chosen per test via the FAKE_TZ env
+put first on PYTHONPATH; its behavior is chosen per test via the FAKE_TZ env
 var. Real-hardware testing is separate (see the design plan).
 
 Optional: also check the helper against the REAL pinned HWI library (still no

@@ -5,7 +5,7 @@ Tests for usbbootdrive/safekeep-coldcard.py using a FAKE Coldcard.
     python3 usbbootdrive/tests/test-coldcard-helper.py
 
 No hardware needed. A fake `hid` + `ckcc` package is generated in a temp dir
-and put first on PYTHONPATH; its behaviour is chosen per test via the
+and put first on PYTHONPATH; its behavior is chosen per test via the
 FAKE_CC env var. Real-hardware testing is separate (see the design plan).
 """
 import base64, json, os, struct, subprocess, sys, tempfile, textwrap

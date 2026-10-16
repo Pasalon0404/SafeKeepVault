@@ -869,7 +869,7 @@
             the dark surfaces the badge sits against.
          3. Material's reference dark-theme palette pairs it cleanly
             with teal (--skb-secondary) and orange (--skb-primary), so
-            the trio harmonises rather than clashes.
+            the trio harmonizes rather than clashes.
 
        The variable lives here in boot.html's local <style> rather than
        in shared/design-system.css so it's self-contained with the
@@ -1820,7 +1820,7 @@
 
        Bind the badge text to --skb-text instead, which the design system
        already resolves to #1a1a1a (near-black) under [data-theme="light"]
-       and #e0e0e0 (light grey) in dark mode. Scoping the rule under
+       and #e0e0e0 (light gray) in dark mode. Scoping the rule under
        [data-theme="light"] is what guarantees dark mode is untouched —
        under the default (no data-theme) the rule never matches, so the
        base #fff color from .dash-fingerprint-badge wins the cascade.
@@ -2325,9 +2325,9 @@
        "Verify My Backup" (#backup-proceed-verify-btn) and "Continue to
        Dashboard" (#backup-continue-btn) inherit .skb-btn-primary:disabled
        { opacity: 0.35 } over an orange fill with near-black (#111) text —
-       the label reads as unreadable faded dark grey before the user
+       the label reads as unreadable faded dark gray before the user
        unlocks the button. Force a legible muted-outline look instead:
-       drop the global fade, neutralise the fill to a bordered outline,
+       drop the global fade, neutralize the fill to a bordered outline,
        and use the theme-aware muted text token. -webkit-text-fill-color
        is set alongside `color` because Chromium paints disabled controls
        with a forced text-fill that otherwise wins over `color`.
@@ -4339,7 +4339,7 @@
        beats the inline `style="width:580px;height:580px"` that
        QRCode.toCanvas writes on the element after every render —
        without `!important` the canvas reports CSS width:100% but
-       browsers honour the inline-style number, leaving the canvas
+       browsers honor the inline-style number, leaving the canvas
        stuck at 580px while the wrapper grows around it (which looks
        like CROPPING). image-rendering: pixelated keeps QR modules
        sharp when scaled up — without this browsers smooth the bitmap
@@ -6061,7 +6061,7 @@
         line-height: 1.42 !important;
       }
       /* Force every text node inside the print area to pure black so
-         the dark-theme on-screen colours don't bleed into the PDF. */
+         the dark-theme on-screen colors don't bleed into the PDF. */
       body.printing-wrec #wrec-print-area,
       body.printing-wrec #wrec-print-area * { color: #000 !important; }
       body.printing-wrec #wrec-print-area strong { font-weight: 700 !important; }
@@ -6711,7 +6711,7 @@
                          flex-growing to fill space between the identity
                          block and the buttons. The standalone "PASSPHRASE"
                          caption was removed so the input sits vertically
-                         centred with the Show / Library / Apply / Clear
+                         centered with the Show / Library / Apply / Clear
                          buttons. The placeholder now carries the hint
                          copy the label used to. -->
                     <div class="dash-command-input-wrap">
@@ -7297,10 +7297,10 @@
                                 style="font-size: 0.8125rem; padding: 0.25rem 0.5rem; border-radius: var(--skb-radius-sm);
                                        background: var(--skb-bg-inset, #0a0a0a); color: var(--skb-text);
                                        border: 1px solid var(--skb-border); font-family: var(--skb-mono);">
-                                <!-- Order matters: top-to-bottom matches the prioritisation in the
+                                <!-- Order matters: top-to-bottom matches the prioritization in the
                                      directive (most-common formats first). Internal value= strings
                                      are UNCHANGED — _psbtRenderQr branches on these constants, so
-                                     reordering / relabelling the options here is purely cosmetic. -->
+                                     reordering / relabeling the options here is purely cosmetic. -->
                                 <option value="standard" selected>Standard (Base64)</option>
                                 <option value="ur">UR (ur:crypto-psbt)</option>
                                 <option value="nunchuk-hex">Raw Hex Type 1 (Nunchuk)</option>
@@ -9687,7 +9687,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     </div>
                     <!-- Dual Fingerprint Display.
                          Two stacked rows, each its own surrounding box, themed
-                         with the project's canonical tokens so the colours stay
+                         with the project's canonical tokens so the colors stay
                          in sync with the dashboard and tool-sidebar treatments:
                            • Master Seed row     → teal   (--skb-secondary*)
                            • Passphrase Wallet   → purple (--skb-passphrase-active*)
@@ -9766,7 +9766,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <div class="arm-xpub-val" id="arm-xpub">Calculating...</div>
                         <!-- Unified action row.
                              Three buttons are universally visible regardless of
-                             Key Format selection. Their behaviour is context-
+                             Key Format selection. Their behavior is context-
                              aware (read from #arm-xpub at click time):
                                • Copy        — copies the live <pre> contents
                                                 (xpub, descriptor string, or
@@ -10489,7 +10489,7 @@ document.addEventListener('keydown', function(evt) {
 //     count happens to be) is respected — Up/Down moves to the closest
 //     tile vertically, Left/Right horizontally.
 //
-// Tab and Enter are NOT intercepted: native browser behaviour already
+// Tab and Enter are NOT intercepted: native browser behavior already
 // walks focus through every focusable element with Tab and triggers
 // click() on Enter for buttons / [role="button"]. Overriding either
 // would risk breaking the seed-word grid Shift+Tab navigation
@@ -10553,7 +10553,7 @@ document.addEventListener('keydown', function(evt) {
 
         // 1. Block browser F-keys unconditionally. Always preventDefault,
         //    even when focus is in an input — none of these keys produce
-        //    text and we never want their browser-native behaviour to fire.
+        //    text and we never want their browser-native behavior to fire.
         if (FN_BLOCK[k]) {
             evt.preventDefault();
             return;
@@ -10820,7 +10820,7 @@ async function _loadAmnesiaStatus() {
     //   (http://localhost:5500) tries to fetch('file:///run/...') and
     //   Chromium raises a cross-origin/protocol error.
     //
-    //   Defence in depth:
+    //   Defense in depth:
     //     1. Protocol pre-check — if we're not running from file://
     //        we skip the fetch entirely. No cross-origin exception can
     //        ever be generated because no fetch is ever initiated.
@@ -10899,7 +10899,7 @@ async function _loadAmnesiaStatus() {
             hide();
         }
     } catch (outerErr) {
-        // Absolute last line of defence. Nothing we do here may throw.
+        // Absolute last line of defense. Nothing we do here may throw.
         try {
             console.warn('[TEMPORARY] unexpected failure in _loadAmnesiaStatus, continuing:', outerErr && outerErr.message);
             hide();
@@ -10961,7 +10961,7 @@ window.addEventListener('DOMContentLoaded', () => {
      ================================================================
      AUTO-DETECTS localhost / 127.0.0.1 and activates a full Live-Server
      development environment: mocked SafeKeepOS bridge, URL-param-driven
-     boot mode selection, floating dev drawer, and a brightly-coloured
+     boot mode selection, floating dev drawer, and a brightly-colored
      ribbon so you can never confuse a dev build with a kiosk build.
 
      PRODUCTION SAFETY: Under file:// (the kiosk origin) the entire
@@ -10985,7 +10985,7 @@ window.addEventListener('DOMContentLoaded', () => {
      MODES (via ?devMode=…):
        normal     (default) — empty vault, welcome screen
        seeded              — vault has master seed, boots into dashboard
-       ephemeral           — #ephemeral=true synthesised, no-vault boot
+       ephemeral           — #ephemeral=true synthesized, no-vault boot
        amnesia             — sessionStorage flag set, amnesia badge on
      ================================================================ -->
 <script>
@@ -11409,7 +11409,7 @@ window.addEventListener('DOMContentLoaded', () => {
             return { success: true };
         },
 
-        // --- Coldcard (dev mock). Behaviour via the console:
+        // --- Coldcard (dev mock). Behavior via the console:
         //   window._devColdcard = 'refuse' | 'absent' | 'nochange'
         coldcardGetPairing: async function () { return _devCcPairing; },
         coldcardDetect: async function () {
@@ -11431,7 +11431,7 @@ window.addEventListener('DOMContentLoaded', () => {
             return { ok: true, status: 'signed', psbtBytes: bytes };
         },
 
-        // --- Trezor One (dev mock). Behaviour via the console:
+        // --- Trezor One (dev mock). Behavior via the console:
         //   window._devTrezor = 'wrongpin' | 'refuse' | 'absent' | 'unlocked'
         //   window._devTrezorXfp / window._devColdcardXfp = fingerprint the mocks report
         // Any PIN positions unlock it (unless 'wrongpin'). Like the real
@@ -11550,7 +11550,7 @@ window.addEventListener('DOMContentLoaded', () => {
     } catch (e) { /* noop */ }
 
     // -----------------------------------------------------------
-    // 5. VISUAL SIGNALLING — banner, drawer, toast
+    // 5. VISUAL SIGNALING — banner, drawer, toast
     // -----------------------------------------------------------
     function _injectBanner() {
         if (document.getElementById('skb-dev-banner')) return;
@@ -12075,7 +12075,7 @@ document.addEventListener('DOMContentLoaded', skui_initUiScale);
 
 // ---- UI Audio Engine ----------------------------------------------------
 // Tactile audio feedback for hover + click on interactive controls.
-// Wholly self-contained: every sound is synthesised on the fly via the
+// Wholly self-contained: every sound is synthesized on the fly via the
 // Web Audio API rather than loaded from a sample file, so the air-gapped
 // boot.html stays a single document with no base64-bloated audio assets.
 //
@@ -14281,7 +14281,7 @@ function _globalSeedStatusUpdate() {
         labelEl.textContent = identity || 'Seed Active';
         fpEl.textContent    = '[' + fp + ']';
 
-        // ── Semantic colour: teal for default seed, purple for passphrase wallet ──
+        // ── Semantic color: teal for default seed, purple for passphrase wallet ──
         // Orange (--skb-primary) is reserved for actions/warnings — when the
         // seed is being modified by an active BIP-39 passphrase we paint the
         // sidebar (and the dashboard badge below) in --skb-passphrase-active
@@ -14297,7 +14297,7 @@ function _globalSeedStatusUpdate() {
         // Fingerprint hex always renders white regardless of mode — the
         // border + label color carry the semantic teal-vs-purple cue,
         // while the fingerprint itself stays high-contrast for legibility.
-        // Previously this matched the label colour, which left the
+        // Previously this matched the label color, which left the
         // passphrase-active fingerprint as low-contrast purple-on-purple.
         fpEl.style.color           = '#fff';
 
@@ -14615,7 +14615,7 @@ function skui_toggleVis(inputId, btnId) {
  * without modification.
  *
  * The collapsed view shows the LAST WORD of the seed phrase plus the
- * fingerprint, in a single horizontal row, so the user can recognise
+ * fingerprint, in a single horizontal row, so the user can recognize
  * which seed is loaded without having to expand. The expanded view
  * shows the full grid exactly as before.
  *
@@ -14720,7 +14720,7 @@ async function seedAccordionRefreshSummaryFromMnemonic(accordionId, mnemonic) {
  * Collapse every seed accordion on the page. Called by showState() on
  * tool navigation so the collapsed view is always the starting state
  * when the user enters a tool — matches the original privacy-mask
- * "always-hidden-on-arrival" behaviour.
+ * "always-hidden-on-arrival" behavior.
  */
 function seedAccordionResetAll() {
     var nodes = document.querySelectorAll('.skb-seed-accordion');
@@ -14972,11 +14972,11 @@ function _resetSubmitQuiz() {
         // dismiss the modal and re-open it (which re-randomizes indices).
         _resetState.quizPassed = false;
         if (errEl) {
-            errEl.textContent = 'Backup verification failed. Reset cancelled.';
+            errEl.textContent = 'Backup verification failed. Reset canceled.';
             errEl.style.display = 'block';
         }
         var submit = document.getElementById('reset-quiz-submit');
-        if (submit) { submit.disabled = true; submit.textContent = 'Reset Cancelled'; }
+        if (submit) { submit.disabled = true; submit.textContent = 'Reset Canceled'; }
         // Auto-close after a moment so the user sees the failure
         setTimeout(function () { hideResetModal(); }, 1800);
         return;
@@ -15547,7 +15547,7 @@ function _wipeAllVolatileSeedState() {
 
 /**
  * User-facing hot-swap entry point. Zeros every RAM-resident
- * seed artefact via _wipeAllVolatileSeedState(), then routes
+ * seed artifact via _wipeAllVolatileSeedState(), then routes
  * the UI back to the initial Temporary Seed Ingest view
  * (the welcome screen in "Temporary Session" mode) so the
  * user can generate or restore a fresh seed without rebooting.
@@ -15565,7 +15565,7 @@ function ephemeralHotSwapSeed() {
         return;
     }
 
-    // 1. Zero every sensitive RAM-resident artefact.
+    // 1. Zero every sensitive RAM-resident artifact.
     _wipeAllVolatileSeedState();
 
     // 2. Drop tool-active body class so sidebar/hero revert to welcome layout.
@@ -18003,7 +18003,7 @@ function ptmp_onInput(e) {
     // fingerprint hint and cipher preview still react in real time.
     ptmp_syncBackingStore();
     // Debounce the dictionary search + AC dropdown rebuild (200 ms).
-    // Same optimisation as vtmp_onInput — prevents main-thread jank
+    // Same optimization as vtmp_onInput — prevents main-thread jank
     // on slower USB-boot hardware from the 2048-word filter + DOM churn.
     clearTimeout(_ptmpInputTimer);
     _ptmpInputTimer = setTimeout(function() {
@@ -20278,7 +20278,7 @@ function _psbtVerifyMultisigChange(btcLib, masterKey, myFingerprint, msInfo, out
  */
 /**
  * Recover the SP-tweaked spending key of a Silent Payment INPUT (P2TR keyed by
- * B_spend + t_k·G, signalled with the proprietary 0x1f / 0x20 PSBT input
+ * B_spend + t_k·G, signaled with the proprietary 0x1f / 0x20 PSBT input
  * fields). Used when a transaction has BOTH an SP input AND an SP output
  * ("SP → SP"): the standard matcher in _psbtDeriveInputKeyForSP only looks at
  * bip32 / tap derivation entries, but an SP input has neither — only the
@@ -20895,7 +20895,7 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
             // This runs BEFORE any multisig reconstruction, BEFORE
             // any single-sig derivation proof, and BEFORE we even
             // compute an address type. It is the ironclad first
-            // line of defence against a false-positive hijack on a
+            // line of defense against a false-positive hijack on a
             // stripped multisig PSBT.
             //
             // The rule is simple and purely structural:
@@ -21405,7 +21405,7 @@ function _psbtBuildReviewHtml(tx, auditResult) {
             // prove returns to this seed. Say so plainly — this is exactly how
             // a compromised coordinator would try to disguise a theft.
             const claimNote = out.changeClaimRejected
-                ? `<div style="margin: 0.4rem 0; padding: 0.45rem 0.6rem; border-left: 3px solid var(--skb-danger); background: rgba(220, 38, 38, 0.08); font-size: 0.8125rem; line-height: 1.45;"><strong>&#9888; Labelled as change, but NOT proven to be yours.</strong> ${_psbtEscape(out.auditDetail || '')} If this is not an address you intend to pay, do not sign.</div>`
+                ? `<div style="margin: 0.4rem 0; padding: 0.45rem 0.6rem; border-left: 3px solid var(--skb-danger); background: rgba(220, 38, 38, 0.08); font-size: 0.8125rem; line-height: 1.45;"><strong>&#9888; Labeled as change, but NOT proven to be yours.</strong> ${_psbtEscape(out.auditDetail || '')} If this is not an address you intend to pay, do not sign.</div>`
                 : '';
 
             outputsHtml += `
@@ -21451,7 +21451,7 @@ function _psbtBuildReviewHtml(tx, auditResult) {
     }
 
     // ======================================================
-    // CHANGE OUTPUTS — clearly labelled, no checkbox required
+    // CHANGE OUTPUTS — clearly labeled, no checkbox required
     // ======================================================
     const anyChange = verifiedChange.length + unverifiedChange.length;
     if (anyChange > 0) {
@@ -21778,7 +21778,7 @@ function _psbtUpdateSignGate() {
             'The audit engine flagged a change-address quorum mismatch &mdash; your master ' +
             'fingerprint was not found in the multisig change output. ' +
             '<strong>Force Sign</strong> is allowing you to proceed anyway. ' +
-            'This is correct behaviour ONLY when (a) the PSBT was generated by a watch-only ' +
+            'This is correct behavior ONLY when (a) the PSBT was generated by a watch-only ' +
             'wallet that does not know your fingerprint, AND (b) you have manually verified ' +
             'every destination on your coordinator. If you are unsure, untick Force Sign.';
     } else if (unverifiedChange && !dietAcked && !forceSign) {
@@ -23564,12 +23564,12 @@ async function psbtDoSign() {
             // Error-message decision tree (most-specific-first ordering):
             //
             //   1. signIdxCalls>0 AND initialSigs>0 → "already signed" by us
-            //      (library recognised our key, refused to append duplicate sig)
+            //      (library recognized our key, refused to append duplicate sig)
             //   2. multisig + forceSign + no sigs   → quorum mismatch, not our wallet
             //   3. multisig + fp mismatch + !force  → cosigner fps stripped (Diet PSBT)
             //   4. single-sig + fp mismatch         → wrong seed/passphrase
             //   5. signIdxCalls>0 (no prior sigs)   → derived pubkey ≠ input script
-            //   6. initialSigs>0 (no calls ran)     → other co-signer signed; our key not recognised
+            //   6. initialSigs>0 (no calls ran)     → other co-signer signed; our key not recognized
             //   7. else                             → no derivation data
             //
             // Branches 1, 6 are NEW (split out of the old generic
@@ -23583,7 +23583,7 @@ async function psbtDoSign() {
 
             if (signIdxCalls > 0 && initialSigs > 0) {
                 // -------- BRANCH 1: ALREADY SIGNED --------
-                // signIdx ran (our key was recognised) AND the PSBT already
+                // signIdx ran (our key was recognized) AND the PSBT already
                 // contained signatures before this attempt. The signing
                 // library refused to append a duplicate, producing a
                 // net-zero change in the sig count. This is the canonical
@@ -23633,13 +23633,13 @@ async function psbtDoSign() {
                 hint = ` ${signIdxCalls} signIdx call(s) ran but sig count didn't change. ` +
                     'The derived pubkey may not match the input\'s script. Check console logs for details.';
             } else if (initialSigs > 0) {
-                // -------- BRANCH 6: TX HAS OTHER-SIGNER SIGS, OUR KEY NOT RECOGNISED --------
+                // -------- BRANCH 6: TX HAS OTHER-SIGNER SIGS, OUR KEY NOT RECOGNIZED --------
                 // signIdxCalls === 0 means our key never matched any input's
                 // bip32Derivation, but the PSBT does already carry signatures.
-                // This is "another co-signer signed but you are not recognised
+                // This is "another co-signer signed but you are not recognized
                 // as a co-signer of this wallet."
                 hint = ` Transaction already has ${initialSigs} signature(s) from another co-signer, ` +
-                    'but YOUR seed wasn\'t recognised on any input. Load the correct seed phrase ' +
+                    'but YOUR seed wasn\'t recognized on any input. Load the correct seed phrase ' +
                     'for this wallet, double-check your passphrase, or enable "Force Sign by Pubkey Match" ' +
                     'to attempt pubkey-match against each quorum slot.';
             } else {
@@ -24229,7 +24229,7 @@ async function _psbtHwConfirmAndPair(kind, d) {
         _psbtCosignMessage = null;
         _psbtUpdateCosignCard();
     });
-    if (!yes) return { ok: false, status: 'cancelled', error: 'Cancelled. Nothing was signed.' };
+    if (!yes) return { ok: false, status: 'cancelled', error: 'Canceled. Nothing was signed.' };
     const r = kind === 'trezor' ? await os.trezorPair(xfp, d.id_xpub) : await os.coldcardPair(xfp, d.master_xpub);
     if (!r || !r.ok) return { ok: false, status: (r && r.status) || 'error', error: (r && r.error) || ('Could not use this ' + name + '.') };
     return { ok: true };
@@ -24630,7 +24630,7 @@ function _tzPinEls() {
     const grid = _psbtEl('div', { class: 'tz-pin-grid', id: 'tz-pin-grid' });
     _TZ_GRID_POSITIONS.forEach(function (pos, i) {
         const row = ['top', 'middle', 'bottom'][Math.floor(i / 3)];
-        const col = ['left', 'centre', 'right'][i % 3];
+        const col = ['left', 'center', 'right'][i % 3];
         grid.appendChild(_psbtEl('button', { type: 'button', class: 'tz-pin-cell',
             'aria-label': row + ' ' + col, onclick: function () { _tzPinAdd(pos); } }, '•'));
     });
@@ -24645,7 +24645,7 @@ function _tzPinEls() {
     actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', id: 'tz-pin-retry',
         style: 'display: none;', onclick: _tzPinRetry }, 'Show a new grid'));
     actions.appendChild(_psbtEl('button', { type: 'button', class: 'skb-btn', id: 'tz-pin-cancel',
-        onclick: function () { _tzPinClose({ ok: false, status: 'cancelled', error: 'PIN entry cancelled.' }); } }, 'Cancel'));
+        onclick: function () { _tzPinClose({ ok: false, status: 'cancelled', error: 'PIN entry canceled.' }); } }, 'Cancel'));
     modal.appendChild(actions);
     overlay.appendChild(modal);
     // Window + capture phase: runs before the app-wide Escape (back to the
@@ -24701,7 +24701,7 @@ function _tzPinKey(e) {
     // focus is — except on Cancel, which keeps its normal click.
     if (k === 'Enter' && e.target && e.target.id === 'tz-pin-cancel') return;
     e.preventDefault();
-    if (k === 'Escape') { if (!_tzPin.busy) _tzPinClose({ ok: false, status: 'cancelled', error: 'PIN entry cancelled.' }); return; }
+    if (k === 'Escape') { if (!_tzPin.busy) _tzPinClose({ ok: false, status: 'cancelled', error: 'PIN entry canceled.' }); return; }
     if (/^[1-9]$/.test(k)) { _tzPinAdd(Number(k)); return; }
     if (k === 'Backspace') { _tzPinBackspace(); return; }
     if (k === 'Enter') { if (_tzPin.retryOnly) _tzPinRetry(); else _tzPinSubmit(); }
@@ -24814,7 +24814,7 @@ async function psbtCosignTrezor() {
     if (!u || !u.ok) {
         _psbtCosignBusy = false;
         _psbtCosignMessage = (u && u.status === 'cancelled')
-            ? { kind: 'info', text: 'PIN entry cancelled. Nothing was signed.' }
+            ? { kind: 'info', text: 'PIN entry canceled. Nothing was signed.' }
             : { kind: 'error', text: (u && u.error) || 'The Trezor could not be unlocked.' };
         await _psbtUpdateCosignCard();
         return;
@@ -25290,7 +25290,7 @@ async function _psbtRenderQr() {
             var encoder = new window.UREncoder(urObj, _psbtUrFragmentSize);
             var totalFrames = encoder.fragmentsLength;
 
-            // 4. Materialise the deterministic frame set.
+            // 4. Materialize the deterministic frame set.
             var urFrames = new Array(totalFrames);
             for (var ui = 0; ui < totalFrames; ui++) urFrames[ui] = encoder.nextPart();
 
@@ -25402,7 +25402,7 @@ async function _psbtRenderQr() {
         titleEl.textContent = 'Raw Transaction — Raw Hex Type 2 (Electrum)';
         hintEl.textContent  = "Scan with Electrum's camera to broadcast. Raw hex (alphanumeric mode).";
         // Route through the shared painter: below threshold → single
-        // static frame (original behaviour); above threshold → animated
+        // static frame (original behavior); above threshold → animated
         // multipart frames Electrum can reassemble. Optical levers
         // preserved: width 580, margin 4, error correction L for the
         // chunkiest modules Electrum's camera can handle.
@@ -25624,7 +25624,7 @@ var _psbtUrFragmentSize = 200;
 var _psbtCourierChunkSize = 500;   // bytes per Courier file chunk (the Courier's own default)
 
 // Format chosen for animated frames: `pNofM <chunk>`. This is the
-// legacy multipart format first popularised by Specter-Desktop and
+// legacy multipart format first popularized by Specter-Desktop and
 // now understood by virtually every PSBT-capable wallet that accepts
 // animated-QR input. We deliberately avoid BC-UR here because Nunchuk
 // and Electrum have historically had flaky BC-UR decoders and the
@@ -25637,10 +25637,10 @@ var _psbtCourierChunkSize = 500;   // bytes per Courier file chunk (the Courier'
 // handle is stashed in _psbtQrAnimTimer so _psbtStopQrAnimation() can
 // tear it down from psbtBackToDashboard (tool close), psbtResetToIngest
 // (new transaction), psbtQrFormatChange (format swap), and the top of
-// _psbtRenderQr (defence-in-depth before each re-render).
+// _psbtRenderQr (defense-in-depth before each re-render).
 //
 // counterBuilder is a caller-supplied formatter so each branch can
-// still customise its status-line wording ("hex chars" vs "chars",
+// still customize its status-line wording ("hex chars" vs "chars",
 // "Nunchuk Raw Hex" vs "Electrum Raw Hex", etc.).
 // Strip the inline `style.width` / `style.height` that QRCode.toCanvas
 // writes onto the canvas after every render. Those inline values match
@@ -25655,11 +25655,11 @@ function _psbtStripCanvasInlineSize(canvas) {
     try {
         canvas.style.removeProperty('width');
         canvas.style.removeProperty('height');
-    } catch (e) { /* belt-and-braces — !important in CSS is the primary defence */ }
+    } catch (e) { /* belt-and-braces — !important in CSS is the primary defense */ }
 }
 
 async function _psbtPaintQr(canvas, payload, qrOpts, counterEl, counterBuilder) {
-    // Defence-in-depth: stop any prior animation before we decide what
+    // Defense-in-depth: stop any prior animation before we decide what
     // to do. Callers already invoke this, but the belt-and-braces call
     // here means a direct call to _psbtPaintQr (hypothetical future
     // reuse) can never leak a stale interval.
@@ -25702,7 +25702,7 @@ async function _psbtPaintQr(canvas, payload, qrOpts, counterEl, counterBuilder) 
                 totalChars: payload.length
             });
             // Static frame — density / speed sliders have no observable
-            // effect, so visually grey them out and surface the small
+            // effect, so visually gray them out and surface the small
             // "applies to animated only" note. See _psbtSetPlaybackControlsAnimated.
             _psbtSetPlaybackControlsAnimated(false);
         } catch (eStatic) {
@@ -25742,7 +25742,7 @@ async function _psbtPaintQr(canvas, payload, qrOpts, counterEl, counterBuilder) 
 //     prefix by _psbtPaintQr's animated branch);
 //   • the UR path (frames are complete `ur:crypto-psbt/...` strings
 //     produced by UREncoder.nextPart()).
-// Defence-in-depth: stops any prior animation before starting, so the
+// Defense-in-depth: stops any prior animation before starting, so the
 // caller is free to invoke us straight after a state change without
 // having to call _psbtStopQrAnimation() themselves.
 async function _psbtAnimateFrames(canvas, frames, qrOpts, counterEl, counterBuilder, totalChars) {
@@ -31749,13 +31749,72 @@ function _descImportSingleKey(text) {
              label: 'Built from a single extended public key (' + k.p + ')', notes: notes, assumed: !byPrefix && !byPath };
 }
 
+/* Text that arrived as hex (some wallets put the setup file's bytes in a QR
+   as hex digits) → the text itself, else null. */
+function _descImportFromHex(text) {
+    var h = text.replace(/\s+/g, '');
+    if (h.length < 40 || h.length % 2 || !/^[0-9a-fA-F]+$/.test(h)) return null;
+    var bytes = new Uint8Array(h.length / 2);
+    for (var i = 0; i < bytes.length; i++) bytes[i] = parseInt(h.substr(i * 2, 2), 16);
+    var s;
+    try { s = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (_) { return null; }
+    return /[\u0000-\u0008\u000e-\u001f]/.test(s) ? null : s;
+}
+
+/* A multisig setup file whose line breaks were lost ("…2026Policy: 2 of
+   3Derivation: m/48'/0'/0'/2'Format: P2WSH# derivation: …8C466A54: xpub…")
+   → the same file with its lines back. Only used when the text has no line
+   breaks at all and clearly is such a file. */
+function _descImportRestoreLines(text) {
+    if (text.indexOf('\n') !== -1 || !/Policy\s*:/i.test(text) || !/[0-9A-Fa-f]{8}\s*:\s*[A-Za-z]pub/.test(text)) return text;
+    return text
+        .replace(/\s*(#)/g, '\n$1')
+        .replace(/\s*(Name|Policy|Derivation|Format|seed|passphrase)\s*:/gi, '\n$1:')
+        .replace(/(#\s*)\n(derivation:)/gi, '$1$2')
+        .replace(/\s*([0-9A-Fa-f]{8})\s*:\s*(?=[xyzYZtuvUV]pub)/g, '\n$1: ')
+        .replace(/^\n+/, '');
+}
+
+/* A single-key JSON export ({"xfp","xpub","path"}, as BlueWallet / Coldcard
+   share one cosigner) → "[xfp/path]xpub", else null. */
+function _descImportJsonKey(text) {
+    if (!/^\x7b/.test(text)) return null;
+    var j;
+    try { j = JSON.parse(text); } catch (_) { return null; }
+    if (!j || typeof j !== 'object') return null;
+    var key = j.xpub || j.Zpub || j.zpub || j.Ypub || j.ypub;
+    var fp = j.xfp || j.fingerprint || j.master_fingerprint;
+    var path = j.path || j.deriv || j.derivation;
+    if (typeof key !== 'string') {
+        if (j.bip84 || j.bip49 || j.bip44 || j.bip48_2 || j.bip48_1) {
+            throw new Error('This is a hardware wallet’s key export with several accounts in it. Export the wallet itself instead (a multisig setup file or descriptor from your wallet app).');
+        }
+        return null;
+    }
+    if (typeof fp === 'string' && /^[0-9A-Fa-f]{8}$/.test(fp) && typeof path === 'string') {
+        var p = _descImportPath(path);
+        if (p === null) throw new Error('The key path “' + path + '” in this file isn’t a valid path.');
+        return '[' + fp.toLowerCase() + (p ? '/' + p : '') + ']' + key.trim();
+    }
+    return key.trim();
+}
+
 /* Main entry: raw Verify input → { ok, error, converted, descriptor, label, notes, expectFirstAddress }. */
 function _descImportConvert(raw) {
-    var text = String(raw || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim().replace(/^bitcoin:(\/\/)?/i, '');
+    var text = String(raw || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n')
+        .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().replace(/^bitcoin:(\/\/)?/i, '');
     if (!text) return { ok: false, error: 'Paste, scan or load an output descriptor or wallet export first.' };
+    var fromHex = _descImportFromHex(text);
+    if (fromHex) text = fromHex.replace(/\r\n?/g, '\n').trim();
+    text = _descImportRestoreLines(text);
     var priv = _descImportPrivateCheck(text);
     if (priv) return { ok: false, error: priv };
     try {
+        var jsonKey = _descImportJsonKey(text);
+        if (jsonKey) {
+            var fromJson = _descImportSingleKey(jsonKey);
+            if (fromJson) { fromJson.label += ', from a key export (JSON)'; return fromJson; }
+        }
         var isSetup = /^\s*policy\s*:/im.test(text) || /^\s*format\s*:/im.test(text) ||
                       /^\s*[0-9A-Fa-f]{8}\s*:\s*[a-zA-Z]{4}[1-9A-HJ-NP-Za-km-z]{100,}\s*$/m.test(text);
         if (isSetup) return _descImportSetup(text);
@@ -31771,7 +31830,9 @@ function _descImportConvert(raw) {
     } catch (e) {
         return { ok: false, error: e.message };
     }
-    return { ok: false, error: 'SafeKeep doesn’t recognise this. Paste an output descriptor, a multisig setup file (BlueWallet, Coldcard, Sparrow…), a BSMS record, or an extended public key (xpub / ypub / zpub).' };
+    var head = text.slice(0, 40).replace(/\s+/g, ' ');
+    return { ok: false, error: 'SafeKeep doesn’t recognize this. Paste an output descriptor, a multisig setup file (BlueWallet, Coldcard, Sparrow…), a BSMS record, or an extended public key (xpub / ypub / zpub). ' +
+             'Received ' + text.length + ' characters, starting “' + head + (text.length > 40 ? '…' : '') + '”.' };
 }
 
 /* Show (or hide, with null) the "converted from …" card above the result. */
@@ -32786,7 +32847,7 @@ function sqr_printBlankGrid() {
 
     // Row/col numbers \u2014 all four sides for hand-coloring legibility
     // (Task #47). The original loop printed labels on the top edge and
-    // left edge only; for users hand-colouring a 21x21 or 25x25 grid,
+    // left edge only; for users hand-coloring a 21x21 or 25x25 grid,
     // losing the row/column count partway down the page is a real risk.
     // Mirroring the labels onto the bottom and right edges gives the
     // user a fixed reference no matter where their pencil is on the
@@ -34245,7 +34306,7 @@ function rlq_onCipherCheck() {
  * bypassing the "Type Yes" confirmation gate. We block that here.
  *
  * `event.preventDefault()` is the FIRST line — unconditional — so the
- * native toggle is always cancelled before we branch on state. Every
+ * native toggle is always canceled before we branch on state. Every
  * state change to chk.checked from this point on is programmatic.
  *
  * Three states are possible when the user activates the Master Seed row:
@@ -34262,7 +34323,7 @@ function rlq_onSeedClick(evt) {
     // Block the native toggle for ALL paths. The input is fully
     // interactable (matches its siblings' DOM shape), so without this
     // line, every click and every Space-press on a focused checkbox
-    // would flip chk.checked before our state machine ran. Centralising
+    // would flip chk.checked before our state machine ran. Centralizing
     // the preventDefault here also covers clicks that hit the label
     // text or the description div — they bubble up to the wrapping
     // <label>'s onclick, which is this function.
@@ -34293,13 +34354,13 @@ function rlq_onSeedClick(evt) {
         if (modal) modal.style.display = 'none';
         // Symmetric feedback: a transient banner confirmed inclusion when
         // the user typed "Yes"; emit the mirror message on deselection so
-        // they get explicit acknowledgement that the change took effect.
+        // they get explicit acknowledgment that the change took effect.
         showStatus('Master Seed will not be included in backup.', 'info');
         return;
     }
 
     // (C) Fresh request to arm the seed → show the modal. The native
-    // toggle was already cancelled at the top of the function, so the
+    // toggle was already canceled at the top of the function, so the
     // checkbox stays visually unchecked while the user types "Yes".
     if (modal) modal.style.display = 'block';
     if (input) { input.value = ''; input.focus(); }
@@ -34421,7 +34482,7 @@ var _RLQ_APP_SETTINGS_KEYS = [
 
 /**
  * Read every Application Settings key out of localStorage and return a
- * plain object suitable for serialisation. Missing keys are omitted so the
+ * plain object suitable for serialization. Missing keys are omitted so the
  * payload stays minimal and forward-compatible.
  */
 function _rlqCollectAppSettings() {
@@ -34474,7 +34535,7 @@ function _rlqCollectAppSettings() {
 /**
  * Read every saved Encrypted Note out of the in-memory _notesStore (via the
  * OS bridge's listNotes/loadNote pair) and return a plain array of full
- * note objects suitable for serialisation.
+ * note objects suitable for serialization.
  *
  * The Encrypted Notes ("Codex") tool already persists notes through the OS
  * bridge (codex_save → os.saveNote at line 26118). When 'codex' is among
@@ -34496,7 +34557,7 @@ function _rlqCollectAppSettings() {
  *
  * Each entry shape: { slug, title, content, updatedAt }.
  * Returns [] (not null) when no notes exist or the bridge is missing, so
- * callers can serialise unconditionally without null-checks.
+ * callers can serialize unconditionally without null-checks.
  */
 async function _rlqCollectNotes() {
     var out = [];
@@ -34692,7 +34753,7 @@ function rlq_renderEntryButton(filename, kind) {
     // files are restorable backups vs. read-only hardware-wallet exports.
     // • backup  → primary-purple (same as before — familiar to users)
     // • export  → secondary-teal (calls out "different thing" without
-    //             signalling danger)
+    //             signaling danger)
     // • unknown → dim border, no hover state, not clickable
     var BG_IDLE, BG_HOVER, BORDER, LABEL_TEXT, LABEL_BG, LABEL_COLOR, CURSOR;
     if (isExport) {
@@ -34725,7 +34786,7 @@ function rlq_renderEntryButton(filename, kind) {
         ? ''
         : ' onclick="rlq_pickEntry(this.getAttribute(\'data-rlq-entry-name\'), \'' + kind + '\')"';
 
-    // Hover behaviour differs for unknown rows (no change) vs. clickable rows.
+    // Hover behavior differs for unknown rows (no change) vs. clickable rows.
     var hoverIn = isUnknown
         ? ''
         : ' onmouseover="this.style.background=\'' + BG_HOVER + '\'"';
@@ -34820,7 +34881,7 @@ function rlq_pickEntry(filename, kind) {
         return;
     }
 
-    // Backup path — original staging behaviour.
+    // Backup path — original staging behavior.
     rlq_pickBackup(filename);
 }
 
@@ -35288,7 +35349,7 @@ async function archive_mount() {
     }
 
     // Raise the whitelist flag BEFORE the picker call so the Storage
-    // Integrity Sentinel recognises this as a sanctioned mount.
+    // Integrity Sentinel recognizes this as a sanctioned mount.
     _storageTransferMountActive = true;
     try {
         _archiveDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
@@ -35310,7 +35371,7 @@ async function archive_mount() {
         await archive_refresh();
     } catch (err) {
         if (err.name === 'AbortError') {
-            // User cancelled the picker — not an error
+            // User canceled the picker — not an error
             return;
         }
         showStatus('Failed to mount directory: ' + err.message, 'error');
@@ -37446,7 +37507,7 @@ async function arm_deriveWallet() {
         // Nunchuk, and Coldcard all accept via SD-card / file import.
         const xpubValue = accountNode.publicExtendedKey;
         let displayValue = xpubValue;
-        // Defensive normalisation: any saved-state or external bridge
+        // Defensive normalization: any saved-state or external bridge
         // call still requesting the deprecated `specter` value falls
         // through to the canonical JSON path rather than rendering an
         // empty xpub.
@@ -37555,7 +37616,7 @@ async function arm_deriveWallet() {
             // schema lets `File > Open` import a watch-only single-sig
             // wallet that preserves the master fingerprint in PSBTs WITHOUT
             // triggering the hardware-plugin loader. Switching `type` to
-            // "hardware" + "hw_type": "coldcard" was the previous behaviour
+            // "hardware" + "hw_type": "coldcard" was the previous behavior
             // and caused USB plugin instantiation on desktop Electrum
             // builds with no Coldcard attached.
             //
@@ -37705,7 +37766,7 @@ async function arm_deriveWallet() {
 
         // Format-specific UI chrome — buttons are NOT mode-toggled here
         // any more. Copy / Show QR / Download JSON are universally
-        // visible (rendered statically in the markup); their behaviour
+        // visible (rendered statically in the markup); their behavior
         // is context-aware at click time. The only thing this block now
         // controls is how the <pre> preview block itself paints:
         //   • JSON formats        → multi-line pre-wrap + monospace
@@ -37819,7 +37880,7 @@ function arm_copyXpub() {
 // Specter releases predate Taproot support). Coldcard itself emits all
 // four blocks because its export reflects the device's full key tree;
 // SafeKeep's UI captures explicit user intent through the Address Type
-// dropdown, so we honour that intent rather than dumping every variant.
+// dropdown, so we honor that intent rather than dumping every variant.
 //
 // `pathType` selects the sub-block: '84' → bip84 (p2wpkh, native segwit),
 // '49' → bip49 (p2sh-p2wpkh, nested), '44' → bip44 (p2pkh, legacy),
@@ -38162,7 +38223,7 @@ function _armBuildExportFilename(snapshot, keyFormat) {
     const derivTag = (snapshot && snapshot.derivationKey ? snapshot.derivationKey : '').toUpperCase();
     const suffix   = _armKeyFormatToSuffix(keyFormat);
     // Spec: <fingerprint>-<derivation>-<key format>.json. Derivation is
-    // the ONLY optional segment — defence-in-depth so a future helper
+    // the ONLY optional segment — defense-in-depth so a future helper
     // change that drops derivationKey doesn't crash the export. The
     // suffix is always present (helper above never returns empty).
     return derivTag
@@ -38403,7 +38464,7 @@ async function _armSaveExportToTransfer(filename, text) {
             // AbortError = the user closed the picker. Treat as a
             // benign cancel, not a routing failure.
             if (e && e.name === 'AbortError') {
-                showStatus('Save cancelled.', 'info');
+                showStatus('Save canceled.', 'info');
                 return false;
             }
             // Any other error → fall through to the legacy anchor
@@ -38474,7 +38535,7 @@ async function arm_downloadColdcardJson() {
     // so each of the four dropdown options that route through this
     // downloader — coldcard_json, descriptor_text, slip132, bip380 —
     // produces a distinct filename instead of all four colliding on
-    // 'SLIP-132'. Mapping is centralised in _armKeyFormatToSuffix.
+    // 'SLIP-132'. Mapping is centralized in _armKeyFormatToSuffix.
     const liveKeyFormat = (keyFormatEl && keyFormatEl.value) || 'coldcard_json';
     const filename = _armBuildExportFilename(snapshot, liveKeyFormat);
 
@@ -38606,7 +38667,7 @@ async function arm_computeNunchukSnapshot() {
 }
 
 // Download the currently-active Nunchuk JSON profile.
-// Mirrors `arm_downloadColdcardJson` exactly for routing behaviour:
+// Mirrors `arm_downloadColdcardJson` exactly for routing behavior:
 // boot-drive → Reliquary Watcher (transfer partition), dev/demo →
 // browser Blob anchor. Filename is built by `_armBuildExportFilename`
 // from the live `#arm-key-format` dropdown value at click time, in the
@@ -38635,7 +38696,7 @@ async function arm_downloadNunchukJson() {
     }
 
     // Task #148: filename suffix is now derived from the LIVE Key
-    // Format dropdown via the centralised _armKeyFormatToSuffix helper.
+    // Format dropdown via the centralized _armKeyFormatToSuffix helper.
     // For nunchuk_json this resolves to 'HWW-MINIMAL', preserving the
     // brand-agnostic, stripped-schema-descriptive convention.
     const filename = _armBuildExportFilename(snapshot, 'nunchuk_json');
@@ -38785,7 +38846,7 @@ async function arm_computeElectrumSnapshot() {
 }
 
 // Download the currently-active Electrum Watch-Only Wallet JSON.
-// Mirrors `arm_downloadColdcardJson` exactly for routing behaviour:
+// Mirrors `arm_downloadColdcardJson` exactly for routing behavior:
 // boot-drive → Reliquary Watcher (transfer partition), dev/demo →
 // browser Blob anchor. Filename is built by `_armBuildExportFilename`
 // from the live `#arm-key-format` dropdown value at click time, in the
@@ -38821,7 +38882,7 @@ async function arm_downloadElectrumWallet() {
     }
 
     // Task #148: filename suffix is now derived from the LIVE Key
-    // Format dropdown via the centralised _armKeyFormatToSuffix helper.
+    // Format dropdown via the centralized _armKeyFormatToSuffix helper.
     // For electrum_json this resolves to 'BIP-32-WATCH', distinguishing
     // it from the bip380 dropdown's 'BIP-32' suffix even though both
     // visually mention BIP-32 in their label — the file body shapes
@@ -39059,7 +39120,7 @@ async function arm_toggleXpubQR() {
                     try {
                         canvas.style.removeProperty('width');
                         canvas.style.removeProperty('height');
-                    } catch (e) { /* belt-and-braces; CSS !important is the primary defence */ }
+                    } catch (e) { /* belt-and-braces; CSS !important is the primary defense */ }
                 }
             } catch (e) {
                 // Most common failure: payload exceeds v40-H capacity.
@@ -39345,7 +39406,7 @@ function auth_init() {
     // currently loaded seed.
     auth_deriveKey();
 
-    // Persist the (re)initialised state so a fresh entry seeds the cache too.
+    // Persist the (re)initialized state so a fresh entry seeds the cache too.
     auth_saveState();
 }
 
@@ -40014,7 +40075,7 @@ async function auth_verify() {
 
         // BIP-322 v1.0.0 prepends a 3-char human-readable variant prefix
         // (smp = simple, ful = full, pof = proof-of-funds) to the base64
-        // signature. Strip a recognised "smp" prefix before decoding so we
+        // signature. Strip a recognized "smp" prefix before decoding so we
         // can verify our own — and Sparrow 2.4.x+ — finalized-spec output.
         // A genuinely unprefixed simple witness always base64-encodes to a
         // leading 'A' (the witness item count 0x01/0x02 has its top 6 bits
@@ -40732,7 +40793,7 @@ async function eob_captureVideoNoise() {
 // mnemonic, and routes it per eob_context — IDENTICALLY for both the
 // manual Forge (eob_forgeSeed: SHA-256(pool) XOR CSPRNG) and the
 // one-click easy button (eob_generateSecureSeed: pure CSPRNG draw).
-// Centralising this guarantees the easy button "outputs the seed phrase
+// Centralizing this guarantees the easy button "outputs the seed phrase
 // exactly as the manual tools do".
 //
 //   onboarding → SafeKeepOS.restoreMasterSeed (or _ephemeralCommitSeed)
@@ -40756,7 +40817,7 @@ async function _eobFinalizeEntropy(entropy) {
     mnemonic = _skvDemoGenerated(mnemonic, entropy);
 
     // Stop camera + detach listeners. No-op for the easy path (it never
-    // started them), but safe and keeps the manual path's behaviour.
+    // started them), but safe and keeps the manual path's behavior.
     eob_cleanup();
 
     // ---- CONTEXT-AWARE ROUTING ----
@@ -41319,7 +41380,7 @@ async function s39r_recover() {
                      'Does this match the "Master Fingerprint" printed on your SLIP-39 share cards?\n\n' +
                      'If it does NOT match, the passphrase is almost certainly wrong (SLIP-39 cannot ' +
                      'detect a wrong passphrase). Press Cancel and re-enter it.')) {
-            s39r_showLocalStatus('Recovery cancelled — fingerprint ' + recFp + ' was not confirmed. Nothing was written. Check the SLIP-39 passphrase and try again.', 'error');
+            s39r_showLocalStatus('Recovery canceled — fingerprint ' + recFp + ' was not confirmed. Nothing was written. Check the SLIP-39 passphrase and try again.', 'error');
             return;
         }
 
@@ -41474,7 +41535,7 @@ function _s39SyncSessionPassphrase() {
 }
 
 /**
- * Initialise the tool state on entry — load seed from session.
+ * Initialize the tool state on entry — load seed from session.
  * Soft-init: if the tool already has active work, preserve state
  * (except passphrase sync, which always refreshes).
  */
@@ -41559,7 +41620,7 @@ function s39_cancel() {
 
     // Navigate back
     showState('state-dashboard');
-    showStatus('Shamir operation cancelled. All generated shares have been cleared from memory.', 'info');
+    showStatus('Shamir operation canceled. All generated shares have been cleared from memory.', 'info');
 }
 
 /**
@@ -43132,7 +43193,7 @@ function tfa_renderTable() {
     --skb-text-dim:   #71717a;
 
     /* Bitcoin orange stays the single accent. Material-era teal / purple /
-       pink retired for calmer semantic colours. */
+       pink retired for calmer semantic colors. */
     --skb-secondary:       #34d399;
     --skb-secondary-hover: #6ee7b7;
     --skb-secondary-muted: rgba(52, 211, 153, 0.10);

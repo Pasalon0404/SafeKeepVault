@@ -60,7 +60,7 @@ function makeEnv(seedPhrase) {
   const statuses = [];
   const ctx = vm.createContext({
     window: { BtcMath: { HDKey, btcSigner, bip39 }, SeedSession: { get: () => (seedPhrase ? { mnemonic: seedPhrase } : null) } },
-    document: { getElementById: el, createElement: () => { const d = { set textContent(v) { d.innerHTML = String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); } }; return d; } }, Uint8Array, Math, Number, String, parseInt, isNaN, setTimeout, Promise, console,
+    TextDecoder, document: { getElementById: el, createElement: () => { const d = { set textContent(v) { d.innerHTML = String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); } }; return d; } }, Uint8Array, Math, Number, String, parseInt, isNaN, setTimeout, Promise, console,
     showStatus(m, t) { statuses.push(t + ': ' + m); }, SKScanner: null,
   });
   vm.runInContext([
@@ -72,7 +72,7 @@ function makeEnv(seedPhrase) {
         '_descChainNodes', '_descScreenAddresses', '_descRecvWallet', '_descRecvAddressAt', '_descRecvGroups', 'desc_recvReset', 'desc_recvStep', 'desc_recvShow',
         '_descRecvNormalize', '_descRecvResult', 'desc_recvCheck', 'desc_recvStopScan', '_descShowAddrExport', 'desc_arraysEqual',
         '_descImportPrivateCheck', '_descImportKey', '_descImportPath', '_descImportWithChecksum', '_descImportSetup', '_descImportBsms',
-        '_descImportDescriptorList', '_descImportSingleKey', '_descImportConvert', '_descShowConverted',
+        '_descImportDescriptorList', '_descImportSingleKey', '_descImportFromHex', '_descImportRestoreLines', '_descImportJsonKey', '_descImportConvert', '_descShowConverted',
         '_descVerifyAddrRows', 'desc_verify', 'desc_useVerified'].map(extract),
   ].join('\n'), ctx);
   const verify = async (d) => { statuses.length = 0; el('desc-verify-result').style.display = ''; el('desc-verify-input').value = d; await ctx.desc_verify(); return {

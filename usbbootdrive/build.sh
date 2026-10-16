@@ -150,7 +150,7 @@ sudo chattr -R -i "$STAGING_DIR" 2>/dev/null || true
 # even if the trap fails.
 # The chroot is about to be rebuilt — it is no longer "complete" until the
 # marker below is re-written after hardening (quick-update.sh relies on this).
-# Remove the completion proofs FIRST, then the trees — so a build cancelled
+# Remove the completion proofs FIRST, then the trees — so a build canceled
 # mid-deletion can never leave "proof" next to a half-deleted chroot.
 rm -f "$WORKSPACE/.chroot-complete"
 rm -f "$OUTPUT_IMG"
@@ -299,7 +299,7 @@ umount -l "$CHROOT_DIR/sys" 2>/dev/null || true
 
 echo "Chroot configuration complete."
 # Mark the chroot as fully set up AND hardened — quick-update.sh refuses to
-# reuse a chroot without this (a cancelled build leaves a half-configured tree).
+# reuse a chroot without this (a canceled build leaves a half-configured tree).
 date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE/.chroot-complete"
 
 # =====================================================================

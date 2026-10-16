@@ -99,7 +99,7 @@ expect('ATTACK 2-of-3 {me,X,Y} + attacker strips xpubs', ms(msOut([me, X, Y], 2,
 expect('ATTACK 1-of-2 {me,X}', ms(msOut([me, X], 1, 1, 0, 89_000_000n), W), 1, 'hijack');
 expect('ATTACK 1-of-2 {me,X} + attacker strips xpubs', ms(msOut([me, X], 1, 1, 0, 89_000_000n), null), 1, 'hijack');
 expect('ATTACK 1-of-3 {me,B,C} (weakened threshold)', ms(msOut(W, 1, 1, 0, 89_000_000n), W), 1, 'hijack');
-expect('ATTACK {me,X,Y} relabelled with B,C fingerprints', ms(msOut([me, X, Y], 2, 1, 0, 89_000_000n, [me.fingerprint, B.fingerprint, C.fingerprint]), W), 1, 'hijack');
+expect('ATTACK {me,X,Y} relabeled with B,C fingerprints', ms(msOut([me, X, Y], 2, 1, 0, 89_000_000n, [me.fingerprint, B.fingerprint, C.fingerprint]), W), 1, 'hijack');
 
 console.log(`\nPSBT CHANGE AUDIT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
