@@ -7025,7 +7025,7 @@
                         <div id="settings-idle-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Idle Timers</h4>
                             <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 1rem; line-height: 1.6;">
-                                Auto-Lock returns the vault to the password prompt after the chosen number of idle minutes. Display Sleep blanks the screen via the OS power-management bridge. Set either to <strong>0</strong> to disable.
+                                Auto-Lock returns the vault to the password prompt after the chosen number of idle minutes. Display Sleep blanks the screen via the OS power-management bridge. Auto-Off powers SafeKeep down (clearing its memory) after the chosen idle minutes, in the app and at the password prompt, with a 60-second warning first. Set any of them to <strong>0</strong> to turn it off; Auto-Off at 0 means stay on.
                             </p>
                             <div style="display: flex; gap: 1.25rem; flex-wrap: wrap;">
                                 <label for="settings-display-sleep-min" style="display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text);">
@@ -7041,6 +7041,13 @@
                                            oninput="skbIdleTimers.onAutoLockInput(this.value)"
                                            style="width: 5rem; padding: 0.4rem 0.55rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.875rem; text-align: right;">
                                     <span style="color: var(--skb-text-muted); letter-spacing: 0.05em;">MIN</span>
+                                </label>
+                                <label for="settings-auto-off-min" style="display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text);">
+                                    <span style="letter-spacing: 0.05em;">AUTO-OFF</span>
+                                    <input type="number" id="settings-auto-off-min" min="0" max="240" step="1" value="30"
+                                           oninput="skbIdleTimers.onAutoOffInput(this.value)"
+                                           style="width: 5rem; padding: 0.4rem 0.55rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.875rem; text-align: right;">
+                                    <span style="color: var(--skb-text-muted); letter-spacing: 0.05em;">MIN (0 = STAY ON)</span>
                                 </label>
                             </div>
                         </div>
@@ -10656,13 +10663,17 @@ document.addEventListener('keydown', function(evt) {
 // =====================================================================
 window.skbIdleTimers = (function _installIdleTimers() {
     var LS_KEY = 'safekeepIdleTimers';
-    var DEFAULTS = { displaySleepMinutes: 10, autoLockMinutes: 15 };
+    var DEFAULTS = { displaySleepMinutes: 10, autoLockMinutes: 15, autoOffMinutes: 30 };
+    var AUTO_OFF_WARN_SEC = 60;   // on-screen countdown before Auto-Off
     var THROTTLE_MS = 1000;
 
     var state = { displaySleepMinutes: DEFAULTS.displaySleepMinutes,
-                  autoLockMinutes:     DEFAULTS.autoLockMinutes };
+                  autoLockMinutes:     DEFAULTS.autoLockMinutes,
+                  autoOffMinutes:      DEFAULTS.autoOffMinutes };
 
     var _autoLockTimerId = null;
+    var _autoOffTimerId  = null;   // fires the warning
+    var _autoOffTickId   = null;   // 1 s countdown while the warning shows
     var _lastActivity    = 0;
 
     function _persist() {
@@ -10682,6 +10693,9 @@ window.skbIdleTimers = (function _installIdleTimers() {
                 }
                 if (typeof parsed.autoLockMinutes === 'number' && parsed.autoLockMinutes >= 0) {
                     state.autoLockMinutes = parsed.autoLockMinutes;
+                }
+                if (typeof parsed.autoOffMinutes === 'number' && parsed.autoOffMinutes >= 0 && parsed.autoOffMinutes <= 240) {
+                    state.autoOffMinutes = Math.floor(parsed.autoOffMinutes);
                 }
             }
         } catch (_) { /* corrupt JSON — fall through to defaults */ }
@@ -10730,6 +10744,73 @@ window.skbIdleTimers = (function _installIdleTimers() {
         }
     }
 
+    // ---- Auto-Off (Settings → Idle Timers) ----
+    // After autoOffMinutes without mouse / keyboard / touch activity,
+    // SafeKeep powers off (which also clears RAM), whether or not a seed
+    // is loaded. A 60-second on-screen countdown comes first; any activity
+    // cancels it. 0 = stay on. Only on the SafeKeep stick (file://): the
+    // website demo has nothing to power off. With the browser closed (at
+    // boot or after a lock), unlock-vault.sh's prompts time out instead.
+    function _autoOffAvailable() {
+        return window.location.protocol === 'file:';
+    }
+
+    function _clearAutoOffTimer() {
+        if (_autoOffTimerId !== null) { clearTimeout(_autoOffTimerId); _autoOffTimerId = null; }
+        if (_autoOffTickId !== null) { clearInterval(_autoOffTickId); _autoOffTickId = null; }
+        var ov = document.getElementById('sk-auto-off-warning');
+        if (ov) ov.remove();
+    }
+
+    function _scheduleAutoOffTimer() {
+        _clearAutoOffTimer();
+        if (state.autoOffMinutes <= 0 || !_autoOffAvailable()) return;   // 0 = stay on
+        var totalSec = state.autoOffMinutes * 60;
+        var warnSec = Math.min(AUTO_OFF_WARN_SEC, totalSec);
+        _autoOffTimerId = setTimeout(function () { _showAutoOffWarning(warnSec); }, (totalSec - warnSec) * 1000);
+    }
+
+    function _showAutoOffWarning(seconds) {
+        _autoOffTimerId = null;
+        var left = seconds;
+        var ov = document.createElement('div');
+        ov.id = 'sk-auto-off-warning';
+        ov.setAttribute('role', 'alertdialog');
+        ov.setAttribute('aria-live', 'assertive');
+        ov.style.cssText = 'position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;' +
+            'background:rgba(0,0,0,0.72);font-family:system-ui,sans-serif;';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:var(--skb-bg-card,#1a1a1a);color:var(--skb-text,#fff);border:2px solid var(--skb-primary,#f7931a);' +
+            'border-radius:12px;padding:1.75rem 2rem;max-width:30rem;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
+        var title = document.createElement('div');
+        title.style.cssText = 'font-size:1.25rem;font-weight:800;margin-bottom:0.5rem;';
+        title.textContent = 'Turning off in ' + left + ' s';
+        var msg = document.createElement('div');
+        msg.style.cssText = 'font-size:0.9375rem;line-height:1.5;color:var(--skb-text-muted,#bbb);margin-bottom:1.25rem;';
+        msg.textContent = 'No activity for a while, so SafeKeep will power off and clear its memory (Auto-Off). Move the mouse or press a key to stay on.';
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:0.75rem;justify-content:center;';
+        var stay = document.createElement('button');
+        stay.type = 'button'; stay.className = 'skb-btn skb-btn--primary'; stay.textContent = 'Stay On';
+        stay.onclick = function () { window.skbIdleTimers.stayOn(); };
+        row.appendChild(stay);
+        box.appendChild(title); box.appendChild(msg); box.appendChild(row); ov.appendChild(box);
+        (document.body || document.documentElement).appendChild(ov);
+        _autoOffTickId = setInterval(function () {
+            left -= 1;
+            if (left <= 0) { _fireAutoOff(); return; }
+            title.textContent = 'Turning off in ' + left + ' s';
+        }, 1000);
+    }
+
+    function _fireAutoOff() {
+        _clearAutoOffTimer();
+        if (typeof _skui_execPowerAction === 'function') {
+            try { _skui_execPowerAction('poweroff'); return; } catch (_) { /* fall through */ }
+        }
+        try { if (window.SafeKeepOS && window.SafeKeepOS.powerOff) window.SafeKeepOS.powerOff(); } catch (_) {}
+    }
+
     // Leading-edge throttle: the FIRST activity event in any
     // THROTTLE_MS window does the work; subsequent events in that
     // window are dropped via the timestamp diff check.
@@ -10738,6 +10819,7 @@ window.skbIdleTimers = (function _installIdleTimers() {
         if (now - _lastActivity < THROTTLE_MS) return;
         _lastActivity = now;
         _scheduleAutoLockTimer();
+        _scheduleAutoOffTimer();
     }
 
     function _attachActivityListeners() {
@@ -10754,6 +10836,8 @@ window.skbIdleTimers = (function _installIdleTimers() {
         var aEl = document.getElementById('settings-auto-lock-min');
         if (dEl) dEl.value = String(state.displaySleepMinutes);
         if (aEl) aEl.value = String(state.autoLockMinutes);
+        var oEl = document.getElementById('settings-auto-off-min');
+        if (oEl) oEl.value = String(state.autoOffMinutes);
     }
 
     // Public methods — invoked from oninput on the Device Options inputs.
@@ -10775,13 +10859,23 @@ window.skbIdleTimers = (function _installIdleTimers() {
         _scheduleAutoLockTimer();  // re-arm with new duration (or disable if 0)
     }
 
+    function onAutoOffInput(raw) {
+        var v = parseInt(raw, 10);
+        if (isNaN(v) || v < 0) v = 0;
+        if (v > 240) v = 240;
+        state.autoOffMinutes = v;
+        _persist();
+        _scheduleAutoOffTimer();   // re-arm with new duration (or stay on if 0)
+    }
+
     // Init: restore from localStorage, sync inputs, attach listeners,
-    // arm both timers. Run after DOMContentLoaded so the inputs exist.
+    // arm the timers. Run after DOMContentLoaded so the inputs exist.
     function _init() {
         _restore();
         _syncInputsToState();
         _attachActivityListeners();
         _scheduleAutoLockTimer();
+        _scheduleAutoOffTimer();
         _applyDisplaySleepToOS();
     }
 
@@ -10797,7 +10891,9 @@ window.skbIdleTimers = (function _installIdleTimers() {
     return {
         onDisplaySleepInput: onDisplaySleepInput,
         onAutoLockInput:     onAutoLockInput,
-        getState:            function() { return { displaySleepMinutes: state.displaySleepMinutes, autoLockMinutes: state.autoLockMinutes }; }
+        onAutoOffInput:      onAutoOffInput,
+        stayOn:              function() { _lastActivity = Date.now(); _scheduleAutoLockTimer(); _scheduleAutoOffTimer(); },
+        getState:            function() { return { displaySleepMinutes: state.displaySleepMinutes, autoLockMinutes: state.autoLockMinutes, autoOffMinutes: state.autoOffMinutes }; }
     };
 })();
 
@@ -34481,7 +34577,7 @@ var _RLQ_APP_SETTINGS_KEYS = [
     'safekeepTheme',         // theme preference
     'safekeepUiScale',       // UI scale
     'safekeepUiAudio',       // Sound: { enabled: bool, volume: 0-1 }
-    'safekeepIdleTimers'     // Idle Timers: { displaySleepMinutes, autoLockMinutes } (task #198)
+    'safekeepIdleTimers'     // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
 ];
 
 /**

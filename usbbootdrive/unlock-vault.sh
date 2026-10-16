@@ -114,6 +114,33 @@ if ls /dev/video* 1>/dev/null 2>&1; then
     HAS_CAMERA=true
 fi
 
+# --- Auto-Off at the password prompt ---
+# Settings → Idle Timers → Auto-Off (minutes, 0 = stay on). The app runs
+# its own timer; here, with the browser closed (at boot or after a lock),
+# the prompts time out instead. The value is kept as a plain number next
+# to the vault (written by safekeep-boot.sh's Settings Watcher) so it can
+# be read while the vault is still locked. No file yet → 30 minutes.
+# A prompt that times out makes this script exit 4: the parent powers off.
+AUTO_OFF_MIN=30
+AUTO_OFF_FILE="$DATA_MOUNT/auto-off-minutes"
+if [ -f "$AUTO_OFF_FILE" ]; then
+    AUTO_OFF_RAW=$(head -c 8 "$AUTO_OFF_FILE" 2>/dev/null | tr -d '[:space:]')
+    if [[ "$AUTO_OFF_RAW" =~ ^[0-9]{1,3}$ ]] && [ "$AUTO_OFF_RAW" -le 240 ]; then
+        AUTO_OFF_MIN=$((10#$AUTO_OFF_RAW))
+    fi
+fi
+AUTO_OFF_ARGS=()
+if [ "$AUTO_OFF_MIN" -gt 0 ]; then
+    AUTO_OFF_ARGS=(--timeout="$((AUTO_OFF_MIN * 60))")
+fi
+ZENITY_TIMEOUT=5    # zenity's exit status when --timeout runs out
+
+idle_power_off() {
+    echo "SafeKeep: no activity at the unlock prompt for ${AUTO_OFF_MIN} min — Auto-Off (exit 4)"
+    sudo umount "$DATA_MOUNT" 2>/dev/null || true
+    exit 4
+}
+
 PASSWORD=""
 
 while true; do
@@ -131,12 +158,14 @@ while true; do
     #   first row is auto-highlighted, so a user with QR muscle memory
     #   just presses Enter and they're scanning their code.
     if [ "$HAS_CAMERA" = true ]; then
-        INPUT_METHOD=$(zenity --list --title="Unlock Vault" \
+        INPUT_METHOD=$(zenity --list --title="Unlock Vault" "${AUTO_OFF_ARGS[@]}" \
             --text="How would you like to enter your Master Passphrase?" \
             --column="Method" --hide-header \
             "Scan QR Code" \
             "Type Password" \
-            "Boot Temporary Session (RAM Only)" 2>/dev/null) || true
+            "Boot Temporary Session (RAM Only)" 2>/dev/null)
+        ZENITY_RC=$?
+        [ "$ZENITY_RC" -eq "$ZENITY_TIMEOUT" ] && idle_power_off
 
         if [ -z "$INPUT_METHOD" ]; then
             # User clicked X / Cancel on the choice dialog → clean exit
@@ -145,11 +174,13 @@ while true; do
         fi
     else
         # No camera: visible typing only (plus ephemeral bypass)
-        INPUT_METHOD=$(zenity --list --title="Unlock Vault" \
+        INPUT_METHOD=$(zenity --list --title="Unlock Vault" "${AUTO_OFF_ARGS[@]}" \
             --text="How would you like to enter your Master Passphrase?" \
             --column="Method" --hide-header \
             "Type Password" \
-            "Boot Temporary Session (RAM Only)" 2>/dev/null) || true
+            "Boot Temporary Session (RAM Only)" 2>/dev/null)
+        ZENITY_RC=$?
+        [ "$ZENITY_RC" -eq "$ZENITY_TIMEOUT" ] && idle_power_off
 
         if [ -z "$INPUT_METHOD" ]; then
             sudo umount "$DATA_MOUNT" 2>/dev/null || true
@@ -177,7 +208,7 @@ while true; do
     if [ "$INPUT_METHOD" = "Scan QR Code" ]; then
         PASSWORD=$(scan_qr_passphrase) || true
         if [ -z "$PASSWORD" ]; then
-            zenity --warning --title="Scan Failed" \
+            zenity --warning "${AUTO_OFF_ARGS[@]}" --title="Scan Failed" \
                 --text="QR scan did not return a result.\nReturning to method selection." 2>/dev/null || true
             continue  # Loop back to choice dialog
         fi
@@ -191,10 +222,12 @@ while true; do
         #   mouse click. --ok-label makes the action verb explicit so
         #   the user can see at a glance what Enter will do. We do NOT
         #   pass --modal or --attach which would push focus elsewhere.
-        PASSWORD=$(zenity --entry --title="Unlock Vault" \
+        PASSWORD=$(zenity --entry --title="Unlock Vault" "${AUTO_OFF_ARGS[@]}" \
             --text="Enter your Master Passphrase (visible):" \
             --ok-label="Unlock" \
-            --width=450 2>/dev/null) || true
+            --width=450 2>/dev/null)
+        ZENITY_RC=$?
+        [ "$ZENITY_RC" -eq "$ZENITY_TIMEOUT" ] && idle_power_off
         if [ -z "$PASSWORD" ]; then
             continue  # Loop back to choice dialog
         fi
@@ -229,7 +262,7 @@ while true; do
             # Wrong password — detach loop, clear password, show error, loop back
             sudo losetup -d "$LOOP_DEV" 2>/dev/null || true
             PASSWORD=""
-            zenity --warning --title="Decryption Failed" --width=400 \
+            zenity --warning "${AUTO_OFF_ARGS[@]}" --title="Decryption Failed" --width=400 \
                 --text="Incorrect password.\n\nPlease try again. You have unlimited attempts." 2>/dev/null || true
             continue
         fi

@@ -1407,10 +1407,10 @@ RELIQUARY_PY
                 mapfile -t DS_FILES < <(ls -t "$CHROMIUM_DOWNLOAD_DIR"/DEVICE_SETTINGS*.json 2>/dev/null)
                 if [ "${#DS_FILES[@]}" -gt 0 ] && [ "$EPHEMERAL_MODE" != "1" ]; then
                     mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
-                    if python3 -I - "${DS_FILES[0]}" "$DEVICE_SETTINGS_SAVED.tmp" <<'DSPYEOF'
+                    if python3 -I - "${DS_FILES[0]}" "$DEVICE_SETTINGS_SAVED.tmp" "$DATA_MOUNT/auto-off-minutes.tmp" <<'DSPYEOF'
 import json, sys
 ALLOWED = ('safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers')
-src, dst = sys.argv[1], sys.argv[2]
+src, dst, auto_off_dst = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(src, 'rb') as f:
     raw = f.read(8193)
 if len(raw) > 8192:
@@ -1423,10 +1423,25 @@ out = {k: v for k, v in settings.items()
        if k in ALLOWED and isinstance(v, str) and len(v) <= 1024}
 with open(dst, 'w', encoding='utf-8') as f:
     json.dump({'version': 1, 'settings': out}, f)
+# Auto-Off minutes, as a plain number OUTSIDE the vault, so the unlock
+# prompt can time out while the vault is still locked (it's just a timer
+# value). Written only when the setting is present and valid.
+try:
+    timers = json.loads(out.get('safekeepIdleTimers', ''))
+    minutes = timers.get('autoOffMinutes') if isinstance(timers, dict) else None
+    if isinstance(minutes, int) and not isinstance(minutes, bool) and 0 <= minutes <= 240:
+        with open(auto_off_dst, 'w', encoding='ascii') as f:
+            f.write('%d\n' % minutes)
+except (ValueError, OSError):
+    pass
 DSPYEOF
                     then
                         chmod 600 "$DEVICE_SETTINGS_SAVED.tmp" 2>/dev/null
                         mv -f "$DEVICE_SETTINGS_SAVED.tmp" "$DEVICE_SETTINGS_SAVED" && sync
+                        if [ -f "$DATA_MOUNT/auto-off-minutes.tmp" ]; then
+                            chmod 644 "$DATA_MOUNT/auto-off-minutes.tmp" 2>/dev/null
+                            mv -f "$DATA_MOUNT/auto-off-minutes.tmp" "$DATA_MOUNT/auto-off-minutes" && sync
+                        fi
                         echo "Settings Watcher: Device Options saved to vault"
                     else
                         rm -f "$DEVICE_SETTINGS_SAVED.tmp" 2>/dev/null
@@ -3066,6 +3081,8 @@ else
     #   0 = vault unlocked and mounted
     #   1 = fatal error (no partition, no vault file, loop device failure)
     #   2 = user explicitly canceled (clicked X on method-choice dialog)
+    #   3 = user chose a temporary (RAM-only) session
+    #   4 = Auto-Off: the prompt sat idle for the Auto-Off time → power off
     #
     # We still wrap this in a loop so that if the user cancels (exit 2),
     # we give them one more chance rather than halting immediately.
@@ -3095,6 +3112,16 @@ else
             # Loop back — they might have fat-fingered the X button.
             echo "User canceled unlock dialog. Retrying..."
             continue
+        elif [ "$UNLOCK_EXIT" -eq 4 ]; then
+            # Auto-Off: the unlock prompt sat idle for the Auto-Off time
+            # (Settings → Idle Timers). Nothing is unlocked; power off,
+            # which also clears RAM.
+            echo "Auto-Off: unlock prompt idle — powering off."
+            printf 'No activity — SafeKeep is turning off (Auto-Off).\r\n' > /dev/tty1 2>/dev/null || true
+            sync
+            sudo poweroff
+            sleep 60
+            exit 0
         elif [ "$UNLOCK_EXIT" -eq 3 ]; then
             # ---- EPHEMERAL BOOT PATH ----
             # User chose "Boot Ephemeral (RAM Only)" at the zenity prompt.
