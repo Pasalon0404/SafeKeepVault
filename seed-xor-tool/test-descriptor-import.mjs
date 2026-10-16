@@ -64,13 +64,15 @@ function makeEnv(seedPhrase) {
     showStatus(m, t) { statuses.push(t + ': ' + m); }, SKScanner: null,
   });
   vm.runInContext([
-    ...['DESC_BIP32_PUBLIC_MAINNET', 'DESC_BIP32_PUBLIC_TESTNET', '_DESC_MAINNET_VERS', '_DESC_TESTNET_VERS', '_WREC_SCRIPTS', '_sha256K', '_B58_ALPHABET', 'DESC_RECV_SEARCH', '_descVerified'].map(extractVar),
+    ...['DESC_BIP32_PUBLIC_MAINNET', 'DESC_BIP32_PUBLIC_TESTNET', '_DESC_MAINNET_VERS', '_DESC_TESTNET_VERS', '_WREC_SCRIPTS', '_sha256K', '_B58_ALPHABET', 'DESC_RECV_SEARCH', '_descVerified', '_DESC_IMPORT_KEY_TYPES', '_DESC_IMPORT_FORMATS'].map(extractVar),
     'var desc_state = { currentDescriptor: null, imported: null };',
     'var _descRecv = { parsed: null, nodes: {}, address: "" }; var _descRecvScanner = null;',
     ...['desc_checksum', 'desc_parseKeyOrigin', '_base58decode', '_base58checkDecode', '_base58check', '_base58encode', '_sha256sync', '_sha256impl', '_rr', '_descNormalizeXpub',
         '_wrecSplitArgs', '_wrecCall', '_wrecParseDescriptor', '_wrecIndexZeroPubkey', '_wrecCompareBytes', '_wrecFirstAddress', '_wrecAddressFromPubkeys', '_wrecEscape',
         '_descChainNodes', '_descScreenAddresses', '_descRecvWallet', '_descRecvAddressAt', '_descRecvGroups', 'desc_recvReset', 'desc_recvStep', 'desc_recvShow',
         '_descRecvNormalize', '_descRecvResult', 'desc_recvCheck', 'desc_recvStopScan', '_descShowAddrExport', 'desc_arraysEqual',
+        '_descImportPrivateCheck', '_descImportKey', '_descImportPath', '_descImportWithChecksum', '_descImportSetup', '_descImportBsms',
+        '_descImportDescriptorList', '_descImportSingleKey', '_descImportConvert', '_descShowConverted',
         '_descVerifyAddrRows', 'desc_verify', 'desc_useVerified'].map(extract),
   ].join('\n'), ctx);
   const verify = async (d) => { statuses.length = 0; el('desc-verify-result').style.display = ''; el('desc-verify-input').value = d; await ctx.desc_verify(); return {
@@ -116,9 +118,9 @@ const nestedC2 = btcSigner.p2sh(btcSigner.p2wsh(btcSigner.p2ms(2, msPub([r1, r2,
   ck('private key refused', !r.shown && !r.useBtn && /private key/.test(r.status), r.status);
   ck('nothing left to use after a failed check', e.ctx.desc_useVerified() === undefined && e.ctx.desc_state.currentDescriptor === null);
   r = await e.verify(UNRANGED);
-  ck('missing /<0;1>/*: warned, no addresses, no Use button', r.shown && !r.useBtn && /<0;1>/.test(r.status) && /Not worked out/.test(r.recv), r.status);
+  ck('missing /<0;1>/*: warned, no addresses, no Use button', r.shown && !r.useBtn && /&lt;0;1&gt;/.test(r.status) && /Not worked out/.test(r.recv), r.status);
   r = await e.verify('   ');
-  ck('empty input refused', !r.shown && /Paste or scan/.test(r.status), r.status);
+  ck('empty input refused', !r.shown && /Paste, scan or load/.test(r.status), r.status);
 }
 // ---- Seed loaded ----
 {
