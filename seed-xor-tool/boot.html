@@ -8255,16 +8255,22 @@
             <!-- ======== VERIFY SECTION (The Validator) ======== -->
             <div id="desc-verify-section" style="display: none;">
                 <div class="skb-card" style="margin-bottom: 1rem;">
-                    <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Paste Output Descriptor</div>
+                    <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Paste, Scan or Load a Descriptor or Wallet Export</div>
                     <p style="font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0 0 0.75rem;">
-                        Paste an output descriptor from Sparrow, Specter, or any coordinator. SafeKeep checks it, shows its addresses and, if a seed is loaded, whether that seed can sign for it. Then use it here as a watch-only wallet.
+                        An output descriptor, a multisig setup file (BlueWallet, Coldcard, Sparrow&hellip;), a BSMS record or an extended public key (xpub / ypub / zpub). Exports are converted to a descriptor here, on the vault, and shown before the result. SafeKeep then checks it, shows its addresses and, if a seed is loaded, whether that seed can sign for it. Then use it here as a watch-only wallet.
                     </p>
-                    <textarea id="desc-verify-input" rows="4" placeholder="wpkh([fingerprint/84'/0'/0']xpub.../0/*)#checksum&#10;or: tr([fingerprint/86'/0'/0']xpub.../0/*)#checksum&#10;or: wsh(sortedmulti(2,[fp/48'/0'/0'/2']xpub...,...))"
+                    <textarea id="desc-verify-input" rows="4" placeholder="wsh(sortedmulti(2,[fp/48'/0'/0'/2']xpub.../&lt;0;1&gt;/*,...))#checksum&#10;or a multisig setup file:  Policy: 2 of 3 / Format: P2WSH / 8C466A54: xpub...&#10;or one key:  [fingerprint/84'/0'/0']zpub..."
                               spellcheck="false" autocomplete="off"
                               style="width: 100%; box-sizing: border-box; padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8125rem; resize: vertical; line-height: 1.5;"></textarea>
-                    <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; border: 1px dashed var(--skb-border); font-size: 0.875rem;" onclick="descv_scanQR()">
-                        Scan Descriptor QR / UR
-                    </button>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                        <button type="button" class="skb-btn" style="flex: 1; border: 1px dashed var(--skb-border); font-size: 0.875rem;" onclick="descv_scanQR()">
+                            Scan QR / UR / Courier
+                        </button>
+                        <button type="button" class="skb-btn" style="flex: 1; border: 1px dashed var(--skb-border); font-size: 0.875rem;" onclick="document.getElementById('desc-verify-file-input').click()">
+                            Load File (Transfer Drive)
+                        </button>
+                    </div>
+                    <input type="file" id="desc-verify-file-input" accept=".txt,.json,.bsms,.descriptor,.desc,text/plain,application/json" style="display: none;" onchange="desc_verifyLoadFile(event)">
                     <div id="descv-qr-area" style="display: none; margin-top: 0.75rem;">
                         <div id="descv-qr-reader" style="width: 100%; min-height: 280px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>
                         <div id="descv-scan-status" style="text-align: center; font-size: 0.8125rem; color: var(--skb-text-muted); margin-top: 0.4rem;">Awaiting QR code...</div>
@@ -8290,6 +8296,14 @@
                 </div>
 
                 <button type="button" class="skb-btn skb-btn--primary" style="width: 100%; margin-bottom: 1rem;" id="desc-verify-btn" onclick="desc_verify()">Check Descriptor</button>
+
+                <!-- Converted from a wallet export (shown before the result) -->
+                <div class="skb-card" id="desc-verify-converted" style="display: none; margin-bottom: 1rem; border-color: var(--skb-primary);">
+                    <div id="desc-verify-converted-label" style="font-size: 0.875rem; font-weight: 600; color: var(--skb-primary); margin-bottom: 0.5rem;"></div>
+                    <div id="desc-verify-converted-text" style="background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); padding: 0.6rem; border-radius: var(--skb-radius-sm); word-break: break-all; line-height: 1.5;"></div>
+                    <div id="desc-verify-converted-notes" style="font-size: 0.8125rem; color: var(--skb-text-muted); margin-top: 0.5rem; line-height: 1.5;"></div>
+                    <div style="font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.4rem;">Compare it with the descriptor your wallet app shows, and the first address below with the wallet&rsquo;s first receive address.</div>
+                </div>
 
                 <!-- Verification Result -->
                 <div id="desc-verify-result" style="display: none;">
@@ -30864,6 +30878,7 @@ function desc_deriveAddress(type, pubkeys, threshold, btcSigner) {
 var _descvQrScanner = null;
 var _descvUrDecoder = null;
 var _descvScanProcessing = false;
+var _descvCourier = null;    // Courier file transfer (a wallet export sent as a file)
 
 async function descv_scanQR() {
     if (!window.jsQR) { showStatus('QR scanner library not available.', 'error'); return; }
@@ -30872,6 +30887,7 @@ async function descv_scanQR() {
     area.style.display = 'block';
     _descvScanProcessing = false;
     _descvUrDecoder = new (window.URDecoder)();
+    _descvCourier = (window.QRParser && window.QRParser.createCourierCollector) ? window.QRParser.createCourierCollector() : null;
     var statusEl = document.getElementById('descv-scan-status');
     if (statusEl) statusEl.textContent = 'Awaiting QR code...';
 
@@ -30897,6 +30913,14 @@ function _descvOnQrScanned(text, binaryData) {
     var trimmed = (parsed || '').trim();
     if (!trimmed) return;
 
+    // Route 0: a file sent with The Courier (setup file, BSMS, descriptor file)
+    var courierFrame = window.QRParser && window.QRParser.parseCourierFrame
+        ? window.QRParser.parseCourierFrame(trimmed) : null;
+    if (courierFrame) {
+        _descvHandleCourierFrame(courierFrame);
+        return;
+    }
+
     // Route 1: UR-encoded QR (single-frame or animated)
     if (trimmed.toUpperCase().startsWith('UR:')) {
         _descvHandleUrFrame(trimmed);
@@ -30910,6 +30934,25 @@ function _descvOnQrScanned(text, binaryData) {
     if (input) input.value = trimmed;
     showStatus('Descriptor scanned from QR — verifying...', 'success');
     desc_verify();
+}
+
+function _descvHandleCourierFrame(frame) {
+    if (!_descvCourier) _descvCourier = window.QRParser.createCourierCollector();
+    var r = _descvCourier.add(frame);
+    var name = String(r.filename || 'courier-file').replace(/[\/\\\u0000-\u001f\u007f]/g, '_').slice(0, 80);
+    var statusEl = document.getElementById('descv-scan-status');
+    if (statusEl) {
+        statusEl.textContent = 'Receiving file \u201c' + name + '\u201d \u2014 chunk ' + r.received + ' / ' + r.total +
+            (r.status === 'bad-checksum' ? ' (a damaged chunk was skipped, keep scanning)' : '');
+    }
+    if (!r.done) return;
+    _descvScanProcessing = true;
+    descv_stopQR();
+    if (r.bytes.length > DESC_VERIFY_FILE_MAX) {
+        showStatus('The file received with The Courier is too large for a wallet export.', 'error');
+        return;
+    }
+    _descVerifyFromBytes(r.bytes, name);
 }
 
 function _descvHandleUrFrame(text) {
@@ -30969,11 +31012,12 @@ function _descvHandleUrFrame(text) {
             var rawCbor = ur.cbor;
             var raw = window.CBOR.decode(Buffer.from(rawCbor));
             // Result should be a Buffer/Uint8Array of the plaintext descriptor
-            var decoded = '';
+            // UTF-8 text: a descriptor, or a wallet export such as a
+            // BlueWallet / Coldcard multisig setup file or text from The Courier.
             var bytes = (raw instanceof Uint8Array || Buffer.isBuffer(raw)) ? raw : rawCbor;
-            for (var i = 0; i < bytes.length; i++) decoded += String.fromCharCode(bytes[i]);
-            if (input) input.value = decoded.trim();
-            showStatus('UR bytes decoded — verifying...', 'success');
+            var decoded = new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+            if (input) input.value = decoded.replace(/^\uFEFF/, '').trim();
+            showStatus('UR bytes decoded — checking...', 'success');
             desc_verify();
 
         } else {
@@ -31481,6 +31525,304 @@ function _bytesToHex(bytes) {
  */
 var _descVerified = null;   // { descriptor, parsed } from the last successful Verify
 
+// =============================================
+// WALLET EXPORT → DESCRIPTOR (Verify tab)
+// Check Descriptor also takes wallet exports that aren't descriptors yet and
+// converts them here, on the vault, before the usual checks:
+//   - multisig setup files (BlueWallet, Coldcard, Sparrow's Coldcard export):
+//     Name / Policy / Derivation / Format lines + one "FINGERPRINT: xpub" line
+//     per cosigner;
+//   - BSMS 1.0 records (descriptor + first address, which is then checked);
+//   - descriptor files with comments (Sparrow) or a descriptor list (Core);
+//   - one extended public key, with or without its key origin.
+// A plain descriptor is passed through untouched. Private keys, seed lines,
+// testnet keys and anything ambiguous are refused rather than guessed.
+// =============================================
+var _DESC_IMPORT_KEY_TYPES = {
+    0x0488B21E: { net: 'main', p: 'xpub' }, 0x049D7CB2: { net: 'main', p: 'ypub' }, 0x04B24746: { net: 'main', p: 'zpub' },
+    0x0295B43F: { net: 'main', p: 'Ypub' }, 0x02AA7ED3: { net: 'main', p: 'Zpub' },
+    0x043587CF: { net: 'test', p: 'tpub' }, 0x044A5262: { net: 'test', p: 'upub' }, 0x045F1CF6: { net: 'test', p: 'vpub' },
+    0x024289EF: { net: 'test', p: 'Upub' }, 0x02575483: { net: 'test', p: 'Vpub' }
+};
+var _DESC_IMPORT_FORMATS = {
+    'P2WSH':      { wrap: ['wsh'],       name: 'Native SegWit multisig (P2WSH)', maxKeys: 20 },
+    'P2SH-P2WSH': { wrap: ['sh', 'wsh'], name: 'Nested SegWit multisig (P2SH-P2WSH)', maxKeys: 20 },
+    'P2WSH-P2SH': { wrap: ['sh', 'wsh'], name: 'Nested SegWit multisig (P2SH-P2WSH)', maxKeys: 20 },
+    'P2SH':       { wrap: ['sh'],        name: 'Legacy multisig (P2SH)', maxKeys: 15 }
+};
+
+/* Private material anywhere in the text → a refusal message, else ''. */
+function _descImportPrivateCheck(text) {
+    if (/\b[xtyzuvYZUV]prv[1-9A-HJ-NP-Za-km-z]{20,}/.test(text)) {
+        return 'This contains a private key (xprv). SafeKeep only takes public keys here — export the watch-only (public) version from your wallet instead.';
+    }
+    var wif = text.match(/\b[5KLc9][1-9A-HJ-NP-Za-km-z]{50,51}\b/g) || [];
+    for (var i = 0; i < wif.length; i++) {
+        try {
+            var p = _base58checkDecode(wif[i]);
+            if ((p.length === 33 || (p.length === 34 && p[33] === 1)) && (p[0] === 0x80 || p[0] === 0xef)) {
+                return 'This contains a private key (WIF). SafeKeep only takes public keys here — export the watch-only (public) version from your wallet instead.';
+            }
+        } catch (_) { /* not base58check: not a WIF */ }
+    }
+    if (/^\s*seed\s*:/im.test(text)) {
+        return 'This file contains a cosigner’s seed phrase (a “seed:” line), so it holds private keys. In BlueWallet, export the coordination setup instead (public keys only), then try again.';
+    }
+    if (/^\s*#?\s*passphrase\s*:/im.test(text)) {
+        return 'This file contains a passphrase line, so it holds private information. Export the coordination setup (public keys only) instead, then try again.';
+    }
+    return '';
+}
+
+/* One extended public key → { xpub (standard xpub), p (original prefix) }; throws a readable error. */
+function _descImportKey(key, label) {
+    var payload;
+    try { payload = _base58checkDecode(key); } catch (_) { payload = null; }
+    if (!payload || payload.length !== 78) throw new Error(label + ' isn’t a valid extended public key (the characters don’t check out). Copy it again.');
+    var v = ((payload[0] << 24) | (payload[1] << 16) | (payload[2] << 8) | payload[3]) >>> 0;
+    var t = _DESC_IMPORT_KEY_TYPES[v];
+    if (!t) throw new Error(label + ' isn’t an extended public key SafeKeep knows (expected xpub, ypub, zpub, Ypub or Zpub).');
+    if (t.net !== 'main') throw new Error(label + ' is a testnet key (' + t.p + '). SafeKeep works with mainnet wallets only.');
+    return { xpub: _descNormalizeXpub(key), p: t.p };
+}
+
+/* "m/48'/0'/0'/2'" or "48h/0h/0h/2h" → "48'/0'/0'/2'"; '' for none; null if malformed. */
+function _descImportPath(raw) {
+    var s = String(raw || '').trim().replace(/^m\/?/i, '');
+    if (!s) return '';
+    if (!/^\d+[\x27hH]?(\/\d+[\x27hH]?)*$/.test(s)) return null;
+    return s.replace(/[hH]/g, "'");
+}
+
+function _descImportWithChecksum(body) { return body + '#' + desc_checksum(body); }
+
+function _descImportSetup(text) {
+    var lines = text.split('\n');
+    var head = lines.filter(function(l) { return /^\s*#/.test(l); }).join(' ');
+    var source = /bluewallet/i.test(head) ? 'BlueWallet multisig setup file'
+               : /coldcard/i.test(head) ? 'Coldcard multisig setup file'
+               : 'multisig setup file (BlueWallet / Coldcard format)';
+    if (/sparrow/i.test(head)) source += ' (exported from Sparrow)';
+    var policy = null, format = null, formatRaw = '', defaultPath = '', curPath = null, name = '';
+    var keys = [];
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line) continue;
+        var dm = /^#?\s*derivation\s*:\s*(\S+)\s*$/i.exec(line);
+        if (dm) {
+            var pth = _descImportPath(dm[1]);
+            if (pth === null) throw new Error('The derivation path “' + dm[1] + '” on line ' + (i + 1) + ' isn’t a valid path.');
+            if (keys.length === 0 && !/^#/.test(line) && curPath === null) defaultPath = pth;
+            curPath = pth;
+            continue;
+        }
+        if (/^#/.test(line)) continue;
+        var km = /^([0-9A-Fa-f]{8})\s*:\s*(\S+)$/.exec(line);
+        if (km) {
+            var label = 'Key ' + (keys.length + 1) + ' (' + km[1].toUpperCase() + ')';
+            var k = _descImportKey(km[2], label);
+            keys.push({ fp: km[1].toLowerCase(), path: curPath !== null ? curPath : defaultPath, xpub: k.xpub, p: k.p, label: label });
+            curPath = null;
+            continue;
+        }
+        var hm = /^([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$/.exec(line);
+        if (!hm) continue;
+        var field = hm[1].toLowerCase(), val = hm[2].trim();
+        if (field === 'name') name = val;
+        else if (field === 'policy') {
+            var pm = /^(\d+)\s*of\s*(\d+)$/i.exec(val);
+            if (!pm) throw new Error('The policy line (“' + val + '”) isn’t in the form “2 of 3”.');
+            policy = { m: parseInt(pm[1], 10), n: parseInt(pm[2], 10) };
+        } else if (field === 'format') {
+            formatRaw = val;
+            format = _DESC_IMPORT_FORMATS[val.toUpperCase()] || null;
+        }
+    }
+    if (!policy) throw new Error('The setup file has no “Policy: M of N” line, so the number of signatures needed is unknown. Export the file again.');
+    if (!formatRaw) throw new Error('The setup file has no “Format:” line (P2WSH, P2SH-P2WSH or P2SH), so the address type is unknown. SafeKeep won’t guess it — export the file again.');
+    if (!format) throw new Error('The format “' + formatRaw + '” isn’t one SafeKeep knows. Expected P2WSH, P2SH-P2WSH or P2SH.');
+    if (keys.length !== policy.n) {
+        throw new Error('The policy says ' + policy.m + ' of ' + policy.n + ', but the file has ' + keys.length + ' key' + (keys.length === 1 ? '' : 's') + '. The file looks incomplete or edited — export it again.');
+    }
+    if (policy.m < 1 || policy.m > policy.n) throw new Error('The policy “' + policy.m + ' of ' + policy.n + '” doesn’t make sense.');
+    if (policy.n > format.maxKeys) throw new Error(format.name + ' allows at most ' + format.maxKeys + ' keys; this file has ' + policy.n + '.');
+    var seen = {};
+    keys.forEach(function(k) {
+        if (seen[k.xpub]) throw new Error(k.label + ' is the same key as ' + seen[k.xpub] + '. Each cosigner needs its own key.');
+        seen[k.xpub] = k.label;
+        if (k.p === 'Zpub' && format.wrap.join('-') !== 'wsh') throw new Error(k.label + ' is a Zpub (Native SegWit multisig key), but the file says Format: ' + formatRaw + '. SafeKeep won’t guess which is right.');
+        if (k.p === 'Ypub' && format.wrap.join('-') !== 'sh-wsh') throw new Error(k.label + ' is a Ypub (Nested SegWit multisig key), but the file says Format: ' + formatRaw + '. SafeKeep won’t guess which is right.');
+    });
+    var notes = [];
+    if (name) notes.push('Wallet name: ' + name);
+    notes.push(policy.m + ' of ' + policy.n + ', ' + format.name + ', sorted keys (BIP-67).');
+    var noPath = keys.filter(function(k) { return !k.path; }).map(function(k) { return k.label; });
+    if (noPath.length) notes.push('No derivation path for ' + noPath.join(', ') + ' — only the fingerprint is recorded for ' + (noPath.length > 1 ? 'them' : 'it') + '. Addresses are not affected.');
+    var converted = keys.filter(function(k) { return k.p !== 'xpub'; });
+    if (converted.length) notes.push(converted.map(function(k) { return k.label + ' ' + k.p; }).join(', ') + ' converted to xpub (same key, standard prefix).');
+    var inner = 'sortedmulti(' + policy.m + ',' + keys.map(function(k) {
+        return '[' + k.fp + (k.path ? '/' + k.path : '') + ']' + k.xpub + '/<0;1>/*';
+    }).join(',') + ')';
+    var body = format.wrap.reduceRight(function(acc, w) { return w + '(' + acc + ')'; }, inner);
+    return { ok: true, converted: true, descriptor: _descImportWithChecksum(body), label: 'Converted from ' + source, notes: notes };
+}
+
+function _descImportBsms(text) {
+    var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+    if (lines.length < 4) throw new Error('This BSMS record is incomplete: it needs 4 lines (BSMS 1.0, descriptor, path restrictions, first address).');
+    var d = lines[1], csm = /^(.*)#([0-9a-z]{8})$/i.exec(d);
+    if (csm && desc_checksum(csm[1]) !== csm[2].toLowerCase()) throw new Error('The descriptor checksum in the BSMS record doesn’t match — a character is wrong or missing.');
+    var body = csm ? csm[1] : d;
+    var restr = lines[2].replace(/\s+/g, '');
+    if (body.indexOf('/**') !== -1) {
+        if (!/^(\/0\/\*,\/1\/\*|Nopathrestrictions)$/i.test(restr)) {
+            throw new Error('The BSMS record limits the wallet to “' + lines[2] + '”, which SafeKeep doesn’t support. Expected /0/*,/1/*.');
+        }
+        body = body.split('/**').join('/<0;1>/*');
+    }
+    return { ok: true, converted: true, descriptor: _descImportWithChecksum(body), label: 'Converted from a BSMS 1.0 wallet record',
+             notes: ['The record’s first address (' + lines[3] + ') is checked against the descriptor below.'], expectFirstAddress: lines[3] };
+}
+
+function _descImportDescriptorList(text) {
+    var isJson = /^[\[\x7b]/.test(text);
+    var body = text.split('\n').filter(function(l) { return !/^\s*#/.test(l); }).join('\n');
+    var cands = body.split(/[\s\x22\x27\x60]+/).map(function(t) { return t.replace(/,$/, ''); })
+        .filter(function(t) { return /^(sh|wsh|wpkh|pkh|tr|sp)\(/.test(t); });
+    var uniq = cands.filter(function(c, i) { return cands.indexOf(c) === i; });
+    if (!uniq.length) return null;
+    uniq.forEach(function(c) {
+        var m = /^(.*)#([0-9a-z]{8})$/i.exec(c);
+        if (m && desc_checksum(m[1]) !== m[2].toLowerCase()) throw new Error('The checksum of the descriptor “' + c.slice(0, 24) + '…” doesn’t match — a character is wrong or missing.');
+    });
+    var strip = function(c) { return c.replace(/#[0-9a-z]{8}$/i, ''); };
+    var src = isJson ? 'a descriptor list (Bitcoin Core format)' : 'a descriptor file';
+    var multi = uniq.filter(function(c) { return c.indexOf('<0;1>') !== -1; });
+    if (multi.length === 1) return { ok: true, converted: true, descriptor: multi[0], label: 'Taken from ' + src + ' (its receive-and-change descriptor)', notes: [] };
+    if (multi.length > 1) throw new Error('This file holds ' + multi.length + ' different wallets’ descriptors. Paste just the one to check.');
+    if (uniq.length === 2) {
+        var r = uniq.filter(function(c) { return strip(c).indexOf('/0/*') !== -1; });
+        var ch = uniq.filter(function(c) { return strip(c).indexOf('/1/*') !== -1; });
+        if (r.length === 1 && ch.length === 1 &&
+            strip(r[0]).split('/0/*').join('/<0;1>/*') === strip(ch[0]).split('/1/*').join('/<0;1>/*')) {
+            return { ok: true, converted: true, descriptor: _descImportWithChecksum(strip(r[0]).split('/0/*').join('/<0;1>/*')),
+                     label: 'Combined from ' + src + ': its receive (…/0/*) and change (…/1/*) descriptors', notes: [] };
+        }
+    }
+    if (uniq.length === 1) return { ok: true, converted: true, descriptor: uniq[0], label: 'Taken from ' + src, notes: [] };
+    throw new Error('This file holds ' + uniq.length + ' descriptors that aren’t one wallet’s receive and change pair. Paste just the one to check.');
+}
+
+function _descImportSingleKey(text) {
+    var m = /^(?:\[([0-9A-Fa-f]{8})((?:\/\d+[\x27hH]?)*)\])?([a-zA-Z]{4}[1-9A-HJ-NP-Za-km-z]{100,112})$/.exec(text);
+    if (!m) return null;
+    var k = _descImportKey(m[3], 'The key');
+    var path = m[2] ? _descImportPath(m[2].slice(1)) : '';
+    if (k.p === 'Ypub' || k.p === 'Zpub') {
+        throw new Error('This is a multisig cosigner key (' + k.p + '). One key can’t describe a multisig wallet — import the wallet’s multisig setup file or descriptor instead.');
+    }
+    var purpose = path ? path.split('/')[0] : '';
+    if (purpose === "48'" || purpose === "45'") {
+        throw new Error('This key’s path (m/' + path + ') is a multisig cosigner path. One key can’t describe a multisig wallet — import the multisig setup file or descriptor instead.');
+    }
+    var types = {
+        wpkh: { body: 'wpkh(%)',     name: 'Native SegWit (P2WPKH)' },
+        shw:  { body: 'sh(wpkh(%))', name: 'Nested SegWit (P2SH-P2WPKH)' },
+        pkh:  { body: 'pkh(%)',      name: 'Legacy (P2PKH)' },
+        tr:   { body: 'tr(%)',       name: 'Taproot (P2TR)' }
+    };
+    var byPath = { "84'": 'wpkh', "49'": 'shw', "44'": 'pkh', "86'": 'tr' }[purpose] || '';
+    var byPrefix = { zpub: 'wpkh', ypub: 'shw' }[k.p] || '';
+    if (byPath && byPrefix && byPath !== byPrefix) {
+        throw new Error('The key prefix (' + k.p + ') says ' + types[byPrefix].name + ' but its path (m/' + path + ') says ' + types[byPath].name + '. SafeKeep won’t guess which is right.');
+    }
+    var pick = byPrefix || byPath || 'pkh', why;
+    if (byPrefix) why = 'from the ' + k.p + ' prefix';
+    else if (byPath) why = 'from the key path m/' + path;
+    else why = 'ASSUMED: a bare xpub doesn’t say which address type it is, and xpub officially means Legacy. If your wallet uses another type, paste the key with its origin, e.g. [fingerprint/84\'/0\'/0\']xpub…, or as a zpub/ypub';
+    var origin = m[1] ? '[' + m[1].toLowerCase() + (path ? '/' + path : '') + ']' : '';
+    var keyExpr = origin + k.xpub + '/<0;1>/*';
+    var notes = ['Address type: ' + types[pick].name + ' — ' + why + '.'];
+    if (k.p !== 'xpub') notes.push(k.p + ' converted to xpub (same key, standard prefix).');
+    if (!origin) notes.push('No key origin (fingerprint and path) was given, so it isn’t in the descriptor. Addresses are not affected.');
+    return { ok: true, converted: true, descriptor: _descImportWithChecksum(types[pick].body.replace('%', keyExpr)),
+             label: 'Built from a single extended public key (' + k.p + ')', notes: notes, assumed: !byPrefix && !byPath };
+}
+
+/* Main entry: raw Verify input → { ok, error, converted, descriptor, label, notes, expectFirstAddress }. */
+function _descImportConvert(raw) {
+    var text = String(raw || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim().replace(/^bitcoin:(\/\/)?/i, '');
+    if (!text) return { ok: false, error: 'Paste, scan or load an output descriptor or wallet export first.' };
+    var priv = _descImportPrivateCheck(text);
+    if (priv) return { ok: false, error: priv };
+    try {
+        var isSetup = /^\s*policy\s*:/im.test(text) || /^\s*format\s*:/im.test(text) ||
+                      /^\s*[0-9A-Fa-f]{8}\s*:\s*[a-zA-Z]{4}[1-9A-HJ-NP-Za-km-z]{100,}\s*$/m.test(text);
+        if (isSetup) return _descImportSetup(text);
+        if (/^BSMS\s+1\.0\b/.test(text)) return _descImportBsms(text);
+        // A plain descriptor (no comment lines, no JSON) is passed through untouched.
+        if (/^(sh|wsh|wpkh|pkh|tr|sp)\(/.test(text) && !/^\s*#/m.test(text) && text.indexOf('"') === -1 && !/\n\s*\n/.test(text)) {
+            return { ok: true, converted: false, descriptor: text };
+        }
+        var single = _descImportSingleKey(text);
+        if (single) return single;
+        var list = _descImportDescriptorList(text);
+        if (list) return list;
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+    return { ok: false, error: 'SafeKeep doesn’t recognise this. Paste an output descriptor, a multisig setup file (BlueWallet, Coldcard, Sparrow…), a BSMS record, or an extended public key (xpub / ypub / zpub).' };
+}
+
+/* Show (or hide, with null) the "converted from …" card above the result. */
+function _descShowConverted(conv) {
+    var box = document.getElementById('desc-verify-converted');
+    if (!box) return;
+    if (!conv) { box.style.display = 'none'; return; }
+    document.getElementById('desc-verify-converted-label').textContent = conv.label;
+    document.getElementById('desc-verify-converted-text').textContent = conv.descriptor;
+    var notes = document.getElementById('desc-verify-converted-notes');
+    notes.innerHTML = '';
+    (conv.notes || []).forEach(function(n) {
+        var d = document.createElement('div');
+        d.textContent = n;
+        if (/ASSUMED/.test(n)) { d.style.color = 'var(--skb-warning, #f59e0b)'; d.style.fontWeight = '600'; }
+        notes.appendChild(d);
+    });
+    box.style.display = 'block';
+}
+
+/* Load a wallet export or descriptor from a file (Transfer Drive). Text only, read in memory. */
+var DESC_VERIFY_FILE_MAX = 256 * 1024;
+function desc_verifyLoadFile(event) {
+    var file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > DESC_VERIFY_FILE_MAX) {
+        showStatus('“' + _wrecEscape(file.name) + '” is too large for a wallet export (' + Math.round(file.size / 1024) + ' KB). Pick the setup or descriptor file.', 'error');
+        return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        _descVerifyFromBytes(new Uint8Array(e.target.result), file.name);
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+/* Bytes from a file or a Courier transfer → text in the input → Check Descriptor. */
+function _descVerifyFromBytes(bytes, name) {
+    var text;
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (_) { text = null; }
+    if (text === null || /[\u0000-\u0008\u000e-\u001f]/.test(text)) {
+        showStatus('“' + _wrecEscape(name) + '” isn’t a text file, so it can’t be a wallet export or descriptor.', 'error');
+        return;
+    }
+    var input = document.getElementById('desc-verify-input');
+    if (input) input.value = text.replace(/^﻿/, '').trim();
+    showStatus('Loaded “' + _wrecEscape(name) + '” — checking...', 'success');
+    desc_verify();
+}
+
 /* Receive / change address rows for the Verify card (count per chain). */
 function _descVerifyAddrRows(p, chain, count) {
     if (p.kind === 'sp') {
@@ -31508,19 +31850,28 @@ async function desc_verify() {
     var useBtn = document.getElementById('desc-verify-use-btn');
     _descVerified = null;
     if (useBtn) useBtn.style.display = 'none';
+    _descShowConverted(null);
 
     try {
         if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
         resultDiv.style.display = 'none';
 
-        var rawDesc = document.getElementById('desc-verify-input').value.trim().replace(/^bitcoin:(\/\/)?/i, '');
-        if (!rawDesc) throw new Error('Paste or scan an output descriptor first.');
+        // Wallet exports (multisig setup files, BSMS, single keys …) are
+        // converted to a descriptor first; a descriptor passes through as is.
+        var conv = _descImportConvert(document.getElementById('desc-verify-input').value);
+        if (!conv.ok) throw new Error(conv.error);
+        if (conv.converted) _descShowConverted(conv);
+        var rawDesc = conv.descriptor;
 
         // Same reader as the Wallet Record: checksum checked, private keys
         // refused, every single-sig and multisig shape the app supports.
         var parsed = _wrecParseDescriptor(rawDesc);
         if (!parsed.ok) throw new Error(parsed.error || 'This descriptor couldn’t be read.');
-        (parsed.warnings || []).forEach(function(w) { showStatus(w, 'warning'); });
+        if (conv.expectFirstAddress && parsed.firstAddress !== conv.expectFirstAddress) {
+            throw new Error('The first address in the file (' + conv.expectFirstAddress + ') doesn’t match the one worked out from its descriptor (' +
+                            (parsed.firstAddress || 'none') + '). Don’t use this wallet record.');
+        }
+        (parsed.warnings || []).forEach(function(w) { showStatus(_wrecEscape(w), 'warning'); });
 
         var bip39 = window.BtcMath.bip39;
         var HDKey = window.BtcMath.HDKey;
@@ -31605,7 +31956,8 @@ async function desc_verify() {
         resultDiv.style.display = 'block';
 
     } catch (e) {
-        showStatus('Descriptor check failed: ' + e.message, 'error');
+        // Messages can quote the pasted / scanned text: never insert it as HTML.
+        showStatus('Descriptor check failed: ' + _wrecEscape(e.message), 'error');
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'Check Descriptor'; }
     }
