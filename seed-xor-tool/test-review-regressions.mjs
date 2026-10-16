@@ -3,9 +3,10 @@
  *
  *  1. BIP-39 passphrases are never trimmed anywhere (a trimmed passphrase is a
  *     different wallet; the Output Descriptor + temp-seed screens used to trim).
- *  2. SLIP-39 and Seed XOR recovery require the user to confirm the recovered
- *     fingerprint BEFORE anything is written to the vault (a wrong SLIP-39
- *     passphrase / wrong XOR share is otherwise undetectable).
+ *  2. SLIP-39 and Seed XOR recovery show the recovered fingerprint BEFORE anything
+ *     is written to the vault (a wrong SLIP-39 passphrase / wrong XOR share is
+ *     otherwise undetectable). SLIP-39 shows both readings (SafeKeep / Trezor) and
+ *     writes only when the user picks Restore This Wallet.
  *  3. Transfer-drive file names can't inject markup into the backup list.
  *  4. The PSBT review warns on an absurd fee and on outputs > inputs.
  *
@@ -17,6 +18,7 @@ import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import * as bip39 from '@scure/bip39'; import { wordlist } from '@scure/bip39/wordlists/english.js'; import { HDKey } from '@scure/bip32';
 import { generateMnemonics, combineMnemonics } from 'shamir-mnemonic-ts';
+import * as btcSigner from '@scure/btc-signer';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(join(__dirname, 'boot.html'), 'utf8');
 process.env.BOOT = join(__dirname, 'boot.html');
@@ -66,27 +68,31 @@ const M = 'abandon abandon abandon abandon abandon abandon abandon abandon aband
 const FP = (HDKey.fromMasterSeed(await bip39.mnemonicToSeed(M, '')).fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase();
 function recCtx(values, confirmAnswer, extra = {}) {
   const { document } = makeDom(values); const writes = []; const prompts = []; let status = '';
-  const ctx = vm.createContext({ window: { BtcMath: { bip39, wordlist, HDKey },
+  const ctx = vm.createContext({ window: { BtcMath: { bip39, wordlist, HDKey, btcSigner },
       SafeKeepOS: { restoreMasterSeed: async (m) => { writes.push(m); return { diskVerified: true, fingerprint: FP }; } } },
     SLIP39: { combineMnemonics }, document, Uint8Array, Buffer, console, confirm: (q) => { prompts.push(q); return confirmAnswer; },
     showStatus: (m) => { status = m; }, clearStatus() {}, s39r_showLocalStatus: (m) => { status = m; }, _isEphemeralBoot: () => false,
     _showDiskVerification() {}, hideShamirRecoveryPanel() {}, transitionToDashboard() {}, _SKB_DEV_MODE: false, ...extra });
   ctx.window.SLIP39 = ctx.SLIP39;
-  vm.runInContext(['_recoveryFingerprint', 's39r_recover', 'xrr_loadIntoVault'].map(extract).join('\n'), ctx);
+  vm.runInContext(['_recoveryFingerprint', 's39r_recover', '_s39rReadings', '_s39rShowChoice', '_s39rClearChoice', 's39r_restorePending', 'xrr_loadIntoVault'].map(extract).join('\n') +
+    '\nvar _s39rPending = null;', ctx);
   return { ctx, writes, prompts, status: () => status };
 }
-console.log('2. recovery requires fingerprint confirmation before writing');
+console.log("2. recovery shows the fingerprint before writing");
 { const ent = Buffer.from(bip39.mnemonicToEntropy(M, wordlist));
   const shares = (await generateMnemonics(1, [[2, 3]], ent, 'right-pass', 1))[0];
-  for (const [label, pp, answer, expectWrite] of [
-      ['SLIP-39 correct passphrase, user confirms', 'right-pass', true, true],
-      ['SLIP-39 WRONG passphrase, user declines', 'wrong-pass', false, false],
-      ['SLIP-39 correct passphrase, user declines', 'right-pass', false, false]]) {
-    const r = recCtx({ 's39r-passphrase': pp }, answer, { _s39rShares: shares.slice(0, 2) });
+  for (const [label, pp, restore, expectWrite] of [
+      ['SLIP-39 correct passphrase, user restores', 'right-pass', true, true],
+      ['SLIP-39 WRONG passphrase, user does not restore', 'wrong-pass', false, false],
+      ['SLIP-39 correct passphrase, user does not restore', 'right-pass', false, false]]) {
+    const r = recCtx({ 's39r-passphrase': pp }, false, { _s39rShares: shares.slice(0, 2) });
     await r.ctx.s39r_recover();
-    ck(label + (expectWrite ? ' -> written' : ' -> nothing written'), (r.writes.length === 1) === expectWrite && r.prompts.length === 1, JSON.stringify({ writes: r.writes.length, prompts: r.prompts.length, status: r.status() }));
-    if (pp === 'right-pass' && answer) ck('  prompt shows the real fingerprint ' + FP, r.prompts[0].includes(FP), r.prompts[0]);
-    if (pp === 'wrong-pass') ck('  wrong passphrase shows a DIFFERENT fingerprint', !r.prompts[0].includes(FP), r.prompts[0]);
+    const shown = r.ctx.document.getElementById('s39r-choice').innerHTML;
+    ck(label + ': Combine writes nothing and asks no confirm()', r.writes.length === 0 && r.prompts.length === 0, JSON.stringify({ writes: r.writes.length, status: r.status() }));
+    if (pp === 'right-pass') ck('  the SafeKeep reading shows the real fingerprint ' + FP, shown.includes('Restore This Wallet (' + FP + ')'), shown.slice(0, 200));
+    if (pp === 'wrong-pass') ck('  wrong passphrase shows a DIFFERENT fingerprint', !shown.includes(FP), shown.slice(0, 200));
+    if (restore) await r.ctx.s39r_restorePending();
+    ck(label + (expectWrite ? ' -> written' : ' -> nothing written'), (r.writes.length === 1) === expectWrite && (!expectWrite || r.writes[0] === M), JSON.stringify({ writes: r.writes.length }));
   }
   for (const [label, answer, expectWrite] of [['XOR recovery, user confirms', true, true], ['XOR recovery, user declines', false, false]]) {
     const r = recCtx({}, answer, { _xrrRecoveredMnemonic: M });
