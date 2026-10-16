@@ -82,6 +82,32 @@ const walletFp = fp(HDKey.fromMasterSeed(await bip39.mnemonicToSeed(mnT, ''))); 
 const trezorFp = fp(HDKey.fromMasterSeed(ms));                                        // SLIP-39 standard: master secret IS the BIP-32 seed
 console.log(`\n  user's real wallet fingerprint : ${walletFp}`);
 console.log(`  Trezor restore fingerprint     : ${trezorFp}   ${walletFp === trezorFp ? '(same)' : '<-- DIFFERENT WALLET'}`);
+// ---- Recovery shows both readings before anything is saved (Trezor shares → standard wallet) ----
+{
+  const vm = await import('node:vm');
+  const btcSigner = await import('@scure/btc-signer');
+  const ctx = vm.createContext({ window: { BtcMath: { bip39, HDKey, btcSigner } }, Uint8Array, Promise });
+  vm.runInContext(extract('_s39rReadings'), ctx);
+  const v4 = OFFICIAL.find(([d]) => d.startsWith('4. '));
+  const secret = new Uint8Array(await combineMnemonics(v4[1], 'TREZOR'));
+  const words = bip39.entropyToMnemonic(secret.slice(), wordlist);
+  const r = await ctx._s39rReadings(words, secret.slice());
+  const fpOf = (k) => (k.fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase();
+  const official = HDKey.fromExtendedKey(v4[3]);          // the official vector's expected master key
+  const addrOf = (root) => btcSigner.p2wpkh(root.derive("m/84'/0'/0'/0/0").publicKey).address;
+  ck('Trezor/standard reading = the official vector\'s master key (fingerprint + first address)',
+    r.standard.fp === fpOf(official) && r.standard.address === addrOf(official), r.standard.fp);
+  const skRoot = HDKey.fromMasterSeed(await bip39.mnemonicToSeed(words, ''));
+  ck('SafeKeep reading = the 12-word wallet (fingerprint + first address)', r.safekeep.fp === fpOf(skRoot) && r.safekeep.address === addrOf(skRoot), r.safekeep.fp);
+  ck('the two readings are different wallets (and both are shown)', r.safekeep.fp !== r.standard.fp);
+  const rec = extract('s39r_recover');
+  ck('Combine & Recover no longer saves anything or asks confirm(): it only shows the choice',
+    !/confirm\(/.test(rec) && !/restoreMasterSeed|_ephemeralCommitSeed/.test(rec) && /_s39rShowChoice\(/.test(rec));
+  const restore = extract('s39r_restorePending');
+  ck('only "Restore This Wallet" (the SafeKeep reading) writes a seed', /restoreMasterSeed\(mnemonic\)/.test(restore) && /_ephemeralCommitSeed\(mnemonic\)/.test(restore));
+  ck('the Trezor reading has no restore button and says nothing is saved', /SafeKeep can&rsquo;t open this wallet yet, so nothing will be saved/.test(extract('_s39rShowChoice')) &&
+    (extract('_s39rShowChoice').match(/onclick=/g) || []).length === 1);
+}
 console.log(`\nSLIP-39: ${pass} passed, ${fail} failed`);
 
 process.exit(fail === 0 ? 0 : 1);
