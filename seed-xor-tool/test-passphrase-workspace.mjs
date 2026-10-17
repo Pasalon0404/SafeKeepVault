@@ -58,13 +58,16 @@ function makeEnv({ amnesia = false } = {}) {
     _skbPrintInterstitial: () => {}, setTimeout: () => {},
     pp_config: { wordCount: 6, separator: '-', capitalization: 'title', lastPassphrase: '', _lastAppliedPassphrase: '' },
   });
-  ctx.window.SafeKeepOS = { savePassphrase: async (nickname, passphrase) => { saved.push({ nickname, passphrase }); return { saved: true, slug: 'x' }; } };
+  ctx.window.SafeKeepOS = { savePassphrase: async (nickname, passphrase) => { saved.push({ nickname, passphrase }); return { saved: true, slug: 'x' }; },
+    loadPassphrase: async (slug) => ({ found: true, nickname: 'Saved ' + slug, passphrase: 'from library ' + slug, slug }) };
   ctx.SafeKeepOS = ctx.window.SafeKeepOS;
-  vm.runInContext(['var _cipherActiveSlug = null, _cipherDirty = true, _cipherSource = "typed", _cipherVerified = false, _cipherGenInfo = null, _ppDraw = null;',
+  vm.runInContext(['var _cipherActiveSlug = null, _cipherDirty = true, _cipherSource = "typed", _cipherVerified = false, _cipherGenInfo = null, _ppDraw = null, _dashPpFromLibrary = null;',
     ...['pp_cryptoRandomInt', 'pp_applyCase', 'pp_generate', 'pp_render', 'pp_setWordCount', 'pp_setSeparator', 'pp_setCapitalization', 'pp_entropyBits', 'pp_updateEntropy', 'cipher_toggleGenerator', '_cipherApplySourceUI',
         'cipher_editGenerated', 'cipher_startVerify', 'cipher_checkVerify', 'cipher_cancelVerify', 'cipher_blockPaste', 'cipher_onPassphraseInput',
         'cipher_onConfirmInput', 'cipher_useGenerated', 'cipher_save', 'cipher_new', '_cipherReady', '_cipherUpdateUseBtn', 'cipher_useNow',
-        '_ppFingerprint', '_applySessionPassphrase', 'dash_applyPassphrase', 'pp_print'].map(extract),
+        '_ppFingerprint', '_applySessionPassphrase', 'dash_applyPassphrase', 'dash_confirmPassphrase', 'dash_cancelPassphraseConfirm',
+        '_dash_hidePassphraseConfirm', '_dash_setConfirmError', '_dash_applyConfirmedPassphrase', '_dash_onPassphraseInput',
+        'dash_loadFromCipher', 'dash_clearPassphrase', 'pp_print'].map(extract),
   ].join('\n'), ctx);
   return { ctx, el, statuses, saved, last: () => statuses[statuses.length - 1] || '', active: () => activePass };
 }
@@ -240,11 +243,48 @@ const fpOf = async (pass) => HDKey.fromMasterSeed(await bip39.mnemonicToSeed(MNE
   await ctx.cipher_useNow();
   ck('typed: use-now applies it', active() === 'correct horse'); }
 
-// ---- Dashboard Apply still works through the shared helper ----
+// ---- Dashboard Apply: a typed passphrase must be typed twice ----
 { const { ctx, el, last, active } = makeEnv();
+  const box = el('dash-pp-confirm'); box.style.display = 'none';
   el('dash-pp-input').value = 'dashboard pass';
   await ctx.dash_applyPassphrase();
-  ck('dashboard Apply sets the session passphrase and fingerprint', active() === 'dashboard pass' && el('dash-fingerprint').textContent === await fpOf('dashboard pass') && /Passphrase applied/.test(last()), last()); }
+  ck('typed: Apply asks to type it again and applies nothing yet', active() === '' && shown(box) && el('dash-pp-confirm-input').focused, box.style.display);
+  el('dash-pp-confirm-input').value = 'dashboard pas';
+  await ctx.dash_confirmPassphrase();
+  ck('typed: a mismatch applies nothing and says so', active() === '' && shown(box) && /don\u2019t match/.test(el('dash-pp-confirm-error').textContent) && el('dash-pp-confirm-input').value === '');
+  el('dash-pp-confirm-input').value = 'dashboard pass ';
+  await ctx.dash_confirmPassphrase();
+  ck('typed: a trailing space counts as different', active() === '');
+  el('dash-pp-confirm-input').value = '';
+  await ctx.dash_confirmPassphrase();
+  ck('typed: an empty confirmation applies nothing', active() === '' && /again first/.test(el('dash-pp-confirm-error').textContent));
+  el('dash-pp-confirm-input').value = 'dashboard pass';
+  await ctx.dash_confirmPassphrase();
+  ck('typed: a matching confirmation applies it and sets the fingerprint', active() === 'dashboard pass' && el('dash-fingerprint').textContent === await fpOf('dashboard pass') && /Passphrase applied/.test(last()), last());
+  ck('typed: the confirm row closes and its field is wiped', !shown(box) && el('dash-pp-confirm-input').value === '' && !shown(el('dash-pp-confirm-error')));
+  ck('success message asks to check the fingerprint', /matches the one you recorded/.test(last())); }
+{ const { ctx, el, active } = makeEnv();
+  el('dash-pp-input').value = 'one'; await ctx.dash_applyPassphrase();
+  el('dash-pp-confirm-input').value = 'on';
+  el('dash-pp-input').value = 'one!'; ctx._dash_onPassphraseInput();
+  ck('editing the passphrase closes the confirm row and wipes it', !shown(el('dash-pp-confirm')) && el('dash-pp-confirm-input').value === '' && active() === '');
+  await ctx.dash_applyPassphrase(); el('dash-pp-confirm-input').value = 'one!';
+  ctx.dash_cancelPassphraseConfirm();
+  ck('Cancel closes it, wipes it and applies nothing', !shown(el('dash-pp-confirm')) && el('dash-pp-confirm-input').value === '' && active() === ''); }
+{ const { ctx, el, active } = makeEnv();
+  await ctx.dash_loadFromCipher('a');
+  ck('(setup) Library load fills the field without applying', el('dash-pp-input').value === 'from library a' && active() === '');
+  await ctx.dash_applyPassphrase();
+  ck('from the Library: applies without retyping (it was checked when saved)', active() === 'from library a' && !shown(el('dash-pp-confirm')));
+  ctx.dash_clearPassphrase();
+  await ctx.dash_loadFromCipher('b');
+  el('dash-pp-input').value = 'from library b2'; ctx._dash_onPassphraseInput();
+  await ctx.dash_applyPassphrase();
+  ck('a Library passphrase that was edited must be confirmed', active() === '' && shown(el('dash-pp-confirm')));
+  ctx.dash_clearPassphrase();
+  ck('Clear closes the confirm row and forgets the Library marker', !shown(el('dash-pp-confirm')));
+  el('dash-pp-input').value = 'from library b'; await ctx.dash_applyPassphrase();
+  ck('after Clear, typing a Library passphrase by hand still needs confirming', active() === '' && shown(el('dash-pp-confirm'))); }
 
 // ---- Print PDF fingerprint matches the printed passphrase ----
 { const { ctx, el } = makeEnv();
@@ -269,7 +309,10 @@ ck('dead pp_applyPassphrase / pp_revertToBase / pp_applyGenerated / pp_useGenera
      ws.indexOf('id="cipher-passphrase"') < ws.indexOf('id="cipher-gen-panel"') && ws.indexOf('id="cipher-gen-panel"') < ws.indexOf('id="cipher-confirm-block"'));
   ck('old Generator card / checkbox is gone', !SRC.includes('cipher-gen-toggle'));
   ck('number/symbol toggles reformat instead of re-rolling', /id="pp-add-num" onchange="pp_render\(\)"/.test(ws) && /id="pp-add-sym" onchange="pp_render\(\)"/.test(ws));
-  ck('copy-check input is wiped on tool exit', /'#cipher-verify-input'/.test(SRC.slice(SRC.indexOf('var _sensitiveSelectors'), SRC.indexOf('var _sensitiveSelectors') + 3000))); }
+  ck('copy-check input is wiped on tool exit', /'#cipher-verify-input'/.test(SRC.slice(SRC.indexOf('var _sensitiveSelectors'), SRC.indexOf('var _sensitiveSelectors') + 3000)));
+  const dashTag = (SRC.match(/<input[^>]*id="dash-pp-confirm-input"[^>]*>/s) || [''])[0];
+  ck('dashboard confirm input blocks paste and drop, and is a password field', /onpaste="return cipher_blockPaste\(event\)"/.test(dashTag) && /ondrop="return false"/.test(dashTag) && /type="password"/.test(dashTag));
+  ck('dashboard confirm input is wiped with the other sensitive fields', /'#dash-pp-confirm-input'/.test(SRC.slice(SRC.indexOf('var _sensitiveSelectors'), SRC.indexOf('var _sensitiveSelectors') + 3000))); }
 
 console.log(`\nPASSPHRASE WORKSPACE: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

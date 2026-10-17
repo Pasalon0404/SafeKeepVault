@@ -1234,6 +1234,16 @@
       flex-direction: column;
       justify-content: center;
     }
+    .dash-pp-confirm {
+      margin: 0.5rem 0 1.5rem;
+      padding: 0.75rem;
+      border: 2px solid var(--skb-passphrase-active, #a78bfa);
+      background: var(--skb-bg-tertiary);
+    }
+    .dash-pp-confirm__label { display: block; font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.5rem; }
+    .dash-pp-confirm__row { display: flex; gap: 0.5rem; align-items: stretch; }
+    .dash-pp-confirm__row .dash-command-input { flex: 1; min-width: 0; }
+    .dash-pp-confirm__error { margin-top: 0.5rem; font-size: 0.8125rem; color: var(--skb-danger); }
     .dash-command-input {
       width: 100%;
       background: var(--skb-bg-input);
@@ -2651,6 +2661,7 @@
     html.skb-sidebar-fits body.tool-active .dash-passphrase,
     html.skb-sidebar-fits body.tool-active .dash-command-row,
     html.skb-sidebar-fits body.tool-active #dash-cipher-dropdown,
+    html.skb-sidebar-fits body.tool-active #dash-pp-confirm,
     html.skb-sidebar-fits body.tool-active .dash-settings,
     html.skb-sidebar-fits body.tool-active .dash-footer-brutalist,
     html.skb-sidebar-fits body.tool-active #amnesia-ghost-badge {
@@ -6801,6 +6812,22 @@
                                spellcheck="false" autocomplete="off"
                                oninput="_dash_onPassphraseInput()">
                     </div>
+                </div>
+
+                <!-- Passphrase confirmation (Dashboard) — shown when Apply is
+                     clicked for a typed passphrase. A typo would silently open a
+                     different, empty wallet, so it must be typed twice. Paste and
+                     drop are blocked so the check can't be skipped. -->
+                <div id="dash-pp-confirm" class="dash-pp-confirm" style="display: none;">
+                    <label for="dash-pp-confirm-input" class="dash-pp-confirm__label">Type the passphrase again to confirm it. A typo would open a different, empty wallet.</label>
+                    <div class="dash-pp-confirm__row">
+                        <input type="password" id="dash-pp-confirm-input" class="dash-command-input" spellcheck="false" autocomplete="off"
+                               onpaste="return cipher_blockPaste(event)" ondrop="return false"
+                               onkeydown="if (event.key === 'Enter') dash_confirmPassphrase(); else if (event.key === 'Escape') dash_cancelPassphraseConfirm();">
+                        <button type="button" class="dash-pp-btn btn-apply" id="dash-pp-confirm-btn" onclick="dash_confirmPassphrase()">Confirm &amp; Apply</button>
+                        <button type="button" class="dash-pp-btn" onclick="dash_cancelPassphraseConfirm()">Cancel</button>
+                    </div>
+                    <div id="dash-pp-confirm-error" class="dash-pp-confirm__error" role="alert" style="display: none;"></div>
                 </div>
 
                 <!-- Cipher Library Dropdown (Dashboard) — full-width, anchored
@@ -14419,6 +14446,8 @@ async function xrr_loadIntoVault() {
  * The user must click "Apply" to commit the passphrase.
  */
 function _dash_onPassphraseInput() {
+    // The passphrase changed: any half-finished confirmation no longer applies.
+    _dash_hidePassphraseConfirm();
     _dash_updatePassphraseButtons();
 }
 
@@ -14614,6 +14643,12 @@ async function _applySessionPassphrase(passphrase) {
     return newFP;
 }
 
+// The exact passphrase last loaded from the Passphrase Library into the
+// Dashboard field. Library passphrases were checked against the written copy
+// when they were saved, so they apply without being typed again. Anything
+// typed (or a loaded one that was then edited) must be confirmed.
+var _dashPpFromLibrary = null;
+
 async function dash_applyPassphrase() {
     var input = document.getElementById('dash-pp-input');
     var passphrase = input ? input.value : '';
@@ -14629,9 +14664,67 @@ async function dash_applyPassphrase() {
         return;
     }
 
+    if (passphrase !== _dashPpFromLibrary) {
+        var box = document.getElementById('dash-pp-confirm');
+        var confirmInput = document.getElementById('dash-pp-confirm-input');
+        if (box && confirmInput) {
+            confirmInput.value = '';
+            _dash_setConfirmError('');
+            box.style.display = 'block';
+            confirmInput.focus();
+            showStatus('Type the passphrase again below to confirm it.', 'info');
+            return;
+        }
+    }
+    await _dash_applyConfirmedPassphrase(passphrase);
+}
+
+/* Confirm & Apply: the retyped passphrase must match exactly (spaces count). */
+async function dash_confirmPassphrase() {
+    var input = document.getElementById('dash-pp-input');
+    var confirmInput = document.getElementById('dash-pp-confirm-input');
+    if (!input || !confirmInput) return;
+    var passphrase = input.value;
+    var again = confirmInput.value;
+    confirmInput.value = '';
+    if (!again) {
+        _dash_setConfirmError('Type the passphrase again first.');
+        confirmInput.focus();
+        return;
+    }
+    if (again !== passphrase) {
+        _dash_setConfirmError('They don\u2019t match, so nothing was applied. Check the passphrase above (Show reveals it) and type it again. Capitals and spaces count.');
+        confirmInput.focus();
+        return;
+    }
+    _dash_hidePassphraseConfirm();
+    await _dash_applyConfirmedPassphrase(passphrase);
+}
+
+function dash_cancelPassphraseConfirm() {
+    _dash_hidePassphraseConfirm();
+    showStatus('Passphrase not applied.', 'info');
+}
+
+function _dash_hidePassphraseConfirm() {
+    var box = document.getElementById('dash-pp-confirm');
+    var confirmInput = document.getElementById('dash-pp-confirm-input');
+    if (confirmInput) confirmInput.value = '';
+    _dash_setConfirmError('');
+    if (box) box.style.display = 'none';
+}
+
+function _dash_setConfirmError(text) {
+    var err = document.getElementById('dash-pp-confirm-error');
+    if (!err) return;
+    err.textContent = text;
+    err.style.display = text ? 'block' : 'none';
+}
+
+async function _dash_applyConfirmedPassphrase(passphrase) {
     try {
         var newFP = await _applySessionPassphrase(passphrase);
-        showStatus('Passphrase applied. New fingerprint: <strong>' + (newFP || '').toUpperCase() + '</strong>. All tools now derive from the passphrase wallet.', 'success');
+        showStatus('Passphrase applied. New fingerprint: <strong>' + (newFP || '').toUpperCase() + '</strong>. All tools now derive from the passphrase wallet. Check that this fingerprint matches the one you recorded for it.', 'success');
     } catch (err) {
         showStatus('Failed to apply passphrase: ' + err.message, 'error');
     }
@@ -14645,6 +14738,8 @@ async function dash_applyPassphrase() {
 function dash_clearPassphrase() {
     var input = document.getElementById('dash-pp-input');
     if (input) input.value = '';
+    _dashPpFromLibrary = null;
+    _dash_hidePassphraseConfirm();
 
     // Clear from both session stores
     if (window.SafeKeepOS && window.SafeKeepOS.clearPassphrase) {
@@ -14754,6 +14849,8 @@ async function dash_loadFromCipher(slug) {
         input.value = result.passphrase;
         input.type = 'password'; // ensure hidden
     }
+    _dashPpFromLibrary = result.passphrase;   // already checked when it was saved
+    _dash_hidePassphraseConfirm();
 
     // Close dropdown
     var dropdown = document.getElementById('dash-cipher-dropdown');
@@ -17186,6 +17283,7 @@ var _sensitiveSelectors = [
     '#cipher-passphrase',      // Cipher raw passphrase input
     '#cipher-confirm',         // Cipher confirmation input
     '#cipher-verify-input',    // Cipher written-copy check input
+    '#dash-pp-confirm-input',  // Dashboard passphrase confirmation
     '.wrec-key-pp',            // Wallet Record key passphrases
     '#wrec-print-area'         // Wallet Record print copy
 ];
