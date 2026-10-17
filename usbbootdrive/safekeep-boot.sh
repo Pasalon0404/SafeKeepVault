@@ -1457,6 +1457,99 @@ DSPYEOF
     echo "Settings watcher daemon started (PID $SETTINGS_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # WALLETS WATCHER — KEEP SAVED WALLETS IN THE VAULT
+    # -------------------------------------------------------------------
+    # The Output Descriptor tool saves wallets (a name and a watch-only
+    # output descriptor each) so the PSBT Signer can check transactions
+    # against them. On every change the app downloads the whole list as
+    # SAVED_WALLETS.json into the vault's seeds/ folder. Same rules as the
+    # Settings Watcher: the file is untrusted data, nothing in it is run.
+    # It is accepted only if it is at most 256 KB with at most 50 wallets,
+    # each a name of 1-64 printable characters and a descriptor of at most
+    # 4 KB of printable ASCII that holds no private key (xprv or WIF), and
+    # is written atomically to
+    #   $VAULT_MOUNT/settings/saved-wallets.json
+    # Living in settings/, it is covered by Encrypted Backup ("Application
+    # Settings"), restore and factory reset. Normal boots only.
+    SAVED_WALLETS_STORED="$VAULT_MOUNT/settings/saved-wallets.json"
+    rm -f "$CHROMIUM_DOWNLOAD_DIR"/SAVED_WALLETS*.json 2>/dev/null
+    (
+        while true; do
+            if compgen -G "$CHROMIUM_DOWNLOAD_DIR/SAVED_WALLETS*.json" > /dev/null; then
+                sleep 1
+                mapfile -t SW_FILES < <(ls -t "$CHROMIUM_DOWNLOAD_DIR"/SAVED_WALLETS*.json 2>/dev/null)
+                if [ "${#SW_FILES[@]}" -gt 0 ] && [ "$EPHEMERAL_MODE" != "1" ]; then
+                    mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
+                    if python3 -I - "${SW_FILES[0]}" "$SAVED_WALLETS_STORED.tmp" <<'SWPYEOF'
+import hashlib, json, re, sys
+src, dst = sys.argv[1], sys.argv[2]
+MAX_BYTES, MAX_WALLETS = 262144, 50
+B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+def b58check(s):
+    n = 0
+    for c in s:
+        n = n * 58 + B58.index(c)
+    raw = n.to_bytes((n.bit_length() + 7) // 8, 'big')
+    raw = b'\0' * (len(s) - len(s.lstrip('1'))) + raw
+    body, check = raw[:-4], raw[-4:]
+    if hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4] != check:
+        raise ValueError('bad checksum')
+    return body
+def has_private_key(text):
+    if re.search(r'\b[xtyzuvYZUV]prv[1-9A-HJ-NP-Za-km-z]{20,}', text):
+        return True
+    for tok in re.findall(r'\b[5KLc9][1-9A-HJ-NP-Za-km-z]{50,51}\b', text):
+        try:
+            p = b58check(tok)
+        except ValueError:
+            continue
+        if (len(p) == 33 or (len(p) == 34 and p[33] == 1)) and p[0] in (0x80, 0xEF):
+            return True
+    return False
+with open(src, 'rb') as f:
+    raw = f.read(MAX_BYTES + 1)
+if len(raw) > MAX_BYTES:
+    sys.exit('file too large')
+data = json.loads(raw.decode('utf-8'))
+wallets = data.get('wallets') if isinstance(data, dict) else None
+if not isinstance(wallets, list) or len(wallets) > MAX_WALLETS:
+    sys.exit('no valid wallet list')
+out = []
+for w in wallets:
+    if not isinstance(w, dict):
+        sys.exit('bad wallet entry')
+    name, desc, added = w.get('name'), w.get('descriptor'), w.get('added', '')
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 64 \
+            or re.search(r'[\x00-\x1f\x7f]', name):
+        sys.exit('bad wallet name')
+    if not isinstance(desc, str) or not desc or len(desc) > 4096 \
+            or not re.fullmatch(r'[\x20-\x7e]+', desc) or re.search(r'["\\]', desc):
+        sys.exit('bad descriptor')
+    if has_private_key(desc):
+        sys.exit('descriptor holds a private key')
+    out.append({'name': name.strip(), 'descriptor': desc,
+                'added': added[:40] if isinstance(added, str) else ''})
+with open(dst, 'w', encoding='utf-8') as f:
+    json.dump({'version': 1, 'wallets': out}, f)
+SWPYEOF
+                    then
+                        chmod 600 "$SAVED_WALLETS_STORED.tmp" 2>/dev/null
+                        mv -f "$SAVED_WALLETS_STORED.tmp" "$SAVED_WALLETS_STORED" && sync
+                        echo "Wallets Watcher: saved wallets stored in vault"
+                    else
+                        rm -f "$SAVED_WALLETS_STORED.tmp" 2>/dev/null
+                        echo "Wallets Watcher: rejected an invalid wallets file"
+                    fi
+                fi
+                rm -f "${SW_FILES[@]}" 2>/dev/null
+            fi
+            sleep 1
+        done
+    ) &
+    WALLETS_WATCHER_PID=$!
+    echo "Wallets watcher daemon started (PID $WALLETS_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # TREZOR WATCHER DAEMON — USB SIGNING WITH A PAIRED TREZOR ONE
     # -------------------------------------------------------------------
     # Same pattern as the Coldcard watcher above. The web app downloads

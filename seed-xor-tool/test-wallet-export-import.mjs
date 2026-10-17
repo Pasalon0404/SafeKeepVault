@@ -73,7 +73,7 @@ function makeEnv(seedPhrase) {
         '_descRecvNormalize', '_descRecvResult', 'desc_recvCheck', 'desc_recvStopScan', '_descShowAddrExport', 'desc_arraysEqual',
         '_descImportPrivateCheck', '_descImportKey', '_descImportPath', '_descImportWithChecksum', '_descImportSetup', '_descImportBsms',
         '_descImportDescriptorList', '_descImportSingleKey', '_descImportFromHex', '_descImportRestoreLines', '_descImportJsonKey', '_descImportConvert', '_descShowConverted', '_descVerifyFromBytes',
-        '_descVerifyAddrRows', 'desc_verify', 'desc_useVerified'].map(extract),
+        '_descVerifyAddrRows', 'desc_verify', 'desc_useVerified', '_descLoadWatchOnly', '_descSaveResult'].map(extract),
   ].join('\n'), ctx);
   const verify = async (text) => {
     statuses.length = 0; el('desc-verify-result').style.display = ''; el('desc-verify-input').value = text; await ctx.desc_verify();
