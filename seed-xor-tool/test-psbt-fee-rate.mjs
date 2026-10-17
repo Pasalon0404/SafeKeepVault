@@ -38,7 +38,7 @@ function extract(name) {
   return SRC.slice(m.index, j + 1);
 }
 
-const FNS = ['_psbtEstimateVsize', '_psbtAuditOutputs', '_psbtExpectedScript', '_psbtScriptsEqual', '_psbtGetDerivEntries', '_psbtNormalizeFp', '_psbtPurposeToType', '_psbtFormatPath', '_psbtDetectMultisig', '_psbtVerifyMultisigChange', '_psbtMultisigWalletBinding'];
+const FNS = ['_psbtEstimateVsize', '_psbtAuditOutputs', '_psbtPrevOut', '_psbtNonWitnessTxidOk', '_psbtPrevTxMismatches', '_psbtExpectedScript', '_psbtScriptsEqual', '_psbtGetDerivEntries', '_psbtNormalizeFp', '_psbtPurposeToType', '_psbtFormatPath', '_psbtDetectMultisig', '_psbtVerifyMultisigChange', '_psbtMultisigWalletBinding'];
 const ctx = vm.createContext({ window: { BtcMath: { btcSigner: btc, HDKey } }, console: { log() {}, warn() {}, error() {} }, Uint8Array, BigInt, Number, String, Array, Object, Map, Set, Math, Error, ArrayBuffer,
   PSBT_NETWORK: btc.NETWORK, PSBT_WILDCARD_FP: '00000000', _psbtLoadedBytes: null, _psbtSnapshotSpOutputs: () => [], _psbtVerifySilentPayments: () => null });
 vm.runInContext(FNS.map(extract).join('\n'), ctx);

@@ -94,7 +94,7 @@ const ctx = vm.createContext({
 vm.runInContext([
   ...['DESC_BIP32_PUBLIC_MAINNET', 'DESC_BIP32_PUBLIC_TESTNET', '_DESC_MAINNET_VERS', '_DESC_TESTNET_VERS', '_WREC_SCRIPTS', '_sha256K', '_B58_ALPHABET'].map(extractVar),
   'var _savedWallets = [], _savedWalletsLoading = null; var desc_state = { currentDescriptor: "" };',
-  ...['_psbtAuditOutputs', '_psbtExpectedScript', '_psbtScriptsEqual', '_psbtGetDerivEntries', '_psbtNormalizeFp', '_psbtPurposeToType', '_psbtFormatPath',
+  ...['_psbtAuditOutputs', '_psbtPrevOut', '_psbtNonWitnessTxidOk', '_psbtPrevTxMismatches', '_psbtExpectedScript', '_psbtScriptsEqual', '_psbtGetDerivEntries', '_psbtNormalizeFp', '_psbtPurposeToType', '_psbtFormatPath',
       '_psbtDetectMultisig', '_psbtVerifyMultisigChange', '_psbtMultisigWalletBinding', '_psbtSavedWalletCheck', '_psbtSavedWalletList', '_psbtAuditWithSavedWallets',
       '_psbtSavedWalletBannerHtml', '_psbtEscape',
       'desc_checksum', 'desc_parseKeyOrigin', '_base58decode', '_base58checkDecode', '_base58check', '_base58encode', '_sha256sync', '_sha256impl', '_rr',
@@ -204,6 +204,13 @@ function ssTx({ inputs = [[0, 0]], change = [1, 3], changeKey } = {}) {
   t.addOutput({ script: btc.p2wpkh(att.publicKey).script, amount: 1_900_000n });
   const r = audit(t, [['Old', PKH]]);
   ck('legacy input read from nonWitnessUtxo matches (receive #4)', r.savedWallets.inputs[0].wallet === 'Old' && r.savedWallets.inputs[0].child === 4, JSON.stringify(r.savedWallets));
+  // A forged previous transaction (paying the saved wallet) under another txid must not match.
+  const other = new btc.Transaction(); other.addInput({ txid: randomBytes(32), index: 0 }); other.addOutput({ script: btc.p2wpkh(att.publicKey).script, amount: 1n }); other.addOutput({ script: btc.p2wpkh(att.publicKey).script, amount: 9n });
+  const tf = new btc.Transaction();
+  tf.addInput({ txid: other.id, index: 1, nonWitnessUtxo: prev.toBytes(true, false), bip32Derivation: [[k.publicKey, { fingerprint: me.fingerprint, path: [44 + H, H, H, 0, 4] }]] });
+  tf.addOutput({ script: btc.p2wpkh(att.publicKey).script, amount: 1n });
+  const rf = audit(tf, [['Old', PKH]]);
+  ck('a forged previous transaction never makes an input "yours"', rf.savedWallets.inputs[0].wallet === null && rf.savedWallets.unmatchedInputs.join() === '0', JSON.stringify(rf.savedWallets));
 }
 
 // ======== 1b. Multisig 2-of-3, including a "diet" PSBT ========
