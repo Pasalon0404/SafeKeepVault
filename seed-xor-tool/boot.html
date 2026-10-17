@@ -2234,6 +2234,15 @@
 .desc-recv-result.is-bad { border-color: var(--skb-danger); color: var(--skb-danger); }
 .desc-recv-result.is-busy { color: var(--skb-text-muted); }
 
+/* ---- Output Descriptor: saved wallets ---- */
+.desc-saved-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
+.desc-saved-row:first-child { border-top: none; padding-top: 0; }
+.desc-saved-info { flex: 1; min-width: 0; }
+.desc-saved-name { font-size: 0.875rem; font-weight: 600; color: var(--skb-text); overflow-wrap: anywhere; }
+.desc-saved-meta { font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.15rem; }
+.desc-saved-addr { font-family: var(--skb-mono); font-size: 0.7rem; color: var(--skb-text-dim); margin-top: 0.15rem; overflow-wrap: anywhere; }
+.desc-saved-row .skb-btn { font-size: 0.75rem; padding: 0.3rem 0.7rem; white-space: nowrap; }
+
 /* ---- Output Descriptor: address export row ---- */
 #desc-addr-export { margin-top: 0.5rem; }
 /* The count field drops below the button when there isn't room for both. */
@@ -4191,6 +4200,14 @@
       margin-bottom: 0.2rem;
     }
     .psbt-change-card.hijacked { border-left: 4px solid var(--skb-danger); background: rgba(220,38,38,0.06); }
+    .psbt-own-note {
+      margin: 0.4rem 0;
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      color: var(--skb-secondary);
+      word-break: normal;
+      overflow-wrap: anywhere;
+    }
     .psbt-change-card__label {
       display: flex;
       gap: 0.5rem;
@@ -8071,6 +8088,13 @@
                 <button type="button" id="desc-mode-verify" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('verify')">Verify</button>
             </div>
 
+            <!-- ======== SAVED WALLETS (shown when the vault holds any) ======== -->
+            <div class="skb-card" id="desc-saved-wallets" style="display: none; margin-bottom: 1rem;">
+                <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.25rem;">Saved Wallets</div>
+                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.75rem; line-height: 1.5;">The PSBT Signer checks every transaction against these: which wallet it spends from, and whether its change comes back to one of them.</p>
+                <div id="desc-saved-list"></div>
+            </div>
+
             <!-- ======== SINGLE-SIG SECTION ======== -->
             <div id="desc-single-section">
                 <!-- Seed Input Card -->
@@ -8405,6 +8429,17 @@
                             </div>
                             <div id="desc-recv-result" class="desc-recv-result" role="status" style="display: none;"></div>
                         </div>
+                    </div>
+
+                    <!-- Save this descriptor to the vault for the PSBT Signer -->
+                    <div id="desc-save-wallet" class="desc-recv">
+                        <div class="desc-recv-head">Save to Vault</div>
+                        <p class="desc-recv-note">Save this wallet so the PSBT Signer can show which of your wallets a transaction spends from, and confirm that its change comes back to you. The vault keeps the descriptor (public keys only), never a seed or passphrase.</p>
+                        <div class="desc-recv-check" style="margin-top: 0.75rem;">
+                            <input type="text" id="desc-save-name" class="skb-input" maxlength="64" placeholder="Wallet name, e.g. Family Vault 2-of-3" autocomplete="off" spellcheck="false" style="font-family: inherit;" onkeydown="if (event.key === 'Enter') desc_saveWallet()">
+                            <button type="button" class="skb-btn skb-btn--primary" id="desc-save-btn" onclick="desc_saveWallet()">Save Wallet</button>
+                        </div>
+                        <div id="desc-save-result" class="desc-recv-result" role="status" style="display: none;"></div>
                     </div>
 
                     <button type="button" class="skb-btn" style="width: 100%; margin-top: 1rem; font-size: 0.8125rem; border: 1px dashed var(--skb-border);" onclick="desc_printPDF()">Print PDF</button>
@@ -9269,7 +9304,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <input type="checkbox" id="rlq-chk-settings" value="settings" onchange="rlq_onCheck()">
                         <div>
                             <div style="font-size: 0.85rem; font-weight: 600;">Application Settings</div>
-                            <div style="font-size: 0.72rem; color: var(--skb-text-dim);">Device configuration and preferences</div>
+                            <div style="font-size: 0.72rem; color: var(--skb-text-dim);">Device options and saved wallets</div>
                         </div>
                     </label>
 
@@ -11309,6 +11344,7 @@ window.addEventListener('DOMContentLoaded', () => {
         return { ok: true, status: 'xpub', deriv: deriv, xfp: root.fingerprint.toString(16).padStart(8, '0').toUpperCase(),
                  xpub: root.derive(deriv).publicExtendedKey };
     }
+    var _devSavedWallets = [];  // dev-mock saved wallets (in memory)
     var _devTzPairing = null;   // dev-mock Trezor pairing (in memory)
     var _devTzUnlocked = false; // dev-mock Trezor: PIN already entered?
     var _devTzPinShown = false; // dev-mock Trezor: grid showing (reset by detect, like the real one)
@@ -11458,6 +11494,16 @@ window.addEventListener('DOMContentLoaded', () => {
         deletePassphrase: async function (slug) {
             delete _passphraseStore[slug];
             return { deleted: true };
+        },
+
+        // --- Saved wallets (in memory for this page) ---
+        loadSavedWallets: async function () {
+            return _devSavedWallets.map(function (w) { return { name: w.name, descriptor: w.descriptor, added: w.added }; });
+        },
+        saveSavedWallets: async function (list) {
+            await _sleep(80);
+            _devSavedWallets = (list || []).map(function (w) { return { name: w.name, descriptor: w.descriptor, added: w.added || '' }; });
+            return { saved: true };
         },
 
         // --- The Codex (notes) ---
@@ -17722,6 +17768,7 @@ function showState(stateId) {
         bip85_autoFillMasterSeed();
     } else if (stateId === 'state-descriptor') {
         desc_autoFillMasterSeed();
+        savedWallets_load();
     } else if (stateId === 'state-seedqr') {
         sqr_autoFillMasterSeed();
     } else if (stateId === 'state-armory') {
@@ -17819,6 +17866,7 @@ function openPsbtSigner() {
     showState('state-psbt-signer');
     _psbtHwMode = false;
     psbtResetToIngest();
+    _savedWalletsLoading = savedWallets_load();
 
     document.getElementById('psbt-vault-fp').textContent = fp;
     if (pp) document.getElementById('psbt-passphrase').value = pp;
@@ -19644,6 +19692,12 @@ async function _psbtIngestComplete(psbtBytes, filename, via) {
         const tx = btcLib.Transaction.fromPSBT(psbtBytes, { network: PSBT_NETWORK });
         _psbtLastTx = tx;
 
+        // The saved wallets are read when the signer opens; a PSBT loaded
+        // straight away must still be checked against them.
+        if (_savedWalletsLoading) {
+            try { await _savedWalletsLoading; } catch (_) {}
+        }
+
         // Final generation check before the synchronous audit. Any
         // ingest that started while we were deriving above has already
         // reset the module state — refuse to write this one's results
@@ -19654,7 +19708,7 @@ async function _psbtIngestComplete(psbtBytes, filename, via) {
         }
 
         // ---- Run the audit engine ----
-        const auditResult = _psbtAuditOutputs(tx, masterKey, myFingerprint);
+        const auditResult = _psbtAuditWithSavedWallets(tx, masterKey, myFingerprint);
         // One more generation check — the synchronous audit can take
         // milliseconds on large PSBTs and a user click could have fired
         // a new ingest in that window.
@@ -21396,6 +21450,117 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
     };
 }
 
+/**
+ * Check a PSBT against the wallets saved in the Output Descriptor tool.
+ * Runs after _psbtAuditOutputs and adds to its result:
+ *   audit.savedWallets = { count, inputs: [{ index, wallet, chain, child }],
+ *                          unmatchedInputs: [index…] }
+ *   output.savedWallet = { name, chain, child } on each output that is an
+ *                        address of a saved wallet
+ * Matching never trusts the PSBT: it takes the (chain, index) a derivation
+ * path claims, works out the saved wallet's own address there, and compares
+ * it with the actual script. A saved descriptor is the user's record of
+ * their own wallet, so an 'unverified-change' output (e.g. a "diet" PSBT
+ * without witnessScript) that matches one becomes 'verified-change'.
+ * Nothing else changes category: a hijack stays blocked, and a payment to
+ * one of your own saved wallets still needs its destination checkbox.
+ *
+ * @param wallets  [{ name, parsed }], parsed by _wrecParseDescriptor
+ */
+function _psbtSavedWalletCheck(tx, audit, wallets) {
+    const btcLib = window.BtcMath.btcSigner;
+    const info = { count: wallets.length, inputs: [], unmatchedInputs: [] };
+    audit.savedWallets = info;
+    if (!wallets.length) return audit;
+
+    // Per wallet, per chain: account nodes walked down to that chain.
+    const nodeCache = wallets.map(() => ({}));
+    function addressAt(w, chain, child) {
+        const cache = nodeCache[w];
+        if (!(chain in cache)) {
+            try { cache[chain] = _descChainNodes(wallets[w].parsed.keys, chain); }
+            catch (e) { cache[chain] = null; }
+        }
+        const nodes = cache[chain];
+        if (!nodes) return null;
+        const p = wallets[w].parsed;
+        return _wrecAddressFromPubkeys(p.kind, p.sorted, p.msM, nodes.map(n => n.deriveChild(child).publicKey));
+    }
+    // The (chain, index) pairs the PSBT claims: the last two steps of each
+    // derivation path, unhardened, on the receive (0) or change (1) chain.
+    function claims(entries) {
+        const seen = new Set(), out = [];
+        for (const e of entries) {
+            const path = e.path || [];
+            if (path.length < 2) continue;
+            const chain = path[path.length - 2] >>> 0, child = path[path.length - 1] >>> 0;
+            if ((chain !== 0 && chain !== 1) || child >= 0x80000000) continue;
+            if (!seen.has(chain + '/' + child) && out.length < 8) { seen.add(chain + '/' + child); out.push({ chain, child }); }
+        }
+        return out;
+    }
+    function match(script, entries) {
+        if (!script) return null;
+        let addr;
+        try { addr = btcLib.Address(PSBT_NETWORK).encode(btcLib.OutScript.decode(script)); } catch (e) { return null; }
+        for (const c of claims(entries)) {
+            for (let w = 0; w < wallets.length; w++) {
+                let a = null;
+                try { a = addressAt(w, c.chain, c.child); } catch (e) { a = null; }
+                if (a === addr) return { name: wallets[w].name, chain: c.chain, child: c.child };
+            }
+        }
+        return null;
+    }
+    const entriesOf = (x) => _psbtGetDerivEntries(x.bip32Derivation).concat(_psbtGetDerivEntries(x.tapBip32Derivation));
+
+    (tx.inputs || []).forEach((inp, i) => {
+        let script = inp.witnessUtxo && inp.witnessUtxo.script;
+        if (!script && inp.nonWitnessUtxo && inp.nonWitnessUtxo.outputs) {
+            const prev = inp.nonWitnessUtxo.outputs[inp.index];
+            script = prev && prev.script;
+        }
+        const m = match(script, entriesOf(inp));
+        info.inputs.push({ index: i, wallet: m ? m.name : null, chain: m ? m.chain : null, child: m ? m.child : null });
+        if (!m) info.unmatchedInputs.push(i);
+    });
+
+    audit.outputs.forEach(o => {
+        const out = tx.outputs[o.index];
+        if (o.silentPayment || !out) return;
+        const m = match(out.script, entriesOf(out));
+        if (!m) return;
+        o.savedWallet = m;
+        if (o.category === 'unverified-change') {
+            o.category = 'verified-change';
+            o.auditDetail = 'Verified against your saved wallet “' + m.name + '”: this is its ' +
+                (m.chain === 1 ? 'change' : 'receive') + ' address #' + m.child + '.';
+        }
+    });
+    audit.unverifiedChangeOutputs = audit.unverifiedChangeOutputs.filter(idx =>
+        audit.outputs.some(o => o.index === idx && o.category === 'unverified-change'));
+    audit.unverifiedChangeDetected = audit.unverifiedChangeOutputs.length > 0;
+    return audit;
+}
+
+/* Saved wallets ready for _psbtSavedWalletCheck (unreadable ones skipped). */
+function _psbtSavedWalletList() {
+    const list = typeof _savedWallets !== 'undefined' ? _savedWallets : [];
+    return list.map(w => ({ name: w.name, parsed: _savedWalletParse(w.descriptor).parsed })).filter(w => w.parsed);
+}
+
+/* Audit + saved-wallet check, as both the ingest and the re-audit run it. */
+function _psbtAuditWithSavedWallets(tx, masterKey, myFingerprint) {
+    const audit = _psbtAuditOutputs(tx, masterKey, myFingerprint);
+    try {
+        _psbtSavedWalletCheck(tx, audit, _psbtSavedWalletList());
+    } catch (e) {
+        console.warn('[PSBT-AUDIT] Saved-wallet check failed:', e);
+        audit.savedWallets = { count: 0, inputs: [], unmatchedInputs: [], error: e.message };
+    }
+    return audit;
+}
+
 
 /**
  * Build the review-phase HTML from audit results.
@@ -21422,6 +21587,42 @@ function _psbtAddressChecksum(addr) {
     return s.slice(0, 6) + ' \u2026 ' + s.slice(-6);
 }
 
+/* Banner: which saved wallets the inputs come from (see _psbtSavedWalletCheck). */
+function _psbtSavedWalletBannerHtml(auditResult) {
+    const sw = auditResult.savedWallets;
+    if (!sw) return '';
+    if (sw.error) {
+        return '<div class="psbt-alert warning"><strong>Saved wallets not checked:</strong> ' + _psbtEscape(sw.error) + '</div>';
+    }
+    if (!sw.count) {
+        if (_psbtHwMode) return '';   // temporary session: there is no vault to save wallets in
+        return '<div class="psbt-alert info">No saved wallets yet. Save your wallet in the <strong>Output Descriptor</strong> tool, and SafeKeep will show which of your wallets each transaction spends from and confirm that its change comes back to you.</div>';
+    }
+    const total = sw.inputs.length;
+    const counts = new Map();
+    sw.inputs.forEach(x => { if (x.wallet) counts.set(x.wallet, (counts.get(x.wallet) || 0) + 1); });
+    const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+    const names = Array.from(counts.entries()).map(([name, n]) =>
+        '<strong>“' + _psbtEscape(name) + '”</strong>' + (counts.size > 1 ? ' (' + plural(n, 'input') + ')' : ''));
+    const list = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+    const unmatched = sw.unmatchedInputs.length;
+
+    if (!counts.size) {
+        return '<div class="psbt-alert warning"><strong>&#9888; Not from a saved wallet:</strong> ' +
+            (total === 1 ? 'the input doesn&rsquo;t' : 'none of the ' + total + ' inputs') +
+            ' match any of your saved wallets. If you meant to spend from one of them, don&rsquo;t sign: check the transaction in your wallet app.</div>';
+    }
+    if (unmatched) {
+        return '<div class="psbt-alert warning"><strong>&#9888; Partly from a saved wallet:</strong> spends from your saved wallet' +
+            (counts.size > 1 ? 's ' : ' ') + list + ', but ' +
+            (unmatched === 1 ? 'input ' + sw.unmatchedInputs[0] + ' doesn&rsquo;t'
+                             : 'inputs ' + sw.unmatchedInputs.join(', ') + ' (' + unmatched + ' of ' + total + ') don&rsquo;t') +
+            ' match any saved wallet. Make sure you meant to spend ' + (unmatched === 1 ? 'it' : 'them') + '.</div>';
+    }
+    return '<div class="psbt-alert success"><strong>&#10003; Spends from your saved wallet' + (counts.size > 1 ? 's' : '') + '</strong> ' + list +
+        (counts.size === 1 && total > 1 ? ' (all ' + total + ' inputs)' : '') + '.</div>';
+}
+
 function _psbtBuildReviewHtml(tx, auditResult) {
     let outputsHtml = '';
 
@@ -21444,6 +21645,9 @@ function _psbtBuildReviewHtml(tx, auditResult) {
                 Always cross-reference every destination address before signing.
             </span>
         </div>`;
+
+    // ---- SAVED WALLETS: which of your wallets this spends from ----
+    outputsHtml += _psbtSavedWalletBannerHtml(auditResult);
 
     // ---- HIJACK ALERT (top of review, impossible to miss) ----
     if (hijacked.length > 0) {
@@ -21504,6 +21708,9 @@ function _psbtBuildReviewHtml(tx, auditResult) {
             // An output the PSBT called "change" but that SafeKeep could not
             // prove returns to this seed. Say so plainly — this is exactly how
             // a compromised coordinator would try to disguise a theft.
+            const ownNote = out.savedWallet
+                ? `<div class="psbt-own-note">This is ${out.savedWallet.chain === 1 ? 'change' : 'receive'} address #${out.savedWallet.child} of your saved wallet <strong>“${_psbtEscape(out.savedWallet.name)}”</strong>. Check it anyway: this transaction moves funds between your wallets.</div>`
+                : '';
             const claimNote = out.changeClaimRejected
                 ? `<div style="margin: 0.4rem 0; padding: 0.45rem 0.6rem; border-left: 3px solid var(--skb-danger); background: rgba(220, 38, 38, 0.08); font-size: 0.8125rem; line-height: 1.45;"><strong>&#9888; Labeled as change, but NOT proven to be yours.</strong> ${_psbtEscape(out.auditDetail || '')} If this is not an address you intend to pay, do not sign.</div>`
                 : '';
@@ -21512,6 +21719,7 @@ function _psbtBuildReviewHtml(tx, auditResult) {
                 <div class="psbt-verify-card${out.silentPayment ? ' psbt-verify-card--sp' : ''}" id="${cardId}" data-dest-index="${idx}">
                     <span class="psbt-verify-card__label">SENDING TO &mdash; Destination ${idx + 1} of ${destinations.length} ${spBadge}</span>
                     <div class="psbt-verify-card__addr">${addr}</div>
+                    ${ownNote}
                     ${claimNote}
                     ${spResolved}
                     <div class="psbt-verify-card__row">
@@ -21573,6 +21781,7 @@ function _psbtBuildReviewHtml(tx, auditResult) {
                 <div style="font-family: var(--skb-mono); font-size: 0.8125rem; word-break: break-all; color: var(--skb-text);">${addr}</div>
                 <div style="font-family: var(--skb-mono); font-size: 0.8125rem; font-weight: 700; color: var(--skb-text); margin-top: 0.25rem;">${sats} sats (${btcAmt} BTC)</div>
                 <div style="font-size: 0.6875rem; color: var(--skb-text-dim); margin-top: 0.2rem; font-family: var(--skb-mono);">${_psbtEscape(out.derivPath || '')}</div>
+                ${out.savedWallet ? `<div class="psbt-own-note">Saved wallet <strong>“${_psbtEscape(out.savedWallet.name)}”</strong>, ${out.savedWallet.chain === 1 ? 'change' : 'receive'} address #${out.savedWallet.child}</div>` : ''}
             </div>`;
     });
 
@@ -23260,7 +23469,7 @@ function psbtOnPassphraseChanged() {
                 if (myGeneration !== _psbtIngestGeneration) return;
                 _psbtLastTx = tx;
 
-                const auditResult = _psbtAuditOutputs(tx, masterKey, myFp);
+                const auditResult = _psbtAuditWithSavedWallets(tx, masterKey, myFp);
                 if (myGeneration !== _psbtIngestGeneration) return;
                 _psbtLastAuditResult = auditResult;
                 // Passphrase change → re-audit → invalidate the diet-PSBT
@@ -30582,6 +30791,7 @@ function desc_recvReset() {
     if (input) input.value = '';
     var res = document.getElementById('desc-recv-result');
     if (res) { res.style.display = 'none'; res.textContent = ''; }
+    _descSaveResult('', '');   // a different descriptor: the last save message no longer applies
     desc_recvShow();
 }
 
@@ -32130,10 +32340,14 @@ async function desc_verify() {
 function desc_useVerified() {
     var v = _descVerified;
     if (!v || v.parsed.addressNote) return;
-    var p = v.parsed;
-    desc_state.currentDescriptor = v.descriptor;
+    _descLoadWatchOnly(v.descriptor, v.parsed, 'Loaded as a watch-only wallet: ');
+}
+
+/* Show a parsed descriptor in the output card as a watch-only wallet. */
+function _descLoadWatchOnly(descriptor, p, message) {
+    desc_state.currentDescriptor = descriptor;
     desc_state.imported = { isMulti: !!p.isMulti };
-    document.getElementById('desc-descriptor-text').textContent = v.descriptor;
+    document.getElementById('desc-descriptor-text').textContent = descriptor;
 
     var addrHtml = p.kind === 'sp'
         ? '<div style="margin-bottom: 0.3rem; word-break: break-all;">' + p.firstAddress + '</div>'
@@ -32146,9 +32360,150 @@ function desc_useVerified() {
     out.style.display = 'block';
     document.getElementById('desc-qr-wrap').style.display = 'none';
     document.getElementById('desc-qr-toggle-btn').textContent = 'Show QR';
-    showStatus('Loaded as a watch-only wallet: ' + p.script + (p.isMulti ? ', ' + p.msM + '-of-' + p.msN : '') +
+    showStatus(message + p.script + (p.isMulti ? ', ' + p.msM + '-of-' + p.msN : '') +
                '. Use Receive below to show or check its addresses.', 'success');
     try { out.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+}
+
+// =============================================
+// Saved wallets — watch-only descriptors kept in the vault
+// =============================================
+// SafeKeepOS.saveSavedWallets stores the list in the encrypted vault
+// (settings/saved-wallets.json); the PSBT Signer reads it through
+// _savedWallets (see _psbtSavedWalletCheck). Only descriptors whose
+// addresses can be worked out here are accepted, because a PSBT is matched
+// by deriving the wallet's address at each input's and output's path.
+var _savedWallets = [];   // [{ name, descriptor, added }], as stored
+var _savedWalletsLoading = null;   // set while the PSBT Signer reads the list
+
+/* Descriptor without its #checksum, to spot the same wallet saved twice. */
+function _savedWalletBody(descriptor) {
+    return String(descriptor || '').replace(/[\r\n]+/g, '').trim().replace(/#[0-9a-z]{8}$/i, '');
+}
+
+/* { parsed } for a descriptor that can be saved and matched, or { error }. */
+function _savedWalletParse(descriptor) {
+    var priv = _descImportPrivateCheck(descriptor || '');
+    if (priv) return { error: priv };
+    var p = _wrecParseDescriptor(descriptor);
+    if (!p.ok) return { error: p.error || 'This descriptor couldn’t be read.' };
+    if (p.kind === 'sp') return { error: 'A Silent Payment wallet can’t be saved here yet: the PSBT Signer checks Silent Payments on its own.' };
+    if (p.addressNote) return { error: p.addressNote };
+    return { parsed: p };
+}
+
+function _savedWalletSummary(p) {
+    return p.script + (p.isMulti ? ' · ' + p.msM + '-of-' + p.msN + ' multisig' : '');
+}
+
+/* Read the list from the vault (or memory off the boot drive) and redraw. */
+async function savedWallets_load() {
+    try {
+        if (window.SafeKeepOS && typeof window.SafeKeepOS.loadSavedWallets === 'function') {
+            _savedWallets = await window.SafeKeepOS.loadSavedWallets();
+        }
+    } catch (e) {
+        console.warn('Saved wallets: could not load', e);
+    }
+    _descRenderSavedWallets();
+    return _savedWallets;
+}
+
+async function _savedWalletsStore(list) {
+    if (!window.SafeKeepOS || typeof window.SafeKeepOS.saveSavedWallets !== 'function') {
+        return { saved: false, error: 'Saving wallets isn’t available here.' };
+    }
+    var r = await window.SafeKeepOS.saveSavedWallets(list);
+    if (r.saved) _savedWallets = list;
+    _descRenderSavedWallets();
+    return r;
+}
+
+function _descRenderSavedWallets() {
+    var card = document.getElementById('desc-saved-wallets');
+    var listEl = document.getElementById('desc-saved-list');
+    if (!card || !listEl) return;
+    card.style.display = _savedWallets.length ? 'block' : 'none';
+    listEl.innerHTML = _savedWallets.map(function(w, i) {
+        var r = _savedWalletParse(w.descriptor);
+        var meta = r.parsed ? _savedWalletSummary(r.parsed) : 'Can’t be read: ' + r.error;
+        var addr = r.parsed ? 'First address: ' + r.parsed.firstAddress : '';
+        return '<div class="desc-saved-row">' +
+            '<div class="desc-saved-info">' +
+                '<div class="desc-saved-name">' + _wrecEscape(w.name) + '</div>' +
+                '<div class="desc-saved-meta">' + _wrecEscape(meta) + '</div>' +
+                (addr ? '<div class="desc-saved-addr">' + _wrecEscape(addr) + '</div>' : '') +
+            '</div>' +
+            (r.parsed ? '<button type="button" class="skb-btn" onclick="desc_openSavedWallet(' + i + ')">Open</button>' : '') +
+            '<button type="button" class="skb-btn" onclick="desc_removeSavedWallet(' + i + ')">Remove</button>' +
+        '</div>';
+    }).join('');
+}
+
+function _descSaveResult(kind, text) {
+    var el = document.getElementById('desc-save-result');
+    if (!el) return;
+    el.className = 'desc-recv-result' + (kind ? ' is-' + kind : '');
+    el.textContent = text;
+    el.style.display = text ? 'block' : 'none';
+}
+
+async function desc_saveWallet() {
+    var nameEl = document.getElementById('desc-save-name');
+    var name = (nameEl ? nameEl.value : '').trim();
+    var descriptor = String(desc_state.currentDescriptor || '').replace(/[\r\n]+/g, '').trim();
+    if (!descriptor) { _descSaveResult('bad', 'No descriptor yet. Generate or load one first.'); return; }
+    if (!name) { _descSaveResult('bad', 'Give the wallet a name first.'); if (nameEl) nameEl.focus(); return; }
+    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) { _descSaveResult('bad', 'Use a name of up to 64 characters.'); return; }
+    var r = _savedWalletParse(descriptor);
+    if (r.error) { _descSaveResult('bad', 'Not saved: ' + r.error); return; }
+    if (descriptor.indexOf('#') === -1) descriptor += '#' + desc_checksum(descriptor);
+
+    await savedWallets_load();
+    var body = _savedWalletBody(descriptor);
+    for (var i = 0; i < _savedWallets.length; i++) {
+        if (_savedWalletBody(_savedWallets[i].descriptor) === body) {
+            _descSaveResult('ok', 'Already saved as “' + _savedWallets[i].name + '”.');
+            return;
+        }
+        if (_savedWallets[i].name.toLowerCase() === name.toLowerCase()) {
+            _descSaveResult('bad', 'A saved wallet is already called “' + _savedWallets[i].name + '”. Choose another name.');
+            return;
+        }
+    }
+    if (_savedWallets.length >= 50) { _descSaveResult('bad', 'The vault holds up to 50 saved wallets. Remove one first.'); return; }
+
+    var btn = document.getElementById('desc-save-btn');
+    if (btn) btn.disabled = true;
+    _descSaveResult('busy', 'Saving to the vault…');
+    try {
+        var res = await _savedWalletsStore(_savedWallets.concat([{ name: name, descriptor: descriptor, added: new Date().toISOString() }]));
+        if (res.saved) {
+            _descSaveResult('ok', 'Saved as “' + name + '”. The PSBT Signer will now check transactions against it.');
+            if (nameEl) nameEl.value = '';
+        } else {
+            _descSaveResult('bad', 'Not saved: ' + (res.error || 'unknown error.'));
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function desc_openSavedWallet(i) {
+    var w = _savedWallets[i];
+    if (!w) return;
+    var r = _savedWalletParse(w.descriptor);
+    if (r.error) { showStatus('“' + w.name + '” can’t be opened: ' + r.error, 'error'); return; }
+    _descLoadWatchOnly(w.descriptor, r.parsed, 'Opened saved wallet “' + w.name + '”: ');
+}
+
+async function desc_removeSavedWallet(i) {
+    var w = _savedWallets[i];
+    if (!w) return;
+    if (!confirm('Remove the saved wallet "' + w.name + '"?\n\nThis only removes it from SafeKeep’s list. Your bitcoin and your wallet app are not affected, and you can save it again from its descriptor.')) return;
+    var res = await _savedWalletsStore(_savedWallets.filter(function(_, j) { return j !== i; }));
+    if (res.saved) showStatus('Removed “' + w.name + '” from saved wallets.', 'success');
+    else showStatus('Couldn’t remove it: ' + (res.error || 'unknown error.'), 'error');
 }
 
 /**

@@ -115,7 +115,7 @@ console.log('3. transfer-drive file names cannot inject markup');
 
 console.log('4. PSBT review fee guard');
 { const ctx = vm.createContext({ Number, String, BigInt, Math, _psbtEscape: (s) => String(s), _psbtAddressChecksum: () => '', PSBT_WILDCARD_FP: '00000000' });
-  vm.runInContext(extract('_psbtBuildReviewHtml'), ctx);
+  vm.runInContext(extract('_psbtBuildReviewHtml') + '\n' + extract('_psbtSavedWalletBannerHtml'), ctx);
   const html = (fee, tin) => ctx._psbtBuildReviewHtml(null, { outputs: [], fee, totalIn: tin, totalOut: tin - fee, feeRate: '10.0', hijackDetected: false }).feeHtml;
   ck('normal fee (0.1%) -> no warning', !/UNUSUALLY HIGH FEE/.test(html(10_000n, 10_000_000n)));
   ck('absurd fee (50%) -> warning', /UNUSUALLY HIGH FEE/.test(html(5_000_000n, 10_000_000n)));

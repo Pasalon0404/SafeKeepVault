@@ -2173,6 +2173,79 @@ const SafeKeepOS = (() => {
     return _silentDownload(DEVICE_SETTINGS_FILE, payload);
   }
 
+  // ---- Saved wallets ----
+  // Output descriptors saved from the Output Descriptor tool, so the PSBT
+  // Signer can check a transaction's inputs and change against the wallets
+  // the user actually owns. Public keys only (the app refuses descriptors
+  // with private keys), but a descriptor reveals every address of the wallet,
+  // so the list lives in the encrypted vault. The whole list is sent on every
+  // change as SAVED_WALLETS.json; safekeep-boot.sh's Wallets Watcher
+  // validates it and stores
+  //   /media/.safekeep-vault/settings/saved-wallets.json
+  // Normal boots only. Off the boot drive (dev, demo) the list stays in memory.
+  // Never use the key "passphrase" in this file: the File Router moves any
+  // JSON download with that key into the Passphrase Library.
+  const SAVED_WALLETS_FILE = 'SAVED_WALLETS.json';
+  const SAVED_WALLETS_URL  = `file://${VAULT_ROOT}/settings/saved-wallets.json`;
+  const SAVED_WALLETS_MAX  = 50;
+  let _savedWalletsMem = [];
+
+  function _cleanWalletList(list) {
+    if (!Array.isArray(list)) return null;
+    const out = [];
+    for (const w of list) {
+      if (!w || typeof w.name !== 'string' || typeof w.descriptor !== 'string') return null;
+      const name = w.name.trim();
+      if (!name || name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) return null;
+      if (!w.descriptor || w.descriptor.length > 4096 || !/^[\x20-\x7e]+$/.test(w.descriptor) || /["\\]/.test(w.descriptor)) return null;
+      out.push({ name, descriptor: w.descriptor, added: typeof w.added === 'string' ? w.added.slice(0, 40) : '' });
+    }
+    return out.length <= SAVED_WALLETS_MAX ? out : null;
+  }
+
+  /**
+   * @returns {Promise<Array<{name: string, descriptor: string, added: string}>>}
+   *          the saved wallets ([] in a temporary session or if none are saved)
+   */
+  async function loadSavedWallets() {
+    if (!isBootDrive()) return _savedWalletsMem.slice();
+    if (_ccTemporarySession()) return [];
+    try {
+      const resp = await fetch(SAVED_WALLETS_URL, { cache: 'no-store' });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      return _cleanWalletList(data && data.wallets) || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /**
+   * Replace the saved list. Waits until the Wallets Watcher has stored it.
+   * @returns {Promise<{saved: boolean, error?: string}>}
+   */
+  async function saveSavedWallets(list) {
+    const clean = _cleanWalletList(list);
+    if (!clean) return { saved: false, error: 'The wallet list is invalid (at most ' + SAVED_WALLETS_MAX + ' wallets, names up to 64 characters).' };
+    if (!isBootDrive()) { _savedWalletsMem = clean; return { saved: true }; }
+    if (_ccTemporarySession()) return { saved: false, error: 'Wallets can’t be saved in a Temporary Session: there is no vault to save them in.' };
+    if (!(await _isVaultMounted())) return { saved: false, error: 'The encrypted vault is not mounted, so the wallet list can’t be saved.' };
+    // A wallet named "passphrase" (or containing the 2FA marker) would make
+    // the File Router claim this file. The \u escapes keep the same JSON
+    // values without the text the router looks for.
+    const payload = JSON.stringify({ version: 1, saved_at: new Date().toISOString(), wallets: clean })
+      .replace(/"passphrase"/g, '"\\u0070assphrase"')
+      .replace(/safekeep-2fa-backup/g, 'safekeep\\u002d2fa-backup');
+    if (!_silentDownload(SAVED_WALLETS_FILE, payload)) return { saved: false, error: 'The save was blocked.' };
+    const want = JSON.stringify(clean.map(w => [w.name, w.descriptor]));
+    for (let i = 0; i < 16; i++) {
+      await _sleep(500);
+      const got = await loadSavedWallets();
+      if (JSON.stringify(got.map(w => [w.name, w.descriptor])) === want) return { saved: true };
+    }
+    return { saved: false, error: 'The vault didn’t confirm the save. Try again.' };
+  }
+
   const DISPLAY_SLEEP_TRIGGER_FILE = 'DISPLAY_SLEEP_TRIGGER.json';
 
   /**
@@ -2761,6 +2834,10 @@ const SafeKeepOS = (() => {
 
     // Coldcard — USB co-signing via the Coldcard Watcher
     saveDeviceSettings,
+
+    // Saved wallets (Output Descriptor tool → PSBT Signer)
+    loadSavedWallets,
+    saveSavedWallets,
 
     coldcardGetPairing,
     coldcardDetect,
