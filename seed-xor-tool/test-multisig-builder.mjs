@@ -58,9 +58,10 @@ const origin = (r) => `[${fpHex(r)}/${PATH.replace(/'/g, 'h')}]${r.derive('m/' +
 
 function makeEnv(cosigners, extra = {}) {
   const els = {};
-  const el = (id) => (els[id] ||= { id, value: '', textContent: '', innerHTML: '', disabled: false, style: {} });
+  const el = (id) => (els[id] ||= { id, value: '', textContent: '', innerHTML: '', className: '', disabled: false, style: {}, focus() {} });
   cosigners.forEach((v, i) => { el('desc-ms-xpub-' + (i + 2)).value = v; });
   el('desc-ms-passphrase').value = extra.passphrase || '';
+  el('desc-ms-passphrase-confirm').value = extra.confirm !== undefined ? extra.confirm : (extra.passphrase || '');
   el('desc-ms-addr-type').value = '84';
   const statuses = [];
   const ctx = vm.createContext({
@@ -71,9 +72,10 @@ function makeEnv(cosigners, extra = {}) {
   vm.runInContext([
     ...['DESC_BIP32_PUBLIC_MAINNET', 'DESC_BIP32_PUBLIC_TESTNET', '_DESC_MAINNET_VERS', '_DESC_TESTNET_VERS', '_sha256K', '_B58_ALPHABET'].map(extractVar),
     `var desc_state = { mode: 'multi', msM: ${extra.m || 2}, msN: ${cosigners.length + 1}, msAddrType: '84', currentDescriptor: null };`,
-    'var _descLocalKeySeq = 0, _descLocalKey = "";',
+    'var _descLocalKeySeq = 0, _descLocalKey = "", _ppFromLibrary = {};',
     ...['desc_checksum', '_base58decode', '_base58checkDecode', '_base58check', '_base58encode', '_sha256sync', '_sha256impl', '_rr', '_descNormalizeXpub',
-        'desc_arraysEqual', '_descLocalKeyOrigin', 'desc_updateLocalKeyStatus', 'desc_generateMulti', 'desc_generate'].map(extract),
+        'desc_arraysEqual', '_descLocalKeyOrigin', 'desc_updateLocalKeyStatus', 'desc_generateMulti', 'desc_generate',
+        '_descPassphraseConfirmed', 'desc_onPassphraseInput'].map(extract),
   ].join('\n'), ctx);
   return { ctx, el, statuses, last: () => statuses[statuses.length - 1] || '' };
 }
@@ -95,6 +97,58 @@ const expectAddr = (i) => btcSigner.p2wsh(btcSigner.p2ms(2, sortB([r1, r2, r3].m
   ck('Key 1 box follows the passphrase', ppEnv.ctx._descLocalKey.startsWith('[' + fpHex(rpp) + '/') && ppEnv.ctx._descLocalKey.endsWith(rpp.derive('m/' + PATH).publicExtendedKey), ppEnv.ctx._descLocalKey.slice(0, 40));
   await env.ctx.desc_generate();
   ck('the Key 1 string is the key used in the descriptor', env.ctx.desc_state.currentDescriptor.includes(want + '/<0;1>/*'));
+}
+
+// ---- A typed passphrase must be typed twice ----
+{
+  const env = makeEnv([origin(r2), origin(r3)], { passphrase: 'TREZOR', confirm: '' });
+  env.ctx.desc_onPassphraseInput('desc-ms-passphrase');
+  await new Promise((r) => setTimeout(r, 50));
+  ck('unconfirmed: the Confirm box appears', env.el('desc-ms-passphrase-confirm-row').style.display === 'block' && /Not confirmed yet/.test(env.el('desc-ms-passphrase-confirm-note').textContent));
+  ck('unconfirmed: Key 1 is not shown and Copy stays off', env.ctx._descLocalKey === '' && /Type the passphrase again/.test(env.el('desc-ms-local-status').textContent) && env.el('desc-ms-local-copy').disabled === true);
+  await env.ctx.desc_generate();
+  ck('unconfirmed: no descriptor is generated', env.ctx.desc_state.currentDescriptor === null && /Type the passphrase again in the box under it first/.test(env.last()), env.last());
+  env.el('desc-ms-passphrase-confirm').value = 'trezor';
+  env.ctx.desc_onPassphraseInput('desc-ms-passphrase');
+  ck('a mismatch (capitals count) says so', /Doesn\u2019t match yet/.test(env.el('desc-ms-passphrase-confirm-note').textContent) && env.el('desc-ms-passphrase-confirm-note').className.includes('is-bad'));
+  await env.ctx.desc_generate();
+  ck('… and still generates nothing', env.ctx.desc_state.currentDescriptor === null);
+  env.el('desc-ms-passphrase-confirm').value = 'TREZOR';
+  env.ctx.desc_onPassphraseInput('desc-ms-passphrase');
+  await new Promise((r) => setTimeout(r, 50));
+  const rpp = await mk(ABANDON, 'TREZOR');
+  ck('a match shows ✔ and Key 1 for the passphrase wallet', /Matches/.test(env.el('desc-ms-passphrase-confirm-note').textContent) && env.ctx._descLocalKey.startsWith('[' + fpHex(rpp) + '/'));
+  await env.ctx.desc_generate();
+  ck('… and the descriptor is generated', !!env.ctx.desc_state.currentDescriptor && env.ctx.desc_state.currentDescriptor.includes(fpHex(rpp)));
+  env.el('desc-ms-passphrase').value = 'TREZOR2';
+  env.ctx.desc_onPassphraseInput('desc-ms-passphrase');
+  ck('changing the passphrase needs confirming again', !env.ctx._descPassphraseConfirmed('desc-ms-passphrase'));
+  env.el('desc-ms-passphrase').value = '';
+  env.ctx.desc_onPassphraseInput('desc-ms-passphrase');
+  ck('an empty passphrase needs nothing and hides the box', env.ctx._descPassphraseConfirmed('desc-ms-passphrase') && env.el('desc-ms-passphrase-confirm-row').style.display === 'none' && env.el('desc-ms-passphrase-confirm').value === '');
+}
+{
+  const env = makeEnv([origin(r2), origin(r3)], { passphrase: 'from library', confirm: '' });
+  vm.runInContext('_ppFromLibrary["desc-ms-passphrase"] = "from library";', env.ctx);
+  env.ctx.desc_onPassphraseInput('desc-ms-passphrase');
+  ck('a Library passphrase (unchanged) needs no retyping', env.ctx._descPassphraseConfirmed('desc-ms-passphrase') && env.el('desc-ms-passphrase-confirm-row').style.display === 'none');
+  env.el('desc-ms-passphrase').value = 'from library!';
+  env.ctx.desc_onPassphraseInput('desc-ms-passphrase');
+  env.el('desc-ms-passphrase').value = 'from library';
+  env.ctx.desc_onPassphraseInput('desc-ms-passphrase');
+  ck('… but once edited, even back to the same text, it must be typed twice', !env.ctx._descPassphraseConfirmed('desc-ms-passphrase') && env.el('desc-ms-passphrase-confirm-row').style.display === 'block');
+}
+{
+  const env = makeEnv([origin(r2), origin(r3)]);
+  vm.runInContext("desc_state.mode = 'single';", env.ctx);
+  env.el('desc-passphrase').value = 'single pass';
+  await env.ctx.desc_generate();
+  ck('single-sig: an unconfirmed passphrase also blocks generating', /Type the passphrase again in the box under it first/.test(env.last()) && env.el('desc-passphrase-confirm-row').style.display === 'block', env.last());
+}
+{
+  const tags = ['desc-passphrase-confirm', 'desc-ms-passphrase-confirm'].map((id) => (SRC.match(new RegExp('<input[^>]*id="' + id + '"[^>]*>', 's')) || [''])[0]);
+  ck('both Confirm boxes are password fields that block paste and drop', tags.every((t) => /type="password"/.test(t) && /onpaste="return cipher_blockPaste\(event\)"/.test(t) && /ondrop="return false"/.test(t)));
+  ck('the Library loader remembers what it put in each field', /_ppFromLibrary\[inputId\] = result\.passphrase;/.test(SRC));
 }
 
 // ---- 2-of-3 with different cosigner input formats ----

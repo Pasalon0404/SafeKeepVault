@@ -2244,6 +2244,13 @@
 .desc-recv-result.is-bad { border-color: var(--skb-danger); color: var(--skb-danger); }
 .desc-recv-result.is-busy { color: var(--skb-text-muted); }
 
+/* ---- Output Descriptor: passphrase confirmation ---- */
+.desc-pp-confirm { margin-top: 0.5rem; }
+.desc-pp-confirm__input { width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-passphrase-active, #a78bfa); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.875rem; color: var(--skb-text); }
+.desc-pp-confirm__note { font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.3rem; min-height: 1em; }
+.desc-pp-confirm__note.is-ok { color: var(--skb-secondary); }
+.desc-pp-confirm__note.is-bad { color: var(--skb-danger); }
+
 /* ---- Output Descriptor: saved wallets ---- */
 .desc-saved-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
 .desc-saved-row:first-child { border-top: none; padding-top: 0; }
@@ -8269,10 +8276,17 @@
                         <div style="display: flex; width: 100%; gap: 0.5rem; align-items: center;">
                             <!-- max-width: none overrides the global tool-input 600px readability cap
                                  so flex:1 fills the row and pushes CLEAR flush right, under the Library button. -->
-                            <input type="password" id="desc-passphrase" autocomplete="off" spellcheck="false"
+                            <input type="password" id="desc-passphrase" autocomplete="off" spellcheck="false" oninput="desc_onPassphraseInput('desc-passphrase')"
                                    style="flex: 1 1 auto; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.875rem; color: var(--skb-text);">
-                            <button type="button" class="skb-btn" onclick="document.getElementById('desc-passphrase').value=''"
+                            <button type="button" class="skb-btn" onclick="document.getElementById('desc-passphrase').value=''; desc_onPassphraseInput('desc-passphrase')"
                                     style="flex: 0 0 auto; padding: 0.4rem 0.75rem; font-size: 0.75rem; font-family: var(--skb-mono); border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); white-space: nowrap;">CLEAR</button>
+                        </div>
+                        <!-- Typed passphrases must be typed twice: a typo here would hand
+                             your watch-only wallet (or your cosigners) a different wallet. -->
+                        <div id="desc-passphrase-confirm-row" class="desc-pp-confirm" style="display: none;">
+                            <input type="password" id="desc-passphrase-confirm" class="desc-pp-confirm__input" style="max-width: none;" placeholder="Type the passphrase again to confirm it" autocomplete="off" spellcheck="false"
+                                   onpaste="return cipher_blockPaste(event)" ondrop="return false" oninput="desc_onPassphraseInput('desc-passphrase')">
+                            <div id="desc-passphrase-confirm-note" class="desc-pp-confirm__note"></div>
                         </div>
                     </div>
 
@@ -8359,10 +8373,17 @@
                         </div>
                         <div id="desc-ms-lib-dropdown" style="display: none; margin-bottom: 0.5rem; padding: 0.5rem; background: var(--skb-bg-card); border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); max-height: 180px; overflow-y: auto;"></div>
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <input type="password" id="desc-ms-passphrase" autocomplete="off" spellcheck="false" oninput="desc_updateLocalKeyStatus()"
+                            <input type="password" id="desc-ms-passphrase" autocomplete="off" spellcheck="false" oninput="desc_onPassphraseInput('desc-ms-passphrase')"
                                    style="flex: 1; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.875rem; color: var(--skb-text);">
-                            <button type="button" class="skb-btn" onclick="document.getElementById('desc-ms-passphrase').value=''; desc_updateLocalKeyStatus()"
+                            <button type="button" class="skb-btn" onclick="document.getElementById('desc-ms-passphrase').value=''; desc_onPassphraseInput('desc-ms-passphrase')"
                                     style="padding: 0.4rem 0.75rem; font-size: 0.75rem; font-family: var(--skb-mono); border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); white-space: nowrap;">CLEAR</button>
+                        </div>
+                        <!-- Typed passphrases must be typed twice: a typo here would hand
+                             your watch-only wallet (or your cosigners) a different wallet. -->
+                        <div id="desc-ms-passphrase-confirm-row" class="desc-pp-confirm" style="display: none;">
+                            <input type="password" id="desc-ms-passphrase-confirm" class="desc-pp-confirm__input" style="max-width: none;" placeholder="Type the passphrase again to confirm it" autocomplete="off" spellcheck="false"
+                                   onpaste="return cipher_blockPaste(event)" ondrop="return false" oninput="desc_onPassphraseInput('desc-ms-passphrase')">
+                            <div id="desc-ms-passphrase-confirm-note" class="desc-pp-confirm__note"></div>
                         </div>
                     </div>
                 </div>
@@ -15091,6 +15112,9 @@ async function lib_openDropdown(inputId, dropdownId) {
  * Handle a selection from the Library dropdown.
  * Loads the raw passphrase and injects it into the target input.
  */
+// Per input id: the exact passphrase last loaded into it from the Library.
+var _ppFromLibrary = {};
+
 async function lib_pick(inputId, dropdownId, slug) {
     var os = window.SafeKeepOS;
     if (!os || !os.loadPassphrase) return;
@@ -15104,6 +15128,7 @@ async function lib_pick(inputId, dropdownId, slug) {
     var input = document.getElementById(inputId);
     if (input) {
         input.value = result.passphrase;
+        _ppFromLibrary[inputId] = result.passphrase;   // checked against the written copy when it was saved
         // Fire oninput so the tool's own handler picks up the change
         input.dispatchEvent(new Event('input', { bubbles: true }));
     }
@@ -30262,6 +30287,37 @@ async function _descLocalKeyOrigin(seed, passphrase, addrType) {
     return { fingerprint: fp, origin: '[' + fp + '/' + path.replace('m/', '') + ']' + _descNormalizeXpub(root.derive(path).publicExtendedKey) };
 }
 
+/* A passphrase is usable once it is empty, loaded unchanged from the
+   Library, or typed a second time exactly (capitals and spaces count). */
+function _descPassphraseConfirmed(inputId) {
+    var input = document.getElementById(inputId);
+    var value = input ? input.value : '';
+    if (!value) return true;
+    if (_ppFromLibrary[inputId] === value) return true;
+    var confirmEl = document.getElementById(inputId + '-confirm');
+    return !!confirmEl && confirmEl.value === value;
+}
+
+/* Show the Confirm box while a typed passphrase is unconfirmed, and say whether it matches. */
+function desc_onPassphraseInput(inputId) {
+    var input = document.getElementById(inputId);
+    var row = document.getElementById(inputId + '-confirm-row');
+    var confirmEl = document.getElementById(inputId + '-confirm');
+    var note = document.getElementById(inputId + '-confirm-note');
+    var value = input ? input.value : '';
+    if (_ppFromLibrary[inputId] !== undefined && _ppFromLibrary[inputId] !== value) delete _ppFromLibrary[inputId];
+    var needs = !!value && _ppFromLibrary[inputId] !== value;
+    if (row) row.style.display = needs ? 'block' : 'none';
+    if (!needs && confirmEl) confirmEl.value = '';
+    if (note) {
+        var typed = confirmEl ? confirmEl.value : '';
+        if (!needs || !typed) { note.textContent = needs ? 'Not confirmed yet.' : ''; note.className = 'desc-pp-confirm__note'; }
+        else if (typed === value) { note.textContent = '\u2714 Matches.'; note.className = 'desc-pp-confirm__note is-ok'; }
+        else { note.textContent = 'Doesn\u2019t match yet. Capitals and spaces count.'; note.className = 'desc-pp-confirm__note is-bad'; }
+    }
+    if (inputId === 'desc-ms-passphrase') desc_updateLocalKeyStatus();
+}
+
 function desc_updateLocalKeyStatus() {
     var seed = window.SeedSession?.get()?.mnemonic;
     var statusEl = document.getElementById('desc-ms-local-status');
@@ -30274,6 +30330,12 @@ function desc_updateLocalKeyStatus() {
 
     if (!seed) {
         statusEl.textContent = 'No master seed loaded. Generate or restore a seed first, then return here.';
+        statusEl.style.color = 'var(--skb-text-muted)';
+        if (fpEl) fpEl.textContent = '';
+        return;
+    }
+    if (!_descPassphraseConfirmed('desc-ms-passphrase')) {
+        statusEl.textContent = 'Type the passphrase again below to see Key 1. A typo would give your cosigners the key of a different wallet.';
         statusEl.style.color = 'var(--skb-text-muted)';
         if (fpEl) fpEl.textContent = '';
         return;
@@ -30532,6 +30594,14 @@ async function desc_generate() {
 
         if (!bip39 || !HDKey) {
             throw new Error('Core crypto libraries (bip39/HDKey) not loaded. Is shared/boot.js present?');
+        }
+
+        var ppId = desc_state.mode === 'single' ? 'desc-passphrase' : 'desc-ms-passphrase';
+        if (!_descPassphraseConfirmed(ppId)) {
+            desc_onPassphraseInput(ppId);
+            var confirmEl = document.getElementById(ppId + '-confirm');
+            if (confirmEl) confirmEl.focus();
+            throw new Error('Type the passphrase again in the box under it first. A typo would give you the descriptor of a different, empty wallet.');
         }
 
         if (desc_state.mode === 'single') {
