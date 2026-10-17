@@ -4200,6 +4200,67 @@
       margin-bottom: 0.2rem;
     }
     .psbt-change-card.hijacked { border-left: 4px solid var(--skb-danger); background: rgba(220,38,38,0.06); }
+    /* Review: totals, inputs being spent, lock time hints */
+    .psbt-summary {
+      border: 1px solid var(--skb-border);
+      background: var(--skb-bg-input);
+      padding: 0.35rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+    .psbt-sum-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 0.45rem 0;
+      border-bottom: 1px solid var(--skb-border);
+      font-size: 0.875rem;
+    }
+    .psbt-sum-row:last-child { border-bottom: none; }
+    .psbt-sum-label { color: var(--skb-text-muted); }
+    .psbt-sum-value { font-family: var(--skb-mono); color: var(--skb-text); text-align: right; }
+    .psbt-sum-sats { display: block; font-size: 0.75rem; color: var(--skb-text-dim); }
+    .psbt-sum-total .psbt-sum-label { color: var(--skb-text); font-weight: 700; }
+    .psbt-sum-total .psbt-sum-value { color: var(--skb-primary); font-weight: 700; font-size: 1rem; }
+    .psbt-sum-warn .psbt-sum-label, .psbt-sum-warn .psbt-sum-value, .psbt-sum-warn-text { color: #ffc107; }
+    .psbt-sum-hint {
+      display: block;
+      font-family: inherit;
+      font-size: 0.75rem;
+      color: var(--skb-text-dim);
+      word-break: normal;
+      overflow-wrap: anywhere;
+    }
+    .psbt-review-value .psbt-sum-hint { font-family: var(--skb-sans, inherit); }
+    .psbt-inputs {
+      border: 1px solid var(--skb-border);
+      margin-bottom: 0.75rem;
+      font-size: 0.8125rem;
+    }
+    .psbt-inputs > summary {
+      cursor: pointer;
+      padding: 0.6rem 1rem;
+      color: var(--skb-text-muted);
+      font-weight: 600;
+    }
+    .psbt-input-row { padding: 0.55rem 1rem; border-top: 1px solid var(--skb-border); }
+    .psbt-input-head { display: flex; justify-content: space-between; gap: 1rem; }
+    .psbt-input-idx { color: var(--skb-text-muted); }
+    .psbt-input-amt { font-family: var(--skb-mono); color: var(--skb-text); }
+    .psbt-input-addr { font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); overflow-wrap: anywhere; margin-top: 0.15rem; }
+    .psbt-input-notes { font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.2rem; }
+    .psbt-compare { margin: 0.75rem 0; }
+    .psbt-compare__label { font-size: 0.75rem; color: var(--skb-text-muted); margin-bottom: 0.35rem; }
+    .psbt-compare__row { display: flex; gap: 0.5rem; }
+    .psbt-compare__row input { flex: 1; min-width: 0; margin: 0; font-family: var(--skb-mono); font-size: 0.8125rem; }
+    .psbt-compare__row .skb-btn { font-size: 0.8125rem; white-space: nowrap; }
+    .psbt-compare__reader { width: 100%; max-width: 420px; min-height: 220px; margin-top: 0.5rem; overflow: hidden; }
+    .psbt-compare__result { margin-top: 0.5rem; padding: 0.55rem 0.75rem; border: 1px solid var(--skb-border); font-size: 0.8125rem; line-height: 1.5; }
+    .psbt-compare__result.is-ok { border-color: var(--skb-secondary); color: var(--skb-secondary); }
+    .psbt-compare__result.is-bad { border-color: var(--skb-danger); color: var(--skb-danger); }
+    .psbt-compare__diff { font-family: var(--skb-mono); color: var(--skb-text); overflow-wrap: anywhere; margin-top: 0.35rem; }
+    .psbt-compare__diff span { display: block; font-family: var(--skb-sans, inherit); font-size: 0.7rem; color: var(--skb-text-muted); }
+    .psbt-compare__diff mark { background: var(--skb-danger); color: #fff; padding: 0 1px; }
     .psbt-own-note {
       margin: 0.4rem 0;
       font-size: 0.8125rem;
@@ -17878,6 +17939,7 @@ function psbtBackToDashboard() {
     _psbtStopQrAnimation();
     psbtStopCameraScan();
     psbtStopSeedScan();
+    psbtCompareStopScan();
 
     // Reset all PSBT state
     _psbtLoadedBytes = null;
@@ -17958,6 +18020,7 @@ function psbtShowStatus(msg, type) {
 
 function psbtResetToIngest() {
     _psbtWipeTempSeed();
+    psbtCompareStopScan();
     _psbtCosignMessage = null;
     if (_psbtCosignConfirm) { const cf = _psbtCosignConfirm; _psbtCosignConfirm = null; cf.resolve(false); }
     var _cosignCard = document.getElementById('psbt-cosign-card');
@@ -21587,6 +21650,155 @@ function _psbtAddressChecksum(addr) {
     return s.slice(0, 6) + ' \u2026 ' + s.slice(-6);
 }
 
+/**
+ * What the transaction spends and when it can be mined, for the review screen.
+ * Pure: reads the parsed PSBT and the audit result, changes neither.
+ * Returns {
+ *   inputs: [{ index, amount (BigInt|null), address, wallet, path,
+ *              sigs: { have, need, multisig } | null, finalized,
+ *              relLock: { blocks } | { seconds } | null }],
+ *   totalIn (BigInt|null), sending, changeBack, changeUnverified (BigInt),
+ *   fee (BigInt|null), leaving (BigInt|null), destinations (count),
+ *   lockTime: { kind: 'none'|'height'|'time', value, ignored },
+ *   rbf (bool)
+ * }
+ */
+function _psbtTxSummary(tx, audit) {
+    const btcLib = window.BtcMath.btcSigner;
+    const savedIn = (audit.savedWallets && audit.savedWallets.inputs) || [];
+    const count = (x) => !x ? 0 : (x instanceof Map ? x.size : (Array.isArray(x) ? x.length : Object.keys(x).length));
+    const inputs = (tx.inputs || []).map((inp, i) => {
+        let amount = null, script = null;
+        if (inp.witnessUtxo) { amount = BigInt(inp.witnessUtxo.amount); script = inp.witnessUtxo.script; }
+        else if (inp.nonWitnessUtxo && inp.nonWitnessUtxo.outputs && inp.nonWitnessUtxo.outputs[inp.index]) {
+            const prev = inp.nonWitnessUtxo.outputs[inp.index];
+            amount = BigInt(prev.amount); script = prev.script;
+        }
+        let address = '';
+        try { if (script) address = btcLib.Address(PSBT_NETWORK).encode(btcLib.OutScript.decode(script)); } catch (e) { address = ''; }
+
+        // Signatures: a multisig input needs m of its keys; anything else needs one.
+        const finalized = !!((inp.finalScriptWitness && inp.finalScriptWitness.length) || (inp.finalScriptSig && inp.finalScriptSig.length));
+        let sigs = null;
+        let ms = null;
+        for (const s of [inp.witnessScript, inp.redeemScript]) {
+            if (!s || ms) continue;
+            try { const d = btcLib.OutScript.decode(s); if (d.type === 'ms') ms = d; } catch (e) {}
+        }
+        if (finalized) sigs = null;
+        else if (ms) sigs = { have: Math.min(count(inp.partialSig), ms.m), need: ms.m, multisig: ms.m + '-of-' + ms.pubkeys.length };
+        else sigs = { have: (count(inp.partialSig) || inp.tapKeySig) ? 1 : 0, need: 1, multisig: '' };
+
+        // BIP-68 relative lock: version 2+, sequence bit 31 clear.
+        let relLock = null;
+        const seq = inp.sequence === undefined ? 0xffffffff : (inp.sequence >>> 0);
+        if ((tx.version >>> 0) >= 2 && !(seq & 0x80000000) && (seq & 0xffff)) {
+            relLock = (seq & 0x00400000) ? { seconds: (seq & 0xffff) * 512 } : { blocks: seq & 0xffff };
+        }
+        const saved = savedIn.find(x => x.index === i);
+        return {
+            index: i, amount, address,
+            wallet: saved && saved.wallet ? saved.wallet : null,
+            path: saved && saved.wallet ? saved.chain + '/' + saved.child : '',
+            sigs, finalized, relLock, sequence: seq
+        };
+    });
+
+    let sending = 0n, changeBack = 0n, changeUnverified = 0n, destinations = 0;
+    audit.outputs.forEach(o => {
+        const amt = BigInt(o.amount);
+        if (o.category === 'verified-change') changeBack += amt;
+        else if (o.category === 'unverified-change') changeUnverified += amt;
+        else { sending += amt; destinations++; }   // destinations and hijacked outputs both leave
+    });
+    const totalIn = inputs.every(x => x.amount !== null) ? inputs.reduce((s, x) => s + x.amount, 0n) : null;
+    const fee = (audit.fee === null || audit.fee === undefined) ? null : BigInt(audit.fee);
+
+    // nLockTime only applies if at least one input isn't final (sequence 0xffffffff).
+    const lt = (tx.lockTime === undefined ? 0 : tx.lockTime) >>> 0;
+    const allFinal = inputs.every(x => x.sequence === 0xffffffff);
+    const lockTime = lt === 0 ? { kind: 'none', value: 0, ignored: false }
+        : { kind: lt < 500000000 ? 'height' : 'time', value: lt, ignored: allFinal };
+
+    return {
+        inputs, totalIn, sending, changeBack, changeUnverified, destinations, fee,
+        leaving: fee === null ? null : sending + fee,
+        lockTime,
+        rbf: inputs.some(x => x.sequence < 0xfffffffe)
+    };
+}
+
+function _psbtBtc(sats) {
+    return (Number(sats) / 1e8).toFixed(8) + ' BTC';
+}
+
+/* "What this transaction does" card and the list of inputs being spent. */
+function _psbtSummaryHtml(s) {
+    const row = (label, value, cls) =>
+        '<div class="psbt-sum-row' + (cls ? ' ' + cls : '') + '"><span class="psbt-sum-label">' + label + '</span><span class="psbt-sum-value">' + value + '</span></div>';
+    const sats = (v) => '<span class="psbt-sum-sats">' + Number(v).toLocaleString() + ' sats</span>';
+    let html = '<div class="psbt-summary">';
+    html += row('Sending to ' + s.destinations + ' destination' + (s.destinations === 1 ? '' : 's'), _psbtBtc(s.sending) + sats(s.sending));
+    html += row('Mining fee', s.fee === null ? 'unknown' : _psbtBtc(s.fee) + sats(s.fee));
+    html += row('Total leaving your wallet', s.leaving === null ? 'unknown (an input amount is missing)' : _psbtBtc(s.leaving) + sats(s.leaving), 'psbt-sum-total');
+    if (s.changeBack > 0n) html += row('Coming back as change', _psbtBtc(s.changeBack) + sats(s.changeBack));
+    if (s.changeUnverified > 0n) html += row('Change you must check', _psbtBtc(s.changeUnverified) + sats(s.changeUnverified), 'psbt-sum-warn');
+    html += '</div>';
+
+    const n = s.inputs.length;
+    html += '<details class="psbt-inputs"><summary>Spending ' + n + ' input' + (n === 1 ? '' : 's') +
+        (s.totalIn !== null ? ' &middot; ' + _psbtBtc(s.totalIn) : '') + '</summary>';
+    s.inputs.forEach(x => {
+        const notes = [];
+        if (x.wallet) notes.push('Saved wallet &ldquo;' + _psbtEscape(x.wallet) + '&rdquo; &middot; ' + (x.path.charAt(0) === '1' ? 'change' : 'receive') + ' #' + _psbtEscape(x.path.split('/')[1]));
+        if (x.finalized) notes.push('Already fully signed');
+        else if (x.sigs && x.sigs.multisig) notes.push(x.sigs.multisig + ' multisig &middot; ' + x.sigs.have + ' of ' + x.sigs.need + ' signatures so far');
+        else if (x.sigs && x.sigs.have) notes.push('Already signed');
+        if (x.relLock) notes.push('<span class="psbt-sum-warn-text">Locked until ' + (x.relLock.blocks
+            ? Number(x.relLock.blocks).toLocaleString() + ' blocks'
+            : _psbtDuration(x.relLock.seconds)) + ' after these coins confirmed</span>');
+        html += '<div class="psbt-input-row">' +
+            '<div class="psbt-input-head"><span class="psbt-input-idx">Input ' + x.index + '</span>' +
+            '<span class="psbt-input-amt">' + (x.amount === null ? 'amount unknown' : _psbtBtc(x.amount)) + '</span></div>' +
+            '<div class="psbt-input-addr">' + _psbtEscape(x.address || '(address unknown)') + '</div>' +
+            (notes.length ? '<div class="psbt-input-notes">' + notes.join(' &middot; ') + '</div>' : '') +
+        '</div>';
+    });
+    html += '</details>';
+    return html;
+}
+
+function _psbtDuration(seconds) {
+    const h = seconds / 3600;
+    return h >= 48 ? 'about ' + Math.round(h / 24) + ' days' : 'about ' + Math.max(1, Math.round(h)) + ' hour' + (Math.round(h) === 1 ? '' : 's');
+}
+
+/* Lock time and replace-by-fee rows for the fee section. */
+function _psbtLockRowsHtml(s) {
+    const row = (label, value) => '<div class="psbt-review-row"><span class="psbt-review-label">' + label + '</span><span class="psbt-review-value">' + value + '</span></div>';
+    const lt = s.lockTime;
+    let lock;
+    if (lt.kind === 'none') lock = 'None';
+    else if (lt.ignored) lock = (lt.kind === 'height' ? 'Block ' + lt.value.toLocaleString() : _psbtEscape(new Date(lt.value * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC')) +
+        ' <span class="psbt-sum-hint">(has no effect: every input is final)</span>';
+    else if (lt.kind === 'height') lock = 'Not before block ' + lt.value.toLocaleString() +
+        ' <span class="psbt-sum-hint">(wallets normally set this to the current block; a much higher number delays the transaction)</span>';
+    else lock = 'Not before ' + _psbtEscape(new Date(lt.value * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC');
+    let html = row('Lock time', lock);
+    html += row('Replace-by-fee', s.rbf
+        ? 'Yes <span class="psbt-sum-hint">(the fee can be raised later if it confirms slowly)</span>'
+        : 'Not signalled');
+    const locked = s.inputs.filter(x => x.relLock);
+    if (locked.length) {
+        html += '<div class="psbt-alert warning" style="margin-top: 0.5rem;"><strong>&#9888; Time-locked input' + (locked.length > 1 ? 's' : '') + ':</strong> ' +
+            locked.map(x => 'input ' + x.index + ' can&rsquo;t be mined until ' + (x.relLock.blocks
+                ? Number(x.relLock.blocks).toLocaleString() + ' blocks'
+                : _psbtDuration(x.relLock.seconds)) + ' after its coins confirmed').join('; ') +
+            '. Expected for a timelocked inheritance or recovery path; otherwise check with your wallet app before signing.</div>';
+    }
+    return html;
+}
+
 /* Banner: which saved wallets the inputs come from (see _psbtSavedWalletCheck). */
 function _psbtSavedWalletBannerHtml(auditResult) {
     const sw = auditResult.savedWallets;
@@ -21648,6 +21860,18 @@ function _psbtBuildReviewHtml(tx, auditResult) {
 
     // ---- SAVED WALLETS: which of your wallets this spends from ----
     outputsHtml += _psbtSavedWalletBannerHtml(auditResult);
+
+    // ---- SUMMARY: totals and the inputs being spent ----
+    let summary = null;
+    if (tx) {
+        try {
+            summary = _psbtTxSummary(tx, auditResult);
+            outputsHtml += _psbtSummaryHtml(summary);
+        } catch (e) {
+            console.warn('[PSBT] Summary failed:', e);
+            summary = null;
+        }
+    }
 
     // ---- HIJACK ALERT (top of review, impossible to miss) ----
     if (hijacked.length > 0) {
@@ -21740,6 +21964,16 @@ function _psbtBuildReviewHtml(tx, auditResult) {
                         <div class="psbt-verify-card__qr">
                             <canvas id="${qrId}" width="160" height="160"></canvas>
                         </div>
+                    </div>
+                    <div class="psbt-compare">
+                        <div class="psbt-compare__label">Compare with the address the recipient gave you</div>
+                        <div class="psbt-compare__row">
+                            <input type="text" class="skb-input" id="psbt-compare-input-${idx}" placeholder="Paste or scan the recipient&rsquo;s address" autocomplete="off" spellcheck="false" onkeydown="if (event.key === 'Enter') psbtCompareAddress(${idx})">
+                            <button type="button" class="skb-btn" onclick="psbtCompareScan(${idx})">Scan QR</button>
+                            <button type="button" class="skb-btn" onclick="psbtCompareAddress(${idx})">Compare</button>
+                        </div>
+                        <div id="psbt-compare-reader-${idx}" class="psbt-compare__reader" style="display: none;"></div>
+                        <div id="psbt-compare-result-${idx}" class="psbt-compare__result" role="status" style="display: none;"></div>
                     </div>
                     <label class="psbt-verify-card__check" for="${checkId}">
                         <input type="checkbox" id="${checkId}" onchange="_psbtOnVerifyToggle(${idx})">
@@ -21864,6 +22098,7 @@ function _psbtBuildReviewHtml(tx, auditResult) {
     } else {
         feeHtml = `<div class="psbt-alert warning">Cannot calculate exact fee — some inputs lack witness UTXO data.</div>`;
     }
+    if (summary) feeHtml += _psbtLockRowsHtml(summary);
 
     // ---- AUDIT SUMMARY ----
     const totalOuts = auditResult.outputs.length;
@@ -21976,6 +22211,75 @@ function _psbtOnVerifyToggle(index) {
     }
 
     _psbtUpdateSignGate();
+}
+
+// ---- Compare a destination with the address the recipient gave ----
+// Exact, character by character: the classic swap is a lookalike address
+// with the same first and last characters. The result never ticks the
+// "I have independently verified" box; the user still confirms it.
+var _psbtCompareScanner = null;
+
+/* { same: true } or { same: false, expected, given } with differing characters in <mark>. */
+function _psbtCompareAddresses(expected, given) {
+    const a = String(expected), b = String(given);
+    if (a === b) return { same: true };
+    const mark = (x, y) => Array.from(x).map((c, i) => c === y[i] ? _psbtEscape(c) : '<mark>' + _psbtEscape(c) + '</mark>').join('');
+    return { same: false, expected: mark(a, b), given: mark(b, a) };
+}
+
+function psbtCompareAddress(idx) {
+    const dest = _psbtVerifyState.destinations[idx];
+    const input = document.getElementById('psbt-compare-input-' + idx);
+    const res = document.getElementById('psbt-compare-result-' + idx);
+    if (!dest || !input || !res) return;
+    const n = _descRecvNormalize(input.value);
+    res.style.display = 'block';
+    if (n.error) {
+        res.className = 'psbt-compare__result is-bad';
+        res.textContent = n.error;
+        return;
+    }
+    let expected = String(dest.address || '');
+    if (/^(bc1|sp1)/i.test(expected)) expected = expected.toLowerCase();   // bech32 ignores case
+    const c = _psbtCompareAddresses(expected, n.address);
+    if (c.same) {
+        res.className = 'psbt-compare__result is-ok';
+        res.innerHTML = '&#10004; <strong>Identical:</strong> every character matches this destination. Check the amount too, then tick the box below.';
+    } else {
+        res.className = 'psbt-compare__result is-bad';
+        res.innerHTML = '&#10008; <strong>Different address. Don&rsquo;t sign.</strong> The transaction would pay a different address from the one you were given. The differences are highlighted:' +
+            '<div class="psbt-compare__diff"><span>In this transaction</span>' + c.expected + '</div>' +
+            '<div class="psbt-compare__diff"><span>You were given</span>' + c.given + '</div>';
+    }
+}
+
+async function psbtCompareScan(idx) {
+    if (!window.jsQR || typeof SKScanner === 'undefined') { showStatus('QR scanner not available.', 'error'); return; }
+    psbtCompareStopScan();
+    const area = document.getElementById('psbt-compare-reader-' + idx);
+    if (!area) return;
+    area.style.display = 'block';
+    try {
+        _psbtCompareScanner = SKScanner.create(area.id);
+        await _psbtCompareScanner.start({ fps: 10 }, function(text, binaryData) {
+            psbtCompareStopScan();
+            const parsed = window.QRParser ? window.QRParser.parseQRScan(text, binaryData) : text;
+            const input = document.getElementById('psbt-compare-input-' + idx);
+            if (input) input.value = String(parsed || '').trim();
+            psbtCompareAddress(idx);
+        });
+    } catch (err) {
+        showStatus('Camera failed: ' + err.message, 'error');
+        psbtCompareStopScan();
+    }
+}
+
+function psbtCompareStopScan() {
+    if (_psbtCompareScanner) {
+        try { _psbtCompareScanner.stop(); } catch (_) {}
+        _psbtCompareScanner = null;
+    }
+    document.querySelectorAll('.psbt-compare__reader').forEach(el => { el.style.display = 'none'; });
 }
 
 /**
