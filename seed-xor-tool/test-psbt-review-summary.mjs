@@ -57,7 +57,7 @@ const ctx = vm.createContext({
   _psbtSnapshotSpOutputs: () => [], _psbtVerifySilentPayments: () => null, _psbtEstimateVsize: () => 200,
   _psbtVerifyState: { destinations: [] }, showStatus() {},
 });
-vm.runInContext(['_psbtAuditOutputs', '_psbtExpectedScript', '_psbtScriptsEqual', '_psbtGetDerivEntries', '_psbtNormalizeFp', '_psbtPurposeToType', '_psbtFormatPath',
+vm.runInContext(['_psbtAuditOutputs', '_psbtPrevOut', '_psbtNonWitnessTxidOk', '_psbtPrevTxMismatches', '_psbtExpectedScript', '_psbtScriptsEqual', '_psbtGetDerivEntries', '_psbtNormalizeFp', '_psbtPurposeToType', '_psbtFormatPath',
   '_psbtDetectMultisig', '_psbtVerifyMultisigChange', '_psbtMultisigWalletBinding', '_psbtSavedWalletCheck',
   '_psbtTxSummary', '_psbtBtc', '_psbtSummaryHtml', '_psbtDuration', '_psbtLockRowsHtml', '_psbtSavedWalletBannerHtml', '_psbtBuildReviewHtml',
   '_psbtEscape', '_psbtAddressChecksum', '_psbtCompareAddresses', 'psbtCompareAddress', '_descRecvNormalize'].map(extract).join('\n'), ctx);
@@ -131,7 +131,7 @@ console.log('Summary:');
   const { s } = run(t, (tx) => { tx.inputs[0].partialSig = [[keys[1].publicKey, Uint8Array.from([0x30, ...randomBytes(70), 1])]]; });
   ck('multisig input: 2-of-3, 1 of 2 signatures so far', s.inputs[0].sigs.multisig === '2-of-3' && s.inputs[0].sigs.have === 1 && s.inputs[0].sigs.need === 2, JSON.stringify(s.inputs[0].sigs));
   ck('legacy input: amount and address from nonWitnessUtxo', s.inputs[1].amount === 250_000n && s.inputs[1].address.startsWith('1'), String(s.inputs[1].amount) + ' ' + s.inputs[1].address);
-  ck('no change: everything sent; fee unknown with a legacy input (as the audit reports)', s.changeBack === 0n && s.sending === 3_000_000n && s.totalIn === 3_250_000n && s.fee === null && s.leaving === null);
+  ck('no change: everything sent; fee known with a verified legacy input', s.changeBack === 0n && s.sending === 3_000_000n && s.totalIn === 3_250_000n && s.fee === 250_000n && s.leaving === 3_250_000n, String(s.fee));
 }
 {
   // An input with no UTXO data: total in and fee unknown.

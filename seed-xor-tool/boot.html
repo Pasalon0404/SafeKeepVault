@@ -20941,6 +20941,46 @@ function _psbtVerifySilentPayments(tx, masterKey, myFingerprint, spMap) {
  * Returns a Number (vB, may be fractional) or null if any input's script
  * type can't be determined.
  */
+// ---- The outputs an input spends (amount + script) ----
+// A segwit input's witnessUtxo is used as given: segwit signatures commit to
+// the amount being spent. A legacy input carries the whole previous
+// transaction (nonWitnessUtxo) instead, and a legacy signature does NOT
+// commit to amounts, so a PSBT could claim a bigger input and hide part of
+// the fee. The previous transaction is used only if it really is the one
+// the input's txid names. btc-signer skips that check when the previous
+// transaction isn't "final" (unsigned inputs), which a forged one can be.
+
+/* True when the input's nonWitnessUtxo hashes to its txid. */
+function _psbtNonWitnessTxidOk(inp) {
+    if (!inp || !inp.nonWitnessUtxo || !inp.txid) return false;
+    try {
+        const B = window.BtcMath.btcSigner;
+        const id = B.Transaction.fromRaw(B.RawTx.encode(inp.nonWitnessUtxo),
+            { allowUnknownOutputs: true, disableScriptCheck: true, allowUnknownInputs: true }).id;
+        return id === Array.from(inp.txid, b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+        return false;
+    }
+}
+
+/* { amount (BigInt), script } of the output this input spends, or null if unknown or unproven. */
+function _psbtPrevOut(inp) {
+    if (!inp) return null;
+    if (inp.witnessUtxo) return { amount: BigInt(inp.witnessUtxo.amount), script: inp.witnessUtxo.script };
+    if (inp.nonWitnessUtxo && _psbtNonWitnessTxidOk(inp)) {
+        const o = inp.nonWitnessUtxo.outputs && inp.nonWitnessUtxo.outputs[inp.index];
+        if (o) return { amount: BigInt(o.amount), script: o.script };
+    }
+    return null;
+}
+
+/* Indexes of inputs whose previous transaction is not the one their txid names. */
+function _psbtPrevTxMismatches(tx) {
+    const out = [];
+    (tx.inputs || []).forEach((inp, i) => { if (inp.nonWitnessUtxo && !_psbtNonWitnessTxidOk(inp)) out.push(i); });
+    return out;
+}
+
 function _psbtEstimateVsize(tx) {
     const btcLib = window.BtcMath.btcSigner;
     const SIG = 72;            // DER ECDSA signature + sighash byte
@@ -20972,7 +21012,8 @@ function _psbtEstimateVsize(tx) {
             const w = inp.finalScriptWitness || [];
             witLen = w.length ? varint(w.length) + w.reduce((a, it) => a + varint(it.length) + it.length, 0) : 0;
         } else {
-            const prev = inp.witnessUtxo && inp.witnessUtxo.script;
+            const po = _psbtPrevOut(inp);
+            const prev = po && po.script;
             const t = prev && decode(prev);
             if (!t) return null;
             if (t.type === 'wpkh') {
@@ -21067,10 +21108,12 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
         _spVerify = { ok: false, fatal: true, reason: 'Silent Payment verification crashed: ' + e.message };
     }
 
-    // Sum inputs
+    // Sum inputs (legacy inputs only from a previous transaction that matches its txid)
+    const prevTxMismatchInputs = _psbtPrevTxMismatches(tx);
     if (tx.inputs) {
         tx.inputs.forEach(inp => {
-            if (inp.witnessUtxo) totalIn += BigInt(inp.witnessUtxo.amount);
+            const prev = _psbtPrevOut(inp);
+            if (prev) totalIn += prev.amount;
             else canCalcFee = false;
         });
     }
@@ -21632,7 +21675,10 @@ function _psbtAuditOutputs(tx, masterKey, myFingerprint) {
         // The caller shows a warning banner and gates signing on an
         // explicit user acknowledgment, but does NOT hard-block.
         unverifiedChangeDetected: metadataMissingOutputs.length > 0,
-        unverifiedChangeOutputs: metadataMissingOutputs
+        unverifiedChangeOutputs: metadataMissingOutputs,
+        // Inputs whose nonWitnessUtxo is not the transaction their txid names:
+        // a broken or tampered PSBT. Signing is blocked (no override).
+        prevTxMismatchInputs
     };
 }
 
@@ -21701,12 +21747,8 @@ function _psbtSavedWalletCheck(tx, audit, wallets) {
     const entriesOf = (x) => _psbtGetDerivEntries(x.bip32Derivation).concat(_psbtGetDerivEntries(x.tapBip32Derivation));
 
     (tx.inputs || []).forEach((inp, i) => {
-        let script = inp.witnessUtxo && inp.witnessUtxo.script;
-        if (!script && inp.nonWitnessUtxo && inp.nonWitnessUtxo.outputs) {
-            const prev = inp.nonWitnessUtxo.outputs[inp.index];
-            script = prev && prev.script;
-        }
-        const m = match(script, entriesOf(inp));
+        const prev = _psbtPrevOut(inp);   // a legacy input only from a previous tx that matches its txid
+        const m = match(prev && prev.script, entriesOf(inp));
         info.inputs.push({ index: i, wallet: m ? m.name : null, chain: m ? m.chain : null, child: m ? m.child : null });
         if (!m) info.unmatchedInputs.push(i);
     });
@@ -21791,12 +21833,8 @@ function _psbtTxSummary(tx, audit) {
     const savedIn = (audit.savedWallets && audit.savedWallets.inputs) || [];
     const count = (x) => !x ? 0 : (x instanceof Map ? x.size : (Array.isArray(x) ? x.length : Object.keys(x).length));
     const inputs = (tx.inputs || []).map((inp, i) => {
-        let amount = null, script = null;
-        if (inp.witnessUtxo) { amount = BigInt(inp.witnessUtxo.amount); script = inp.witnessUtxo.script; }
-        else if (inp.nonWitnessUtxo && inp.nonWitnessUtxo.outputs && inp.nonWitnessUtxo.outputs[inp.index]) {
-            const prev = inp.nonWitnessUtxo.outputs[inp.index];
-            amount = BigInt(prev.amount); script = prev.script;
-        }
+        const prev = _psbtPrevOut(inp);
+        const amount = prev ? prev.amount : null, script = prev ? prev.script : null;
         let address = '';
         try { if (script) address = btcLib.Address(PSBT_NETWORK).encode(btcLib.OutScript.decode(script)); } catch (e) { address = ''; }
 
@@ -22219,7 +22257,10 @@ function _psbtBuildReviewHtml(tx, auditResult) {
             feeHtml += `<div class="psbt-alert error" style="margin-top: 0.5rem;"><strong>&#9888; UNUSUALLY HIGH FEE:</strong> ${feeBtc} BTC is ${pct}% of the ${(inN / 1e8).toFixed(8)} BTC being spent. Normal fees are a tiny fraction of that. Confirm this fee on your coordinator before signing &mdash; if it is not what you intended, do not sign.</div>`;
         }
     } else {
-        feeHtml = `<div class="psbt-alert warning">Cannot calculate exact fee — some inputs lack witness UTXO data.</div>`;
+        const mism = auditResult.prevTxMismatchInputs || [];
+        feeHtml = mism.length
+            ? `<div class="psbt-alert error"><strong>&#9888; Fee unknown, and the PSBT doesn&rsquo;t add up:</strong> the previous transaction included for input ${mism.join(', ')} is not the one it spends. Don&rsquo;t sign: create the transaction again in your wallet.</div>`
+            : `<div class="psbt-alert warning">Cannot calculate the fee: the PSBT doesn&rsquo;t include the amount of every input it spends.</div>`;
     }
     if (summary) feeHtml += _psbtLockRowsHtml(summary);
 
@@ -22456,6 +22497,9 @@ function _psbtUpdateSignGate() {
     // Unsafe sighash: blocked outright. Force Sign does not override this —
     // such a signature lets its holder change the transaction afterwards.
     var unsafeSighash = (_psbtLastAuditResult && _psbtLastAuditResult.unsafeSighashInputs) || [];
+    // A legacy input whose previous transaction isn't the one its txid
+    // names: its amount is unproven, so the real fee is unknown. No override.
+    var prevMismatch = (_psbtLastAuditResult && _psbtLastAuditResult.prevTxMismatchInputs) || [];
 
     if (unsafeSighash.length) {
         signBtn.disabled = true;
@@ -22474,6 +22518,22 @@ function _psbtUpdateSignGate() {
             unsafeSighash.map(function (u) { return 'input ' + u.index + ': ' + _psbtSighashName(u.sighash); }).join(', ') +
             '). Such a signature does not cover the whole transaction, so it could be reused to send the funds elsewhere. ' +
             'Create the transaction again in your wallet with the default signature type.';
+    } else if (prevMismatch.length) {
+        signBtn.disabled = true;
+        signBtn.textContent = 'SIGNING BLOCKED — Input Data Doesn’t Match';
+        signBtn.style.background = 'var(--skb-danger)';
+        signBtn.style.borderColor = 'var(--skb-danger)';
+        signBtn.style.opacity = '0.9';
+        signBtn.style.cursor = 'not-allowed';
+        banner.style.display = 'block';
+        banner.style.borderColor = 'var(--skb-danger)';
+        banner.style.color = 'var(--skb-danger)';
+        banner.style.background = 'rgba(220, 38, 38, 0.10)';
+        banner.innerHTML = 'SIGNING BLOCKED &mdash; the previous transaction included for ' +
+            (prevMismatch.length === 1 ? 'input ' + prevMismatch[0] + ' is' : 'inputs ' + prevMismatch.join(', ') + ' is') +
+            ' not the one ' + (prevMismatch.length === 1 ? 'it spends' : 'they spend') + '. The PSBT is broken or has been tampered with: ' +
+            'the amount it claims can&rsquo;t be trusted, so the real fee could be much higher than it looks. ' +
+            'Create the transaction again in your wallet.';
     } else if (hijack && !forceSign) {
         signBtn.disabled = true;
         signBtn.textContent = 'SIGNING BLOCKED — Hijack Detected';
@@ -23952,6 +24012,14 @@ async function psbtDoSign() {
     if (unsafeSighash.length) {
         psbtShowStatus('<strong>SIGNING BLOCKED:</strong> this PSBT asks for a signature type other than SIGHASH_ALL (' +
             unsafeSighash.map(u => 'input ' + u.index + ': ' + _psbtSighashName(u.sighash)).join(', ') + '). Nothing was signed.', 'error');
+        return;
+    }
+    // Backstop for the review gate: never sign when a legacy input's previous
+    // transaction doesn't match its txid (its amount, and so the fee, is unproven).
+    const prevMismatch = _psbtPrevTxMismatches(btcLib.Transaction.fromPSBT(_psbtLoadedBytes, { network: PSBT_NETWORK }));
+    if (prevMismatch.length) {
+        psbtShowStatus('<strong>SIGNING BLOCKED:</strong> the previous transaction included for input ' + prevMismatch.join(', ') +
+            ' is not the one it spends, so its amount and the fee can’t be trusted. Nothing was signed.', 'error');
         return;
     }
 
