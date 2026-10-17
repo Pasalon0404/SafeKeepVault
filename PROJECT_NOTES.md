@@ -1,14 +1,21 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Sept 29, 2026).**
+> **Start with the "Current state" section below (updated Oct 17, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
-> Current state section.
+> Current state section. `CLAUDE.md` holds the standing rules for AI
+> sessions (desktop/laptop only, no version bump until the owner asks).
 
 ---
 
-## Current state (Sept 29, 2026) — version v1.34
+## Current state (Oct 17, 2026) — v1.45 plus unreleased work on `main`
+
+The last release is **v1.45** (Oct 15). `seed-xor-tool/VERSION` still says
+1.45: features merge to `main` without a bump, and builds from `main` are
+for the owner's own use until the owner says it's release time (see
+`CLAUDE.md`). The version stamp shows the exact commit, e.g.
+`v1.45 · build 268 · 4543c21`.
 
 ### Working with Dave (the owner)
 
@@ -19,6 +26,8 @@
   especially comments that contain apostrophes.
 - Don't guess when he pastes an error. Read the actual output first. Two
   past incidents came from running commands on the wrong machine.
+- Check the build stamp he pastes against `origin/main`: a build from a
+  feature branch shows the branch commit instead of the merge commit.
 
 ### Machines
 
@@ -41,13 +50,15 @@ Personal values (`<PROJECT_FOLDER>`, `<ZBOOK_USER>`, `<ZBOOK_IP>`, `<HOME_LAN>`,
 On the Mac:
 ```
 cd "<PROJECT_FOLDER>"
+git checkout main && git pull
 cd seed-xor-tool
 npm run build
 cd ..
 rsync -av --delete --exclude '* (1)*' seed-xor-tool/dist/ <ZBOOK_USER>@<ZBOOK_IP>:/home/safekeep-build/src/dist/
 rsync -av --exclude 'workspace/' --exclude '*.img' --exclude '* (1)*' --exclude '.DS_Store' usbbootdrive/ <ZBOOK_USER>@<ZBOOK_IP>:/home/safekeep-build/
 ```
-The second rsync is only needed when something in `usbbootdrive/` changed.
+The second rsync is only needed when something in `usbbootdrive/` changed
+(e.g. `safekeep-boot.sh`). `npm run build` is `node build-offline.mjs`.
 
 If the build prints `⚠ shallow git clone` (the stamp then ends in
 `+ shallow clone`), the Mac's clone is missing history, so the build number
@@ -55,14 +66,13 @@ is wrong and the file can't match a release. Fix it once with
 `git fetch --unshallow`. Releases are built by `.github/workflows/release.yml`
 from a `vX.Y` tag; see `VERIFYING.md` for checking and signing them.
 
-`build.sh` stops right away if `src/dist/boot.html` is missing (it used to
-skip the copy silently and produce an image with no app). Someone building
-from a fresh clone on one Linux machine runs `bash prepare-app.sh` (no sudo)
-in `usbbootdrive/` instead of the first rsync: it runs `npm ci` +
+`build.sh` stops right away if `src/dist/boot.html` is missing. Someone
+building from a fresh clone on one Linux machine runs `bash prepare-app.sh`
+(no sudo) in `usbbootdrive/` instead of the first rsync: it runs `npm ci` +
 `npm run build` and copies the result into `usbbootdrive/src/dist/`.
 `seed-xor-tool/.npmrc` sets `legacy-peer-deps=true` because
 `vite-plugin-node-polyfills@0.25.0` doesn't declare Vite 8 support yet;
-without it a clean `npm ci` fails.
+without it a clean `npm ci` fails. Don't run `npm audit fix --force`.
 
 On the ZBook:
 ```
@@ -71,30 +81,41 @@ lsblk -o NAME,SIZE,TRAN,MODEL
 sudo bash quick-update.sh --usb /dev/sdb
 ```
 - `quick-update.sh` reuses the last full build's chroot, drops in the new
-  app and scripts, re-squashes, and rewrites ONLY the OS partition.
-  **The vault and transfer data are preserved.** It asks you to type YES.
+  app and scripts (including `safekeep-boot.sh`), re-squashes, and rewrites
+  ONLY the OS partition. **The vault and transfer data are preserved.** It
+  asks you to type YES.
 - It refuses to run (and tells you to run the full `build.sh`, ~20 min)
   if `chroot-setup.sh` or `safekeep-harden.sh` changed, or if the last full
   build didn't finish (`workspace/.chroot-complete` marker).
-- `npm install` needs `--legacy-peer-deps`: vite 8 and
-  vite-plugin-node-polyfills have a harmless peer-version mismatch. Don't
-  run `npm audit fix --force`.
-- The Vite build can't run in the Linux sandbox (the rolldown native
-  binding is missing). Builds happen on the Mac.
+
+Users who download the release image update by reflashing, which erases
+the vault: the website's Docs page ("Updating to a New Version") walks
+them through Encrypted Backup → copy the `.7z` off → flash → restore.
+There is no in-app updater (an open decision, below).
 
 ### Dev testing (no USB)
 
 - On the Mac: `cd seed-xor-tool && npm run dev`, then open
   `http://localhost:5173/boot.html?devMode=seeded`
-  (also `normal`, `ephemeral`, `amnesia`). The Dev Drawer has
-  "Load test seed" (abandon×23 art → nickname "Digital Wheat Crumble").
-- In dev mode the Transfer Drive is an in-memory mock ("TRANSFER (dev mock)").
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs`, 19 files, all
-  passing. They extract real functions from boot.html and check them
-  against official vectors (BIP-39/32/44/49/84/86, BIP-85, Coldcard Seed
-  XOR, all 45 SLIP-39 vectors, BIP-322, PSBT change audit, Silent
-  Payments). `test-transfer-bridge.mjs` runs the real Transfer Watcher bash
-  code end-to-end and needs GNU coreutils, so it skips itself on macOS.
+  (also `normal`, `ephemeral`, `amnesia`). In seeded mode the vault holds
+  the 24-word `abandon … art` seed (fingerprint `5436d724`). The Dev Drawer
+  switches modes. In dev mode `window.SafeKeepOS` is an in-memory mock
+  (Transfer Drive, saved wallets, passphrases and notes all live in memory).
+- The Vite dev server and `npm run build` also work in a Linux cloud
+  sandbox after `npm ci` (the old "rolldown binding missing" problem is
+  gone). Playwright with the preinstalled Chromium can drive the dev server
+  for screenshots at laptop size (1366×900).
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **41 files**,
+  all passing on `main`. They extract real functions from `boot.html` (or
+  `shared/boot.js`) into a Node VM and check them against official vectors
+  and real PSBTs built with `@scure/btc-signer`. Some also run the Python
+  embedded in `safekeep-boot.sh` (Settings and Wallets watchers).
+  `test-transfer-bridge.mjs` runs the real Transfer Watcher bash code and
+  needs GNU coreutils, so it skips itself on macOS. Hardware helper tests
+  live in `usbbootdrive/tests/` (Coldcard, Trezor).
+- When a change adds a helper that an extracted function now calls, the
+  tests that extract that function need the helper added to their list,
+  or they fail with `ReferenceError`.
 
 ### Git rules
 
@@ -106,6 +127,9 @@ sudo bash quick-update.sh --usb /dev/sdb
 - The folders contain stray `* (1).*` download duplicates (e.g.
   `boot (1).html`, `safekeep-boot (1).sh`). They are untracked junk and
   can be deleted. The rsync commands exclude them.
+- Cloud sessions work on a branch, open a PR when asked, and Dave merges
+  it on GitHub. After a merge, the next piece of work starts the branch
+  again from `origin/main`.
 
 ### Safety rules (non-negotiable)
 
@@ -117,8 +141,12 @@ sudo bash quick-update.sh --usb /dev/sdb
 - **Lock must never power off or reboot.** It returns to the native unlock
   screen.
 - Don't weaken crypto. Verify changes against official test vectors, with
-  a mutation check where practical.
+  a mutation check where practical (break the check, confirm a test fails).
 - UI polish is secondary. Never break function for looks.
+- Never write the JSON key `"passphrase"` (or the 2FA marker
+  `"safekeep-2fa-backup"`) into a JSON download that isn't a passphrase or
+  2FA file: the File Router in `safekeep-boot.sh` moves any JSON in
+  `seeds/` that contains them.
 
 ### How key subsystems work now
 
@@ -128,8 +156,10 @@ enterprise policy (written at launch by `safekeep-boot.sh`) routes them
 silently into `/media/.safekeep-vault/seeds/` (normal boot) or
 `/tmp/safekeep-signals/` (temporary session), where bash watchers in
 `safekeep-boot.sh` act on them. The app reads results back with
-`fetch(file://…)`. Examples: POWER_ACTION, WIPE_TRIGGER, RELIQUARY_*
-(backups), RESTORE_*, Codex notes, passphrases, 2FA.
+`fetch(file://…)`. Every watcher treats its file as untrusted data and
+runs nothing from it. Examples: POWER_ACTION, WIPE_TRIGGER, RELIQUARY_*
+(backups), RESTORE_*, DEVICE_SETTINGS, SAVED_WALLETS, Codex notes,
+passphrases, 2FA, COLDCARD_/TREZOR_ requests.
 
 **Lock (true lock).** The dashboard Lock button calls `SafeKeepOS.lock()`,
 which writes `POWER_ACTION.txt` = `lock` and closes the window. The daemon
@@ -137,99 +167,149 @@ defaults to `lock` if the signal file is missing, so it can never fall
 through to poweroff. The lock branch kills the session's children,
 unmounts, runs `cryptsetup close vault`, then
 `exec /usr/local/bin/safekeep-boot` → native zenity unlock prompt.
-Fallbacks: `systemctl --no-block restart`, then a zenity message plus
-`sleep infinity`. The same mechanism powers "RETURN TO MASTER VAULT" from a
-temporary session (Settings). Debug logs:
-`/media/.safekeep-vault/power-debug.log` and
-`/mnt/safekeep-data/safekeep-power-debug.log`.
+Idle timers (Device Options): Auto-Lock, Display Sleep, and Auto-Off
+(powers down after N idle minutes, also at the unlock prompt; 0 = stay on).
 
-**Transfer Drive (auto-mounted, no prompts — NEW, not yet hardware-tested).**
-The exFAT TRANSFER partition is mounted at boot at
-`/media/safekeep-transfer`. The app no longer uses showDirectoryPicker,
-which caused a folder picker plus an "Allow this site to edit files?" prompt
-every boot. `shared/transfer-drive.js` (window.SKTransfer) provides a
-FileSystemDirectoryHandle look-alike, so every tool still uses
-`window.vaultTransferDriveHandle` unchanged:
-- reads: `fetch(file://<transfer>/<name>)`
-- listing: `/tmp/safekeep-signals/xfer/index.txt`, kept current by the
-  Transfer Watcher
-- write/delete/rename: one download, `SKXFER-<W|D|M>-<id>[-<hexname>].skxfer`.
-  The Transfer Watcher (between the `SKX_TRANSFER_WATCHER_BEGIN/END` markers
-  in `safekeep-boot.sh`) performs FIXED operations only, re-validates names
-  (no `/`, no leading `.`, no control characters), and acks via
-  `/tmp/safekeep-signals/xfer/done-<id>.txt`.
-- Auto-mount happens in `transitionToDashboard()` via
-  `_transferAutoMount()`. If the watcher isn't running, the old Mount button
-  and picker come back as a fallback.
-- Chromium policy now also sets
-  `AutomaticDownloadsAllowedForUrls: ["file://*","file:///*"]` and
-  `DefaultAutomaticDownloadsSetting: 1` to stop the "download multiple
-  files" prompt.
-- If it misbehaves on hardware: `grep "Transfer Watcher" /tmp/safekeep-boot.log`
+**Encrypted Backup (Reliquary).** The app sends a JSON request
+(`RELIQUARY_TRIGGER.json`); the watcher validates it against a fixed list
+and runs `7z` directly with an argument list (no shell, no command text
+from the app). Categories map to vault folders: codex, settings,
+passphrases, twofa, seeds. Restore ("Unlock .7z Backup") is on the
+welcome screen and reads the `.7z` from the Transfer Drive.
 
-**Seed Nickname** (status bar, formerly "Vault Identifier"). Three BIP-39
-words from SHA-256 of the normalized mnemonic (NFKD, lowercase, single
-spaces), truncated to 32 bits. Same seed → same words on every
-build and drive. The passphrase is not included. It is a convenience label
-only. It does NOT prove the USB drive is genuine or untampered: it is
-computed after unlock, and a cloned drive shows the same words. Decided
-Sept 2026: keep it and label it honestly. Skipped pre-unlock anti-phishing
-words (low value for a stick kept physically secure).
+**Transfer Drive.** The exFAT TRANSFER partition is mounted at boot at
+`/media/safekeep-transfer`; `shared/transfer-drive.js` (window.SKTransfer)
+gives tools a FileSystemDirectoryHandle look-alike. Writes, deletes and
+renames go through the Transfer Watcher (between the
+`SKX_TRANSFER_WATCHER_BEGIN/END` markers in `safekeep-boot.sh`), which
+performs fixed operations only. In daily use on hardware. If it
+misbehaves: `grep "Transfer Watcher" /tmp/safekeep-boot.log`.
 
-**UI polish layer.** Nearly all visual styling is in
-`<style id="skb-polish">` near the end of boot.html, inside `@media screen`
-so print output is untouched. It holds the design tokens (palette, radii,
-type scale), buttons, the status-bar pills, and seed-word tiles that are
-blurred until hovered. Fonts: Inter + JetBrains Mono from
-`@fontsource-variable/*`, imported in `boot-entry.js` and inlined into the
-single-file build. Dashboard icons are inline Lucide SVGs. Advanced tools
-are grouped: Keys & Seeds / Backup & Recovery / Signing & Transfer /
-Private Data. Version string: `id="dash-version"` in boot.html.
+**Settings in the vault.** Device Options are saved as
+`settings/device-settings.json` (Settings Watcher, known keys only).
+**Saved wallets** (below) are `settings/saved-wallets.json`. Both live in
+`settings/`, so Encrypted Backup ("Application Settings"), restore and
+factory reset cover them. Normal boots only.
 
-### Crypto review results (Sept 2026)
+**Saved wallets** (Output Descriptor tool → PSBT Signer). The user saves a
+name + watch-only descriptor ("Save to Vault"; list with Open/Remove).
+Storage: `SafeKeepOS.saveSavedWallets` downloads `SAVED_WALLETS.json`; the
+Wallets Watcher (Python heredoc `SWPYEOF` in `safekeep-boot.sh`) accepts
+≤ 256 KB, ≤ 50 wallets, names 1–64 printable characters, printable
+descriptors ≤ 4 KB with no xprv/WIF, and writes the file atomically. The
+signer's `_psbtSavedWalletCheck` matches inputs and outputs by deriving
+the saved wallet's address at the (chain, index) a derivation path claims
+and comparing it with the real script (never trusting the PSBT). It
+names the spending wallet in a banner, and turns `unverified-change`
+(e.g. BlueWallet "diet" multisig PSBTs) into `verified-change` when it is
+a saved wallet's address. Hijacks stay blocked; payments to your own
+saved wallets keep their checkbox. Tests: `test-saved-wallets.mjs`.
 
-All core crypto passed official vectors. Fixed in that review:
-- PSBT change-hijack holes: foreign-fingerprint and unknown-purpose outputs
-  are now treated as destinations; multisig change is bound to the wallet
-  via global xpubs.
-- Fee sanity guard: error if fee < 0 or fee ≥ 5% of inputs.
-- BIP-322 signatures use low-S.
-- Passphrases are no longer `.trim()`-ed (spaces are significant in BIP-39).
-- Seed XOR / SLIP-39 recovery shows the recovered fingerprint and asks for
-  confirmation before replacing the vault seed.
-- An XSS hole in restore file names was fixed.
+**PSBT Signer review screen.** Besides the existing output audit
+(`_psbtAuditOutputs`: change proof, hijack detection, multisig binding
+via global xpubs, Silent Payments, SIGHASH_ALL-only, 5% fee guard):
+- Summary card: sending, fee, total leaving your wallet, change back,
+  change still to check; collapsible list of inputs (amount, address,
+  saved wallet, multisig signatures so far). `_psbtTxSummary` is pure.
+- Lock time, BIP-68 relative locks (warning), replace-by-fee.
+- Per destination, "Compare with the address the recipient gave you"
+  (paste/scan; exact match or highlighted differences). It never ticks
+  the "I have independently verified" checkbox.
+- Legacy inputs: amounts come from `nonWitnessUtxo` only if it hashes to
+  the input's txid (`_psbtPrevOut` / `_psbtNonWitnessTxidOk`).
+  `@scure/btc-signer` skips that check for non-final previous
+  transactions, so a forged one could hide fee. A mismatch blocks signing
+  with no Force Sign override. Tests: `test-psbt-review-summary.mjs`,
+  `test-psbt-legacy-inputs.mjs`.
 
-Known SLIP-39 facts worth remembering: SafeKeep's SLIP-39 shares encode the
-BIP-39 *entropy*, so restoring them on a Trezor gives a different wallet
-(the UI says so). A wrong SLIP-39 passphrase silently yields a different
-valid secret.
+**Passphrase entry.** A mistyped BIP-39 passphrase silently opens a
+different wallet, so a *typed* passphrase must be typed twice (paste
+blocked) before the Dashboard applies it or the Output Descriptor tool
+uses it (single-sig, and multisig Key 1, which stays hidden until
+confirmed). A passphrase loaded unchanged from the Passphrase Library
+needs no retyping (`lib_pick` records it in `_ppFromLibrary`). The
+Passphrase Library itself checks the written copy when saving. The Verify
+tab's passphrase isn't confirmed: a typo there only shows MISMATCH.
+
+**OS lock-down (v1.45).** No network/Wi-Fi/Bluetooth/NFC/USB-network
+drivers in the image (the build fails if one is left), network services
+masked, firewall drops everything, no compilers, a watchdog that switches
+off any interface that appears and shows a red banner. Release builds
+have no terminal or file manager (`SAFEKEEP_DEV_SHELL=1 bash build.sh`
+adds them for troubleshooting only). The website tells users to turn off
+Intel AMT/vPro and radios in the BIOS, and Secure Boot if the stick won't
+start (the GRUB image isn't signed).
+
+**Releases and verification.** The app (`boot.html`) is a reproducible
+build: a `vX.Y` tag runs `.github/workflows/release.yml` (checksums,
+GitHub attestation, OpenTimestamps; `ots-upgrade.yml` completes the
+proof). The maintainer adds the GPG signature by hand. `npm run
+verify-release` rebuilds a stamped commit and compares bytes. The OS
+image is not reproducible. A start-up self-check runs published vectors
+before the app accepts any input. An online demo (`npm run build:demo`,
+demo.safekeepbitcoin.com) only accepts the public all-zero-entropy seeds.
+
+**Seed Nickname, LifeHash, UI polish.** The status-bar Seed Nickname is
+three words from SHA-256 of the mnemonic (a convenience label, not proof
+the drive is genuine). LifeHash icons beside fingerprints match
+Sparrow's. Styling lives in `<style id="skb-polish">` inside
+`@media screen`, so print output is untouched.
+
+### The website (separate repos)
+
+- `Pasalon0404/Safekeep-Website` → **safekeepbitcoin.com** (CNAME). Pages:
+  index, features, compare, docs (incl. "Updating to a New Version" and
+  "Recovering Without SafeKeep"), download (image + GPG steps), courier,
+  print-qr, release-notes, about, donate, `llms.txt`.
+- `Pasalon0404/safekeep-companion` → the online Courier Tool (can be used
+  on phones; the phone rule in `CLAUDE.md` doesn't apply to it).
+- Update the website only at release time (`CLAUDE.md`). Not yet
+  documented there: saved wallets, the review screen additions, the
+  passphrase confirmations, legacy-input fees.
 
 ### Open items / next steps
 
-1. **Hardware-test the Transfer Drive auto-mount** (v1.34 build): check the
-   status bar shows MOUNTED, the Mount button is gone, save/rename/delete
-   work, and no Chromium prompts appear.
-2. **Security hardening, not urgent:** the Reliquary/backup watcher
-   executes shell command text sent from the app, as root
-   (`exportToTransfer` / `createReliquary` build a `command` string). Replace
-   it with fixed operations like the Transfer Watcher uses.
-3. Chromium runs with `--no-sandbox` and `--disable-web-security`. That's
-   acceptable only because the machine is offline and runs only our page.
-   Revisit if anything ever loads untrusted content.
-4. Minor: the "Device Options" chevron is still a text glyph, not an SVG.
+1. **Website at release time** — document the unreleased features above.
+2. **Updater (decision)** — today a reflash wipes the vault. Option: a
+   signed update file the vault verifies before rewriting only the OS
+   partition (the logic `quick-update.sh` already has).
+3. **Second source for the GPG fingerprint** — publish it outside GitHub
+   (e.g. X bio, keys.openpgp.org), then name it on the download page.
+4. Chromium still runs with `--no-sandbox` and `--disable-web-security`
+   (comments in `safekeep-boot.sh` explain why). Acceptable only because
+   the machine is offline and runs only our page.
+5. Not supported yet: Taproot script-path / miniscript signing, saving
+   Silent Payment wallets, matching inputs whose PSBT has no derivation
+   path.
+6. Legacy inputs that carry only `witnessUtxo` (no `nonWitnessUtxo`) are
+   still trusted for their amount; Bitcoin Core and most wallets send
+   `nonWitnessUtxo` for legacy inputs.
 
-### Recent commits (newest first)
+Closed since the Sept 29 notes: the Reliquary watcher no longer runs
+command text (fixed list + `7z` argument list); the Transfer Drive
+auto-mount is in daily use on hardware.
+
+### Recent work (newest first)
 
 ```
-3380e5b feat(transfer): auto-mount transfer drive via watcher, no browser permission prompts
-e8e7f0d ui(seed-nickname): rename Vault Identifier, honest tooltip, case-insensitive, clear on seed wipe
-844b929 ui(polish): embedded fonts, icon set, grouped tools, refined palette, seed-word privacy blur
-74ec864 build: quick-update.sh + completion marker so a cancelled build is never reused
-82db373 feat(lock): return from a Temporary session to the master vault without rebooting
-5d55949 fix: review round 2 - recovery confirmation, exact passphrases, input escaping, fee guard
-7962f6e fix(security): close PSBT change-hijack holes; crypto vector review
+035fc05 PSBT Signer: fee for legacy inputs, and refuse a forged previous transaction   (#40)
+6e95938 Output Descriptor: type a passphrase twice before it is used                     (#39)
+68fa6fa Dashboard passphrase: type it twice before it is applied                         (#38)
+977cf5f PSBT review: spending summary, inputs, lock time, RBF, address compare           (#37)
+f6f89bb Saved wallets: check PSBTs against the wallets you own                           (#36)
+0af5eec Idle Timers: Auto-Off powers SafeKeep down after N idle minutes
+c4f6822 SLIP-39 recovery: show both readings, never save a Trezor share set as a wrong wallet
+0b53fdb / e0d6029 Verify tab: convert wallet exports to a descriptor before checking
+2142c9a OS lock-down: no root shell, no network drivers, no compilers, network watchdog   (v1.45)
+eaacdbb Output Descriptor: import a descriptor from another wallet (watch-only)
+f011ef5 Output Descriptor: import a multisig cosigner's key from a Coldcard or Trezor     (v1.44)
+851fe5f / 5bcb77b PSBT signer: take and give PSBT files via The Courier                   (v1.43)
+fa85e2a Output Descriptor: show a receive address with QR, and check an address           (v1.42)
 ```
-(v1.34 is committed; the version string lives at `id="dash-version"` in boot.html.)
+`git log --oneline` has the rest; v1.35–v1.41 added verifiable releases,
+the self-check, LifeHash, Bitcoin Core export, dice fairness, playing
+cards, Verifiable Dice, Standard SeedQR, the Wallet Record rewrite and
+the online demo.
 
 ---
 ---
