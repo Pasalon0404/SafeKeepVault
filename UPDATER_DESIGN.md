@@ -111,12 +111,30 @@ then:
 
 The update file must come from the same full build as the image.
 
+## Proof-of-concept results (Oct 18, 2026)
+
+On a developer build of v1.46, on a Patriot P210 128 GB stick, booted with
+UEFI on the owner's laptop:
+
+- **Room:** the OS is 1,258 MB, and two copies leave 146 MB free on the
+  2.8 GB OS partition. They fit, but with little to spare.
+- **Writing the idle slot while running works.** Remounting `/cdrom`
+  read-write, copying, reading back and checking the hashes took 16 seconds.
+- **Switching works.** After the switch the stick booted slot B
+  (`live-media-path=casper-b`), and GRUB listed "previous version, slot a".
+  The app ran normally from slot B.
+- **A power cut while writing is harmless.** Pulling the stick mid-copy left
+  slot A empty. The stick booted slot B normally with no "previous version"
+  entry, and running the copy again completed cleanly.
+- **Fallback works.** With `slot.cfg` naming a slot without a kernel, GRUB
+  booted the other slot.
+- **Not yet tested:** legacy BIOS boot, slower sticks.
+
 ## Risks and open questions
 
 - **Writing the OS partition while it is in use.** Casper keeps the OS
-  partition mounted to read the running squashfs. Remounting it
-  read-write to write the other slot needs a proof of concept on a real
-  stick. That is the first thing to build.
+  partition mounted read-only at `/cdrom`. The proof of concept showed that
+  remounting it read-write to write the other slot works (see above).
 - **Key compromise.** Anyone holding the maintainer's private key could
   ship a malicious update to every user who installs it. Today the same
   key signs the image, so the risk exists already, but an updater makes it

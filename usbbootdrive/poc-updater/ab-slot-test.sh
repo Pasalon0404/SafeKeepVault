@@ -20,7 +20,7 @@
 set -euo pipefail
 
 OS_MNT=/cdrom
-FILES="filesystem.squashfs vmlinuz initrd filesystem.size"
+FILES="filesystem.squashfs vmlinuz initrd filesystem.size filesystem.manifest"
 
 die() { echo ""; echo "ERROR: $*" >&2; exit 1; }
 
