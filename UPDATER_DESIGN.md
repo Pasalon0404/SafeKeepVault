@@ -212,6 +212,14 @@ UEFI on the owner's laptop:
 - **Fallback works.** With `slot.cfg` naming a slot without a kernel, GRUB
   booted the other slot.
 - **Not yet tested:** legacy BIOS boot, slower sticks.
+- **Updater (Part 2):**
+  - **Build 283 → 284:** worked on a quick-updated stick.
+  - **A brand-new stick:** flashed from `main`, it updated to the next build
+    from Device Options, writing slot A → B. That is the case every user
+    meets first.
+  - **Before both of those:** one try failed with "Input/output error" at
+    its first write, before the update log existed, and nothing was
+    changed. It has not come back.
 
 ## Risks and open questions
 

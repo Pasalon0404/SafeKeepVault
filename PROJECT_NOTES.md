@@ -278,10 +278,14 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
      release that everyone installs with one last reflash.
    - **Part 2** is merged: `make-update.sh`, `safekeep-update.py`, the Update
      Watcher, and Device Options → Update SafeKeep. Release steps are in
-     `VERIFYING.md`, steps 4–6. It worked on a stick (build 283 → 284). The
-     first try on a freshly flashed stick failed with "Input/output error"
-     at the first write, before the update log existed. Repeat that case
-     (fresh flash, then an update) before the release.
+     `VERIFYING.md`, steps 4–6. Tested on sticks:
+     - build 283 → 284 worked on a stick that had been quick-updated;
+     - a freshly flashed new stick updated from `main` to the next build
+       (slot A → B, Oct 18).
+
+     One earlier try failed with "Input/output error" at the first write,
+     before the update log existed. It hasn't come back. If it does,
+     Device Options → Show update log records why.
 3. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
 4. Chromium still runs with `--no-sandbox` and `--disable-web-security`
