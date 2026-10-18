@@ -7055,7 +7055,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh()">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -7188,6 +7188,22 @@
                                 <button type="button" class="skb-btn" id="settings-trezor-log-btn" onclick="tzSettingsShowLog()">Show Trezor log</button>
                             </div>
                             <pre id="settings-trezor-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
+                        </div>
+                        <div id="settings-update-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Update SafeKeep</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                Install a newer SafeKeep without reflashing. On your online computer, download <strong>SafeKeep-Update-….tar</strong> from the official release page and copy it onto the Transfer Drive. SafeKeep installs it only if it carries the maintainer&rsquo;s signature and is newer than this version. Your vault and the Transfer Drive are not touched, and this version stays available as &ldquo;previous version&rdquo; in the startup menu. Make an Encrypted Backup first anyway.
+                            </p>
+                            <div id="settings-update-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;"></div>
+                            <div id="settings-update-found" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.7;"></div>
+                            <div id="settings-update-progress" style="display: none; margin-bottom: 0.75rem;">
+                                <div style="height: 6px; background: var(--skb-bg-input); border-radius: 3px; overflow: hidden;"><div id="settings-update-bar" style="height: 100%; width: 0%; background: var(--skb-primary); transition: width 0.4s;"></div></div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="skb-btn" id="settings-update-check-btn" onclick="updSettingsCheck()">Check for update</button>
+                                <button type="button" class="skb-btn skb-btn--primary" id="settings-update-install-btn" style="display: none;" onclick="updSettingsInstall()">Install update</button>
+                                <button type="button" class="skb-btn skb-btn--primary" id="settings-update-restart-btn" style="display: none;" onclick="updSettingsRestart()">Restart now</button>
+                            </div>
                         </div>
                         <div class="settings-danger-zone">
                             <h4>Factory Reset</h4>
@@ -25317,6 +25333,142 @@ async function psbtCosignAnotherSeed() {
     await _psbtIngestComplete(bytes, name);
     psbtSetKeySource('temp');
     psbtShowStatus('Half-signed transaction loaded. Enter the next co-signer\'s seed under Temporary Seed, then sign.', 'info');
+}
+
+// ===========================================================================
+// SETTINGS → UPDATE SAFEKEEP — check / install a signed update
+// ===========================================================================
+// The OS side (safekeep-update.py) does every check that matters: the
+// maintainer's signature, newer than this version, every file matching the
+// signed manifest. This only shows what it found and asks before installing.
+let _updFound = null;
+let _updBusy = false;
+
+function _updEl(id) { return document.getElementById('settings-update-' + id); }
+
+function _updStatus(text, isError) {
+    const el = _updEl('status');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = isError ? 'var(--skb-danger)' : 'var(--skb-text)';
+}
+
+function _updCurrentStamp() {
+    const el = document.getElementById('dash-version');
+    return el ? el.textContent.trim() : '';
+}
+
+// The app hash in groups of 8, to compare with the release's SHA256SUMS.
+function _updGroups(hex) {
+    return (String(hex || '').match(/.{1,8}/g) || []).join(' ');
+}
+
+function updSettingsRefresh() {
+    if (_updBusy) return;
+    const os = window.SafeKeepOS;
+    _updFound = null;
+    const found = _updEl('found');
+    if (found) { found.style.display = 'none'; found.textContent = ''; }
+    const install = _updEl('install-btn'), check = _updEl('check-btn');
+    if (install) install.style.display = 'none';
+    if (!check) return;
+    if (!os || typeof os.updateCheck !== 'function' || !os.isBootDrive || !os.isBootDrive()) {
+        _updStatus('Updates work when SafeKeep runs from its USB stick.', false);
+        check.disabled = true;
+        return;
+    }
+    check.disabled = false;
+    _updStatus('This SafeKeep: ' + (_updCurrentStamp() || 'unknown version'), false);
+}
+
+async function updSettingsCheck() {
+    const os = window.SafeKeepOS;
+    const check = _updEl('check-btn'), install = _updEl('install-btn'), found = _updEl('found');
+    if (!os || typeof os.updateCheck !== 'function' || _updBusy) return;
+    _updFound = null;
+    install.style.display = 'none';
+    found.style.display = 'none'; found.textContent = '';
+    check.disabled = true;
+    _updStatus('Looking for an update on the Transfer Drive and checking its signature…', false);
+    let r;
+    try { r = await os.updateCheck(); } finally { check.disabled = false; }
+    if (!r || !r.ok) {
+        _updStatus((r && r.error) || 'The update check failed.', true);
+        return;
+    }
+    if (r.status === 'none') {
+        _updStatus(r.message || 'No update file on the Transfer Drive.', false);
+        return;
+    }
+    const u = r.update;
+    _updFound = u;
+    _updStatus('This SafeKeep: ' + (r.current || _updCurrentStamp()), false);
+    found.textContent = '';
+    const rows = [
+        ['Update', 'v' + u.version + '  ·  signed by SafeKeep’s maintainer'],
+        ['Build', u.build],
+        ['App SHA-256', _updGroups(u.app_sha256)],
+        ['Size', Math.round(u.bytes / 1048576) + ' MB'],
+        ['File', u.file]
+    ];
+    rows.forEach(function (row) {
+        const line = document.createElement('div');
+        const k = document.createElement('span');
+        k.style.color = 'var(--skb-text-muted)';
+        k.textContent = row[0] + ': ';
+        const v = document.createElement('span');
+        v.textContent = row[1];
+        v.style.wordBreak = 'break-all';
+        line.appendChild(k); line.appendChild(v);
+        found.appendChild(line);
+    });
+    const note = document.createElement('div');
+    note.style.cssText = 'margin-top: 0.5rem; color: var(--skb-text-muted);';
+    note.textContent = 'The App SHA-256 should match the boot.html line of that release’s SHA256SUMS on GitHub.';
+    found.appendChild(note);
+    found.style.display = '';
+    install.textContent = 'Install v' + u.version;
+    install.style.display = '';
+}
+
+async function updSettingsInstall() {
+    const os = window.SafeKeepOS;
+    if (!_updFound || !os || typeof os.updateInstall !== 'function' || _updBusy) return;
+    const u = _updFound;
+    const check = _updEl('check-btn'), install = _updEl('install-btn'), restart = _updEl('restart-btn');
+    const progress = _updEl('progress'), bar = _updEl('bar');
+    _updBusy = true;
+    check.disabled = true; install.disabled = true;
+    progress.style.display = ''; bar.style.width = '0%';
+    _updStatus('Installing v' + u.version + '… You can keep the screen open; this takes a few minutes.', false);
+    let r;
+    try {
+        r = await os.updateInstall(u.file, u.manifest_sha256, function (p) {
+            if (window.skbIdleTimers && skbIdleTimers.stayOn) skbIdleTimers.stayOn();
+            bar.style.width = Math.max(0, Math.min(100, p.percent || 0)) + '%';
+            _updStatus((p.step || 'Installing') + '… ' + (p.percent || 0) + '%', false);
+        });
+    } finally {
+        _updBusy = false;
+        check.disabled = false; install.disabled = false;
+    }
+    if (!r || !r.ok) {
+        progress.style.display = 'none';
+        const msg = (r && r.error) || 'The update failed.';
+        _updStatus(/unchanged/.test(msg) ? msg : msg + ' The SafeKeep you are running is unchanged.', true);
+        return;
+    }
+    bar.style.width = '100%';
+    install.style.display = 'none';
+    _updEl('found').style.display = 'none';
+    _updFound = null;
+    _updStatus('Installed ' + r.build + '. Restart to start using it. If anything is wrong afterwards, choose “previous version” in the startup menu.', false);
+    restart.style.display = '';
+}
+
+function updSettingsRestart() {
+    const os = window.SafeKeepOS;
+    if (os && typeof os.restart === 'function') os.restart();
 }
 
 // ===========================================================================

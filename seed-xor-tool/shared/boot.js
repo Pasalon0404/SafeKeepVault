@@ -644,6 +644,7 @@ const SafeKeepOS = (() => {
     'DISPLAY_SLEEP',    // Settings idle timer → safekeep-boot.sh display watcher
     'COLDCARD_REQUEST', 'COLDCARD_ACK',   // PSBT Signer ↔ Coldcard Watcher
     'TREZOR_REQUEST', 'TREZOR_ACK',       // PSBT Signer ↔ Trezor Watcher
+    'UPDATE_REQUEST', 'UPDATE_ACK',       // Device Options ↔ Update Watcher
     'master-seed'
   ];
 
@@ -2520,6 +2521,76 @@ const SafeKeepOS = (() => {
     }
   }
 
+  // ===================================================================
+  //  UPDATE — install a signed SafeKeep update (Update Watcher)
+  // ===================================================================
+  // Same request / RAM result / ack pattern as the Trezor above:
+  //   request : UPDATE_REQUEST.json  → Chromium's download folder
+  //   result  : /tmp/safekeep-signals/UPDATE_RESULT.json  (RAM, always)
+  //   ack     : UPDATE_ACK.json      → Chromium's download folder
+  // The helper (safekeep-update.py) verifies the update file's signature
+  // against the maintainer key built into the image and writes it into the
+  // OS slot that isn't running (UPDATER_DESIGN.md). While an install runs it
+  // writes "working" results with a percentage; onProgress gets those.
+  const UPDATE_REQUEST_FILE = 'UPDATE_REQUEST.json';
+  const UPDATE_ACK_FILE     = 'UPDATE_ACK.json';
+  const UPDATE_RESULT_URL   = `file://${COLDCARD_SIGNAL_DIR}/UPDATE_RESULT.json`;
+  let _updInFlight = false;
+
+  async function _updateRequest(payload, maxWaitMs, onProgress) {
+    if (!isBootDrive()) {
+      return { ok: false, status: 'unavailable',
+               error: 'Updates only work when SafeKeep is running from its USB stick.' };
+    }
+    if (_ccTemporarySession()) {
+      return { ok: false, status: 'temporary',
+               error: 'Updates need your vault: restart SafeKeep and unlock the vault, then update.' };
+    }
+    if (_updInFlight) {
+      return { ok: false, status: 'in_progress', error: 'An update request is already running.' };
+    }
+    _updInFlight = true;
+    const requestId = _ccRequestId();
+    try {
+      await _usbAckChain;
+      _rawBlobDownload(UPDATE_REQUEST_FILE, JSON.stringify(Object.assign({}, payload, { request_id: requestId })));
+      const deadline = Date.now() + maxWaitMs;
+      await _sleep(700);
+      while (Date.now() < deadline) {
+        try {
+          const resp = await fetch(UPDATE_RESULT_URL, { cache: 'no-store' });
+          if (resp.ok) {
+            const result = await resp.json();
+            if (result && result.request_id === requestId) {
+              if (result.status !== 'working') {
+                _usbQueueAck(UPDATE_ACK_FILE);
+                return result;
+              }
+              if (onProgress) { try { onProgress(result); } catch (_) {} }
+            }
+          }
+        } catch (e) { /* not written yet, or mid-replace */ }
+        await _sleep(500);
+      }
+      return { ok: false, status: 'no_answer',
+               error: 'SafeKeep did not hear back from the updater. Restart SafeKeep and try again.' };
+    } finally {
+      _updInFlight = false;
+    }
+  }
+
+  /** Look for a signed update on the Transfer Drive.
+   *  ok → status 'none' | 'ready' (update: {file, version, build, app_sha256, manifest_sha256, bytes}) */
+  async function updateCheck() {
+    return _updateRequest({ action: 'check' }, 120000);
+  }
+
+  /** Install the update that updateCheck() showed. ok → status 'installed' (slot, version, build) */
+  async function updateInstall(file, manifestSha256, onProgress) {
+    return _updateRequest({ action: 'install', file: String(file || ''),
+                            manifest_sha256: String(manifestSha256 || '') }, 30 * 60 * 1000, onProgress);
+  }
+
   function _tzUpper(r) {
     if (r && r.ok && r.xfp) r.xfp = String(r.xfp).toUpperCase();
     return r;
@@ -2847,6 +2918,8 @@ const SafeKeepOS = (() => {
     coldcardXpub,
 
     // Trezor One — USB signing via the Trezor Watcher
+    updateCheck,
+    updateInstall,
     trezorGetPairing,
     trezorDetect,
     trezorPromptPin,

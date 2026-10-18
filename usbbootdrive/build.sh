@@ -230,6 +230,8 @@ install -m 644 config/ckcc-build-requirements.txt "$CHROOT_DIR/ckcc-build-requir
 # Trezor USB signing: helper + hash-pinned HWI list (same pattern as above).
 install -m 755 safekeep-trezor.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-trezor.py"
 install -m 644 config/hwi-requirements.txt "$CHROOT_DIR/hwi-requirements.txt"
+# Updater: installs a signed update into the spare OS slot (UPDATER_DESIGN.md).
+install -m 755 safekeep-update.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-update.py"
 
 # ---------------------------------------------------------------------------
 # Install safekeep-session.service — the permanent replacement for the

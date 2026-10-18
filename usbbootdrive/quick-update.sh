@@ -27,7 +27,7 @@
 #
 #  Covered by a quick update:
 #     src/dist/*            (boot.html, manifest.json, …)
-#     safekeep-boot.sh, unlock-vault.sh, setup-vault.sh
+#     safekeep-boot.sh, unlock-vault.sh, setup-vault.sh, safekeep-update.py
 #     safekeep-session.service, config/99-hide-drives.rules
 #
 #  NOT covered — run the full `sudo bash build.sh` instead:
@@ -160,6 +160,8 @@ if [ -d "$CHROOT_DIR/opt/safekeep-hwi" ]; then
     mkdir -p "$CHROOT_DIR/usr/local/lib/safekeep"
     install -m 755 safekeep-trezor.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-trezor.py"
 fi
+mkdir -p "$CHROOT_DIR/usr/local/lib/safekeep"
+install -m 755 safekeep-update.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-update.py"
 install -m 644 safekeep-session.service "$CHROOT_DIR/etc/systemd/system/safekeep-session.service"
 [ -f config/99-hide-drives.rules ] && install -m 644 config/99-hide-drives.rules "$CHROOT_DIR/etc/udev/rules.d/99-hide-drives.rules"
 # Full SHA-256 of the app, to compare with a release's SHA256SUMS (VERIFYING.md).

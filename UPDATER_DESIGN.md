@@ -84,55 +84,77 @@ The owner approved 8 GB as the minimum stick size (Oct 18, 2026).
    - `test-os-slots.mjs` checks that the file is identical to
      `developer-pubkey.asc`.
 
-### Part 2: the updater (from the release after that)
+### Part 2: the updater — built
 
-**What a release adds:** `SafeKeep-Update-v1.NN.tar`, containing:
-- the four `casper/` files;
-- a `manifest.json`;
-- `manifest.json.asc`, the maintainer's signature of the manifest.
+**What a release adds:** `SafeKeep-Update-v1.NN.tar`, an uncompressed tar
+made by `usbbootdrive/make-update.sh` right after the full build. It holds:
+- `manifest.json`, first:
+  - `format` and `kind`;
+  - `version` and the build stamp;
+  - `app_sha256`, the hash of the app read from inside the squashfs, which
+    must match that release's `SHA256SUMS`;
+  - `layout: "two-slot"`;
+  - the size and SHA-256 of every OS file;
+- `manifest.json.asc`: the maintainer's signature of the manifest, added
+  on the Mac with `tar -rf`;
+- the OS files: `filesystem.squashfs`, `vmlinuz` and `initrd`, plus
+  `filesystem.size` and `filesystem.manifest`.
 
-The manifest holds:
-- the version and build stamp;
-- the SHA-256 of each file;
-- the SHA-256 of the app (`boot.html`), which must match that release's
-  `SHA256SUMS`;
-- the oldest stick layout it can be installed on.
+Release steps: `VERIFYING.md`, "For the maintainer", steps 4–6.
 
-**What the user does:** download the update file on their online computer
-and copy it to the Transfer Drive. Then, on the unlocked vault, open
-**Device Options → Update SafeKeep**.
+**What the user does:**
+1. Download the update file on their online computer and copy it to the
+   Transfer Drive.
+2. On the unlocked vault, open **Device Options → Update SafeKeep → Check
+   for update**.
+3. Click **Install**, then **Restart now**.
 
-**What the stick does:**
-1. **It requires an unlocked vault.** A Temporary Session can't update,
-   and neither can someone who has the stick but not the password.
-2. **It checks the signature.** `gpgv` checks the manifest signature
-   against the key built into the stick, and stops on any failure. The
-   tar file itself is treated as untrusted data: it is never run, and it
-   is unpacked only as the four named files.
-3. **It refuses to go backwards.** The version must be newer than the
-   running one, so an old release with a known bug can't be installed.
-4. **It shows what it found** before anything is written: the version,
-   the build stamp and the app hash. It also recommends making an
-   Encrypted Backup first.
-5. **It writes the new OS into the slot that isn't running**, checks each
-   file's SHA-256 after writing, and only then switches `slot.cfg`.
-6. **It reboots into the new OS.**
-   - If the new OS fails its start-up self-check, the user can choose the
-     previous slot from the GRUB menu, which lists both versions.
-   - The previous slot is kept until the next update.
+**How it works:**
+- The app (`SafeKeepOS.updateCheck` / `updateInstall` in `shared/boot.js`)
+  saves `UPDATE_REQUEST.json`.
+- The Update Watcher in `safekeep-boot.sh` runs
+  `/usr/local/lib/safekeep/safekeep-update.py` as root, with `python3 -I`.
+- The helper writes `UPDATE_RESULT.json` in RAM. While an install runs,
+  that file holds "working" results with a percentage.
 
-The vault and the Transfer Drive are never written to, apart from deleting
-the update file from the Transfer Drive at the end.
+**What the helper checks:**
+1. **The vault is unlocked.** A Temporary Session is refused. A stick with
+   the older one-slot layout is told to reflash once.
+2. **The signature.** Nothing else in the tar is read until
+   `manifest.json` passes `gpgv` against the key built into the image, and
+   the signing key's fingerprint is the pinned one. Each OS file must then
+   be a plain file of the size in the signed manifest. Nothing is unpacked
+   by name or path: the helper looks up the allowed member names and
+   streams their bytes into files it names itself.
+3. **No going backwards.** The update must have a higher version, or the
+   same version with a higher build number. An older release with a known
+   bug can't be put back. The build-number rule also lets the owner test
+   updates between builds of the same version.
+4. **What it found** is shown before anything is written: the version, the
+   build stamp, and the app hash (to compare with the release's
+   `SHA256SUMS`), and the size. Install sends back the manifest hash the
+   user was shown. If the file has changed since, nothing is installed.
+5. **Writing.** The new OS goes into the slot that isn't running, as
+   `.casper-X.new`, and is hashed while it's written.
+   - It is then read back from the stick and checked against the manifest.
+   - Only then is it renamed into place and does `slot.cfg` switch.
+   - If `slot.cfg` already names the spare slot (installed but not yet
+     restarted), it is pointed back at the running slot first.
+6. **Clean-up.** The update file is deleted from the Transfer Drive. The
+   user restarts; the previous version stays in GRUB's menu until the next
+   update.
 
-### Release steps that change
+The vault is never touched. Auto-Lock and Auto-Off are held off while an
+install runs, though a power cut would be harmless anyway.
 
-After `sudo bash build.sh`, a new script `make-update.sh` packs
-`casper/` into the update file and writes the manifest. The maintainer
-then:
-- signs the manifest on the Mac, the same way as `SHA256SUMS.txt`;
-- uploads the update file next to the zip.
-
-The update file must come from the same full build as the image.
+Tests: `test-updater.mjs` runs `make-update.sh` on a real squashfs, then
+the helper on a fake OS partition with a throwaway signing key. It covers:
+- a good update, and the next one going into the other slot;
+- unsigned, other-key and pinned-fingerprint cases;
+- not newer;
+- a file changed after the check, or OS bytes that don't match;
+- a symlink member;
+- a temporary session, the old layout, and bad requests.
 
 ## Proof-of-concept results (Oct 18, 2026)
 
@@ -179,11 +201,7 @@ UEFI on the owner's laptop:
    Ubuntu 24.04).
 2. **Part 1 — built, to be tested on a stick, then released** (one last
    reflash for everyone).
-3. **Part 2:**
-   - the updater;
-   - `make-update.sh`;
-   - tests for the manifest checks;
-   - docs for the website.
-
-   It ships in the release after Part 1, so that its first real
-   update can be tested.
+3. **Part 2 — built.** Test on a stick: install an update made by
+   `make-update.sh` and signed with the real key. It can ship in the same
+   release as Part 1, but its first real use is updating *from* that
+   release to the next one.
