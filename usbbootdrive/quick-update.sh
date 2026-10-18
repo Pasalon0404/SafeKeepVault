@@ -132,7 +132,9 @@ if [ -n "$TARGET_USB" ]; then
     echo ""
     lsblk -o NAME,SIZE,MODEL,TRAN,LABEL "$TARGET_USB"
     echo ""
-    echo "Will REPLACE the operating system on $OS_PART (SafeKeep OS partition)."
+    echo "Will write a new operating system onto $OS_PART (SafeKeep OS partition)."
+    echo "On a two-slot stick it goes into the spare slot and the current OS is kept"
+    echo "as GRUB's \"previous version\"; an older stick has its OS replaced."
     echo "The vault (partition 4) and transfer drive (partition 5) are NOT touched."
     read -r -p "Type YES to continue: " ok
     [ "$ok" = "YES" ] || die "canceled."
