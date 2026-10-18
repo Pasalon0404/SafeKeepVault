@@ -276,9 +276,12 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
      Drive, and the maintainer key + gpgv in the image. It ships in a
      release that everyone installs with one last reflash.
-   - **Part 2** is built: `make-update.sh`, `safekeep-update.py`, the Update
+   - **Part 2** is merged: `make-update.sh`, `safekeep-update.py`, the Update
      Watcher, and Device Options → Update SafeKeep. Release steps are in
-     `VERIFYING.md`, steps 4–6.
+     `VERIFYING.md`, steps 4–6. It worked on a stick (build 283 → 284). The
+     first try on a freshly flashed stick failed with "Input/output error"
+     at the first write, before the update log existed. Repeat that case
+     (fresh flash, then an update) before the release.
 3. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
 4. Chromium still runs with `--no-sandbox` and `--disable-web-security`
