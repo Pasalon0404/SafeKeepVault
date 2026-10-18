@@ -135,7 +135,33 @@ it is about to install. Before flashing, check that it equals the release's
    gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign SHA256SUMS
    gh release upload v1.36 SHA256SUMS.asc
    ```
-4. Build the USB image from the released `boot.html`, not a local build,
-   so the stick runs exactly the attested bytes. Copy it into
-   `usbbootdrive/src/dist/boot.html`, and check `app sha256` in the
-   quick-update output.
+4. Build the USB image on the build machine with the full
+   `sudo bash build.sh`, not `quick-update.sh`. Use the app from the
+   release, not a local build, so the stick runs exactly the attested
+   bytes:
+   - copy the released `boot.html` into `usbbootdrive/src/dist/boot.html`;
+   - check that `sha256sum src/dist/boot.html` matches `SHA256SUMS`.
+5. Make the update file from that same build, so people on an earlier
+   two-slot release can update in place (`UPDATER_DESIGN.md`):
+   ```sh
+   sudo bash make-update.sh        # on the build machine
+   ```
+   Check that its `app sha256` matches the `boot.html` line of `SHA256SUMS`.
+   Copy `SafeKeep-Update-v1.36.tar` and `manifest.json` to the Mac, then sign
+   the manifest and add the signature to the update file:
+   ```sh
+   gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign manifest.json
+   tar -rf SafeKeep-Update-v1.36.tar manifest.json.asc
+   ```
+   SafeKeep refuses an update file without this signature.
+6. Name the image `SafeKeep-Release-v1.36.img` and zip it. Write
+   `SHA256SUMS.txt` with the image's hash only, so the website's
+   `shasum -c SHA256SUMS.txt` works for people who only download the image.
+   The update file needs no entry there: it carries its own signature, which
+   the stick checks. Sign `SHA256SUMS.txt`, then upload everything:
+   ```sh
+   shasum -a 256 SafeKeep-Release-v1.36.img > SHA256SUMS.txt
+   gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign SHA256SUMS.txt
+   zip SafeKeep-Release-v1.36.zip SafeKeep-Release-v1.36.img
+   gh release upload v1.36 SafeKeep-Release-v1.36.zip SafeKeep-Update-v1.36.tar SHA256SUMS.txt SHA256SUMS.txt.asc
+   ```

@@ -272,10 +272,13 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
 ### Open items / next steps
 
 1. **Website at release time** — document the unreleased features above.
-2. **Updater** — approved; see `UPDATER_DESIGN.md`. Part 1 (two OS slots,
-   8 GB sticks, 2.5 GB Transfer Drive, maintainer key + gpgv in the image)
-   is built; it ships in a release that everyone installs with one last
-   reflash. Part 2 (Update button, signed update file) comes after.
+2. **Updater** — see `UPDATER_DESIGN.md`.
+   - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
+     Drive, and the maintainer key + gpgv in the image. It ships in a
+     release that everyone installs with one last reflash.
+   - **Part 2** is built: `make-update.sh`, `safekeep-update.py`, the Update
+     Watcher, and Device Options → Update SafeKeep. Release steps are in
+     `VERIFYING.md`, steps 4–6.
 3. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
 4. Chromium still runs with `--no-sandbox` and `--disable-web-security`

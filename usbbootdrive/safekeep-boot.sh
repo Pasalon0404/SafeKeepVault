@@ -1627,6 +1627,61 @@ SWPYEOF
     echo "Trezor watcher daemon started (PID $TREZOR_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # UPDATE WATCHER — INSTALL A SIGNED UPDATE INTO THE SPARE OS SLOT
+    # -------------------------------------------------------------------
+    # Device Options → Update SafeKeep (UPDATER_DESIGN.md). Same request /
+    # RAM result / ack pattern as the Trezor watcher:
+    #   request : UPDATE_REQUEST.json { "action": "check" | "install",
+    #             "request_id", "file", "manifest_sha256" }
+    #   result  : $SIGNAL_DIR/UPDATE_RESULT.json (RAM; "working" results
+    #             with a percentage while an install runs)
+    #   ack     : UPDATE_ACK.json
+    # The helper (/usr/local/lib/safekeep/safekeep-update.py) treats the
+    # request AND the update file as untrusted: nothing is used until the
+    # update's manifest passes gpgv against the maintainer key built into
+    # the image, and every OS file matches that signed manifest. It only
+    # writes the OS slot that is not running, and refuses in a temporary
+    # session. Nothing here runs a command taken from the request or the file.
+    UPDATE_REQUEST="$CHROMIUM_DOWNLOAD_DIR/UPDATE_REQUEST.json"
+    UPDATE_RESULT="$SIGNAL_DIR/UPDATE_RESULT.json"
+    UPDATE_HELPER="/usr/local/lib/safekeep/safekeep-update.py"
+    rm -f "$UPDATE_REQUEST" "$UPDATE_RESULT" "$CHROMIUM_DOWNLOAD_DIR"/UPDATE_ACK*.json 2>/dev/null
+
+    (
+        while true; do
+            if [ -f "$UPDATE_REQUEST" ]; then
+                echo "$(date +%T) Update Watcher: request detected"
+                rm -f "$UPDATE_RESULT" "$CHROMIUM_DOWNLOAD_DIR"/UPDATE_ACK*.json \
+                      "$CHROMIUM_DOWNLOAD_DIR"/UPDATE_REQUEST\ \(*\).json 2>/dev/null
+                if [ -f "$UPDATE_HELPER" ]; then
+                    SAFEKEEP_TRANSFER="${TRANSFER_MOUNT:-/media/safekeep-transfer}" \
+                    SAFEKEEP_EPHEMERAL="$EPHEMERAL_MODE" \
+                        python3 -I "$UPDATE_HELPER" "$UPDATE_REQUEST" "$UPDATE_RESULT" 2>>/tmp/safekeep-update.log
+                    echo "$(date +%T) Update Watcher: helper finished (exit $?)"
+                else
+                    echo '{"ok":false,"status":"error","error":"The updater is not installed on this SafeKeep build."}' > "$UPDATE_RESULT"
+                fi
+                rm -f "$UPDATE_REQUEST"
+                [ -f "$UPDATE_RESULT" ] || echo '{"ok":false,"status":"error","error":"The update helper stopped unexpectedly."}' > "$UPDATE_RESULT"
+
+                ACK_WAIT=0
+                while [ $ACK_WAIT -lt 120 ]; do
+                    if compgen -G "$CHROMIUM_DOWNLOAD_DIR/UPDATE_ACK*.json" > /dev/null; then
+                        break
+                    fi
+                    [ -f "$UPDATE_REQUEST" ] && break
+                    sleep 1
+                    ACK_WAIT=$((ACK_WAIT + 1))
+                done
+                rm -f "$CHROMIUM_DOWNLOAD_DIR"/UPDATE_ACK*.json "$UPDATE_RESULT" 2>/dev/null
+            fi
+            sleep 1
+        done
+    ) &
+    UPDATE_WATCHER_PID=$!
+    echo "Update watcher daemon started (PID $UPDATE_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # CODEX WATCHER DAEMON — NOTE FILE ROUTING & TRANSFER COPY
     # -------------------------------------------------------------------
     # Chromium's DownloadDirectory points to .safekeep-vault/seeds/, but
