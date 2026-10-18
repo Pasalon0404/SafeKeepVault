@@ -12579,6 +12579,9 @@ var skui_audio = (function () {
 
     return {
         init:       init,
+        // The hover tick, for a QR chunk read by SKScanner. Same mute and
+        // volume as every other UI sound.
+        scanTick:   _hoverTick,
         setEnabled: setEnabled,
         setVolume:  setVolume,
         isEnabled:  function () { return enabled; },
@@ -33517,6 +33520,21 @@ var SKScanner = (function() {
         var scanning = false;
         var lastScanTime = 0;
         var instance = null;
+        // QR chunks already read in this scan: each new one plays the hover
+        // tick, so the user hears a static QR land and an animated QR's
+        // frames come in. Repeats (a static QR held in view, an animated QR
+        // looping) stay silent. Only a 32-bit FNV-1a hash of each chunk is
+        // kept, never the text (it may be a seed), and only until stop().
+        // A hash collision just skips one tick.
+        var seenChunks = null;
+        function _chunkHash(str) {
+            var h = 0x811c9dc5;
+            for (var i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = Math.imul(h, 0x01000193);
+            }
+            return (h >>> 0) + ':' + str.length;
+        }
 
         function start(config, onSuccess) {
             var decodeFps = (config && config.fps) || 6;  // QR decode throttle (default 6 Hz)
@@ -33527,6 +33545,7 @@ var SKScanner = (function() {
             // Clean up any previous session
             stop();
             container.innerHTML = '';
+            seenChunks = new Set();
 
             // Disable backdrop-filter blur on lock overlay while scanning
             var lockOverlay = document.getElementById('vault-lock-overlay');
@@ -33584,6 +33603,11 @@ var SKScanner = (function() {
                                 if (code) {
                                     // code.data       = decoded text string
                                     // code.binaryData = Uint8ClampedArray of raw bytes
+                                    var chunk = _chunkHash(code.data || '');
+                                    if (seenChunks && !seenChunks.has(chunk) && seenChunks.size < 5000) {
+                                        seenChunks.add(chunk);
+                                        try { if (window.skui_audio) skui_audio.scanTick(); } catch (e) { /* sound is optional */ }
+                                    }
                                     onSuccess(code.data, code.binaryData);
                                 }
                             }
@@ -33603,6 +33627,7 @@ var SKScanner = (function() {
             if (video) { video.srcObject = null; video.remove(); video = null; }
             if (canvas) { canvas.remove(); canvas = null; }
             ctx = null;
+            seenChunks = null;
 
             // Re-enable backdrop-filter blur when no scanners are active
             var lockOverlay = document.getElementById('vault-lock-overlay');
