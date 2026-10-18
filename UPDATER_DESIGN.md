@@ -147,6 +147,16 @@ Release steps: `VERIFYING.md`, "For the maintainer", steps 4–6.
 The vault is never touched. Auto-Lock and Auto-Off are held off while an
 install runs, though a power cut would be harmless anyway.
 
+**When an install fails,** the error names the step it failed on.
+**Show update log** in the same section then shows:
+- the updater's log, which lives in RAM and is gone at power-off;
+- how the system partition was mounted;
+- the kernel's read-only flags for the stick;
+- the kernel's recent messages.
+
+On a normal build this is the only way to see why it failed, since there
+is no terminal.
+
 Tests: `test-updater.mjs` runs `make-update.sh` on a real squashfs, then
 the helper on a fake OS partition with a throwaway signing key. It covers:
 - a good update, and the next one going into the other slot;
