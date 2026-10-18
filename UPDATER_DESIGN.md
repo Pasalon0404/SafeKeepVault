@@ -36,13 +36,20 @@ maintainer's signature.
 
 ### Part 1: a new stick layout (one last reflash)
 
-1. **The Transfer Drive grows to fill the stick on first boot.** The
-   Transfer Drive is the last partition and is still empty on first boot.
-   So first-boot setup can extend it to the end of the stick and
-   re-create its exFAT filesystem, before anything is stored on it.
-   The image stays 3.8 GB, and a 4 GB stick still works without
-   updates. Updating will need a stick of **8 GB or more**: most sticks
-   sold today are larger.
+1. **The Transfer Drive grows on first boot, to 4 GB or as much as the
+   stick allows if that's less.** First-boot setup:
+   - reads the stick's real size (`blockdev --getsize64` on the disk
+     holding `safekeep-os`);
+   - moves the backup partition table to the real end of the stick
+     (`sgdisk -e`);
+   - extends the Transfer Drive, the last partition, and re-creates its
+     exFAT filesystem. That's safe because it is still empty on first boot.
+
+   The rest of a large stick is left unused, because the Transfer Drive is
+   unencrypted and shouldn't invite storing other files. The image stays
+   3.8 GB, and a 4 GB stick still works without updates. An 8 GB stick
+   gets about 3 GB, enough for an update file. So updating needs a stick of
+   **8 GB or more**.
 2. **Two OS slots.** The OS partition holds `casper-a/` and `casper-b/`,
    plus a one-line file `slot.cfg` (`set slot=a`). GRUB reads
    `slot.cfg` and boots the slot it names. If the file is missing or that
@@ -124,7 +131,9 @@ The update file must come from the same full build as the image.
 ## Suggested order
 
 1. **Proof of concept, on a stick from the ZBook:** two slots, `slot.cfg`,
-   and writing the idle slot while booted. No signature yet.
+   and writing the idle slot while booted. No signature yet. The scripts and
+   test steps are in `usbbootdrive/poc-updater/`. GRUB loads a slot with
+   casper's `live-media-path=casper-a` option (casper 1.498, Ubuntu 24.04).
 2. **Part 1 in a release** (one last reflash for everyone).
 3. **Part 2:**
    - the updater;
