@@ -7203,7 +7203,9 @@
                                 <button type="button" class="skb-btn" id="settings-update-check-btn" onclick="updSettingsCheck()">Check for update</button>
                                 <button type="button" class="skb-btn skb-btn--primary" id="settings-update-install-btn" style="display: none;" onclick="updSettingsInstall()">Install update</button>
                                 <button type="button" class="skb-btn skb-btn--primary" id="settings-update-restart-btn" style="display: none;" onclick="updSettingsRestart()">Restart now</button>
+                                <button type="button" class="skb-btn" id="settings-update-log-btn" onclick="updSettingsShowLog()">Show update log</button>
                             </div>
+                            <pre id="settings-update-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
                         </div>
                         <div class="settings-danger-zone">
                             <h4>Factory Reset</h4>
@@ -25464,6 +25466,30 @@ async function updSettingsInstall() {
     _updFound = null;
     _updStatus('Installed ' + r.build + '. Restart to start using it. If anything is wrong afterwards, choose “previous version” in the startup menu.', false);
     restart.style.display = '';
+}
+
+// Diagnostics: this session's updater logs (RAM only, gone at power-off):
+// the steps it took, and on a failure the step, the error, how the system
+// partition was mounted and the kernel's recent messages.
+async function updSettingsShowLog() {
+    const pre = _updEl('log');
+    if (!pre) return;
+    if (pre.style.display !== 'none') { pre.style.display = 'none'; return; }
+    async function read(url) {
+        try { const r = await fetch(url, { cache: 'no-store' }); return r.ok ? await r.text() : null; }
+        catch (_) { return null; }
+    }
+    const boot = await read('file:///tmp/safekeep-boot.log');
+    const helper = await read('file:///tmp/safekeep-update.log');
+    const tail = (t, n) => t.split('\n').filter(Boolean).slice(-n).join('\n');
+    let out = '== Update Watcher (safekeep-boot.log) ==\n';
+    out += boot === null ? '(not available here)\n'
+        : (tail(boot.split('\n').filter(l => /Update Watcher/.test(l)).join('\n'), 20) || '(no update activity yet)') + '\n';
+    out += '\n== Updater (safekeep-update.log) ==\n';
+    out += helper === null ? '(no updater messages yet)' : (tail(helper, 150) || '(empty)');
+    pre.textContent = out;
+    pre.style.display = '';
+    pre.scrollTop = pre.scrollHeight;
 }
 
 function updSettingsRestart() {

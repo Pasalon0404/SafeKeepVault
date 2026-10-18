@@ -108,6 +108,38 @@ def write_result(obj):
     os.replace(tmp, _result_path)
 
 
+# ---- diagnostics (stderr -> /tmp/safekeep-update.log, RAM only) ---------
+
+def log(msg):
+    sys.stderr.write('%s safekeep-update: %s\n' % (time.strftime('%H:%M:%S'), msg))
+    sys.stderr.flush()
+
+
+def run_quiet(args):
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=20)
+        return (r.stdout + r.stderr).strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return '(%s: %s)' % (args[0], e)
+
+
+def log_system_state(why):
+    """What the kernel thinks of the system partition, for the log."""
+    log('--- %s ---' % why)
+    log('mount: ' + run_quiet(['findmnt', '-no', 'SOURCE,FSTYPE,OPTIONS', OS_MNT]))
+    src = run_quiet(['findmnt', '-no', 'SOURCE', OS_MNT]).split('\n')[0].strip()
+    if src.startswith('/dev/'):
+        part = os.path.basename(src)
+        disk = run_quiet(['lsblk', '-no', 'PKNAME', src]).split('\n')[0].strip()
+        for name in filter(None, (part, disk)):
+            try:
+                with open('/sys/class/block/%s/ro' % name) as f:
+                    log('/sys/class/block/%s/ro = %s' % (name, f.read().strip()))
+            except OSError as e:
+                log('/sys/class/block/%s/ro: %s' % (name, e))
+    log('kernel messages (last 40):\n' + run_quiet(['dmesg', '--ctime'])[-6000:].split('\n', 1)[-1])
+
+
 # ---- small helpers -------------------------------------------------------
 
 def stamp_of_text(text):
@@ -391,13 +423,19 @@ def do_install(req):
         return tick
 
     write_result({'ok': True, 'status': 'working', 'step': 'Preparing', 'percent': 0})
+    log('install %s (%s) into slot %s; running slot %s' % (info['file'], info['build'], idle, slot))
     remounted = False
+    stage = 'opening the system partition for writing'
     try:
         if REMOUNT:
             r = subprocess.run(['mount', '-o', 'remount,rw', OS_MNT], capture_output=True, text=True, timeout=60)
+            log('remount rw: exit %d %s' % (r.returncode, (r.stdout + r.stderr).strip()))
             if r.returncode != 0:
+                log_system_state('remount rw failed')
                 raise Refuse('write_failed', 'SafeKeep could not open its system partition for writing.')
             remounted = True
+            log('mount now: ' + run_quiet(['findmnt', '-no', 'OPTIONS', OS_MNT]))
+        stage = 'pointing slot.cfg at the running slot'
         # If slot.cfg already names the idle slot (an update installed but
         # not yet restarted), point it back at the running slot first, so a
         # power cut while that slot is rewritten still boots this one.
@@ -405,16 +443,21 @@ def do_install(req):
             write_slot_cfg(slot)
         new = os.path.join(OS_MNT, '.casper-%s.new' % idle)
         dest = os.path.join(OS_MNT, 'casper-' + idle)
+        stage = 'removing the old copy in slot %s' % idle
         shutil.rmtree(new, ignore_errors=True)
         shutil.rmtree(dest, ignore_errors=True)
         os.sync()
+        stage = 'creating the new slot folder'
         os.mkdir(new, 0o755)
+        stage = 'opening the update file'
         tf = tarfile.open(path, 'r:')
         try:
             for fname, meta in files.items():
                 m = member(tf, fname, MAX_OS_FILE)
                 if m is None or m.size != meta['size']:
                     raise Refuse('changed', 'The update file changed while installing.')
+                stage = 'writing %s' % fname
+                log(stage)
                 src = tf.extractfile(m)
                 h = hashlib.sha256()
                 tick = progress('Writing')
@@ -426,6 +469,7 @@ def do_install(req):
                         h.update(b)
                         out.write(b)
                         tick(len(b))
+                    stage = 'saving %s to the stick' % fname
                     out.flush()
                     os.fsync(out.fileno())
                 if h.hexdigest() != meta['sha256']:
@@ -440,19 +484,28 @@ def do_install(req):
             pass
         tick = progress('Checking')
         for fname, meta in files.items():
+            stage = 'reading back %s' % fname
             if file_sha256(os.path.join(new, fname), tick) != meta['sha256']:
                 raise Refuse('write_failed', '%s did not read back correctly from the stick.' % fname)
+        stage = 'putting slot %s in place' % idle
         os.rename(new, dest)
         fsync_dir(OS_MNT)
+        stage = 'switching slot.cfg to slot %s' % idle
         write_slot_cfg(idle)
         os.sync()
-    except Refuse:
+        log('installed into slot %s' % idle)
+    except Refuse as e:
+        log('refused while %s: %s' % (stage, e.message))
         raise
     except OSError as e:
-        raise Refuse('write_failed', 'Writing the update failed (%s). This SafeKeep is unchanged.' % e.strerror)
+        log('FAILED while %s: errno %s %s (%s)' % (stage, e.errno, e.strerror, e.filename or ''))
+        log_system_state('after the failure')
+        raise Refuse('write_failed', 'Writing the update failed while %s (%s). This SafeKeep is unchanged. '
+                     'Device Options → Show update log has the details.' % (stage, e.strerror))
     finally:
         if remounted:
-            subprocess.run(['mount', '-o', 'remount,ro', OS_MNT], capture_output=True, timeout=60)
+            r = subprocess.run(['mount', '-o', 'remount,ro', OS_MNT], capture_output=True, text=True, timeout=60)
+            log('remount ro: exit %d %s' % (r.returncode, (r.stdout + r.stderr).strip()))
     removed = False
     try:
         os.remove(path)
@@ -500,6 +553,8 @@ def main():
     except Refuse as e:
         result = {'ok': False, 'status': e.status, 'error': e.message}
     except Exception:  # never leave the app waiting
+        import traceback
+        log('unexpected error:\n' + traceback.format_exc())
         result = {'ok': False, 'status': 'error', 'error': 'The update helper stopped unexpectedly. This SafeKeep is unchanged.'}
     write_result(result)
     return 0

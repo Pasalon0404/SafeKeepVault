@@ -307,6 +307,27 @@ sign(U1, MFPR);
   ck('pinned fingerprint enforced (keyring alone is not enough)', !res.ok && res.status === 'bad_signature', JSON.stringify(res));
 }
 
+{
+  // A write that fails on the stick: the error names the step, the log has
+  // the details, and the stick is unchanged.
+  const s = stick();
+  put(s, U1);
+  writeFileSync(join(s.os, '.casper-b.new'), 'not a folder');   // mkdir will fail
+  let { res } = run(s, { action: 'check' });
+  const reqPath = join(s.d, 'UPDATE_REQUEST.json'), resPath = join(s.d, 'UPDATE_RESULT.json');
+  writeFileSync(reqPath, JSON.stringify({ action: 'install', request_id: 'f'.repeat(24), file: res.update.file, manifest_sha256: res.update.manifest_sha256 }));
+  const r = sh('python3', ['-I', join(OS, 'safekeep-update.py'), reqPath, resPath], { env: { PATH: process.env.PATH, ...s.env } });
+  res = JSON.parse(readFileSync(resPath, 'utf8'));
+  ck('failed write: write_failed, naming the step', !res.ok && res.status === 'write_failed' && /while creating the new slot folder/.test(res.error) && /Show update log/.test(res.error), JSON.stringify(res));
+  ck('...the log has the step, the error and the system state', /FAILED while creating the new slot folder: errno \d+/.test(r.stderr) && /--- after the failure ---/.test(r.stderr) && /kernel messages/.test(r.stderr), r.stderr.slice(0, 400));
+  ck('...slot.cfg and slot a unchanged, update file kept', readFileSync(join(s.os, 'slot.cfg'), 'utf8') === 'set slot=a\n' && existsSync(join(s.os, 'casper-a', 'vmlinuz')) && readdirSync(s.tr).length === 1);
+}
+
+{
+  const ui = read('seed-xor-tool/boot.html');
+  ck('Device Options has Show update log, reading the RAM log', ui.includes('onclick="updSettingsShowLog()">Show update log</button>') && ui.includes("read('file:///tmp/safekeep-update.log')"));
+}
+
 rmSync(T, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
