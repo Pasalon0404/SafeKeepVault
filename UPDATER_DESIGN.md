@@ -34,32 +34,55 @@ maintainer's signature.
 
 ## Proposal
 
-### Part 1: a new stick layout (one last reflash)
+### Part 1: a new stick layout (one last reflash) — built
 
-1. **The Transfer Drive grows on first boot, to 4 GB or as much as the
-   stick allows if that's less.** First-boot setup:
-   - reads the stick's real size (`blockdev --getsize64` on the disk
-     holding `safekeep-os`);
-   - moves the backup partition table to the real end of the stick
-     (`sgdisk -e`);
-   - extends the Transfer Drive, the last partition, and re-creates its
-     exFAT filesystem. That's safe because it is still empty on first boot.
+The owner approved 8 GB as the minimum stick size (Oct 18, 2026).
 
-   The rest of a large stick is left unused, because the Transfer Drive is
-   unencrypted and shouldn't invite storing other files. The image stays
-   3.8 GB, and a 4 GB stick still works without updates. An 8 GB stick
-   gets about 3 GB, enough for an update file. So updating needs a stick of
-   **8 GB or more**.
+1. **Bigger partitions, fixed in the image.**
+
+   | Partition | Before | Now |
+   |---|---|---|
+   | OS | 2,944 MB | 3,584 MB |
+   | Transfer Drive | 300 MB | 2,560 MB |
+   | Whole image | 3,800 MB | 6,704 MB |
+
+   - **OS:** two slots of about 1.3 GB each, with room to grow by about
+     35%.
+   - **Transfer Drive:** room for an update file.
+   - **Whole image:** fits the smallest real "8 GB" sticks, which hold about
+     7,400 MB. The empty space zips away, so the release zip stays about
+     1.3 GB.
+
+   Nothing on the stick is ever resized. An earlier draft grew the
+   Transfer Drive on first boot. That was dropped because a user may copy
+   a backup onto the Transfer Drive right after flashing, and growing it
+   would have meant reformatting it. Larger sticks keep their extra space
+   unused, so the unencrypted Transfer Drive doesn't invite storing other
+   files.
+
+   `build.sh` stops if two copies of the OS no longer fit.
 2. **Two OS slots.** The OS partition holds `casper-a/` and `casper-b/`,
-   plus a one-line file `slot.cfg` (`set slot=a`). GRUB reads
-   `slot.cfg` and boots the slot it names. If the file is missing or that
-   slot has no kernel, GRUB falls back to the other slot.
-   - Switching slots means writing a new `slot.cfg` to a temporary
-     name and renaming it over the old one. On ext4 that rename is
-     atomic, so a power cut leaves either the old OS or the new one,
-     never half of each.
-3. **The maintainer's public key in the image**, plus `gpgv` to check
-   signatures with it. Neither depends on the network.
+   plus a one-line file `slot.cfg` (`set slot=a`).
+   - **GRUB** (`usbbootdrive/grub.cfg`) reads `slot.cfg` and boots that
+     slot with `live-media-path=casper-<slot>`. If the file is missing or
+     that slot has no kernel, it falls back to the other slot. It lists the
+     other slot as "previous version" when it has a kernel.
+   - **Switching** means writing a new `slot.cfg` under a temporary name
+     and renaming it over the old one. On ext4 that rename is atomic, so a
+     power cut leaves either the old OS or the new one, never half of each.
+   - **A new build** puts the OS in slot A. Slot B stays empty until the
+     first update.
+   - **`os-slots.sh`** holds the slot logic: which slot boots, writing a
+     slot (to a temporary name, read back and checked, then renamed), and
+     switching. `quick-update.sh` uses it already, and the updater will use
+     it too.
+3. **The maintainer's public key in the image**, as a `gpgv` keyring at
+   `/usr/local/share/safekeep/maintainer.gpg`.
+   - `build.sh` pins its fingerprint (A333 EB82 … EDBA 86C2) and stops if
+     `usbbootdrive/config/maintainer-pubkey.asc` holds a different key, or
+     if `gpgv` is missing from the image.
+   - `test-os-slots.mjs` checks that the file is identical to
+     `developer-pubkey.asc`.
 
 ### Part 2: the updater (from the release after that)
 
@@ -142,17 +165,20 @@ UEFI on the owner's laptop:
   - show the update's build stamp and app hash, so careful users can
     compare them with the GitHub release and the attestation;
   - later, require two signatures.
-- **Users on 4 GB sticks** can't use the updater, and keep reflashing.
+- **Users on 4 GB sticks** can't install releases with the two-slot
+  layout. They need a stick of 8 GB or more.
 - **The hardening rules** must allow the updater to mount `safekeep-os`.
   Today a udev rule hides it from the desktop.
 
 ## Suggested order
 
-1. **Proof of concept, on a stick from the ZBook:** two slots, `slot.cfg`,
-   and writing the idle slot while booted. No signature yet. The scripts and
-   test steps are in `usbbootdrive/poc-updater/`. GRUB loads a slot with
-   casper's `live-media-path=casper-a` option (casper 1.498, Ubuntu 24.04).
-2. **Part 1 in a release** (one last reflash for everyone).
+1. **Proof of concept, on a stick from the ZBook — done** (results above):
+   two slots, `slot.cfg`, and writing the idle slot while booted. The
+   scripts and test steps are in `usbbootdrive/poc-updater/`. GRUB loads a
+   slot with casper's `live-media-path=casper-a` option (casper 1.498,
+   Ubuntu 24.04).
+2. **Part 1 — built, to be tested on a stick, then released** (one last
+   reflash for everyone).
 3. **Part 2:**
    - the updater;
    - `make-update.sh`;

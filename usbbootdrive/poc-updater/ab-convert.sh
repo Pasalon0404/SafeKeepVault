@@ -7,13 +7,15 @@
 #  UPDATER_DESIGN.md, so ab-slot-test.sh can then be tried on it:
 #     casper/  →  casper-a/       (the OS that was on the stick)
 #     slot.cfg    "set slot=a"
-#     GRUB        grub-ab.cfg, for BIOS (EFI partition /boot/grub/grub.cfg)
+#     GRUB        ../grub.cfg, for BIOS (EFI partition /boot/grub/grub.cfg)
 #                 and UEFI (rebuilt EFI/BOOT/BOOTX64.EFI, which carries
 #                 its own copy of grub.cfg)
 #  It also copies ab-slot-test.sh onto the transfer drive (partition 5).
 #  The vault (partition 4) is not touched.
 #
 #  FOR A SPARE TEST STICK ONLY. To undo, flash the stick again.
+#  Only needed for sticks flashed before the two-slot layout: build.sh now
+#  makes two-slot images itself.
 #
 #  Usage (from /home/safekeep-build):
 #     sudo bash poc-updater/ab-convert.sh --usb /dev/sdb
@@ -21,7 +23,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-GRUB_CFG="$HERE/grub-ab.cfg"
+GRUB_CFG="$HERE/../grub.cfg"
 MNT_OS="workspace/mnt-ab-os"
 MNT_EFI="workspace/mnt-ab-efi"
 MNT_TR="workspace/mnt-ab-transfer"

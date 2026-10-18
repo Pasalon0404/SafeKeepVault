@@ -25,7 +25,7 @@ If you do use a release, verify it first. Each release of the app (`boot.html`) 
 
 SafeKeepVault has two parts: the web app (`seed-xor-tool/`, compiled into one offline HTML file) and the bootable USB operating system (`usbbootdrive/`) that runs it. You can build the app on Mac, Windows or Linux. The USB image needs **Linux**. One Linux machine can do the whole build, no Mac needed.
 
-**What you need:** an x86-64 Linux machine (Debian or Ubuntu is easiest; `build.sh` installs its own tools with `apt-get`), `sudo`, git, **Node.js 22+** with npm, about 15 GB of free disk space, an internet connection during the build, and a USB stick of 4 GB or more.
+**What you need:** an x86-64 Linux machine (Debian or Ubuntu is easiest; `build.sh` installs its own tools with `apt-get`), `sudo`, git, **Node.js 22+** with npm, about 15 GB of free disk space, an internet connection during the build, and a USB stick of 8 GB or more.
 
 ### 1. Build the app from source
 
@@ -45,7 +45,7 @@ To build the app by hand instead: `cd seed-xor-tool && npm ci && npm run build`,
 sudo bash build.sh
 ```
 
-This takes 10–20 minutes the first time. It downloads Ubuntu 24.04 packages, builds a locked-down system around the app, and writes `safekeep.img` (about 3.8 GB). It stops immediately if `src/dist/boot.html` is missing.
+This takes 10–20 minutes the first time. It downloads Ubuntu 24.04 packages, builds a locked-down system around the app, and writes `safekeep.img` (about 6.7 GB; it zips to about 1.3 GB). It stops immediately if `src/dist/boot.html` is missing.
 
 ### 3. Flash a USB stick
 
