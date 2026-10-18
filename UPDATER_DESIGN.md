@@ -156,6 +156,34 @@ the helper on a fake OS partition with a throwaway signing key. It covers:
 - a symlink member;
 - a temporary session, the old layout, and bad requests.
 
+## Testing an update on a stick
+
+An update only installs when it is newer, and the build number counts
+commits, so a test needs two commits: the stick runs build N, and the
+update carries build N+1.
+
+1. **Stick on build N.** Build the image from the first commit with the
+   full `sudo bash build.sh`. Flash a spare 8 GB+ stick and set up a test
+   vault.
+2. **Update file from build N+1.**
+   - Build the app from the next commit and copy it to the build machine.
+   - On the build machine, run `sudo bash quick-update.sh` (with no
+     `--usb`) to compress the new OS, then `sudo bash make-update.sh`.
+3. **Sign it on the Mac.** Copy the `.tar` and `manifest.json` over, then:
+   ```sh
+   gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign manifest.json
+   tar -rf SafeKeep-Update-v….tar manifest.json.asc
+   ```
+4. **Put it on the stick.** Copy the `.tar` onto the stick's Transfer Drive.
+5. **Install.** Boot the stick, unlock, and open **Device Options → Update
+   SafeKeep → Check for update**.
+   - It should show build N+1, with the app hash the Mac's build printed.
+   - Click **Install**, then **Restart now**.
+6. **Check the result.**
+   - The dashboard shows build N+1.
+   - GRUB lists "previous version", which still boots build N.
+   - The update file is gone from the Transfer Drive.
+
 ## Proof-of-concept results (Oct 18, 2026)
 
 On a developer build of v1.46, on a Patriot P210 128 GB stick, booted with
