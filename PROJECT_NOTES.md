@@ -83,7 +83,9 @@ sudo bash quick-update.sh --usb /dev/sdb
 - `quick-update.sh` reuses the last full build's chroot, drops in the new
   app and scripts (including `safekeep-boot.sh`), re-squashes, and rewrites
   ONLY the OS partition. **The vault and transfer data are preserved.** It
-  asks you to type YES.
+  asks you to type YES. On a two-slot stick it writes the slot that isn't
+  booted, checks it and switches (`os-slots.sh`); the previous OS stays as
+  GRUB's "previous version". Older sticks get their `casper/` replaced.
 - It refuses to run (and tells you to run the full `build.sh`, ~20 min)
   if `chroot-setup.sh` or `safekeep-harden.sh` changed, or if the last full
   build didn't finish (`workspace/.chroot-complete` marker).
@@ -270,9 +272,10 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
 ### Open items / next steps
 
 1. **Website at release time** — document the unreleased features above.
-2. **Updater (decision)** — today a reflash wipes the vault. Option: a
-   signed update file the vault verifies before rewriting only the OS
-   partition (the logic `quick-update.sh` already has).
+2. **Updater** — approved; see `UPDATER_DESIGN.md`. Part 1 (two OS slots,
+   8 GB sticks, 2.5 GB Transfer Drive, maintainer key + gpgv in the image)
+   is built; it ships in a release that everyone installs with one last
+   reflash. Part 2 (Update button, signed update file) comes after.
 3. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
 4. Chromium still runs with `--no-sandbox` and `--disable-web-security`
@@ -332,7 +335,7 @@ across the boot stack, the Bitcoin tools, and the build pipeline.
 
 SafeKeep Vault is an **air-gapped Bitcoin wallet operating system**
 distributed as a bootable USB live image (`safekeep.img`). The user
-flashes the image to a 4 GB+ USB drive, boots from it, and gets a
+flashes the image to an 8 GB+ USB drive, boots from it, and gets a
 hardened Linux kiosk that auto-launches a Chromium browser pointing
 at a fully self-contained `boot.html` containing the wallet tools.
 
@@ -356,7 +359,7 @@ cd usbbootdrive/
 sudo bash build.sh
 ```
 
-Produces `safekeep.img` (~3.8 GB). Takes 10-20 minutes on a fresh
+Produces `safekeep.img` (~6.7 GB, mostly empty space that zips away). Takes 10-20 minutes on a fresh
 build, ~5 minutes on rebuilds (the debootstrap base is cached at
 `workspace/base-chroot/`). The build is destructive — it nukes
 `workspace/chroot/` and `workspace/staging/` each run.
@@ -398,9 +401,13 @@ you iterate on UI without rebuilding the image.
 │ USB layout (5 partitions, GPT)                                  │
 │   1. BIOS Boot   (2 MB)        — GRUB core.img for legacy BIOS  │
 │   2. EFI System  (256 MB FAT32)— GRUB BOOTX64.EFI for UEFI      │
-│   3. OS          (2.9 GB ext4) — squashfs + kernel + initrd     │
+│   3. OS          (3.5 GB ext4) — slots casper-a/, casper-b/     │
+│                                  (squashfs, kernel, initrd)     │
+│                                  + slot.cfg                     │
 │   4. Data        (300 MB ext4) — `.vault.luks` file container   │
-│   5. Transfer    (300 MB exFAT)— Mac/Win-readable airlock       │
+│   5. Transfer    (2.5 GB exFAT)— Mac/Win-readable airlock       │
+│   Sticks flashed before the two-slot layout: OS 2.9 GB with one │
+│   casper/ folder, Transfer 300 MB.                              │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -478,11 +485,11 @@ entire website folder/                  ← project root
 2. **Ubuntu chroot** — debootstrap noble (cached) into `workspace/chroot/`
 3. **Inject + configure** — copy src/dist into chroot, bind-mount /dev/proc/sys, run `chroot-setup.sh` then `safekeep-harden.sh`
 4. **squashfs compression** — compress the configured chroot
-5. **Image creation** — 3.8 GB blank `.img`, attached as loop device
+5. **Image creation** — 6.7 GB blank `.img`, attached as loop device
 6. **Partitioning** — sgdisk creates the 5-partition GPT
 7. **Format** — FAT32, ext4×2, exFAT
-8. **Install OS content** — copy squashfs/kernel/initrd to OS partition
-9. **GRUB install** — UEFI (`grub-mkstandalone`) + BIOS (`grub-install`)
+8. **Install OS content** — copy squashfs/kernel/initrd into slot A (`casper-a/`) and write `slot.cfg`; slot B is filled by the first update (`os-slots.sh`, `UPDATER_DESIGN.md`)
+9. **GRUB install** — `grub.cfg` (boots the slot in `slot.cfg`) for UEFI (`grub-mkstandalone`) + BIOS (`grub-install`)
 10. **Finalize** — unmount everything, detach loop
 
 The build is **idempotent** as long as the host network reaches

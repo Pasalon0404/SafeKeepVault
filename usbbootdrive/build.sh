@@ -3,15 +3,22 @@ set -e
 
 # =============================================================================
 # SafeKeep OS Build Script
-# Produces a 3.8GB raw disk image (.img) sized for 4GB+ USB drives.
+# Produces a 6.7GB raw disk image (.img) sized for 8GB+ USB drives.
 # Pre-baked partitions:
 #   Partition 1: BIOS Boot (2MB)          — GRUB core.img for legacy PCs
 #   Partition 2: EFI System (256MB, FAT32) — GRUB for UEFI boot
-#   Partition 3: OS (2944MB, ext4)         — squashfs, kernel, initrd
+#   Partition 3: OS (3584MB, ext4)         — two OS slots, casper-a/ and
+#                                            casper-b/ (squashfs, kernel,
+#                                            initrd), and slot.cfg
 #   Partition 4: Data (300MB, ext4)        — LUKS file-container vault
-#   Partition 5: Transfer (300MB, exFAT)   — Airlock for Mac/Win file exchange
+#   Partition 5: Transfer (2560MB, exFAT)  — Airlock for Mac/Win file exchange
 #
-# The user flashes safekeep.img to any 4GB+ USB drive, boots, and runs
+# The OS goes into slot A; slot B stays empty until the first update
+# (UPDATER_DESIGN.md). The Transfer Drive is big enough to carry an update
+# file. The image's empty space compresses away, so the release zip stays
+# about the size of the OS.
+#
+# The user flashes safekeep.img to any 8GB+ USB drive and boots.
 # The boot wrapper (safekeep-boot) auto-runs vault setup on first boot.
 # =============================================================================
 
@@ -27,10 +34,12 @@ OUTPUT_IMG="safekeep.img"
 
 # Partition sizes in MB
 EFI_SIZE_MB=256
-OS_SIZE_MB=2944       # ~2.9GB — room for squashfs + kernel + grub
+OS_SIZE_MB=3584       # two OS slots (~1.3GB each today) with room to grow
 DATA_SIZE_MB=300      # LUKS vault file container
-TRANSFER_SIZE_MB=300  # exFAT airlock partition (Mac/Win readable)
-TOTAL_SIZE_MB=3800    # Fits on 4GB USB drives
+TRANSFER_SIZE_MB=2560 # exFAT airlock partition (Mac/Win readable); holds an update file
+# 1MB before partition 1 + the partitions + 1MB for the backup GPT.
+# 6704MB fits the smallest real "8GB" sticks (about 7,400MB usable).
+TOTAL_SIZE_MB=$(( 1 + 2 + EFI_SIZE_MB + OS_SIZE_MB + DATA_SIZE_MB + TRANSFER_SIZE_MB + 1 ))
 
 echo ""
 echo "========================================="
@@ -78,6 +87,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The maintainer's public key goes into the image, so the stick can check
+# signed updates (UPDATER_DESIGN.md). Pinned here: a different key in
+# config/ stops the build.
+MAINTAINER_FPR="A333EB826F70A79A736F09948EA7DD8CEDBA86C2"
+MAINTAINER_KEY="config/maintainer-pubkey.asc"
+for f in grub.cfg "$MAINTAINER_KEY"; do
+    [ -s "$f" ] || { echo "ERROR: $f is missing (rsync the whole usbbootdrive folder)." >&2; exit 1; }
+done
+
 # The compiled web app must be in src/dist before anything slow happens —
 # rsync'd from the Mac, or produced by prepare-app.sh from a repo checkout.
 # Without this check, a missing app only showed up after booting the image.
@@ -96,6 +114,7 @@ DEPS_NEEDED=""
 command -v debootstrap >/dev/null || DEPS_NEEDED="$DEPS_NEEDED debootstrap"
 command -v mksquashfs >/dev/null || DEPS_NEEDED="$DEPS_NEEDED squashfs-tools"
 command -v sgdisk >/dev/null || DEPS_NEEDED="$DEPS_NEEDED gdisk"
+command -v gpg >/dev/null || DEPS_NEEDED="$DEPS_NEEDED gnupg"
 command -v grub-install >/dev/null || DEPS_NEEDED="$DEPS_NEEDED grub-pc-bin grub-efi-amd64-bin"
 command -v mkfs.fat >/dev/null || DEPS_NEEDED="$DEPS_NEEDED dosfstools"
 command -v mkfs.ext4 >/dev/null || DEPS_NEEDED="$DEPS_NEEDED e2fsprogs"
@@ -282,6 +301,20 @@ chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" /bin/
 echo "Running OS hardening in chroot..."
 chroot "$CHROOT_DIR" /bin/bash -c "safekeep-harden"
 
+# Maintainer key for checking signed updates, as a binary keyring for gpgv.
+KEY_FPR=$(GNUPGHOME=$(mktemp -d) gpg --batch --with-colons --show-keys "$MAINTAINER_KEY" 2>/dev/null \
+    | awk -F: '$1=="fpr" {print $10; exit}')
+if [ "$KEY_FPR" != "$MAINTAINER_FPR" ]; then
+    echo "ERROR: $MAINTAINER_KEY has fingerprint '$KEY_FPR', expected $MAINTAINER_FPR." >&2
+    exit 1
+fi
+mkdir -p "$CHROOT_DIR/usr/local/share/safekeep"
+GNUPGHOME=$(mktemp -d) gpg --batch --yes --dearmor -o "$CHROOT_DIR/usr/local/share/safekeep/maintainer.gpg" "$MAINTAINER_KEY"
+chmod 644 "$CHROOT_DIR/usr/local/share/safekeep/maintainer.gpg"
+chroot "$CHROOT_DIR" gpgv --version >/dev/null 2>&1 \
+    || { echo "ERROR: gpgv is missing from the image; the stick could not check signed updates." >&2; exit 1; }
+echo "Maintainer key installed ($MAINTAINER_FPR); gpgv present."
+
 # Unmount chroot bind mounts BEFORE compression. Using `-l` (lazy)
 # for the same reason cleanup() does: chroot-setup.sh and
 # safekeep-harden.sh might leak a background process holding an
@@ -321,12 +354,14 @@ cp "$(ls "$CHROOT_DIR"/boot/initrd.img-* | sort -V | tail -1)" "$STAGING_DIR/cas
 chroot "$CHROOT_DIR" dpkg-query -W --showformat='${Package} ${Version}\n' > "$STAGING_DIR/casper/filesystem.manifest" 2>/dev/null || true
 printf "%s" "$(du -sx --block-size=1 "$CHROOT_DIR" | cut -f1)" > "$STAGING_DIR/casper/filesystem.size"
 
-# Check that the OS fits in the OS partition
+# Check that TWO copies of the OS fit in the OS partition: an update writes
+# the new OS into the idle slot while the running one stays (UPDATER_DESIGN.md).
+# The 160MB margin covers ext4's own overhead (journal, reserved blocks).
 OS_CONTENT_SIZE=$(du -sm "$STAGING_DIR" | awk '{print $1}')
-echo "OS content size: ${OS_CONTENT_SIZE}MB (partition: ${OS_SIZE_MB}MB)"
-if [ "$OS_CONTENT_SIZE" -gt "$OS_SIZE_MB" ]; then
-    echo "ERROR: OS content (${OS_CONTENT_SIZE}MB) exceeds partition size (${OS_SIZE_MB}MB)!"
-    echo "Increase OS_SIZE_MB in build.sh."
+echo "OS content size: ${OS_CONTENT_SIZE}MB per slot (partition: ${OS_SIZE_MB}MB for two slots)"
+if [ $(( OS_CONTENT_SIZE * 2 + 160 )) -gt "$OS_SIZE_MB" ]; then
+    echo "ERROR: two copies of the OS (2 x ${OS_CONTENT_SIZE}MB) don't fit the ${OS_SIZE_MB}MB OS partition."
+    echo "Increase OS_SIZE_MB in build.sh (and TOTAL_SIZE_MB follows)."
     exit 1
 fi
 
@@ -359,7 +394,7 @@ sgdisk -n 1:2048:+2M -t 1:EF02 -c 1:"BIOS Boot" "$LOOP_DEV"
 # Partition 2: EFI System Partition (FAT32, for UEFI boot)
 sgdisk -n 2:0:+${EFI_SIZE_MB}M -t 2:EF00 -c 2:"EFI System" "$LOOP_DEV"
 
-# Partition 3: OS Partition (ext4, holds squashfs + kernel + grub.cfg)
+# Partition 3: OS Partition (ext4, holds the two OS slots + slot.cfg)
 sgdisk -n 3:0:+${OS_SIZE_MB}M -t 3:8300 -c 3:"safekeep-os" "$LOOP_DEV"
 
 # Partition 4: Data Partition (ext4, for the LUKS file container)
@@ -420,13 +455,15 @@ mkdir -p "$WORKSPACE/mnt-efi" "$WORKSPACE/mnt-os" "$WORKSPACE/mnt-data"
 mount "$EFI_PART" "$WORKSPACE/mnt-efi"
 mount "$OS_PART" "$WORKSPACE/mnt-os"
 
-# Copy OS content (squashfs, kernel, initrd, manifest)
-mkdir -p "$WORKSPACE/mnt-os/casper"
-cp "$STAGING_DIR/casper/filesystem.squashfs" "$WORKSPACE/mnt-os/casper/"
-cp "$STAGING_DIR/casper/vmlinuz" "$WORKSPACE/mnt-os/casper/"
-cp "$STAGING_DIR/casper/initrd" "$WORKSPACE/mnt-os/casper/"
-cp "$STAGING_DIR/casper/filesystem.manifest" "$WORKSPACE/mnt-os/casper/" 2>/dev/null || true
-cp "$STAGING_DIR/casper/filesystem.size" "$WORKSPACE/mnt-os/casper/" 2>/dev/null || true
+# Copy OS content (squashfs, kernel, initrd, manifest) into slot A, and
+# point slot.cfg at it. casper-b/ is created by the first update.
+mkdir -p "$WORKSPACE/mnt-os/casper-a"
+cp "$STAGING_DIR/casper/filesystem.squashfs" "$WORKSPACE/mnt-os/casper-a/"
+cp "$STAGING_DIR/casper/vmlinuz" "$WORKSPACE/mnt-os/casper-a/"
+cp "$STAGING_DIR/casper/initrd" "$WORKSPACE/mnt-os/casper-a/"
+cp "$STAGING_DIR/casper/filesystem.manifest" "$WORKSPACE/mnt-os/casper-a/" 2>/dev/null || true
+cp "$STAGING_DIR/casper/filesystem.size" "$WORKSPACE/mnt-os/casper-a/" 2>/dev/null || true
+printf 'set slot=a\n' > "$WORKSPACE/mnt-os/slot.cfg"
 
 # =====================================================================
 # PHASE 9: INSTALL GRUB (UEFI + BIOS)
@@ -438,48 +475,11 @@ echo "Phase 9: Installing GRUB bootloader..."
 mkdir -p "$WORKSPACE/mnt-efi/EFI/BOOT"
 mkdir -p "$WORKSPACE/mnt-efi/boot/grub"
 
-# Create GRUB config
-# Uses search-by-label so it works regardless of partition numbering
-cat > "$WORKSPACE/mnt-efi/boot/grub/grub.cfg" << 'EOF'
-# Load modules needed to find partitions
-insmod part_gpt
-insmod ext2
-insmod fat
-insmod search_label
-insmod linux
-insmod gzio
-
-set timeout=3
-set default=0
-
-# Search for the OS partition by label
-search --no-floppy --label --set=ospart safekeep-os
-
-# Fallback: if search failed, try common partition paths
-if [ -z "$ospart" ]; then
-    # On most systems, OS partition is the 3rd GPT partition
-    set ospart=hd0,gpt3
-fi
-
-set root=${ospart}
-
-menuentry "SafeKeepVault" {
-    set root=${ospart}
-    # noprompt — suppresses casper's "Please remove the installation medium,
-    # then press ENTER" prompt at shutdown. SafeKeep poweroffs are deliberate
-    # (dashboard Power Options modal calls sudo poweroff), so the "are you
-    # sure?" prompt is not useful — it just leaves a wall of kernel I/O
-    # warnings sitting on the screen during the casper eject sequence.
-    linux /casper/vmlinuz boot=casper nopersistent noprompt quiet splash usbhid.quirks=0xd13e:0xcc10:0x4 ---
-    initrd /casper/initrd
-}
-
-menuentry "SafeKeepVault (Safe Mode)" {
-    set root=${ospart}
-    linux /casper/vmlinuz boot=casper nopersistent noprompt nomodeset usbhid.quirks=0xd13e:0xcc10:0x4 ---
-    initrd /casper/initrd
-}
-EOF
+# GRUB config: grub.cfg (next to this script) finds the OS partition by
+# label, reads slot.cfg and boots that slot, falling back to the other slot
+# if the named one has no kernel.
+[ -s grub.cfg ] || { echo "ERROR: grub.cfg is missing (it sits next to build.sh)."; exit 1; }
+cp grub.cfg "$WORKSPACE/mnt-efi/boot/grub/grub.cfg"
 
 # Also put a copy of grub.cfg on the OS partition for redundancy
 mkdir -p "$WORKSPACE/mnt-os/boot/grub"
@@ -492,7 +492,7 @@ grub-mkstandalone \
     --output="$WORKSPACE/mnt-efi/EFI/BOOT/BOOTX64.EFI" \
     --locales="" \
     --fonts="" \
-    --modules="part_gpt ext2 fat search search_label normal linux gzio" \
+    --modules="part_gpt ext2 fat search search_label normal linux gzio test configfile" \
     "boot/grub/grub.cfg=$WORKSPACE/mnt-efi/boot/grub/grub.cfg"
 
 # --- BIOS GRUB ---
@@ -504,7 +504,7 @@ grub-install \
     --target=i386-pc \
     --boot-directory="$WORKSPACE/mnt-efi/boot" \
     --recheck \
-    --modules="part_gpt ext2 fat search search_label normal linux gzio" \
+    --modules="part_gpt ext2 fat search search_label normal linux gzio test configfile" \
     "$LOOP_DEV"
 
 echo "GRUB installed for both UEFI and BIOS boot."
@@ -543,11 +543,11 @@ echo ""
 echo "  Partition layout:"
 echo "    1. BIOS Boot   (2MB)                      — GRUB for legacy PCs"
 echo "    2. EFI System  (${EFI_SIZE_MB}MB, FAT32)  — GRUB for UEFI PCs/Macs"
-echo "    3. OS          (${OS_SIZE_MB}MB, ext4)     — SafeKeep Linux"
+echo "    3. OS          (${OS_SIZE_MB}MB, ext4)     — SafeKeep Linux, slots A and B"
 echo "    4. Data        (${DATA_SIZE_MB}MB, ext4)   — LUKS vault container"
 echo "    5. Transfer    (${TRANSFER_SIZE_MB}MB, exFAT) — Airlock (Mac/Win readable)"
 echo ""
-echo "  To flash to USB (4GB+ drive):"
+echo "  To flash to USB (8GB+ drive):"
 echo "    Linux/Mac:  sudo dd if=$OUTPUT_IMG of=/dev/sdX bs=4M status=progress && sync"
 echo "    Windows:    Use Rufus (DD mode) or balenaEtcher"
 echo ""

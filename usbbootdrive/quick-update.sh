@@ -14,13 +14,16 @@
 #  reuses it:
 #     1. copies the new app + runtime scripts into workspace/chroot
 #     2. re-compresses it into filesystem.squashfs   (the only slow step)
-#     3. swaps the new OS into the target:
+#     3. writes the new OS into the target:
 #          (default)      safekeep.img  — flash it as usual
 #          --usb /dev/sdX the plugged-in SafeKeep stick, IN PLACE.
 #                         Only the OS partition is touched: the encrypted
 #                         vault and the transfer drive (your backups) are
 #                         kept, so there is nothing to re-flash and no
 #                         seed to restore.
+#        On a two-slot stick (os-slots.sh) the new OS goes into the slot
+#        that isn't booted and the stick switches to it; the previous OS
+#        stays in the other slot. Older sticks have their casper/ replaced.
 #
 #  Covered by a quick update:
 #     src/dist/*            (boot.html, manifest.json, …)
@@ -37,7 +40,7 @@
 #     sudo bash quick-update.sh --usb /dev/sdb  # update the stick in place
 #
 #  For a public release image, use the full `sudo bash build.sh`. An image
-#  updated here still holds the old OS in its free space, so it zips to
+#  updated here still holds the old OS in its other slot, so it zips to
 #  roughly twice the size (past GitHub's 2 GB limit per release file).
 # =====================================================================
 set -euo pipefail
@@ -46,10 +49,12 @@ WORKSPACE="workspace"
 CHROOT_DIR="$WORKSPACE/chroot"
 STAGING_DIR="$WORKSPACE/staging"
 OUTPUT_IMG="safekeep.img"
-OS_SIZE_MB=2944                 # must match build.sh
 MNT="$WORKSPACE/mnt-quick"
 
 die() { echo ""; echo "ERROR: $*" >&2; exit 1; }
+
+# shellcheck source=os-slots.sh
+source "$(dirname "$0")/os-slots.sh"
 
 TARGET_USB=""
 if [ "${1:-}" = "--usb" ]; then
@@ -127,7 +132,9 @@ if [ -n "$TARGET_USB" ]; then
     echo ""
     lsblk -o NAME,SIZE,MODEL,TRAN,LABEL "$TARGET_USB"
     echo ""
-    echo "Will REPLACE the operating system on $OS_PART (SafeKeep OS partition)."
+    echo "Will write a new operating system onto $OS_PART (SafeKeep OS partition)."
+    echo "On a two-slot stick it goes into the spare slot and the current OS is kept"
+    echo "as GRUB's \"previous version\"; an older stick has its OS replaced."
     echo "The vault (partition 4) and transfer drive (partition 5) are NOT touched."
     read -r -p "Type YES to continue: " ok
     [ "$ok" = "YES" ] || die "canceled."
@@ -171,7 +178,7 @@ cp "$(ls "$CHROOT_DIR"/boot/vmlinuz-* | sort -V | tail -1)"    "$STAGING_DIR/cas
 cp "$(ls "$CHROOT_DIR"/boot/initrd.img-* | sort -V | tail -1)" "$STAGING_DIR/casper/initrd"
 printf "%s" "$(du -sx --block-size=1 "$CHROOT_DIR" | cut -f1)" > "$STAGING_DIR/casper/filesystem.size"
 SQ_MB=$(du -sm "$STAGING_DIR/casper" | awk '{print $1}')
-[ "$SQ_MB" -lt "$OS_SIZE_MB" ] || die "OS content ${SQ_MB}MB exceeds the ${OS_SIZE_MB}MB partition."
+echo "      OS size: ${SQ_MB}MB"
 
 # ---------------------------------------------------------------------
 # 4. Swap the new OS into the target's OS partition (partition 3)
@@ -201,27 +208,42 @@ echo ""
 echo "[3/3] Writing the new OS into $WHAT ..."
 mkdir -p "$MNT"
 mount "$TARGET_PART" "$MNT"
-[ -d "$MNT/casper" ] || die "no casper/ folder on the OS partition — not a SafeKeep OS partition."
-# Preferred: write to temp names, then rename — a crash mid-copy never leaves
-# a half-written OS. That needs room for old + new side by side; if the
-# partition can't hold both, replace in place (if that is interrupted the
-# stick won't boot until updated again — the vault partition is unaffected).
-NEED_KB=$(du -sk "$STAGING_DIR/casper" | awk '{print $1}')
-FREE_KB=$(df -Pk "$MNT" | awk 'NR==2 {print $4}')
-if [ "$FREE_KB" -gt $(( NEED_KB + 51200 )) ]; then
-    for f in filesystem.squashfs vmlinuz initrd filesystem.size; do
-        cp "$STAGING_DIR/casper/$f" "$MNT/casper/.$f.new"
-    done
-    sync
-    for f in filesystem.squashfs vmlinuz initrd filesystem.size; do
-        mv -f "$MNT/casper/.$f.new" "$MNT/casper/$f"
-    done
+LAYOUT=$(slot_layout "$MNT")
+if [ "$LAYOUT" = two-slot ]; then
+    # Two OS slots (build.sh since the updater work): write the slot that
+    # isn't booted, check it, then switch. The previous OS stays in the other
+    # slot and GRUB offers it as "previous version".
+    ACTIVE=$(slot_active "$MNT")
+    IDLE=$(slot_other "$ACTIVE")
+    echo "      Writing slot $IDLE (the stick boots slot $ACTIVE now)..."
+    slot_write "$MNT" "$IDLE" "$STAGING_DIR/casper" || die "writing slot $IDLE failed. The stick still boots slot $ACTIVE."
+    slot_switch "$MNT" "$IDLE" || die "switching to slot $IDLE failed. The stick still boots slot $ACTIVE."
+    echo "      Slot $IDLE written and checked; the stick now boots slot $IDLE."
+elif [ "$LAYOUT" = legacy ]; then
+    # Older sticks (one casper/ folder). Preferred: write to temp names, then
+    # rename — a crash mid-copy never leaves a half-written OS. That needs room
+    # for old + new side by side; if the partition can't hold both, replace in
+    # place (if that is interrupted the stick won't boot until updated again —
+    # the vault partition is unaffected).
+    NEED_KB=$(du -sk "$STAGING_DIR/casper" | awk '{print $1}')
+    FREE_KB=$(df -Pk "$MNT" | awk 'NR==2 {print $4}')
+    if [ "$FREE_KB" -gt $(( NEED_KB + 51200 )) ]; then
+        for f in filesystem.squashfs vmlinuz initrd filesystem.size; do
+            cp "$STAGING_DIR/casper/$f" "$MNT/casper/.$f.new"
+        done
+        sync
+        for f in filesystem.squashfs vmlinuz initrd filesystem.size; do
+            mv -f "$MNT/casper/.$f.new" "$MNT/casper/$f"
+        done
+    else
+        echo "      (not enough room for old + new side by side — replacing in place; do not unplug)"
+        for f in filesystem.squashfs vmlinuz initrd filesystem.size; do
+            rm -f "$MNT/casper/$f"
+            cp "$STAGING_DIR/casper/$f" "$MNT/casper/$f"
+        done
+    fi
 else
-    echo "      (not enough room for old + new side by side — replacing in place; do not unplug)"
-    for f in filesystem.squashfs vmlinuz initrd filesystem.size; do
-        rm -f "$MNT/casper/$f"
-        cp "$STAGING_DIR/casper/$f" "$MNT/casper/$f"
-    done
+    die "no casper-a/ or casper/ folder on the OS partition — not a SafeKeep OS partition."
 fi
 sync
 umount "$MNT"
