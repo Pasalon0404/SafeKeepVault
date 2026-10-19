@@ -4917,6 +4917,12 @@
       margin-top: 0.25rem;
     }
     .eob-mode-toggle { margin-top: 0.25rem; }
+    .eob-verify-warning {
+        margin: 0.6rem 0 0;
+        padding: 0.5rem 0.65rem;
+        border-left: 3px solid var(--skb-danger);
+        background: rgba(239, 68, 68, 0.06);
+    }
     .eob-mode-desc {
       font-size: 0.78rem;
       color: var(--skb-text-muted);
@@ -8917,8 +8923,10 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <ul>
                     <li><strong>SeedSigner:</strong> Tools &rarr; New seed &rarr; Dice rolls, then pick the same word count.</li>
                     <li><strong>COLDCARD:</strong> New Seed Words &rarr; Advanced / Tools &rarr; Dice Rolls (wording varies by model and firmware).</li>
+                    <li><strong>Ian Coleman&rsquo;s BIP39 tool:</strong> tick <em>Show entropy details</em>, choose entropy type <strong>Base 10</strong> (not Dice, which counts a 6 as 0 and gives different words), set Mnemonic Length to the same word count (not &ldquo;Use Raw Entropy&rdquo;), and type the rolls as digits 1&ndash;6.</li>
                 </ul>
                 Enter the same rolls in the same order. If the words don't match exactly, don't use this seed. The security depends entirely on your dice: use a fair die, and never let anyone see or record the rolls.
+                <p class="eob-verify-warning"><strong>Check a website only with practice rolls.</strong> Your rolls <em>are</em> your seed: typing your real rolls into a web page on an online computer gives your seed to that computer. To check real rolls with Ian Coleman&rsquo;s tool, use its offline copy on a computer that never goes online again. SeedSigner and COLDCARD are offline devices, so they are safe for this.</p>
             </div>
 
             <!-- Entropy Meter -->
