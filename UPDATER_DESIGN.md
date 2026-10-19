@@ -1,6 +1,7 @@
 # Design note: updating a SafeKeep stick in place
 
-Status: **proposal, for the owner to approve.** Nothing here is built yet.
+Status: **built and released in v1.47** (Oct 19, 2026). Part 1 and Part 2
+are both in that release; the first update file for users ships with v1.48.
 
 ## The problem
 
@@ -220,6 +221,12 @@ UEFI on the owner's laptop:
   - **Before both of those:** one try failed with "Input/output error" at
     its first write, before the update log existed, and nothing was
     changed. It has not come back.
+  - **The first real update, v1.46 build 286 → v1.47 build 291** (Oct 19,
+    2026): on the owner's 64 GB stick, with the update file made from the
+    v1.47 release build and signed with the maintainer's real key on the
+    Mac. Check showed build 291 and the released app hash (`e65b81f4…`).
+    It installed from Device Options, and the dashboard then showed
+    v1.47 build 291, with the vault unchanged.
 
 ## Risks and open questions
 
@@ -245,9 +252,6 @@ UEFI on the owner's laptop:
    scripts and test steps are in `usbbootdrive/poc-updater/`. GRUB loads a
    slot with casper's `live-media-path=casper-a` option (casper 1.498,
    Ubuntu 24.04).
-2. **Part 1 — built, to be tested on a stick, then released** (one last
-   reflash for everyone).
-3. **Part 2 — built.** Test on a stick: install an update made by
-   `make-update.sh` and signed with the real key. It can ship in the same
-   release as Part 1, but its first real use is updating *from* that
-   release to the next one.
+2. **Part 1 — done**, released in v1.47 (one last reflash for everyone).
+3. **Part 2 — done**, released in v1.47 and tested with the real key (above).
+   Its first use by users is updating *from* v1.47 to the next release.
