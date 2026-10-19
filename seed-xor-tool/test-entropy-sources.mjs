@@ -57,6 +57,25 @@ ck('COLDCARD "123456" example uses the same method',
     words(createHash('sha256').update('123456').digest()) ===
     'mirror reject rookie talk pudding throw happy era myth already payment own sentence push head sting video explain letter bomb casual hotel rather garment');
 
+// Ian Coleman's BIP39 tool (src/js/index.js, entropy.js): with a word count
+// chosen it takes SHA-256 of the cleaned entropy string. Entropy type
+// "Base 10" keeps the digits as typed, so it equals our rolls; type "Dice"
+// first turns every 6 into 0, so it differs whenever a 6 was rolled.
+{
+    const rolls = '35162461352164523613452616345216345261346521634526';
+    const e = await diceRollsToEntropy(rolls, 12);
+    const sha = (str) => createHash('sha256').update(str).digest();
+    ck('Coleman "Base 10" (SHA-256 of the digits as typed) gives the same entropy',
+        Buffer.from(e).equals(sha(rolls).subarray(0, 16)));
+    ck('Coleman "Dice" (6 counted as 0) gives different entropy',
+        !Buffer.from(e).equals(sha(rolls.replace(/6/g, '0')).subarray(0, 16)));
+    const ui = readFileSync(new URL('./boot.html', import.meta.url), 'utf8');
+    ck('Verifiable Dice explains the Coleman check: Base 10, not Dice, not raw entropy',
+        /Ian Coleman&rsquo;s BIP39 tool:<\/strong>[^<]*<em>Show entropy details<\/em>, choose entropy type <strong>Base 10<\/strong> \(not Dice/.test(ui) && ui.includes('not &ldquo;Use Raw Entropy&rdquo;'));
+    ck('...with the warning to check websites only with practice rolls',
+        ui.includes('Check a website only with practice rolls.') && ui.includes('use its offline copy on a computer that never goes online again'));
+}
+
 console.log('\n2. Verifiable dice input rules');
 ck('12 words need 50 rolls, 24 need 99', verifiableRollsNeeded(12) === 50 && verifiableRollsNeeded(24) === 99 && VERIFIABLE_DICE_ROLLS[12] === 50);
 ck('other word counts are refused', (() => { try { verifiableRollsNeeded(18); return false; } catch { return true; } })());
