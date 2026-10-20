@@ -92,13 +92,30 @@ if [ -f "$DATA_MOUNT/$SETUP_MARKER" ]; then
     fi
 fi
 
-# --- Check if vault file already exists (without the state marker) ---
-# This handles the edge case where setup-vault was interrupted AFTER
-# creating the vault but BEFORE the hardening phase completed.
-# In this case we skip vault creation and jump to hardening.
-SKIP_VAULT=false
+# --- Vault file without the state marker = interrupted creation ---
+# The marker is written only inside the vault-creation block below,
+# after luksFormat and mkfs succeed. Nothing else creates the vault
+# file (factory reset deletes the vault BEFORE it removes the marker),
+# so a vault file with no marker means creation was cut off — power
+# lost mid-dd, before luksFormat, or before the marker was written.
+# Such a file may have no valid LUKS header, and it was never unlocked,
+# so it holds no user data. Keeping it would send the user to
+# unlock-vault against a broken header ("Incorrect password" forever),
+# so delete it and create the vault again from scratch.
 if [ -f "$DATA_MOUNT/$VAULT_FILE" ]; then
-    SKIP_VAULT=true
+    echo "setup-vault: vault file found without $SETUP_MARKER — previous setup was interrupted. Recreating."
+    zenity --info --title="SafeKeepVault — Setup Was Interrupted" --width=450 \
+        --text="The last vault setup didn't finish, so the vault it started is unusable.\n\nIt held no data. SafeKeepVault will delete it and start the setup again." || true
+
+    # Release anything a failed run in this same boot may have left open.
+    sudo umount -l "$VAULT_MOUNT" 2>/dev/null || true
+    sudo cryptsetup close "$MAPPER_NAME" 2>/dev/null || true
+    STALE_LOOP=$(losetup -j "$DATA_MOUNT/$VAULT_FILE" 2>/dev/null | awk -F: '{print $1}' | head -1 || true)
+    if [ -n "$STALE_LOOP" ]; then
+        sudo losetup -d "$STALE_LOOP" 2>/dev/null || true
+    fi
+
+    sudo rm -f "$DATA_MOUNT/$VAULT_FILE"
 fi
 
 # ===================================================================
@@ -109,7 +126,7 @@ fi
 # partition access, which the kernel locks on the boot device.
 # ===================================================================
 
-if [ "$SKIP_VAULT" = false ]; then
+if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
 
     # --- Calculate available space ---
     AVAIL_KB=$(df -k "$DATA_MOUNT" | tail -1 | awk '{print $4}')
@@ -225,7 +242,7 @@ MARKEREOF
     # Clear password from memory (best effort — bash doesn't guarantee this)
     unset PASSWORD
 
-fi  # end SKIP_VAULT
+fi  # end vault creation
 
 
 # ===================================================================
