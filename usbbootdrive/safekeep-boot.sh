@@ -1198,6 +1198,13 @@ if action == 'create':
         if path not in sources:
             sources.append(path)
 
+    # Leave out folders that don't exist yet. A new vault has no settings/
+    # until a setting is saved, and 7z exits 1 ("WARNING: No more files")
+    # for a missing input path, which failed the whole backup.
+    sources = [p for p in sources if os.path.isdir(p)]
+    if not sources:
+        fail('Nothing to back up yet: the selected items are empty.')
+
     password = data.get('password')
     if not isinstance(password, str) or not password or '\x00' in password:
         fail('Encryption password is required.')
