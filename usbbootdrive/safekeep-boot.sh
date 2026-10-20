@@ -902,7 +902,8 @@ POLICYEOF
     #     The boot-time check near the top of this script detects
     #     .wipe_pending, zeroes the 16MB LUKS header (destroying all
     #     keyslots and the volume master key), deletes the vault file,
-    #     removes the setup marker, and reboots into first-boot setup.
+    #     removes the setup marker, and goes straight into first-boot
+    #     setup in the same boot.
     #
     # WHY TWO PHASES:
     #   - File-level shred is INEFFECTIVE on SSDs (wear leveling moves
@@ -993,8 +994,8 @@ POLICYEOF
                 # 4) Write the .wipe_pending flag to the DATA partition.
                 #    This flag persists across reboot (ext4, not casper overlay).
                 #    On next boot, safekeep-boot detects it and executes Phase 2:
-                #    LUKS header destruction → vault file deletion → reboot into
-                #    first-boot setup.
+                #    LUKS header destruction → vault file deletion → first-boot
+                #    setup (same boot, no second reboot).
                 #
                 #    CRITICAL: Verify the data partition is actually mounted.
                 #    If it's not (e.g., unmounted during unlock flow), re-mount
@@ -3058,7 +3059,8 @@ fi
 #     LUKS header with zeros, destroying all keyslots. Without the
 #     keyslots the volume master key is unrecoverable — the remaining
 #     ciphertext is random noise. Then we delete the vault file and
-#     the setup marker, forcing a fresh vault creation on next boot.
+#     the setup marker, and fall through to first-boot setup below in
+#     this same boot.
 #
 # This guarantees data destruction even if Phase 1 was incomplete.
 # -------------------------------------------------------------------
@@ -3138,31 +3140,16 @@ if [ -f "$WIPE_PENDING" ]; then
     sudo rm -f "$WIPE_PENDING"
     echo "Phase 2: wipe_pending flag removed"
 
-    # 8) Sync, notify user, and reboot into first-boot setup
+    # 8) Sync, notify the user, and go straight on to first-boot setup.
+    #    No reboot: Phase 1 already rebooted (so RAM from the old session
+    #    is gone), the mapper and loop device are released above, and the
+    #    marker is gone, so the STEP 2 check below runs setup-vault in
+    #    this same boot.
     sync
-    echo "Phase 2: COMPLETE — rebooting into first-boot setup"
+    echo "Phase 2: COMPLETE — continuing to first-boot setup (no reboot)"
 
     zenity --info --title="Factory Reset Complete" --width=400 \
-        --text="All vault data has been cryptographically destroyed.\n\nThe system will now reboot. You will be prompted\nto create a new encrypted vault.\n\nClick OK to reboot." 2>/dev/null || true
-
-    # -------------------------------------------------------------------
-    # REBOOT FENCE — prevents factory-reset race condition
-    # -------------------------------------------------------------------
-    # `sudo reboot` returns exit 0 the INSTANT it signals systemd, but
-    # the OS takes ~10 seconds to tear the system down. A bare `exit 0`
-    # here merely terminates THIS script — the surrounding flow (display
-    # manager / kiosk wrapper) can still spawn the next UI prompt during
-    # the shutdown window, flashing the Recovery/Restore menu at the
-    # user for ~10 seconds.
-    #
-    # `exec sleep infinity` REPLACES this process with sleep so it can
-    # never return. When systemd brings the system down, sleep is killed
-    # cleanly as part of shutdown.
-    #
-    # Same pattern as setup-vault.sh's first-boot fence.
-    # -------------------------------------------------------------------
-    sudo systemctl reboot 2>/dev/null || sudo reboot || true
-    exec sleep infinity
+        --text="All vault data has been cryptographically destroyed.\n\nNext, set up a new encrypted vault.\n\nClick OK to continue." 2>/dev/null || true
 else
     echo "Phase 2: no .wipe_pending flag found — normal boot continues"
 fi
