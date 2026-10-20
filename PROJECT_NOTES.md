@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Oct 17, 2026).**
+> **Start with the "Current state" section below (updated Oct 20, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,13 +9,19 @@
 
 ---
 
-## Current state (Oct 17, 2026) — v1.45 plus unreleased work on `main`
+## Current state (Oct 20, 2026) — v1.48 plus unreleased work on `main`
 
-The last release is **v1.45** (Oct 15). `seed-xor-tool/VERSION` still says
-1.45: features merge to `main` without a bump, and builds from `main` are
-for the owner's own use until the owner says it's release time (see
-`CLAUDE.md`). The version stamp shows the exact commit, e.g.
-`v1.45 · build 268 · 4543c21`.
+The last release is **v1.48** (Oct 20), the first with an update file:
+v1.47 sticks install it in place from Device Options → Update SafeKeep.
+`seed-xor-tool/VERSION` says 1.48: features merge to `main` without a bump,
+and builds from `main` are for the owner's own use until the owner says
+it's release time (see `CLAUDE.md`). The version stamp shows the exact
+commit, e.g. `v1.48 · build 307 · e86560c`.
+
+Unreleased on `main` (for v1.49): the new two-tone SAFEKEEP / VAULT boot
+logo, a shutdown screen that is actually visible, and the shutdown fix
+for Restart now after an update (see "Text consoles" below). All tested
+on Dave's stick through in-place updates (builds 303–307).
 
 ### Working with Dave (the owner)
 
@@ -93,7 +99,37 @@ sudo bash quick-update.sh --usb /dev/sdb
 Users who download the release image update by reflashing, which erases
 the vault: the website's Docs page ("Updating to a New Version") walks
 them through Encrypted Backup → copy the `.7z` off → flash → restore.
-There is no in-app updater (an open decision, below).
+That is only needed once, for sticks set up with v1.46 or earlier: from
+v1.47 the stick updates in place from a signed update file
+(`UPDATER_DESIGN.md`; release steps in `VERIFYING.md`).
+
+### Testing an update on a stick (in place)
+
+How every change to the boot scripts or the OS was tested on Oct 20
+(builds 303 → 307). Give Dave each command to paste.
+
+1. **Commit first.** The stick installs only an update whose build
+   number (the commit count) is higher than what it runs; uncommitted
+   changes don't raise it.
+2. On the Mac: `npm run build`, then both rsync commands above.
+3. On the ZBook: the full `sudo bash build.sh` if `chroot-setup.sh` or
+   `safekeep-harden.sh` changed, otherwise `sudo bash quick-update.sh`
+   (no `--usb`). Then **`sudo bash make-update.sh`** and check that it
+   prints the new build number. Once a stale update file was copied
+   because this step was skipped.
+4. On the Mac, in a new folder (a clean build's file has the same name as
+   the release file, `SafeKeep-Update-v1.48.tar`): `scp` the `.tar` and
+   `manifest.json` from `/home/safekeep-build/`, check
+   `grep -o '"build": "[^"]*"' manifest.json`, then sign:
+   `gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign manifest.json && tar -rf SafeKeep-Update-v1.48.tar manifest.json.asc`
+   (`tar -rf` may not change the file size: the signature fits in the
+   archive's end padding).
+5. Plug the stick into the Mac (click Ignore, never Initialize, on the
+   "can't read this disk" prompts), `cp` the `.tar` to `/Volumes/TRANSFER/`,
+   then `diskutil eject $(diskutil info /Volumes/TRANSFER | awk '/Part of Whole/{print $4}')`.
+6. On the laptop: Device Options → Update SafeKeep → Check for update →
+   Install → Restart now. The restart is done by the **old** OS, so a
+   shutdown fix only shows on the update after the one that adds it.
 
 ### Dev testing (no USB)
 
@@ -107,8 +143,13 @@ There is no in-app updater (an open decision, below).
   sandbox after `npm ci` (the old "rolldown binding missing" problem is
   gone). Playwright with the preinstalled Chromium can drive the dev server
   for screenshots at laptop size (1366×900).
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **41 files**,
-  all passing on `main`. They extract real functions from `boot.html` (or
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **44 files**,
+  all passing on Linux at `e86560c` (Oct 20). On macOS three always fail
+  because they need Linux tools: `test-auto-off.mjs`, `test-os-lockdown.mjs`
+  (GNU `sed`) and `test-updater.mjs` (`gpgv`). Nothing runs tests on push —
+  only the release workflow, after the tag is pushed — so before tagging,
+  run them on the ZBook (Node 22): clone the repo into `/tmp`, `npm ci` in
+  `seed-xor-tool`, then run each file. They extract real functions from `boot.html` (or
   `shared/boot.js`) into a Node VM and check them against official vectors
   and real PSBTs built with `@scure/btc-signer`. Some also run the Python
   embedded in `safekeep-boot.sh` (Settings and Wallets watchers).
@@ -251,6 +292,48 @@ image is not reproducible. A start-up self-check runs published vectors
 before the app accepts any input. An online demo (`npm run build:demo`,
 demo.safekeepbitcoin.com) only accepts the public all-zero-entropy seeds.
 
+**First boot and factory reset.** `setup-vault.sh` takes the master
+passphrase by QR (30-second limit, then back to the choice) or typed
+visibly twice, creates the LUKS file container (`.vault.luks`, sized from
+the data partition's free space and shown as "Creating your 193 MB
+encrypted vault"), writes `.setup_complete`, then offers **Continue now**
+(exits 0; `safekeep-boot.sh` runs the normal unlock prompt) or **Shut down
+to copy a backup onto the stick**. A vault file without the marker means
+creation was interrupted: it is deleted and created again. Factory reset:
+Phase 1 (in the session) deletes the vault's files, writes `.wipe_pending`
+and restarts; Phase 2 (next boot) zeroes the LUKS header, deletes the
+vault and the marker, then carries on into first-boot setup in the same
+boot. On hardware: first boot (Continue now / Shut down) and backups were
+tested Oct 19–20. **Not yet tested on a stick:** factory reset without
+the second restart, the QR time limit, interrupted-setup recovery.
+
+**Text consoles (boot logo, shutdown screen).** Lessons from Oct 20, all
+in `chroot-setup.sh` (so they need the full `build.sh`):
+- X runs on **vt7**; text written to tty1 is invisible while X is up.
+  The shutdown screen runs `chvt 1` first. The splash `safekeep-boot.sh`
+  draws at start-up is hidden the same way (left alone: switching there
+  would hide the unlock prompt).
+- **casper.service is masked.** `casper-stop` ejects the boot USB at the
+  end of every shutdown (`noprompt` only skips the prompt). Anything not
+  already in RAM then fails to load: "sd [sda] access beyond end of
+  device" / "SQUASHFS error" scrolling until the power button is held.
+  It showed up on Restart now after an update, which pushes those pages
+  out of memory.
+- On the Linux console `ESC[90m` (dark grey) also turns on **bold**, and
+  bold colour 3 is bright yellow. Use `ESC[22;33m` / `ESC[22;37m`.
+- `ESC]P3F7931A` makes colour 3 Bitcoin orange. **setvtrgb.service** is
+  masked (Ubuntu's palette has colour 3 yellow), and so are
+  **console-setup.service** and its udev rule
+  `/etc/udev/rules.d/90-console-setup.rules` → `/dev/null` (a font reload
+  under the logo).
+- When the graphics driver takes the console over, text already on screen
+  loses its block and box characters ("?"). `safekeep-splash-redraw.service`
+  waits for `systemd-udev-settle`, clears tty1 and draws the splash again.
+- The logo lives in two places to keep in step: `skb_logo` in
+  `safekeep-boot.sh` and `/etc/safekeep-splash.txt` written by
+  `chroot-setup.sh`. Only CP437 characters, rows ≤ 80 columns.
+  `test-os-lockdown.mjs` checks the masks and the colour codes.
+
 **Seed Nickname, LifeHash, UI polish.** The status-bar Seed Nickname is
 three words from SHA-256 of the mnemonic (a convenience label, not proof
 the drive is genuine). LifeHash icons beside fingerprints match
@@ -265,14 +348,27 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
   print-qr, release-notes, about, donate, `llms.txt`.
 - `Pasalon0404/safekeep-companion` → the online Courier Tool (can be used
   on phones; the phone rule in `CLAUDE.md` doesn't apply to it).
-- Update the website only at release time (`CLAUDE.md`). Not yet
-  documented there: saved wallets, the review screen additions, the
-  passphrase confirmations, legacy-input fees.
+- Update the website only at release time (`CLAUDE.md`). Prepare it on a
+  branch with TODO hashes, fill them in from the published release, then
+  open a PR for Dave to merge (as for v1.47 and v1.48). The live site is
+  up to date with v1.48.
 
 ### Open items / next steps
 
-1. **Website at release time** — document the unreleased features above.
-2. **Updater** — see `UPDATER_DESIGN.md`.
+1. **Before v1.49:**
+   - Hardware-test the v1.48 changes nobody has run on a stick yet:
+     factory reset (straight into setup), the first-boot QR time limit.
+   - Flash the full image onto a spare stick and go through first boot
+     once: the console masks and the splash redraw were only tested
+     through in-place updates.
+   - Check boot time (the redraw waits for `systemd-udev-settle`).
+   - Run the tests on the ZBook before tagging.
+   - Release notes: people updating from v1.48 may see the scrolling
+     errors once on Restart now (v1.48 does that restart); holding the
+     power button is safe. The download page's update notice needs the
+     v1.49 file name, for v1.47 and v1.48 sticks.
+2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
+   went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
      Drive, and the maintainer key + gpgv in the image. It ships in a
      release that everyone installs with one last reflash.
@@ -305,6 +401,19 @@ auto-mount is in daily use on hardware.
 ### Recent work (newest first)
 
 ```
+e86560c Boot splash: redraw it after the graphics driver takes over the console
+eabb41a Boot logo: orange not bold yellow; no font reload under the early splash
+9cb6de6 OS: keep the kernel console font and palette for the boot logo
+dcf4382 Shutdown screen: switch to tty1 so it is actually seen
+282818f Boot screens: new SAFEKEEP / VAULT logo in bold two-tone blocks
+b676478 OS: mask casper.service so shutdown never ejects the USB stick
+a3cc40b chore: bump version to v1.48                                                     (v1.48)
+b3b2fe1 First boot: give the QR passphrase scan a 30-second limit
+7854781 Factory reset: go straight into setup after the wipe, no second restart
+271758f Backup: a QR-scanned password doesn't need scanning twice
+7f4fef8 Backup: skip vault folders that don't exist yet
+af828d1 First boot: continue straight to unlock instead of shutting down
+12d7271 setup-vault: recreate a vault left without .setup_complete
 035fc05 PSBT Signer: fee for legacy inputs, and refuse a forged previous transaction   (#40)
 6e95938 Output Descriptor: type a passphrase twice before it is used                     (#39)
 68fa6fa Dashboard passphrase: type it twice before it is applied                         (#38)
