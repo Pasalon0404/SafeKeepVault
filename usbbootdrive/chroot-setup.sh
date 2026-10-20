@@ -1185,24 +1185,43 @@ systemctl mask casper.service 2>/dev/null || ln -sf /dev/null /etc/systemd/syste
 echo "casper.service masked: no eject of the USB stick at shutdown."
 
 # --- Step 2: Create the Splash Art File ---
+# Same two-tone logo as skb_logo in safekeep-boot.sh (keep the two in
+# step). The file holds raw escape codes: OSC P redefines palette colour
+# 3 as Bitcoin orange (#F7931A) on the Linux console, █ blocks are drawn
+# in colour 3 and the box-drawing "shadow" in dark grey. safekeep-splash
+# .service simply `cat`s it to tty1. Every row is ≤80 columns, and every
+# character used is in CP437, so the kernel's own VGA font draws it.
 echo "Creating boot splash art..."
-cat > /etc/safekeep-splash.txt << 'SPLASHEOF'
-
-      _____       ____     __ __               __    __            ____
-     / ___/____ _/ __/___ / //_/___  ___  ____ | |  / /___ ___  __/ / /_
-     \__ \/ __ `/ /_/ __ \/ ,< / _ \/ _ \/ __ \| | / / __ `/ / / / / __/
-    ___/ / /_/ / __/  __/ /| |/  __/  __/ /_/ /| |/ / /_/ / /_/ / / /_
-   /____/\__,_/_/  \___/_/ |_|\___/\___/ .___/ |___/\__,_/\__,_/_/\__/
-                                      /_/
-
-                 ╔═══════════════════════════════════╗
-                 ║             loading...            ║
-                 ╚═══════════════════════════════════╝
-
-                      Air-gapped. Open source.
-                        Don't trust. Verify.
-
-SPLASHEOF
+{
+    printf '\033]P3F7931A'
+    printf '\n\n'
+    while IFS= read -r _skb_line; do
+        _skb_line=${_skb_line//█/$'\033[33m'█$'\033[90m'}
+        printf '\033[90m%s\033[0m\n' "$_skb_line"
+    done << 'SPLASHLOGO'
+        ███████╗ █████╗ ███████╗███████╗██╗  ██╗███████╗███████╗██████╗
+        ██╔════╝██╔══██╗██╔════╝██╔════╝██║ ██╔╝██╔════╝██╔════╝██╔══██╗
+        ███████╗███████║█████╗  █████╗  █████╔╝ █████╗  █████╗  ██████╔╝
+        ╚════██║██╔══██║██╔══╝  ██╔══╝  ██╔═██╗ ██╔══╝  ██╔══╝  ██╔═══╝
+        ███████║██║  ██║██║     ███████╗██║  ██╗███████╗███████╗██║
+        ╚══════╝╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝
+                  ██╗   ██╗ █████╗ ██╗   ██╗██╗     ████████╗
+                  ██║   ██║██╔══██╗██║   ██║██║     ╚══██╔══╝
+                  ██║   ██║███████║██║   ██║██║        ██║
+                  ╚██╗ ██╔╝██╔══██║██║   ██║██║        ██║
+                   ╚████╔╝ ██║  ██║╚██████╔╝███████╗   ██║
+                    ╚═══╝  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝
+SPLASHLOGO
+    printf '\n'
+    printf '\033[90m%b\033[0m\n' \
+        "                     ╔═══════════════════════════════════╗" \
+        "                     ║             \033[37mloading...\033[90m            ║" \
+        "                     ╚═══════════════════════════════════╝"
+    printf '\n'
+    printf '\033[37m%s\033[0m\n' "                            Air-gapped. Open source."
+    printf '                \033[90m────────────\033[37m  don'"'"'t trust, verify.  \033[90m────────────\033[0m\n'
+    printf '\n'
+} > /etc/safekeep-splash.txt
 
 # --- Step 3: Create the Early-Boot Systemd Service ---
 echo "Creating safekeep-splash systemd service..."

@@ -48,52 +48,71 @@ echo "========================================"
 echo ""
 
 # ------------------------------------------------------------------
-# tty1 BOOT SPLASH — FIGlet slant "SafeKeepVault" logo + taglines
+# tty1 LOGO — "SAFEKEEP / VAULT" in ANSI Shadow blocks, two-tone
 # ------------------------------------------------------------------
-# Rendered to /dev/tty1 so the user sees a branded splash while the
-# boot script runs (AMNESIA → INTEGRITY → vault unlock → Chromium).
+# skb_logo prints the logo to stdout; callers redirect it to /dev/tty1.
+# Used by the boot splash below and the "Session ended" screen in
+# launch_browser. The early-boot splash (/etc/safekeep-splash.txt,
+# written by chroot-setup.sh) carries the same art.
 #
-# STRICT single-quoted heredoc: bash performs ZERO expansion on the
-# body, so every backslash / backtick / dollar sign is passed through
-# literally. Do NOT convert to double quotes or `echo -e` — that will
-# break the ASCII art on real hardware.
+# Characters: only █ and the double-line box set (═ ║ ╔ ╗ ╚ ╝) plus ─.
+# All are in CP437, so even the kernel's built-in VGA font draws them.
 #
-# RAW-TTY SAFE: Each line is emitted through `printf '%s\r\n'` so the
-# output contains an explicit Carriage Return + Line Feed on every
-# row. On a raw Linux console where `stty onlcr` is disabled, a plain
-# "\n" from `cat` only advances the cursor down one line without
-# returning it to column 0 — the classic "staircase effect" that made
-# the previous rendering look like `SafeKeepVaul?` because each line
-# was offset a few columns to the right of the one above, chopping
-# off the right edge of the logo.
+# Colours: the █ blocks are palette colour 3, which the OSC P escape
+# below redefines as Bitcoin orange (#F7931A) on the Linux console;
+# the box-drawing "shadow" is dark grey (90). A console that ignores the
+# palette escape just shows its usual colour 3 (dark orange).
 #
-# Width: every row is ≤80 cols so it does NOT wrap on a standard VGA
-# text-mode tty1. This is the SAME slant-font art the systemd
-# safekeep-splash.service writes at early boot from
-# /etc/safekeep-splash.txt, for visual consistency across the two
-# splash stages.
+# STRICT single-quoted heredoc: no expansion of the art. Every line is
+# ended with an explicit \r\n so a raw tty with `onlcr` off doesn't
+# produce the "staircase" effect. Every row is ≤80 columns.
 # ------------------------------------------------------------------
+skb_logo() {
+    local _skb_line _skb_orange=$'\033[33m' _skb_shadow=$'\033[90m'
+    printf '\033]P3F7931A'
+    printf '\r\n\r\n'
+    while IFS= read -r _skb_line; do
+        _skb_line=${_skb_line//█/$_skb_orange█$_skb_shadow}
+        printf '%s%s\033[0m\r\n' "$_skb_shadow" "$_skb_line"
+    done << 'SKB_LOGO_EOF'
+        ███████╗ █████╗ ███████╗███████╗██╗  ██╗███████╗███████╗██████╗
+        ██╔════╝██╔══██╗██╔════╝██╔════╝██║ ██╔╝██╔════╝██╔════╝██╔══██╗
+        ███████╗███████║█████╗  █████╗  █████╔╝ █████╗  █████╗  ██████╔╝
+        ╚════██║██╔══██║██╔══╝  ██╔══╝  ██╔═██╗ ██╔══╝  ██╔══╝  ██╔═══╝
+        ███████║██║  ██║██║     ███████╗██║  ██╗███████╗███████╗██║
+        ╚══════╝╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝
+                  ██╗   ██╗ █████╗ ██╗   ██╗██╗     ████████╗
+                  ██║   ██║██╔══██╗██║   ██║██║     ╚══██╔══╝
+                  ██║   ██║███████║██║   ██║██║        ██║
+                  ╚██╗ ██╔╝██╔══██║██║   ██║██║        ██║
+                   ╚████╔╝ ██║  ██║╚██████╔╝███████╗   ██║
+                    ╚═══╝  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝
+SKB_LOGO_EOF
+}
+
+# skb_tagline TEXT — centred light-grey text between dark-grey rules.
+skb_tagline() {
+    local _skb_rule='────────────'
+    local _skb_text="  $1  "
+    # 12-column rules on each side; counted by hand because ${#…} counts
+    # bytes, not columns, outside a UTF-8 locale (─ is 3 bytes).
+    local _skb_w=$(( 12 * 2 + ${#_skb_text} ))
+    local _skb_pad=$(( (80 - _skb_w) / 2 ))
+    if [ "$_skb_pad" -lt 0 ]; then _skb_pad=0; fi
+    printf '%*s\033[90m%s\033[37m%s\033[90m%s\033[0m\r\n' "$_skb_pad" '' "$_skb_rule" "$_skb_text" "$_skb_rule"
+}
+
+# tty1 BOOT SPLASH — shown while the boot script runs
+# (AMNESIA → INTEGRITY → vault unlock → Chromium).
 if [ -w /dev/tty1 ]; then
     {
         # ANSI reset + clear screen + cursor home. Does not depend on
         # TERM being set, unlike `clear`.
         printf '\033[2J\033[H\r'
-        while IFS= read -r _skb_line; do
-            printf '%s\r\n' "$_skb_line"
-        done << 'SKB_LOGO_EOF'
-
-
-          _____        ____      __ __                 __    __           ____
-         / ___/____ _ / __/___  / //_/___   ___   ____ | |  / /____ _ __ / / /_
-         \__ \/ __ `// /_ / _ \/ ,<  / _ \ / _ \ / __ \| | / // __ `// // / __/
-        ___/ / /_/ // __//  __/ /| |/  __//  __// /_/ /| |/ // /_/ // // / /_
-       /____/\__,_//_/   \___/_/ |_|\___/ \___// .___/ |___/ \__,_/ \__/\__/
-                                              /_/
-
-                         don't trust, verify.
-
-
-SKB_LOGO_EOF
+        skb_logo
+        printf '\r\n'
+        skb_tagline "don't trust, verify."
+        printf '\r\n'
     } > /dev/tty1 2>/dev/null || true
 fi
 
@@ -2972,29 +2991,17 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
     if [ -w /dev/tty1 ]; then
         # Pick the splash sub-title based on the requested action.
         if [ "$POWER_ACTION" = "reboot" ]; then
-            _SKB_BYE_HEADLINE="                      Session ended. Restarting..."
+            _SKB_BYE_HEADLINE="Session ended. Restarting..."
         else
-            _SKB_BYE_HEADLINE="                      Session ended. Powering off..."
+            _SKB_BYE_HEADLINE="Session ended. Powering off..."
         fi
         {
             printf '\033[2J\033[H\r'
-            # ASCII-art logo: quoted heredoc keeps backslashes/backticks literal.
-            while IFS= read -r _skb_bye_line; do
-                printf '%s\r\n' "$_skb_bye_line"
-            done << 'SKB_BYE_EOF'
-
-
-          _____        ____      __ __                 __    __           ____
-         / ___/____ _ / __/___  / //_/___   ___   ____ | |  / /____ _ __ / / /_
-         \__ \/ __ `// /_ / _ \/ ,<  / _ \ / _ \ / __ \| | / // __ `// // / __/
-        ___/ / /_/ // __//  __/ /| |/  __//  __// /_/ /| |/ // /_/ // // / /_
-       /____/\__,_//_/   \___/_/ |_|\___/ \___// .___/ |___/ \__,_/ \__/\__/
-                                              /_/
-
-SKB_BYE_EOF
+            skb_logo
+            printf '\r\n'
             # Subtitle printed separately so we can interpolate the action.
-            printf '%s\r\n' "$_SKB_BYE_HEADLINE"
-            printf '%s\r\n' "                  Destroying all temporary session data in RAM."
+            skb_tagline "$_SKB_BYE_HEADLINE"
+            printf '\033[90m%s\033[0m\r\n' "                 Destroying all temporary session data in RAM."
             printf '\r\n\r\n'
         } > /dev/tty1 2>/dev/null || true
     fi
