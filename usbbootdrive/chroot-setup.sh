@@ -1184,6 +1184,26 @@ echo "Snap shutdown configured: DefaultTimeoutStopSec=1s (system-wide)."
 systemctl mask casper.service 2>/dev/null || ln -sf /dev/null /etc/systemd/system/casper.service
 echo "casper.service masked: no eject of the USB stick at shutdown."
 
+# ==================================================================
+#  KEEP THE KERNEL'S CONSOLE FONT AND PALETTE — mask console-setup
+#  and setvtrgb
+# ------------------------------------------------------------------
+#  The boot logo (/etc/safekeep-splash.txt) is on tty1 before these
+#  run. console-setup.service then loads its own font and resets every
+#  console's charset, and the logo's block and box characters already
+#  on screen turn into "?". setvtrgb.service loads Ubuntu's palette,
+#  whose colour 3 is yellow, over the logo's Bitcoin orange.
+#
+#  SafeKeep needs neither: the text consoles only show the logo screens
+#  (every getty is masked, the session runs in X on vt7, and X sets its
+#  own keyboard layout; the console keymap is keyboard-setup.service).
+#  The kernel's built-in font draws all the logo's characters.
+systemctl mask console-setup.service setvtrgb.service 2>/dev/null || {
+    ln -sf /dev/null /etc/systemd/system/console-setup.service
+    ln -sf /dev/null /etc/systemd/system/setvtrgb.service
+}
+echo "console-setup.service and setvtrgb.service masked: kernel font and palette kept."
+
 # --- Step 2: Create the Splash Art File ---
 # Same two-tone logo as skb_logo in safekeep-boot.sh (keep the two in
 # step). The file holds raw escape codes: OSC P redefines palette colour
