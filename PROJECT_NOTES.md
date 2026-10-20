@@ -427,9 +427,11 @@ you iterate on UI without rebuilding the image.
 │   → startx → openbox → autostart → safekeep-boot                │
 │                              │                                  │
 │   safekeep-boot orchestrates:                                   │
-│     • First boot only: setup-vault (create LUKS, harden OS,     │
-│       poweroff to force user to pull-and-reseat the drive)      │
-│     • Every subsequent boot: unlock-vault (zenity prompt for    │
+│     • First boot only: setup-vault (visible passphrase typed    │
+│       twice, create LUKS), then "Continue now" (default, goes   │
+│       straight to unlock) or "Shut down" to copy a .7z backup   │
+│       onto TRANSFER from another computer                       │
+│     • Every boot: unlock-vault (zenity prompt for               │
 │       LUKS passphrase) → mount → launch_browser                 │
 │     • launch_browser: entropy gate → Chromium kiosk             │
 │     • On Chromium exit: read /tmp/POWER_ACTION.txt → poweroff   │

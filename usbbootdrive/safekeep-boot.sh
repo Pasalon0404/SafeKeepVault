@@ -8,10 +8,10 @@
 #   1. If vault already mounted (Chromium relaunch) → launch browser
 #   2. Mount data partition, check for .setup_complete state marker
 #   3. If marker MISSING (first boot):
-#      → run setup-vault (vault creation + OS hardening + reboot)
-#      → system reboots, this script never reaches step 4
-#   4. If marker EXISTS (subsequent boots):
-#      → run unlock-vault (passphrase prompt → decrypt → mount)
+#      → run setup-vault (passphrase + vault creation)
+#      → user picks "Continue now": setup-vault exits 0, go to step 4
+#      → user picks "Shut down": machine powers off, never reaches step 4
+#   4. Run unlock-vault (passphrase prompt → decrypt → mount)
 #   5. Launch Chromium with boot.html
 #
 # Called from: /etc/xdg/openbox/autostart
@@ -3175,21 +3175,23 @@ fi
 # --- State Lock Check ---
 # The .setup_complete marker on the data partition tells us whether
 # first-boot initialization (vault creation) has been completed.
-# If the marker is MISSING, we need to run setup-vault which creates
-# the encrypted vault and triggers a mandatory reboot.
+# If the marker is MISSING, we run setup-vault, which sets the
+# passphrase, creates the encrypted vault and writes the marker.
 if [ ! -f "$DATA_MOUNT/$SETUP_MARKER" ]; then
     # ---- FIRST BOOT: Full initialization required ----
     echo "First boot detected (no .setup_complete marker). Starting initialization..."
     sudo umount "$DATA_MOUNT" 2>/dev/null || true
 
-    # setup-vault handles vault creation, OS hardening, initramfs rebuild,
-    # writes the state marker, and triggers a mandatory reboot.
-    # This script will NOT continue past this point on first boot —
-    # setup-vault fences its own reboot with `exec sleep infinity`, so
-    # on a successful run control NEVER returns from the call below.
-    setup-vault || true
+    # setup-vault ends one of three ways:
+    #   - exit 0 after creating the vault: the user chose "Continue now".
+    #     We fall through to the normal unlock prompt below — no restart.
+    #   - "Shut down to copy a backup": it powers off and fences itself
+    #     with `exec sleep infinity`, so control never returns here.
+    #   - non-zero: canceled or failed.
+    SETUP_EXIT=0
+    setup-vault || SETUP_EXIT=$?
+    echo "setup-vault exited with code $SETUP_EXIT"
 
-    # If we reach here, setup-vault exited without rebooting (canceled/error).
     # Re-mount and check if the vault was at least created.
     if ! mountpoint -q "$DATA_MOUNT"; then
         sudo mount "$DATA_PART" "$DATA_MOUNT" || {
@@ -3198,15 +3200,15 @@ if [ ! -f "$DATA_MOUNT/$SETUP_MARKER" ]; then
         }
     fi
 
-    # ---- Defense-in-depth reboot fence ----
-    # setup-vault fences its own reboot, so reaching this line SHOULD mean
-    # it exited without rebooting. But if the .setup_complete marker was
-    # written before an unexpected exit, a reboot is still pending and we
-    # must NOT fall through to the unlock-vault block — doing so would
-    # flash the "Unlock Vault" dialog during the ~10s shutdown window,
-    # which is the bug we are fixing.
-    if [ -f "$DATA_MOUNT/$SETUP_MARKER" ]; then
-        echo "Setup marker present after setup-vault exit — reboot is pending. Halting to avoid unlock-vault fall-through."
+    # ---- Defense-in-depth shutdown fence ----
+    # Marker present + exit 0 = vault created and the user chose
+    # "Continue now": go on to unlock. Marker present + any other exit
+    # means setup-vault stopped unexpectedly after creating the vault —
+    # possibly with a poweroff already in flight. Do NOT fall through to
+    # the unlock-vault block, which would flash the "Unlock Vault" dialog
+    # during the ~10s shutdown window.
+    if [ -f "$DATA_MOUNT/$SETUP_MARKER" ] && [ "$SETUP_EXIT" -ne 0 ]; then
+        echo "Setup marker present but setup-vault exited $SETUP_EXIT — a shutdown may be pending. Halting to avoid unlock-vault fall-through."
         sync
         exec sleep infinity
     fi

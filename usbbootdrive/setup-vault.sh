@@ -3,16 +3,23 @@
 # setup-vault — First-Boot Initialization & OS Hardening for SafeKeep
 # ============================================================================
 #
-# This script runs ONCE on the very first boot. It performs two operations
-# in sequence:
+# This script runs ONCE on the very first boot:
 #
-#   PHASE 1: Create the encrypted LUKS vault (user password setup)
-#   PHASE 2: Scorched-earth OS hardening (network kill, host storage
-#            blacklist, printer purge, automount firewall, BadUSB defense)
+#   PHASE 1: Create the encrypted LUKS vault (user password setup).
+#            The passphrase is typed visibly and twice, so a typo is
+#            caught before the vault is locked with it.
+#   PHASE 2: Ask the user what to do next:
+#              - Continue now (default): exit 0. safekeep-boot.sh goes
+#                straight to the normal unlock prompt, where the user
+#                proves the new passphrase works and the session starts.
+#              - Shut down: power off so the user can copy a .7z backup
+#                onto the TRANSFER partition from another computer.
 #
-# After both phases complete, it writes a persistent state marker
-# (.setup_complete) to the data partition and triggers a mandatory
-# reboot so the initramfs-baked module blacklists take effect.
+# OS hardening is NOT done here — it is baked into the image at build
+# time by safekeep-harden.sh, so no reboot is needed to apply it.
+#
+# Vault creation writes a persistent state marker (.setup_complete) to
+# the data partition.
 #
 # STATE LOCK:
 #   The marker file lives at /mnt/safekeep-data/.setup_complete on the
@@ -21,20 +28,20 @@
 #   (which resets on each boot), files on safekeep-data survive forever.
 #
 #   safekeep-boot.sh checks for this marker BEFORE calling setup-vault.
-#   If the marker exists, setup-vault is never invoked. The heavy
-#   initialization (LUKS format, module blacklists, initramfs rebuild,
-#   package purge) runs exactly once in the device's lifetime.
+#   If the marker exists, setup-vault is never invoked, so the LUKS
+#   format runs once per vault (again only after a factory reset).
 #
 # EXECUTION:
 #   Called automatically by safekeep-boot.sh on first boot.
 #   Can also be invoked manually via Ctrl+Alt+S (Openbox keybind).
 #
 # USB PARTITION MAP (for reference):
-#   Partition 1: BIOS Boot   (1MB, raw)
-#   Partition 2: EFI System  (100MB, FAT32, label "SK-EFI")
-#   Partition 3: OS          (ext4, label "safekeep-os")
+#   (sizes are set in build.sh)
+#   Partition 1: BIOS Boot   (2MB, raw)
+#   Partition 2: EFI System  (256MB, FAT32, label "SK-EFI")
+#   Partition 3: OS          (3584MB, ext4, label "safekeep-os", two OS slots)
 #   Partition 4: Data        (300MB, ext4, label "safekeep-data")
-#   Partition 5: Transfer    (300MB, exFAT, label "TRANSFER")
+#   Partition 5: Transfer    (2560MB, exFAT, label "TRANSFER")
 #
 # ============================================================================
 
@@ -125,7 +132,7 @@ if [ "$SKIP_VAULT" = false ]; then
 
     # --- Welcome dialog ---
     zenity --question --title="SafeKeepVault — First Boot Setup" --width=450 \
-        --text="Welcome to SafeKeepVault!\n\nThis one-time setup will:\n\n  1. Create an encrypted vault for your seed words, passphrases, encrypted notes and other data\n  2. Lock down the OS (disable networks, block host drives)\n  3. Reboot to apply kernel-level protections\n\nThis takes about 60 seconds. Continue?" \
+        --text="Welcome to SafeKeepVault!\n\nThis one-time setup will:\n\n  1. Set your Master Passphrase\n  2. Create an encrypted vault for your seed words, passphrases, encrypted notes and other data\n  3. Unlock the new vault and start SafeKeepVault\n\nNetworks and the computer's own drives are already blocked.\n\nThis takes about 60 seconds. Continue?" \
         --ok-label="Begin Setup" \
         --cancel-label="Cancel"
 
@@ -147,27 +154,59 @@ if [ "$SKIP_VAULT" = false ]; then
         INPUT_METHOD=$(zenity --list --title="Lock Your Vault" \
             --text="How would you like to set your Master Passphrase?" \
             --column="Method" --hide-header \
-            "Scan QR Code" "Type Manually")
+            "Scan QR Code" "Type Password") || true
         if [ -z "$INPUT_METHOD" ]; then
             sudo umount "$DATA_MOUNT"
             exit 1
         fi
     else
-        INPUT_METHOD="Type Manually"
+        INPUT_METHOD="Type Password"
     fi
 
+    PASSWORD=""
     if [ "$INPUT_METHOD" = "Scan QR Code" ]; then
         zenity --info --title="Scan QR" --width=350 \
             --text="Hold your SafeKeep QR code up to the camera.\nThe window will close automatically once read."
-        PASSWORD=$(zbarcam -1 --raw -Sdisable -Sqr.enable)
+        # Newlines are stripped exactly as unlock-vault does, so the
+        # passphrase set here is byte-for-byte the one unlock will send.
+        PASSWORD=$(zbarcam -1 --raw -Sdisable -Sqr.enable | tr -d '\n') || true
     else
-        # KEYBOARD UX: zenity --password places focus on the entry field
-        # by default; the OK button is the default action, so Enter from
-        # the entry field submits without a mouse click. --ok-label makes
-        # the action verb explicit so it's obvious what Enter will do.
-        PASSWORD=$(zenity --password --title="Lock Your Vault" \
-            --text="Enter your Master Passphrase:" \
-            --ok-label="Set Passphrase")
+        # VISIBLE, CONFIRMED ENTRY:
+        #   The passphrase is shown as it is typed (matching unlock-vault's
+        #   visible entry) and asked for twice. A typo here would lock the
+        #   vault with a passphrase the user does not know, and an empty
+        #   vault cannot be factory-reset without unlocking it first — the
+        #   only way out would be reflashing the stick.
+        #
+        # KEYBOARD UX: zenity --entry places focus on the text field and
+        # OK is the default action, so Enter submits without a mouse
+        # click. --ok-label makes the action verb explicit.
+        while true; do
+            PASSWORD=$(zenity --entry --title="Lock Your Vault" --width=450 \
+                --text="Enter your Master Passphrase (visible):" \
+                --ok-label="Next") || true
+            if [ -z "$PASSWORD" ]; then
+                break
+            fi
+
+            PASSWORD_CONFIRM=$(zenity --entry --title="Lock Your Vault" --width=450 \
+                --text="Type your Master Passphrase again to confirm:" \
+                --ok-label="Set Passphrase") || true
+            if [ -z "$PASSWORD_CONFIRM" ]; then
+                PASSWORD=""
+                break
+            fi
+
+            if [ "$PASSWORD" = "$PASSWORD_CONFIRM" ]; then
+                unset PASSWORD_CONFIRM
+                break
+            fi
+
+            unset PASSWORD_CONFIRM
+            PASSWORD=""
+            zenity --warning --title="Passphrases Don't Match" --width=400 \
+                --text="The two passphrases you typed are different.\n\nPlease type it again." || true
+        done
     fi
 
     if [ -z "$PASSWORD" ]; then
@@ -178,20 +217,20 @@ if [ "$SKIP_VAULT" = false ]; then
 
     # --- Create the LUKS vault ---
     (
-    echo "5"; echo "# Creating vault container (${VAULT_MB}MB)..."
+    echo "5"; echo "# Creating your ${VAULT_MB} MB encrypted vault..."
     sudo dd if=/dev/zero of="$DATA_MOUNT/$VAULT_FILE" bs=1M count="$VAULT_MB" status=none
 
-    echo "20"; echo "# Attaching loop device..."
+    echo "20"; echo "# Preparing the vault..."
     LOOP_DEV=$(sudo losetup --find --show "$DATA_MOUNT/$VAULT_FILE")
 
-    echo "35"; echo "# Encrypting vault with LUKS..."
+    echo "35"; echo "# Locking the vault with your Master Passphrase..."
     printf '%s' "$PASSWORD" | sudo cryptsetup luksFormat -q "$LOOP_DEV" --key-file=-
 
-    echo "50"; echo "# Opening encrypted vault..."
+    echo "50"; echo "# Opening the vault to set it up..."
     printf '%s' "$PASSWORD" | sudo cryptsetup open "$LOOP_DEV" "$MAPPER_NAME" --key-file=-
     udevadm settle --timeout=10
 
-    echo "65"; echo "# Formatting vault filesystem..."
+    echo "65"; echo "# Setting up storage inside the vault..."
     sudo mkfs.ext4 -F -L safekeep-vault /dev/mapper/"$MAPPER_NAME"
 
     # Clean up the vault (remove lost+found, create seeds dir)
@@ -200,11 +239,11 @@ if [ "$SKIP_VAULT" = false ]; then
     sudo rm -rf "$VAULT_MOUNT/lost+found"
     sudo umount "$VAULT_MOUNT"
 
-    echo "80"; echo "# Sealing vault..."
+    echo "80"; echo "# Locking the vault..."
     sudo cryptsetup close "$MAPPER_NAME"
     sudo losetup -d "$LOOP_DEV"
 
-    echo "95"; echo "# Writing state marker..."
+    echo "95"; echo "# Saving setup..."
 
     # Write the state lock marker to the persistent data partition.
     # This tells safekeep-boot.sh that first-boot initialization is complete.
@@ -218,8 +257,8 @@ vault_created=true
 hardening=build-time
 MARKEREOF
 
-    echo "100"; echo "# Vault created successfully!"
-    ) | zenity --progress --title="SafeKeep — Creating Encrypted Vault" \
+    echo "100"; echo "# Your ${VAULT_MB} MB encrypted vault is ready."
+    ) | zenity --progress --title="SafeKeepVault — Creating Your Encrypted Vault" \
         --auto-close --no-cancel --width=450
 
     # Clear password from memory (best effort — bash doesn't guarantee this)
@@ -244,33 +283,49 @@ fi  # end SKIP_VAULT
 
 
 # ===================================================================
-# PHASE 2: MANDATORY SHUTDOWN
+# PHASE 2: CONTINUE NOW, OR SHUT DOWN TO COPY A BACKUP
 # ===================================================================
-# A full shutdown (rather than a reboot) after vault creation gives
-# the user a clean window to physically remove the USB, plug it into
-# another machine, and pre-stage an existing .7z backup onto the
-# transfer partition BEFORE powering the vault back on for restore.
-# This was impossible with a reboot — the drive stayed hot and the
-# user was forced straight into the unlock prompt.
-#
 # All hardening (module blacklists, dconf, etc.) is baked into the
-# squashfs/initramfs at build time and is already active, so no
-# second boot is required to enforce security — shutdown is safe.
+# squashfs/initramfs at build time and is already active, so no second
+# boot is needed to enforce security. The only reason to stop here is
+# a user restoring from a .7z backup: the backup must be on the TRANSFER
+# partition, and the stick has to be unplugged and copied to from
+# another computer while this machine is off.
 #
-# After the user powers the machine back on:
-#   - safekeep-boot.sh runs again
-#   - Sees .setup_complete marker → skips setup-vault entirely
-#   - Sees .vault.luks exists → runs unlock-vault
-#   - User enters passphrase → Chromium launches
+#   Continue now (default) → exit 0. safekeep-boot.sh sees the marker
+#     and exit 0, and runs the normal unlock-vault prompt. Entering the
+#     passphrase there proves it works before any data goes in.
+#   Shut down → power off (fenced below). On the next power-on,
+#     safekeep-boot.sh sees the marker and runs unlock-vault as usual.
+#
+# KEYBOARD UX: plain --list (see the Method dialog above), so Enter on
+# the pre-highlighted first row picks "Continue now". Closing the dialog
+# also continues — the user can still power off from the menu later.
 # ===================================================================
 
-# Unmount the data partition cleanly before shutdown
 sudo umount "$DATA_MOUNT" 2>/dev/null || true
-
-zenity --info --title="SafeKeepVault — Setup Complete" --width=450 \
-    --text="Your SafeKeep device is initialized!\n\n  ✓ Encrypted vault created and locked\n  ✓ All networks permanently disabled (build-time)\n  ✓ Host machine drives blocked (build-time)\n  ✓ USB automount firewall active (build-time)\n  ✓ BadUSB defense enabled (build-time)\n\nThe system will now shut down.\n\nOnce the machine is fully powered off, it is safe\nto remove the USB. If you have an existing .7z\nbackup, plug the USB into another computer and\ncopy the backup onto the TRANSFER partition. Then\nreturn the USB to this machine and power on to\nunlock your vault.\n\nClick OK to shut down now."
-
 sync
+
+# VAULT_MB is only set when this run created the vault (it is measured
+# from the data partition's free space above).
+VAULT_DESC="encrypted vault"
+if [ -n "${VAULT_MB:-}" ]; then
+    VAULT_DESC="${VAULT_MB} MB encrypted vault"
+fi
+
+NEXT_STEP=$(zenity --list --title="SafeKeepVault — Vault Created" --width=520 --height=420 \
+    --text="Your ${VAULT_DESC} is created and locked.\n\nNext, unlock it with the Master Passphrase you just set.\n\nRestoring from a .7z backup? It must be on the stick's TRANSFER drive first. Choose \"Shut down\", copy the backup onto TRANSFER from another computer, then put the stick back and power on." \
+    --column="Next step" --hide-header \
+    "Continue now" \
+    "Shut down to copy a backup onto the stick") || true
+
+if [ "$NEXT_STEP" != "Shut down to copy a backup onto the stick" ]; then
+    echo "setup-vault: vault created — continuing to unlock without a restart."
+    exit 0
+fi
+
+zenity --info --title="SafeKeepVault — Shutting Down" --width=450 \
+    --text="SafeKeepVault will now shut down.\n\nOnce the machine is fully powered off, remove the USB stick and plug it into another computer. Copy your .7z backup onto the TRANSFER drive.\n\nThen put the stick back in this machine and power on to unlock your vault.\n\nClick OK to shut down now." || true
 
 # -------------------------------------------------------------------
 # SHUTDOWN FENCE — prevents first-boot race condition
