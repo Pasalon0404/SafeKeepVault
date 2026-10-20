@@ -59,6 +59,7 @@ const between = (s, a, b) => { const i = s.indexOf(a); if (i < 0) throw new Erro
   ck('casper.service masked (no eject of the stick at shutdown)', /^systemctl mask casper\.service\b/m.test(setup));
   ck('console-setup + setvtrgb masked (boot logo keeps its font and colours)', /^systemctl mask console-setup\.service setvtrgb\.service\b/m.test(setup));
   ck('console-setup udev rule masked (no font reload under the boot logo)', /^ln -sf \/dev\/null \/etc\/udev\/rules\.d\/90-console-setup\.rules$/m.test(setup));
+  ck('splash redrawn after udev settles (graphics driver takeover)', /After=systemd-udev-settle\.service safekeep-splash\.service[\s\S]*ExecStart=\/bin\/cat \/etc\/safekeep-splash\.txt[\s\S]*systemctl enable safekeep-splash-redraw\.service/.test(setup));
   ck('boot logo colours reset bold (22) so colour 3 is not bright yellow', !/\\033\[3[37]m/.test(setup) && !/\\033\[3[37]m/.test(read('safekeep-boot.sh')));
   const build = read('build.sh');
   ck('build.sh passes SAFEKEEP_DEV_SHELL into the chroot', /\/usr\/bin\/env SAFEKEEP_DEV_SHELL="\$SAFEKEEP_DEV_SHELL" \/bin\/bash -c "\/chroot-setup.sh"/.test(build));

@@ -1275,6 +1275,35 @@ SVCEOF
 
 systemctl enable safekeep-splash.service
 
+# --- Step 3.1: Redraw the splash once the graphics driver owns the screen ---
+# The splash above is drawn very early. When the laptop's graphics driver
+# (i915, amdgpu, ...) loads, the kernel hands the console over to it and
+# re-renders what is already on screen; the logo's block and box characters
+# don't survive that (they turn into "?"), while anything written afterwards
+# is fine. The driver is loaded from udev's coldplug, so waiting for
+# systemd-udev-settle means the takeover is over. Then clear tty1 and draw
+# the same splash again, before the X session takes the screen.
+cat > /etc/systemd/system/safekeep-splash-redraw.service << 'SVCEOF'
+[Unit]
+Description=SafeKeep Vault Boot Splash (redraw after the graphics driver takes over)
+DefaultDependencies=no
+Wants=systemd-udev-settle.service
+After=systemd-udev-settle.service safekeep-splash.service
+Before=safekeep-session.service
+
+[Service]
+Type=oneshot
+StandardOutput=tty
+TTYPath=/dev/tty1
+ExecStartPre=/usr/bin/clear
+ExecStart=/bin/cat /etc/safekeep-splash.txt
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+systemctl enable safekeep-splash-redraw.service
+
 # --- Step 3.5: Enable the kiosk session unit ---
 # safekeep-session.service is the permanent replacement for the old
 # getty@tty1-autologin → .profile → startx chain (severed by the hardening
