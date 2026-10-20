@@ -357,10 +357,8 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
 ### Open items / next steps
 
 1. **Before v1.49:**
-   - Flash the full image onto a spare stick and go through first boot
-     once: the console masks and the splash redraw were only tested
-     through in-place updates.
-   - Check boot time (the redraw waits for `systemd-udev-settle`).
+   - Done Oct 20 (build 307): a fresh flash through first boot shows the
+     logo and shutdown screen correctly, and boot time didn't change.
    - Run the tests on the ZBook before tagging.
    - Release notes: people updating from v1.48 may see the scrolling
      errors once on Restart now (v1.48 does that restart); holding the
@@ -381,15 +379,23 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
      One earlier try failed with "Input/output error" at the first write,
      before the update log existed. It hasn't come back. If it does,
      Device Options → Show update log records why.
-3. **Second source for the GPG fingerprint** — publish it outside GitHub
+3. **ZBook keeps asking to restart.** Not a real update: `build.sh`
+   bind-mounts the ZBook's `/run` into the build chroot (line ~268), so
+   installing the image's kernel there writes the ZBook's own
+   `/run/reboot-required` (its `.pkgs` names `linux-image-6.8.0-31-generic`,
+   the image's kernel). Every full build triggers it. Fix later: give the
+   chroot its own tmpfs `/run` (DNS uses a copied `resolv.conf`, nothing
+   else in the build needs the host's `/run`), or put the flag back after
+   the chroot steps. Until then it's harmless.
+4. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
-4. Chromium still runs with `--no-sandbox` and `--disable-web-security`
+5. Chromium still runs with `--no-sandbox` and `--disable-web-security`
    (comments in `safekeep-boot.sh` explain why). Acceptable only because
    the machine is offline and runs only our page.
-5. Not supported yet: Taproot script-path / miniscript signing, saving
+6. Not supported yet: Taproot script-path / miniscript signing, saving
    Silent Payment wallets, matching inputs whose PSBT has no derivation
    path.
-6. Legacy inputs that carry only `witnessUtxo` (no `nonWitnessUtxo`) are
+7. Legacy inputs that carry only `witnessUtxo` (no `nonWitnessUtxo`) are
    still trusted for their amount; Bitcoin Core and most wallets send
    `nonWitnessUtxo` for legacy inputs.
 
