@@ -304,8 +304,9 @@ Phase 1 (in the session) deletes the vault's files, writes `.wipe_pending`
 and restarts; Phase 2 (next boot) zeroes the LUKS header, deletes the
 vault and the marker, then carries on into first-boot setup in the same
 boot. On hardware: first boot (Continue now / Shut down) and backups were
-tested Oct 19–20. **Not yet tested on a stick:** factory reset without
-the second restart, the QR time limit, interrupted-setup recovery.
+tested Oct 19–20; factory reset (one restart, then straight into setup)
+and the 30-second QR limit on Oct 20 (build 307). **Not yet tested on a
+stick:** interrupted-setup recovery (it needs a power cut mid-setup).
 
 **Text consoles (boot logo, shutdown screen).** Lessons from Oct 20, all
 in `chroot-setup.sh` (so they need the full `build.sh`):
@@ -356,8 +357,6 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
 ### Open items / next steps
 
 1. **Before v1.49:**
-   - Hardware-test the v1.48 changes nobody has run on a stick yet:
-     factory reset (straight into setup), the first-boot QR time limit.
    - Flash the full image onto a spare stick and go through first boot
      once: the console masks and the splash redraw were only tested
      through in-place updates.
