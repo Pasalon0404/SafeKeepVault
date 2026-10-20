@@ -167,27 +167,48 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     #
     #   --hide-header drops the column header for a cleaner look since the
     #   column name ("Method") is redundant given the --text label above.
+    #
+    # A failed or timed-out QR scan returns to this method choice (as in
+    # unlock-vault) instead of leaving the user stuck at the camera.
+    # Cancelling the choice or a typed entry still aborts setup.
+    HAS_CAMERA=false
     if ls /dev/video* 1>/dev/null 2>&1; then
-        INPUT_METHOD=$(zenity --list --title="Lock Your Vault" \
-            --text="How would you like to set your Master Passphrase?" \
-            --column="Method" --hide-header \
-            "Scan QR Code" "Type Password") || true
-        if [ -z "$INPUT_METHOD" ]; then
-            sudo umount "$DATA_MOUNT"
-            exit 1
-        fi
-    else
-        INPUT_METHOD="Type Password"
+        HAS_CAMERA=true
     fi
+    QR_SCAN_TIMEOUT=30
 
     PASSWORD=""
-    if [ "$INPUT_METHOD" = "Scan QR Code" ]; then
-        zenity --info --title="Scan QR" --width=350 \
-            --text="Hold your SafeKeep QR code up to the camera.\nThe window will close automatically once read."
-        # Newlines are stripped exactly as unlock-vault does, so the
-        # passphrase set here is byte-for-byte the one unlock will send.
-        PASSWORD=$(zbarcam -1 --raw -Sdisable -Sqr.enable | tr -d '\n') || true
-    else
+    while true; do
+        if [ "$HAS_CAMERA" = true ]; then
+            INPUT_METHOD=$(zenity --list --title="Lock Your Vault" \
+                --text="How would you like to set your Master Passphrase?" \
+                --column="Method" --hide-header \
+                "Scan QR Code" "Type Password") || true
+            if [ -z "$INPUT_METHOD" ]; then
+                sudo umount "$DATA_MOUNT"
+                exit 1
+            fi
+        else
+            INPUT_METHOD="Type Password"
+        fi
+
+        if [ "$INPUT_METHOD" = "Scan QR Code" ]; then
+            zenity --info --title="Scan QR" --width=350 \
+                --text="Hold your SafeKeep QR code up to the camera.\nThe window will close automatically once read (or after ${QR_SCAN_TIMEOUT} seconds)." || true
+            # Same scan as unlock-vault's scan_qr_passphrase(): time limit,
+            # /dev/video0, newlines stripped — so the passphrase set here is
+            # byte-for-byte the one unlock will send. Captured straight into
+            # the variable (no temp file holding the passphrase).
+            PASSWORD=$(timeout "$QR_SCAN_TIMEOUT" zbarcam -1 --raw \
+                -Sdisable -Sqr.enable /dev/video0 2>/dev/null | tr -d '\n') || true
+            if [ -n "$PASSWORD" ]; then
+                break
+            fi
+            zenity --warning --title="Scan Failed" --width=400 \
+                --text="QR scan did not return a result.\nReturning to method selection." || true
+            continue
+        fi
+
         # VISIBLE, CONFIRMED ENTRY:
         #   The passphrase is shown as it is typed (matching unlock-vault's
         #   visible entry) and asked for twice. A typo here would lock the
@@ -224,7 +245,8 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
             zenity --warning --title="Passphrases Don't Match" --width=400 \
                 --text="The two passphrases you typed are different.\n\nPlease type it again." || true
         done
-    fi
+        break
+    done
 
     if [ -z "$PASSWORD" ]; then
         sudo umount "$DATA_MOUNT"
