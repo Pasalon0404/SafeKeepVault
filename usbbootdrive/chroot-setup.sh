@@ -1163,6 +1163,27 @@ echo "  Created /etc/systemd/system.conf.d/20-safekeep-snap-shutdown.conf"
 
 echo "Snap shutdown configured: DefaultTimeoutStopSec=1s (system-wide)."
 
+# ==================================================================
+#  NO EJECT AT SHUTDOWN — mask casper.service
+# ------------------------------------------------------------------
+#  casper.service runs /sbin/casper-stop at the very end of every
+#  shutdown. It "caches" a fixed list of files (halt, reboot, systemd,
+#  plymouth...) and then runs `eject` on the boot device. `noprompt`
+#  on the kernel line only skips the "remove the installation medium"
+#  prompt — the eject still happens. On a USB stick the kernel then
+#  sees a zero-size disk, so any page of the running system that is
+#  not already in RAM fails to load ("sd [sda] access beyond end of
+#  device" / "SQUASHFS error: Failed to read block", scrolling until
+#  the power button is held). It shows up after an in-place update:
+#  writing and reading back ~1.3 GB pushes the running system's pages
+#  out of memory, then Restart now needs them after the eject.
+#
+#  Nothing here needs casper-stop: the stick is never ejected by hand,
+#  there are no persistence snapshots to resync (nopersistent), and
+#  systemd's own shutdown remounts the OS partition read-only.
+systemctl mask casper.service 2>/dev/null || ln -sf /dev/null /etc/systemd/system/casper.service
+echo "casper.service masked: no eject of the USB stick at shutdown."
+
 # --- Step 2: Create the Splash Art File ---
 echo "Creating boot splash art..."
 cat > /etc/safekeep-splash.txt << 'SPLASHEOF'

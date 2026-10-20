@@ -56,6 +56,7 @@ const between = (s, a, b) => { const i = s.indexOf(a); if (i < 0) throw new Erro
     }
     rmSync(root, { recursive: true, force: true });
   }
+  ck('casper.service masked (no eject of the stick at shutdown)', /^systemctl mask casper\.service\b/m.test(setup));
   const build = read('build.sh');
   ck('build.sh passes SAFEKEEP_DEV_SHELL into the chroot', /\/usr\/bin\/env SAFEKEEP_DEV_SHELL="\$SAFEKEEP_DEV_SHELL" \/bin\/bash -c "\/chroot-setup.sh"/.test(build));
   ck('build.sh: anything but 1 means off', /\[ "\$SAFEKEEP_DEV_SHELL" = "1" \] \|\| SAFEKEEP_DEV_SHELL=0/.test(build));
