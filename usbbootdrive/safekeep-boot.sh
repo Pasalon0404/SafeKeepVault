@@ -2995,6 +2995,10 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
         else
             _SKB_BYE_HEADLINE="Session ended. Powering off..."
         fi
+        # X is on vt7 (safekeep-session.service) and is still the visible
+        # console here, so text written to tty1 would never be seen before
+        # the power-off. Bring tty1 to the front first.
+        chvt 1 2>/dev/null || true
         {
             printf '\033[2J\033[H\r'
             skb_logo
@@ -3004,6 +3008,9 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
             printf '\033[90m%s\033[0m\r\n' "                 Destroying all temporary session data in RAM."
             printf '\r\n\r\n'
         } > /dev/tty1 2>/dev/null || true
+        # Leave it on screen for a moment: with 1-second stop timeouts the
+        # power-off itself is over almost at once.
+        sleep 1.5
     fi
 
     # Dispatch: reboot or poweroff based on the user's dashboard selection.
