@@ -1204,6 +1204,16 @@ systemctl mask console-setup.service setvtrgb.service 2>/dev/null || {
 }
 echo "console-setup.service and setvtrgb.service masked: kernel font and palette kept."
 
+# console-setup also ships a udev rule that runs cached_setup_font.sh
+# (setfont + a charset reset on every tty) whenever a console appears.
+# That happens when the graphics driver takes the screen over during
+# boot — after the logo is drawn — and turned its block and box
+# characters into "?". A same-named rule in /etc/udev/rules.d pointing
+# at /dev/null overrides the packaged one.
+mkdir -p /etc/udev/rules.d
+ln -sf /dev/null /etc/udev/rules.d/90-console-setup.rules
+echo "90-console-setup.rules masked: no console font reload during boot."
+
 # --- Step 2: Create the Splash Art File ---
 # Same two-tone logo as skb_logo in safekeep-boot.sh (keep the two in
 # step). The file holds raw escape codes: OSC P redefines palette colour
@@ -1216,7 +1226,7 @@ echo "Creating boot splash art..."
     printf '\033]P3F7931A'
     printf '\n\n'
     while IFS= read -r _skb_line; do
-        _skb_line=${_skb_line//█/$'\033[33m'█$'\033[90m'}
+        _skb_line=${_skb_line//█/$'\033[22;33m'█$'\033[90m'}
         printf '\033[90m%s\033[0m\n' "$_skb_line"
     done << 'SPLASHLOGO'
         ███████╗ █████╗ ███████╗███████╗██╗  ██╗███████╗███████╗██████╗
@@ -1235,11 +1245,11 @@ SPLASHLOGO
     printf '\n'
     printf '\033[90m%b\033[0m\n' \
         "                     ╔═══════════════════════════════════╗" \
-        "                     ║             \033[37mloading...\033[90m            ║" \
+        "                     ║             \033[22;37mloading...\033[90m            ║" \
         "                     ╚═══════════════════════════════════╝"
     printf '\n'
-    printf '\033[37m%s\033[0m\n' "                            Air-gapped. Open source."
-    printf '                \033[90m────────────\033[37m  don'"'"'t trust, verify.  \033[90m────────────\033[0m\n'
+    printf '\033[22;37m%s\033[0m\n' "                            Air-gapped. Open source."
+    printf '                \033[90m────────────\033[22;37m  don'"'"'t trust, verify.  \033[90m────────────\033[0m\n'
     printf '\n'
 } > /etc/safekeep-splash.txt
 

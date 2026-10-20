@@ -62,13 +62,16 @@ echo ""
 # below redefines as Bitcoin orange (#F7931A) on the Linux console;
 # the box-drawing "shadow" is dark grey (90). A console that ignores the
 # palette escape just shows its usual colour 3 (dark orange).
+# On the Linux console 90 (dark grey) also turns on bold, and bold turns
+# colour 3 into bright yellow, so every other colour starts with 22
+# (normal intensity): 22;33 orange, 22;37 light grey.
 #
 # STRICT single-quoted heredoc: no expansion of the art. Every line is
 # ended with an explicit \r\n so a raw tty with `onlcr` off doesn't
 # produce the "staircase" effect. Every row is ≤80 columns.
 # ------------------------------------------------------------------
 skb_logo() {
-    local _skb_line _skb_orange=$'\033[33m' _skb_shadow=$'\033[90m'
+    local _skb_line _skb_orange=$'\033[22;33m' _skb_shadow=$'\033[90m'
     printf '\033]P3F7931A'
     printf '\r\n\r\n'
     while IFS= read -r _skb_line; do
@@ -99,7 +102,7 @@ skb_tagline() {
     local _skb_w=$(( 12 * 2 + ${#_skb_text} ))
     local _skb_pad=$(( (80 - _skb_w) / 2 ))
     if [ "$_skb_pad" -lt 0 ]; then _skb_pad=0; fi
-    printf '%*s\033[90m%s\033[37m%s\033[90m%s\033[0m\r\n' "$_skb_pad" '' "$_skb_rule" "$_skb_text" "$_skb_rule"
+    printf '%*s\033[90m%s\033[22;37m%s\033[90m%s\033[0m\r\n' "$_skb_pad" '' "$_skb_rule" "$_skb_text" "$_skb_rule"
 }
 
 # tty1 BOOT SPLASH — shown while the boot script runs
