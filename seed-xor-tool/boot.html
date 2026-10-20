@@ -9519,14 +9519,17 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                             <button type="button" class="skb-btn" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; border-radius: 3px;" onclick="rlq_scanPassword('backup')" title="Scan password via QR">Scan QR</button>
                         </div>
                     </div>
-                    <input type="password" id="rlq-backup-password" placeholder="AES-256 encryption password" autocomplete="off" style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono);">
+                    <input type="password" id="rlq-backup-password" placeholder="AES-256 encryption password" autocomplete="off" oninput="rlq_onBackupPasswordInput()" style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono);">
                     <!-- QR Scanner area for backup password -->
                     <div id="rlq-pw-qr-backup" style="display: none; margin-top: 0.5rem;">
                         <div id="rlq-pw-qr-reader-backup" style="border-radius: 8px; overflow: hidden;"></div>
                         <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="rlq_stopPasswordScan('backup')">Stop Scanner</button>
                     </div>
+                    <!-- Shown instead of Confirm Password after a QR scan (see _rlqSetBackupFromQr) -->
+                    <div id="rlq-pw-qr-note" style="display: none; font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.35rem; padding: 0.3rem 0.5rem; background: var(--skb-bg-input); border-radius: var(--skb-radius-sm);">Scanned from a QR code, so there's no need to confirm it. If you type in the field above, you'll be asked to confirm again.</div>
 
                     <!-- Confirm Password -->
+                    <div id="rlq-confirm-block">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; margin-top: 0.75rem;">
                         <label style="font-size: 0.8rem; color: var(--skb-text-muted);">Confirm Password</label>
                         <div style="display: flex; gap: 0.35rem;">
@@ -9541,6 +9544,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     <div id="rlq-pw-qr-confirm" style="display: none; margin-top: 0.5rem;">
                         <div id="rlq-pw-qr-reader-confirm" style="border-radius: 8px; overflow: hidden;"></div>
                         <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="rlq_stopPasswordScan('confirm')">Stop Scanner</button>
+                    </div>
                     </div>
                 </div>
 
@@ -35644,13 +35648,45 @@ async function rlq_scanPassword(target) {
             var parsed = window.QRParser
                 ? window.QRParser.parseQRScan(text, binaryData)
                 : text;
-            document.getElementById(fieldId).value = (parsed || '').trim();
-            showStatus('Password scanned via QR — field populated.', 'success');
+            var scanned = (parsed || '').trim();
+            document.getElementById(fieldId).value = scanned;
+            if (target === 'backup') {
+                // A scanned password can't have a typo, so don't make the
+                // user scan the same code again into Confirm Password.
+                document.getElementById('rlq-confirm-password').value = scanned;
+                _rlqSetBackupFromQr(true);
+                showStatus('Password scanned via QR — no need to confirm it.', 'success');
+            } else {
+                showStatus('Password scanned via QR — field populated.', 'success');
+            }
         });
     } catch (err) {
         document.getElementById(wrapperId).style.display = 'none';
         showStatus('Camera access denied or unavailable: ' + err.message, 'error');
     }
+}
+
+/**
+ * Backup password filled from a QR scan: hide Confirm Password (it was
+ * filled with the same value) and show a note instead. Turning it off
+ * clears and shows Confirm Password again, so a typed password still
+ * has to be entered twice.
+ */
+var _rlqBackupFromQr = false;
+
+function _rlqSetBackupFromQr(on) {
+    _rlqBackupFromQr = on;
+    var block = document.getElementById('rlq-confirm-block');
+    var note = document.getElementById('rlq-pw-qr-note');
+    var mismatchEl = document.getElementById('rlq-pw-mismatch');
+    if (block) block.style.display = on ? 'none' : '';
+    if (note) note.style.display = on ? 'block' : 'none';
+    if (mismatchEl) mismatchEl.style.display = 'none';
+    if (!on) document.getElementById('rlq-confirm-password').value = '';
+}
+
+function rlq_onBackupPasswordInput() {
+    if (_rlqBackupFromQr) _rlqSetBackupFromQr(false);
 }
 
 function rlq_stopPasswordScan(target) {
@@ -36164,9 +36200,7 @@ function rlq_init() {
     });
     document.getElementById('rlq-seed-modal').style.display = 'none';
     document.getElementById('rlq-backup-password').value = '';
-    document.getElementById('rlq-confirm-password').value = '';
-    var mismatchEl = document.getElementById('rlq-pw-mismatch');
-    if (mismatchEl) mismatchEl.style.display = 'none';
+    _rlqSetBackupFromQr(false);
     document.getElementById('rlq-export-result').style.display = 'none';
 }
 
