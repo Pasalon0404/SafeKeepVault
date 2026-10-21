@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Oct 20, 2026).**
+> **Start with the "Current state" section below (updated Oct 21, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,19 +9,28 @@
 
 ---
 
-## Current state (Oct 20, 2026) — v1.48 plus unreleased work on `main`
+## Current state (Oct 21, 2026) — v1.50
 
-The last release is **v1.48** (Oct 20), the first with an update file:
-v1.47 sticks install it in place from Device Options → Update SafeKeep.
-`seed-xor-tool/VERSION` says 1.48: features merge to `main` without a bump,
-and builds from `main` are for the owner's own use until the owner says
-it's release time (see `CLAUDE.md`). The version stamp shows the exact
-commit, e.g. `v1.48 · build 307 · e86560c`.
+The last release is **v1.50** (Oct 21, `v1.50 · build 315 · ff1e6c3`):
+safer seed generation (see "Seed entropy" below). v1.47, v1.48 and v1.49
+sticks install it in place from Device Options → Update SafeKeep.
+v1.49 (Oct 20) added the boot logo, the visible shutdown screen and the
+clean restart after an update. `seed-xor-tool/VERSION` says 1.50: features
+merge to `main` without a bump, and builds from `main` are for the owner's
+own use until the owner says it's release time (see `CLAUDE.md`).
 
-Unreleased on `main` (for v1.49): the new two-tone SAFEKEEP / VAULT boot
-logo, a shutdown screen that is actually visible, and the shutdown fix
-for Restart now after an update (see "Text consoles" below). All tested
-on Dave's stick through in-place updates (builds 303–307).
+Release notes for v1.50:
+- **Version numbers are two whole numbers.** The updater compares
+  (major, minor, build), so 1.5 is *older* than 1.49. After 1.49 comes
+  1.50; never drop the trailing zero.
+- **The release workflow runs `test-entropy-built.mjs` after the build**
+  (it needs `dist/boot.html`), with the runner's Google Chrome.
+- **Where make-update.sh writes:** the `.tar` goes in
+  `/home/safekeep-build/` and `manifest.json` in `workspace/update/`.
+  For v1.50 the tar was first fetched from the wrong folder, so
+  `tar -rf` made a 2.5 KB signature-only file and that got uploaded; it
+  was replaced the same day. Check the tar is about 1.3 GB before
+  uploading.
 
 ### Working with Dave (the owner)
 
@@ -365,19 +374,14 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
   on phones; the phone rule in `CLAUDE.md` doesn't apply to it).
 - Update the website only at release time (`CLAUDE.md`). Prepare it on a
   branch with TODO hashes, fill them in from the published release, then
-  open a PR for Dave to merge (as for v1.47 and v1.48). The live site is
-  up to date with v1.48.
+  open a PR for Dave to merge (as for v1.47–v1.50). The v1.50 website PR
+  is Safekeep-Website #19 (branch `release-v1.50`).
 
 ### Open items / next steps
 
-1. **Before v1.49:**
-   - Done Oct 20 (build 307): a fresh flash through first boot shows the
-     logo and shutdown screen correctly, and boot time didn't change.
-   - Run the tests on the ZBook before tagging.
-   - Release notes: people updating from v1.48 may see the scrolling
-     errors once on Restart now (v1.48 does that restart); holding the
-     power button is safe. The download page's update notice needs the
-     v1.49 file name, for v1.47 and v1.48 sticks.
+1. **After v1.50:** merge Safekeep-Website #19. The v1.50 update file has
+   not yet been installed on a stick from the release itself; the same
+   code was tested on Dave's stick as build 313.
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer

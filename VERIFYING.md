@@ -147,8 +147,11 @@ it is about to install. Before flashing, check that it equals the release's
    sudo bash make-update.sh        # on the build machine
    ```
    Check that its `app sha256` matches the `boot.html` line of `SHA256SUMS`.
-   Copy `SafeKeep-Update-v1.36.tar` and `manifest.json` to the Mac, then sign
-   the manifest and add the signature to the update file:
+   Copy `SafeKeep-Update-v1.36.tar` (in the build folder itself) and
+   `manifest.json` (in `workspace/update/`) to the Mac, then sign the
+   manifest and add the signature to the update file. Check the `.tar` is
+   there first (about 1.3 GB): `tar -rf` on a missing file quietly creates a
+   new one that holds only the signature.
    ```sh
    gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign manifest.json
    tar -rf SafeKeep-Update-v1.36.tar manifest.json.asc
