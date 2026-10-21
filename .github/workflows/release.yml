@@ -65,6 +65,7 @@ jobs:
       - name: Run tests
         run: |
           for f in test-*.mjs; do
+            [ "$f" = test-entropy-built.mjs ] && continue   # needs dist/: runs after the build
             echo "::group::$f"
             node "$f"
             echo "::endgroup::"
@@ -81,6 +82,9 @@ jobs:
           npm run build
           cmp "$RUNNER_TEMP/boot-first.html" dist/boot.html
           echo "Two builds produced identical bytes."
+
+      - name: Test seed generation in the built app
+        run: CHROMIUM_BINARY="$(command -v google-chrome || command -v chromium)" node test-entropy-built.mjs
 
       - name: Check the version stamp
         run: |
