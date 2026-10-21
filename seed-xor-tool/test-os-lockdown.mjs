@@ -63,6 +63,7 @@ const between = (s, a, b) => { const i = s.indexOf(a); if (i < 0) throw new Erro
   ck('boot logo colours reset bold (22) so colour 3 is not bright yellow', !/\\033\[3[37]m/.test(setup) && !/\\033\[3[37]m/.test(read('safekeep-boot.sh')));
   const build = read('build.sh');
   ck('build.sh passes SAFEKEEP_DEV_SHELL into the chroot', /\/usr\/bin\/env SAFEKEEP_DEV_SHELL="\$SAFEKEEP_DEV_SHELL" \/bin\/bash -c "\/chroot-setup.sh"/.test(build));
+  ck('build.sh: chroot gets its own /run, not the build machine\'s', !/mount --bind \/run\b/.test(build) && /mount -t tmpfs [^\n]*"\$CHROOT_DIR\/run"/.test(build));
   ck('build.sh: anything but 1 means off', /\[ "\$SAFEKEEP_DEV_SHELL" = "1" \] \|\| SAFEKEEP_DEV_SHELL=0/.test(build));
   ck('quick-update.sh warns about a developer OS tree', /etc\/safekeep-dev-shell/.test(read('quick-update.sh')));
   ck('File Explorer launcher only in developer builds', /if \[ "\$\{SAFEKEEP_DEV_SHELL:-0\}" = "1" \]; then\ncat > \/usr\/share\/applications\/safekeep-files.desktop/.test(setup));

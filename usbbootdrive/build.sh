@@ -265,7 +265,14 @@ echo "Chromium enterprise policy installed at /etc/chromium/policies/managed/saf
 
 # Bind-mount host systems for chroot
 mount --bind /dev "$CHROOT_DIR/dev"
-mount --bind /run "$CHROOT_DIR/run"
+# The chroot gets its own empty /run, NOT the build machine's. With the
+# host's /run bound in, package scripts inside the chroot wrote to the
+# host: installing the image's kernel created the build machine's own
+# /run/reboot-required, so it asked to be restarted after every full
+# build. DNS doesn't need the host's /run (resolv.conf is copied below).
+mount -t tmpfs -o mode=0755,size=64M tmpfs "$CHROOT_DIR/run"
+mkdir -p "$CHROOT_DIR/run/lock"
+chmod 1777 "$CHROOT_DIR/run/lock"
 mount -t proc proc "$CHROOT_DIR/proc"
 mount -t sysfs sysfs "$CHROOT_DIR/sys"
 

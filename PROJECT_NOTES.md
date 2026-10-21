@@ -379,14 +379,12 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
      One earlier try failed with "Input/output error" at the first write,
      before the update log existed. It hasn't come back. If it does,
      Device Options → Show update log records why.
-3. **ZBook keeps asking to restart.** Not a real update: `build.sh`
-   bind-mounts the ZBook's `/run` into the build chroot (line ~268), so
-   installing the image's kernel there writes the ZBook's own
-   `/run/reboot-required` (its `.pkgs` names `linux-image-6.8.0-31-generic`,
-   the image's kernel). Every full build triggers it. Fix later: give the
-   chroot its own tmpfs `/run` (DNS uses a copied `resolv.conf`, nothing
-   else in the build needs the host's `/run`), or put the flag back after
-   the chroot steps. Until then it's harmless.
+3. **ZBook "restart required" (fixed Oct 20).** It wasn't a real update:
+   `build.sh` bind-mounted the ZBook's `/run` into the build chroot, so
+   installing the image's kernel there created the ZBook's own
+   `/run/reboot-required` on every full build. The chroot now gets its own
+   tmpfs `/run` (`test-os-lockdown.mjs` checks it); a full build after the
+   change left no flag. The desktop's restart icon only clears on a restart.
 4. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
 5. Chromium still runs with `--no-sandbox` and `--disable-web-security`
