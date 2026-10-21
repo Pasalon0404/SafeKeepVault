@@ -10,12 +10,16 @@
  *      "suspicious or worse" about 5%; a loaded die (one face twice as likely)
  *      is caught almost always at 300 rolls.
  *   4. boot.html wiring: the panel exists, only hand-entered rolls feed it,
- *      both reset paths clear it, and boot-entry.js loads the module.
+ *      all three reset paths clear it, and boot-entry.js loads the module.
+ *   5. Pattern check: made-up sequences (123456…, 112233…, 1111…) that the
+ *      chi-squared test calls fair are caught; Verifiable mode refuses them,
+ *      asks to confirm unusual rolls, and passes ordinary ones. Simulated
+ *      fair dice are never refused and asked to confirm about 1% of the time.
  *
  * Run:  node test-dice-fairness.mjs
  */
 
-import { assessDice, chiSquaredPValue, describeAssessment } from './shared/dice-fairness.js';
+import { assessDice, chiSquaredPValue, describeAssessment, findRollPatterns, verifiableDiceGate, PATTERN_LIMITS } from './shared/dice-fairness.js';
 import { readFileSync } from 'node:fs';
 import { randomInt } from 'node:crypto';
 
@@ -94,8 +98,47 @@ console.log('\n4. boot.html wiring');
     ck('manual dice handler records the roll and re-renders', handler.includes('_eobDiceRolls.push(') && handler.includes('eob_renderDiceFairness()'));
     const others = html.slice(html.indexOf('function eob_handleWiggle('), html.indexOf('async function eob_captureVideoNoise(') + 2000);
     ck('mouse and camera do not feed the check', !others.includes('_eobDiceRolls'));
-    ck('both reset paths clear the rolls', (html.match(/\n {4}_eobDiceRolls = \[\];/g) || []).length === 2);
-    ck('both reset paths re-render the panel', (html.match(/eob-dice-count'\)\.textContent = '0';\n\s*eob_renderDiceFairness\(\);/g) || []).length === 2);
+    ck('all reset paths clear the rolls', (html.match(/\n {4}_eobDiceRolls = \[\];/g) || []).length === 3);
+    ck('all reset paths re-render the panel', (html.match(/eob-dice-count'\)\.textContent = '0';\n\s*eob_renderDiceFairness\(\);/g) || []).length === 3);
+    const render = html.slice(html.indexOf('function eob_renderDiceFairness('), html.indexOf('// --- Method B: Playing Cards ---'));
+    ck('panel shows the pattern check over the fairness verdict', render.includes('DF.findRollPatterns(_eobDiceRolls)') && render.includes('these rolls are not random'));
+    ck('any change to the rolls clears the confirmation', render.includes('confirmCheck.checked = false'));
+    ck('switching mode re-renders the panel', html.slice(html.indexOf('function eob_setEntropyMode('), html.indexOf('function _eobVerifiableGate(')).includes('eob_renderDiceFairness();'));
+}
+
+console.log('\n5. Pattern check');
+{
+    const seq = (s) => s.split('').map(Number);
+    const MADE_UP = {
+        '123456 repeated': '123456'.repeat(9).slice(0, 50),
+        '654321 repeated': '654321'.repeat(9).slice(0, 50),
+        '112233445566 repeated': '112233445566'.repeat(5).slice(0, 50),
+        '135 repeated': '135'.repeat(17).slice(0, 50),
+        '12 repeated': '12'.repeat(25),
+        'all ones': '1'.repeat(50),
+        '24 words, 123456 repeated': '123456'.repeat(17).slice(0, 99),
+        '20 ones then real rolls': '1'.repeat(20) + '351624613521645236134526163452',
+    };
+    for (const [name, s] of Object.entries(MADE_UP)) {
+        ck(`${name}: chi-squared alone ${assessDice(seq(s)).verdict.id === 'ok' ? 'calls it fair' : 'flags it'}; pattern check refuses it`,
+            findRollPatterns(seq(s)).level === 'pattern' && verifiableDiceGate(seq(s)).id === 'block', JSON.stringify(findRollPatterns(seq(s)).reasons));
+    }
+    ck('123456… has a plain-English reason', /repeats every 6 rolls/.test(findRollPatterns(seq(MADE_UP['123456 repeated'])).reasons.join()));
+    ck('fewer than 30 rolls are never judged', findRollPatterns(Array(29).fill(1)).level === 'none');
+    ck('SeedSigner\'s own patterned vector would be refused here', verifiableDiceGate(seq('12345612345612345612345612345612345612345612345612')).id === 'block');
+    const real = seq('35162461352164523613452616345216345261346521634526');
+    ck('ordinary rolls pass', findRollPatterns(real).level === 'none' && verifiableDiceGate(real).id === 'ok', JSON.stringify(findRollPatterns(real)));
+    const run8 = real.slice(0, 42).concat(Array(8).fill(6));
+    ck('a run of 8 is unusual: confirm, not refuse', findRollPatterns(run8).level === 'suspicious' && verifiableDiceGate(run8).id === 'confirm');
+    ck('a likely-biased die needs confirming', verifiableDiceGate(seq('6'.repeat(20) + '1'.repeat(5) + '6'.repeat(1) + '2345'.repeat(6))).id !== 'ok');
+    ck('limits are frozen', Object.isFrozen(PATTERN_LIMITS));
+    for (const N of [50, 99]) {
+        const TRIALS = 20000;
+        const c = { ok: 0, confirm: 0, block: 0 };
+        for (let t = 0; t < TRIALS; t++) c[verifiableDiceGate(Array.from({ length: N }, () => randomInt(1, 7))).id]++;
+        ck(`${N} fair rolls: never refused (${c.block} of ${TRIALS})`, c.block === 0);
+        ck(`${N} fair rolls: asked to confirm about 1% (got ${(c.confirm / TRIALS * 100).toFixed(2)}%)`, c.confirm / TRIALS < 0.025);
+    }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

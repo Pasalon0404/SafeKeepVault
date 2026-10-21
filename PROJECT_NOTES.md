@@ -193,6 +193,20 @@ How every change to the boot scripts or the OS was tested on Oct 20
 
 ### How key subsystems work now
 
+**Seed entropy** (reviewed after COLDCARD's 2026 weak-seed losses, whose
+cause was a build change that quietly swapped the random generator).
+Every seed draw goes through `drawCheckedRandom` in
+`shared/entropy-harden.js`: it refuses a `getRandomValues` replaced by
+script, and output that is zeros, constant, counting, uneven or a repeat
+of the last draw. 1-click = SHA-256(device32 || background salt). Entropy
+Generator Mixed = SHA-256("SafeKeepVault/entropy-mix/v1" || device32 ||
+SHA-256(pool)), and the pool empties after each seed. The mouse earns 0.25
+bits a sample and at most half the target. Verifiable dice (SHA-256 of the
+rolls, nothing mixed in) refuses patterned rolls such as 123456123456…
+and asks the user to confirm unusual ones (`shared/dice-fairness.js`).
+`test-entropy-built.mjs` drives all of this in the built `dist/boot.html`
+in Chrome: run it after `npm run build` whenever the seed code changes.
+
 **Browser ↔ OS bridge.** Chromium runs as a kiosk on `file://` and can't
 call the OS directly. The app "downloads" small trigger files. The
 enterprise policy (written at launch by `safekeep-boot.sh`) routes them

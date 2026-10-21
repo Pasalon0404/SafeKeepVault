@@ -8,17 +8,21 @@
  *   3. Camera noise bits: lowest bit of R, G, B only, packed LSB-first.
  *   4. Camera credit: 0 without a previous frame, for a repeated or nearly
  *      repeated frame, or for an all-0 / all-1 frame; 4 bits otherwise.
- *   5. Credits: mouse 0.5, dice log2(6), camera 4; no digital-dice source.
+ *   5. Credits: mouse 0.25 (at most half the target), dice log2(6),
+ *      camera 4; no digital-dice source.
  *   6. Playing cards: key parsing, labels, log2(cards left) per card, a full
  *      deck worth log2(52!).
  *   7. boot.html wiring: no hard-coded credits left, the verifiable path skips
- *      the CSPRNG mix, the camera uses the noise bits, resets go back to Mixed.
+ *      the CSPRNG mix and is gated by the pattern check, Mixed hashes the pool
+ *      with the device draw, the pool empties after a seed, the camera uses
+ *      the noise bits, resets go back to Mixed. test-entropy-built.mjs runs
+ *      the same paths in the built app.
  *
  * Run:  node test-entropy-sources.mjs
  */
 
 import {
-    ENTROPY_CREDIT, VERIFIABLE_DICE_ROLLS, verifiableRollsNeeded,
+    ENTROPY_CREDIT, MOUSE_SHARE_MAX, mouseCredit, VERIFIABLE_DICE_ROLLS, verifiableRollsNeeded,
     diceRollsToEntropy, cameraFrameLsbs, cameraFrameCredit,
     DECK_SIZE, CARD_RANKS, CARD_SUITS, cardRankFromKey, cardSuitFromKey, cardLabel, cardCredit,
 } from './shared/entropy-sources.js';
@@ -114,7 +118,16 @@ console.log('\n4. Camera credit');
 
 console.log('\n5. Credits');
 ck('no digital-dice credit', !('digitalDice' in ENTROPY_CREDIT));
-ck('mouse credit 0.5', ENTROPY_CREDIT.mouseSample === 0.5);
+ck('mouse credit 0.25', ENTROPY_CREDIT.mouseSample === 0.25);
+ck('mouse may fill half the target', MOUSE_SHARE_MAX === 0.5);
+ck('mouse credit while under the cap', mouseCredit(0, 128) === 0.25 && mouseCredit(63.75, 128) === 0.25);
+ck('mouse credit tops up to the cap exactly', mouseCredit(63.9, 128) > 0 && Math.abs(63.9 + mouseCredit(63.9, 128) - 64) < 1e-9);
+ck('no mouse credit at or over the cap', mouseCredit(64, 128) === 0 && mouseCredit(100, 128) === 0 && mouseCredit(128, 256) === 0);
+{
+    let bits = 0, n = 0;
+    while (true) { const c = mouseCredit(bits, 256); if (!c) break; bits += c; n++; }
+    ck('24 words: 512 samples reach the mouse cap of 128 bits', n === 512 && bits === 128, `${n} samples, ${bits} bits`);
+}
 ck('dice credit log2(6)', ENTROPY_CREDIT.diceRoll === Math.log2(6));
 ck('camera credit 4 per frame', ENTROPY_CREDIT.cameraFrame === 4);
 ck('credits are frozen', Object.isFrozen(ENTROPY_CREDIT));
@@ -154,7 +167,11 @@ console.log('\n7. boot.html wiring');
     ck('Digital Dice card and function are gone',
         !html.includes('eob_rollDigitalDice') && !html.includes('eob-card-digital') && !html.includes('eob-digital-count') && !html.includes('_eobDigitalCount'));
     const wiggle = fn('function eob_handleWiggle');
-    ck('mouse uses the 0.5-bit credit', wiggle.includes("_eobCredit('mouseSample')"));
+    ck('mouse uses the capped credit', wiggle.includes('ES.mouseCredit(_eobMouseBits, _targetEntropyBits)') && wiggle.includes('_eobMouseBits += credit'));
+    ck('mouse samples record fine timing', wiggle.includes('performance.now()') && wiggle.includes('e.timeStamp'));
+    ck('meter and button use the capped count', fn('function eob_updateMeter').includes('_eobCountedBits()') && fn('function _eobCanForge').includes('_eobCountedBits() >= _targetEntropyBits'));
+    ck('fallback credit matches the module', html.includes('{ diceRoll: Math.log2(6), mouseSample: 0.25, cameraFrame: 4 }'));
+    ck('every reset clears the mouse credit', (html.match(/\n {4}_eobMouseBits = 0;/g) || []).length === 3);
     const cam = fn('async function eob_captureVideoNoise');
     ck('camera samples noise bits, not every 17th byte', cam.includes('cameraFrameLsbs') && cam.includes('cameraFrameCredit') && !cam.includes('i += 17'));
     const dice = fn('function eob_handleDiceKey');
@@ -172,14 +189,22 @@ console.log('\n7. boot.html wiring');
     ck('forge gate uses _eobCanForge', forge.includes('if (!_eobCanForge()) return;'));
     ck('verifiable forge uses diceRollsToEntropy', verifiableBranch.includes('diceRollsToEntropy(_eobDiceRolls'));
     ck('verifiable forge skips the CSPRNG mix', !verifiableBranch.includes('getRandomValues') && !verifiableBranch.includes('^'));
-    ck('mixed forge still XORs with the CSPRNG', forge.includes('crypto.getRandomValues(sysEntropy)') && forge.includes('userEntropy[_mi] ^ sysEntropy[_mi]'));
+    ck('mixed forge hashes the pool with a checked device draw', forge.includes('Mix.mixWithDeviceRandom(hashArray, entropyLength)'));
+    ck('mixed forge no longer XORs', !forge.includes('^ sysEntropy') && !forge.includes('getRandomValues'));
+    ck('mixed forge empties the pool afterwards', forge.includes('_eobResetCollection();'));
+    const resetFn = fn('function _eobResetCollection');
+    ck('_eobResetCollection clears pool, credits, rolls, cards and mouse',
+        ['_activeEntropyPool = \'\';', '_eobEstimatedBits = 0;', '_eobDiceRolls = [];', '_eobDeckCards = [];', '_eobMouseBits = 0;', 'eob_updateMeter();'].every((x) => resetFn.includes(x)));
     const canForge = fn('function _eobCanForge');
-    ck('verifiable needs exactly the roll count', canForge.includes('_eobDiceRolls.length === _eobRollsNeeded()'));
+    ck('verifiable needs exactly the roll count', canForge.includes('_eobDiceRolls.length !== _eobRollsNeeded()) return false'));
+    ck('verifiable refuses a pattern and needs confirmation for unusual rolls',
+        canForge.includes("gate.id === 'block') return false") && canForge.includes("gate.id === 'confirm'") && canForge.includes('eob-dice-confirm-check'));
+    ck('confirmation box exists', html.includes('id="eob-dice-confirm"') && html.includes('id="eob-dice-confirm-check"'));
     ck('roll counts in boot.html match the module (50 / 99)', fn('function _eobRollsNeeded').includes('? 50 : 99'));
     ck('eob_init resets to Mixed', fn('function eob_init').includes("eob_setEntropyMode('mixed')"));
     // Every Entropy Generator function must still parse (a stray quote in a
     // string breaks the whole inline script, and eob_init with it).
-    for (const name of ['function eob_init', 'function eob_setEntropyMode', 'function _eobCanForge', 'function eob_updateMeter',
+    for (const name of ['function eob_init', 'function eob_setEntropyMode', 'function _eobVerifiableGate', 'function _eobCountedBits', 'function _eobCanForge', 'function _eobResetCollection', 'function eob_renderDiceFairness', 'function eob_updateMeter',
         'function eob_handleDiceKey', 'function _eobRenderCards', 'function eob_handleCardKey', 'function eob_newDeck', 'function eob_handleWiggle', 'async function eob_captureVideoNoise', 'async function eob_forgeSeed']) {
         let ok = true, err = '';
         try { new Function(fn(name).replace(/^async function/, 'return async function').replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }

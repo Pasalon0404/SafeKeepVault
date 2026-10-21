@@ -6,9 +6,10 @@
  *
  *   - Physical dice: log2(6) ≈ 2.585 bits per roll (a fair die; the
  *     fairness panel checks that assumption).
- *   - Mouse movement: 0.5 bits per sample. Pointer paths are smooth and
- *     partly predictable, so a coordinate pair is worth far less than its
- *     size suggests.
+ *   - Mouse movement: 0.25 bits per sample, and at most half the target
+ *     (64 of 128 bits, 128 of 256) from the mouse in total. Pointer paths
+ *     are smooth and partly predictable, the position is on screen, and a
+ *     few seconds of wiggling shouldn't be able to fill the meter alone.
  *   - Camera: 4 bits per frame, and only for a frame whose sensor-noise
  *     bits (the lowest bit of each R, G and B value) actually changed from
  *     the previous frame and aren't stuck at all-0 or all-1.
@@ -30,9 +31,21 @@
 
 export const ENTROPY_CREDIT = Object.freeze({
     diceRoll: Math.log2(6),
-    mouseSample: 0.5,
+    mouseSample: 0.25,
     cameraFrame: 4,
 });
+
+/** Most the mouse may add towards a target of `targetBits`: half of it. */
+export const MOUSE_SHARE_MAX = 0.5;
+
+/**
+ * Credit for one more mouse sample when the mouse has already been credited
+ * `mouseBitsSoFar` towards `targetBits`. Zero once the mouse's share is full.
+ */
+export function mouseCredit(mouseBitsSoFar, targetBits) {
+    const room = targetBits * MOUSE_SHARE_MAX - mouseBitsSoFar;
+    return room > 0 ? Math.min(ENTROPY_CREDIT.mouseSample, room) : 0;
+}
 
 export const DECK_SIZE = 52;
 export const CARD_RANKS = Object.freeze(['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']);
@@ -143,7 +156,7 @@ export function cameraFrameCredit(lsbs, prevLsbs) {
 
 if (typeof window !== 'undefined') {
     window.EntropySources = {
-        ENTROPY_CREDIT, VERIFIABLE_DICE_ROLLS, verifiableRollsNeeded,
+        ENTROPY_CREDIT, MOUSE_SHARE_MAX, mouseCredit, VERIFIABLE_DICE_ROLLS, verifiableRollsNeeded,
         DECK_SIZE, CARD_RANKS, CARD_SUITS, cardRankFromKey, cardSuitFromKey, cardLabel, cardCredit,
         diceRollsToEntropy, cameraFrameLsbs, cameraFrameCredit,
     };

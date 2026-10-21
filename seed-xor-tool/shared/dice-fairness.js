@@ -119,6 +119,99 @@ export function describeAssessment(r) {
     }
 }
 
+/*
+ * Pattern check. The chi-squared test only looks at how often each face
+ * came up, so made-up rolls such as 123456123456… or 112233445566… score as
+ * perfectly fair. In Verifiable mode the rolls are the whole seed, and a seed
+ * from a pattern can be guessed. These checks look at the order of the rolls.
+ *
+ * Thresholds come from 200,000 simulated runs of 50 and of 99 fair rolls
+ * (test-dice-fairness.mjs repeats a smaller simulation):
+ *   - repeat at a fixed distance (1–12 rolls apart): fair dice ≤ 0.48 of the
+ *     time at most, about 1/6 on average. Pattern at 0.6, suspicious at 0.5.
+ *   - the same step from one roll to the next (+1, +2, … mod 6): fair dice
+ *     ≤ 0.47. Pattern at 0.6, suspicious at 0.5.
+ *   - longest run of one face: 99.9% of fair runs stay ≤ 7. Suspicious at 8,
+ *     pattern at 15.
+ *   - three or fewer different faces in 30+ rolls: about 1 in 10^8 or rarer
+ *     for fair dice. Pattern.
+ */
+export const PATTERN_LIMITS = Object.freeze({
+    repeatPattern: 0.6, repeatSuspicious: 0.5, maxPeriod: 12,
+    stepPattern: 0.6, stepSuspicious: 0.5,
+    runSuspicious: 8, runPattern: 15,
+    minDistinct: 4,
+    minRolls: 30,
+});
+
+/**
+ * Look for non-random order in a list of rolls (1..6). Returns
+ * { level: 'none' | 'suspicious' | 'pattern', reasons: [plain-English strings],
+ *   longestRun, repeat: { share, period }, step: { share, step }, distinct }.
+ * Fewer than 30 rolls is always 'none': too few to judge.
+ */
+export function findRollPatterns(rolls, sides = 6) {
+    const r = [];
+    for (const x of rolls || []) {
+        const v = Number(x);
+        if (Number.isInteger(v) && v >= 1 && v <= sides) r.push(v);
+    }
+    const n = r.length, L = PATTERN_LIMITS;
+    let longestRun = n ? 1 : 0;
+    for (let i = 1, run = 1; i < n; i++) {
+        run = r[i] === r[i - 1] ? run + 1 : 1;
+        if (run > longestRun) longestRun = run;
+    }
+    const repeat = { share: 0, period: 0 };
+    for (let p = 1; p <= L.maxPeriod && n - p >= 20; p++) {
+        let same = 0;
+        for (let i = 0; i + p < n; i++) if (r[i] === r[i + p]) same++;
+        if (same / (n - p) > repeat.share) { repeat.share = same / (n - p); repeat.period = p; }
+    }
+    const steps = new Array(sides).fill(0);
+    for (let i = 1; i < n; i++) steps[(((r[i] - r[i - 1]) % sides) + sides) % sides]++;
+    const step = { share: 0, step: 0 };
+    for (let s = 1; s < sides; s++) {   // step 0 (same face again) is the run check
+        if (n > 1 && steps[s] / (n - 1) > step.share) { step.share = steps[s] / (n - 1); step.step = s; }
+    }
+    const distinct = new Set(r).size;
+    const out = { level: 'none', reasons: [], longestRun, repeat, step, distinct, n };
+    if (n < L.minRolls) return out;
+
+    const pattern = [], suspicious = [];
+    if (distinct < L.minDistinct) pattern.push(`only ${distinct} different face${distinct === 1 ? '' : 's'} in ${n} rolls`);
+    if (longestRun >= L.runPattern) pattern.push(`the same face ${longestRun} times in a row`);
+    else if (longestRun >= L.runSuspicious) suspicious.push(`the same face ${longestRun} times in a row`);
+    const repeatText = `the sequence repeats every ${repeat.period} roll${repeat.period === 1 ? '' : 's'} ${Math.round(repeat.share * 100)}% of the time`;
+    if (repeat.share >= L.repeatPattern) pattern.push(repeatText);
+    else if (repeat.share >= L.repeatSuspicious) suspicious.push(repeatText);
+    const stepText = `${Math.round(step.share * 100)}% of rolls are the previous roll plus ${step.step} (counting round from 6 to 1)`;
+    if (step.share >= L.stepPattern) pattern.push(stepText);
+    else if (step.share >= L.stepSuspicious) suspicious.push(stepText);
+
+    if (pattern.length) { out.level = 'pattern'; out.reasons = pattern.concat(suspicious); }
+    else if (suspicious.length) { out.level = 'suspicious'; out.reasons = suspicious; }
+    return out;
+}
+
+/**
+ * Whether Verifiable dice may turn these rolls into a seed. Verifiable mode
+ * has nothing else mixed in, so:
+ *   - a pattern is refused outright ('block');
+ *   - a likely-biased die (p < 0.01) or a suspicious pattern needs the user
+ *     to confirm the rolls are real ('confirm');
+ *   - anything else is 'ok'.
+ * Returns { id: 'ok' | 'confirm' | 'block', reasons: [strings] }.
+ */
+export function verifiableDiceGate(rolls) {
+    const pat = findRollPatterns(rolls);
+    if (pat.level === 'pattern') return { id: 'block', reasons: pat.reasons };
+    const reasons = pat.reasons.slice();
+    const fair = assessDice(rolls);
+    if (fair.verdict.id === 'biased') reasons.unshift('the face counts are very uneven for a fair die');
+    return reasons.length ? { id: 'confirm', reasons } : { id: 'ok', reasons };
+}
+
 if (typeof window !== 'undefined') {
-    window.DiceFairness = { assessDice, describeAssessment, chiSquaredPValue };
+    window.DiceFairness = { assessDice, describeAssessment, chiSquaredPValue, findRollPatterns, verifiableDiceGate };
 }
