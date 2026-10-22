@@ -92,7 +92,7 @@ trap cleanup EXIT
 # config/ stops the build.
 MAINTAINER_FPR="A333EB826F70A79A736F09948EA7DD8CEDBA86C2"
 MAINTAINER_KEY="config/maintainer-pubkey.asc"
-for f in grub.cfg "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh; do
+for f in grub.cfg "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh quiet-downloads/manifest.json quiet-downloads/background.js; do
     [ -s "$f" ] || { echo "ERROR: $f is missing (rsync the whole usbbootdrive folder)." >&2; exit 1; }
 done
 
@@ -243,6 +243,10 @@ install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-
 # the root helper that checks or changes the Master Passphrase.
 install -m 644 passphrase-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/passphrase-dialogs.sh"
 install -m 755 safekeep-passphrase.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-passphrase.py"
+# Chromium extension that hides "Download started" for the app's request
+# files (safekeep-boot.sh loads it with --load-extension).
+install -d -m 755 "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads"
+install -m 644 quiet-downloads/manifest.json quiet-downloads/background.js "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads/"
 
 # ---------------------------------------------------------------------------
 # Install safekeep-session.service — the permanent replacement for the

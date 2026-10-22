@@ -183,8 +183,9 @@ How every change to the boot scripts or the OS was tested on Oct 20
   sandbox after `npm ci` (the old "rolldown binding missing" problem is
   gone). Playwright with the preinstalled Chromium can drive the dev server
   for screenshots at laptop size (1366×900).
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **47 files**,
-  all passing on Linux at `0e0f42e` (Oct 22). `test-change-passphrase.mjs`
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **48 files**,
+  all passing on Linux (Oct 22; `test-entropy-built.mjs` needs
+  `CHROMIUM_BINARY=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`). `test-change-passphrase.mjs`
   needs `cryptsetup` for its LUKS checks and says SKIP without it. On macOS three always fail
   because they need Linux tools: `test-auto-off.mjs`, `test-os-lockdown.mjs`
   (GNU `sed`) and `test-updater.mjs` (`gpgv`). Nothing runs tests on push —
@@ -269,6 +270,14 @@ silently into `/media/.safekeep-vault/seeds/` (normal boot) or
 runs nothing from it. Examples: POWER_ACTION, WIPE_TRIGGER, RELIQUARY_*
 (backups), RESTORE_*, DEVICE_SETTINGS, SAVED_WALLETS, Codex notes,
 passphrases, 2FA, COLDCARD_/TREZOR_ requests.
+In kiosk mode Chromium shows "Download started. To see it, press Esc."
+for each of these files, and no flag or policy turns that off (tried in
+ungoogled-chromium 155: `DownloadBubbleEnabled`,
+`--disable-features=DownloadBubble,DownloadBubbleV2`). The kiosk loads a
+tiny extension, `usbbootdrive/quiet-downloads/` →
+`/usr/local/lib/safekeep/quiet-downloads`, whose only code is
+`chrome.downloads.setUiOptions({enabled:false})`. That hides the message;
+the files are still written (`test-quiet-downloads.mjs`).
 
 **Lock (true lock).** The dashboard Lock button calls `SafeKeepOS.lock()`,
 which writes `POWER_ACTION.txt` = `lock` and closes the window. The daemon
