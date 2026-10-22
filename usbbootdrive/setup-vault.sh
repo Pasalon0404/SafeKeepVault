@@ -177,6 +177,44 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     fi
     QR_SCAN_TIMEOUT=30
 
+    # STRENGTH CHECK (PASSPHRASE_STRENGTH_DESIGN.md):
+    #   Someone who finds the stick can copy the vault and guess offline,
+    #   so a Weak passphrase is refused and a Fair one needs "Use Anyway".
+    #   The same check runs for a typed and a scanned passphrase. The
+    #   passphrase goes to the checker on stdin and is never shown.
+    #   If the checker itself fails (it can't on a correct build), setup
+    #   says so and continues rather than leaving the stick unusable.
+    # Returns 0 to accept PASSWORD, 1 to choose another.
+    passphrase_ok() {
+        local result band bits message
+        result=$(printf '%s' "$PASSWORD" | python3 -I /usr/local/lib/safekeep/safekeep-pwcheck.py --lines vault 2>/dev/null) || result=""
+        { read -r band; read -r bits; read -r message; } <<< "$result"
+        case "$band" in
+            strong)
+                return 0 ;;
+            weak)
+                zenity --warning --title="Passphrase Too Easy to Guess" --width=450 \
+                    --ok-label="Choose Another" \
+                    --text="Strength: Weak (about ${bits} bits)\n\nThis Master Passphrase is too easy to guess. ${message}\n\nAnyone who finds this stick can copy the vault and try likely passwords on their own computers, as fast as they can.\n\nUse a long random password from a password manager (as a QR code), or 6 or more random words." || true
+                return 1 ;;
+            fair)
+                # Plain --list (see the Method dialog below): Enter picks the
+                # highlighted first row, and closing the dialog also means
+                # "Choose another", so only a deliberate pick keeps it.
+                local choice
+                choice=$(zenity --list --title="Passphrase Could Be Stronger" --width=450 --height=330 \
+                    --text="Strength: Fair (about ${bits} bits)\n\nThis Master Passphrase would take a determined attacker a long time to guess, but not forever. ${message}\n\nFor a vault that protects your bitcoin, we recommend a long random password from a password manager (as a QR code), or 6 or more random words." \
+                    --column="Choice" --hide-header \
+                    "Choose another passphrase" "Use this one anyway") || true
+                [ "$choice" = "Use this one anyway" ]
+                return ;;
+            *)
+                zenity --warning --title="Strength Check Unavailable" --width=450 \
+                    --text="SafeKeepVault couldn't check how strong this passphrase is.\n\nMake sure it is a long random password from a password manager, or 6 or more random words." || true
+                return 0 ;;
+        esac
+    }
+
     PASSWORD=""
     while true; do
         if [ "$HAS_CAMERA" = true ]; then
@@ -202,7 +240,9 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
             PASSWORD=$(timeout "$QR_SCAN_TIMEOUT" zbarcam -1 --raw \
                 -Sdisable -Sqr.enable /dev/video0 2>/dev/null | tr -d '\n') || true
             if [ -n "$PASSWORD" ]; then
-                break
+                passphrase_ok && break
+                PASSWORD=""
+                continue
             fi
             zenity --warning --title="Scan Failed" --width=400 \
                 --text="QR scan did not return a result.\nReturning to method selection." || true
@@ -225,6 +265,11 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
                 --ok-label="Next") || true
             if [ -z "$PASSWORD" ]; then
                 break
+            fi
+            # Checked before the confirmation, so a Weak one isn't typed twice.
+            if ! passphrase_ok; then
+                PASSWORD=""
+                continue
             fi
 
             PASSWORD_CONFIRM=$(zenity --entry --title="Lock Your Vault" --width=450 \

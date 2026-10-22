@@ -92,7 +92,7 @@ trap cleanup EXIT
 # config/ stops the build.
 MAINTAINER_FPR="A333EB826F70A79A736F09948EA7DD8CEDBA86C2"
 MAINTAINER_KEY="config/maintainer-pubkey.asc"
-for f in grub.cfg "$MAINTAINER_KEY"; do
+for f in grub.cfg "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json; do
     [ -s "$f" ] || { echo "ERROR: $f is missing (rsync the whole usbbootdrive folder)." >&2; exit 1; }
 done
 
@@ -232,6 +232,11 @@ install -m 755 safekeep-trezor.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-t
 install -m 644 config/hwi-requirements.txt "$CHROOT_DIR/hwi-requirements.txt"
 # Updater: installs a signed update into the spare OS slot (UPDATER_DESIGN.md).
 install -m 755 safekeep-update.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-update.py"
+# Password strength check: setup-vault.sh and the backup watcher refuse a
+# Weak password (PASSPHRASE_STRENGTH_DESIGN.md).
+install -m 755 safekeep-pwcheck.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-pwcheck.py"
+mkdir -p "$CHROOT_DIR/usr/local/share/safekeep"
+install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-lists.json"
 
 # ---------------------------------------------------------------------------
 # Install safekeep-session.service — the permanent replacement for the

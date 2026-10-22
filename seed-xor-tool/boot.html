@@ -9527,6 +9527,15 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         </div>
                     </div>
                     <input type="password" id="rlq-backup-password" placeholder="AES-256 encryption password" autocomplete="off" oninput="rlq_onBackupPasswordInput()" style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono);">
+                    <!-- Strength of the backup password (rlq_renderStrength; PASSPHRASE_STRENGTH_DESIGN.md) -->
+                    <div id="rlq-pw-strength" style="display: none; margin-top: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.75rem; color: var(--skb-text-muted);">Strength</span>
+                            <span id="rlq-pw-strength-label" style="font-size: 0.75rem; font-weight: 600;"></span>
+                        </div>
+                        <div class="pp-entropy-meter"><div class="pp-entropy-fill" id="rlq-pw-strength-fill"></div></div>
+                        <div id="rlq-pw-strength-text" style="font-size: 0.75rem; color: var(--skb-text-dim); margin-top: 0.3rem; line-height: 1.4;"></div>
+                    </div>
                     <!-- QR Scanner area for backup password -->
                     <div id="rlq-pw-qr-backup" style="display: none; margin-top: 0.5rem;">
                         <div id="rlq-pw-qr-reader-backup" style="border-radius: 8px; overflow: hidden;"></div>
@@ -35663,6 +35672,7 @@ async function rlq_scanPassword(target) {
                 // user scan the same code again into Confirm Password.
                 document.getElementById('rlq-confirm-password').value = scanned;
                 _rlqSetBackupFromQr(true);
+                rlq_renderStrength();
                 showStatus('Password scanned via QR — no need to confirm it.', 'success');
             } else {
                 showStatus('Password scanned via QR — field populated.', 'success');
@@ -35695,6 +35705,43 @@ function _rlqSetBackupFromQr(on) {
 
 function rlq_onBackupPasswordInput() {
     if (_rlqBackupFromQr) _rlqSetBackupFromQr(false);
+    rlq_renderStrength();
+}
+
+/**
+ * Strength bar under the backup password (shared/pwcheck.js). A 7z backup
+ * can be copied to a computer and guessed far faster than the vault, so it
+ * uses the stricter backup bands: Weak is refused by rlq_export (and by the
+ * backup watcher on the OS side), Fair is allowed with this warning.
+ */
+var RLQ_STRENGTH = {
+    weak: { label: 'Weak', color: 'var(--skb-danger)', pct: 20,
+        advice: 'Too easy to guess for a backup, which can be copied to a computer and guessed quickly. Use your vault password if it came from a password manager, or 6 or more random words.' },
+    fair: { label: 'Fair', color: 'var(--skb-warning, #f59e0b)', pct: 60,
+        advice: 'Allowed, but a long random password from a password manager, or 6 or more random words, would be safer.' },
+    strong: { label: 'Strong', color: 'var(--skb-primary)', pct: 100, advice: '' },
+};
+
+function rlq_rateBackupPassword(password) {
+    return window.PwCheck ? window.PwCheck.rate(password, 'backup') : null;
+}
+
+function rlq_renderStrength() {
+    var box = document.getElementById('rlq-pw-strength');
+    if (!box) return;
+    var password = document.getElementById('rlq-backup-password').value;
+    var rating = password ? rlq_rateBackupPassword(password) : null;
+    if (!rating) { box.style.display = 'none'; return; }
+    var look = RLQ_STRENGTH[rating.band];
+    var fill = document.getElementById('rlq-pw-strength-fill');
+    var label = document.getElementById('rlq-pw-strength-label');
+    box.style.display = 'block';
+    fill.style.width = look.pct + '%';
+    fill.style.background = look.color;
+    label.textContent = look.label + ' · about ' + Math.floor(rating.bits) + ' bits';
+    label.style.color = look.color;
+    document.getElementById('rlq-pw-strength-text').textContent =
+        [window.PwCheck.describe(rating), look.advice].filter(Boolean).join(' ');
 }
 
 function rlq_stopPasswordScan(target) {
@@ -35864,6 +35911,13 @@ async function rlq_export() {
     var password = document.getElementById('rlq-backup-password').value;
     if (!password) {
         showStatus('An encryption password is required.', 'error');
+        document.getElementById('rlq-backup-password').focus();
+        return;
+    }
+    var rating = rlq_rateBackupPassword(password);
+    if (rating && rating.band === 'weak') {
+        rlq_renderStrength();
+        showStatus('This password is too easy to guess for a backup. Choose a stronger one.', 'error');
         document.getElementById('rlq-backup-password').focus();
         return;
     }
@@ -36209,6 +36263,7 @@ function rlq_init() {
     document.getElementById('rlq-seed-modal').style.display = 'none';
     document.getElementById('rlq-backup-password').value = '';
     _rlqSetBackupFromQr(false);
+    rlq_renderStrength();
     document.getElementById('rlq-export-result').style.display = 'none';
 }
 
