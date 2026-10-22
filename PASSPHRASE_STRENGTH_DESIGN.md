@@ -140,17 +140,25 @@ own.**
 
 ### Part 2: offer a strong passphrase at setup
 
-Setup's choice becomes **Scan QR Code**, **Type Password** or
-**Generate one for me**.
-- **Generate** draws 6 words from the BIP39 list with the stick's random
-  number generator (`/dev/urandom`) and shows them large, with "Write
-  these down now". The user then types them back to confirm, which also
-  proves they wrote them down correctly.
-- Users with a password manager can keep doing what the owner suggested:
-  generate a password there, turn it into a QR code with the website's QR
-  generator, and scan it. That page must make the QR entirely in the
-  browser and never send the password anywhere; the setup dialog and the
-  docs say so.
+**The recommended route doesn't change.** The website's docs recommend:
+generate a fully random password of 20+ characters in a password manager,
+turn it into a QR code with the website's in-browser QR generator, keep
+the QR in the password manager, and scan it at setup and at every unlock.
+That keeps working exactly as today:
+- **Scan QR Code** stays the first choice in setup, so Enter still picks
+  it.
+- A password-manager password rates Strong, so setup shows no extra
+  dialog and continues as it does now.
+- No "write it down" step: the docs tell these users the password
+  manager is its home and not to write it down, and setup follows that.
+
+**Generate one for me** is added as a third choice, after **Scan QR Code**
+and **Type Password**, for users without a password manager:
+- It draws 6 words from the BIP39 list with the stick's random number
+  generator (`/dev/urandom`) and shows them large, with "Write these down
+  now".
+- The user then types them back from the paper, which also proves they
+  wrote them down correctly.
 
 ### Part 3: change the Master Passphrase
 
@@ -196,11 +204,12 @@ losing the funds.
 1. **Words, not random characters.** "Generate one for me" (Part 2) gives
    6 BIP39 words. They are Strong, and easy to write down, read back and
    type, unlike a string such as `x7#Qp…`.
-2. **A Master Passphrase card.** Setup asks the user to write the
-   passphrase on paper and keep it like the seed backup: with it, or
+2. **A Master Passphrase card, for Generate and Type only.** Setup asks
+   the user to write the passphrase on paper and keep it like the seed backup: with it, or
    somewhere separate. Users already do this for their 12 or 24 words.
    The docs give the trade-off: kept together, one find gives a thief
-   both; kept apart, both must be found again later.
+   both; kept apart, both must be found again later. Users on the QR
+   route are not asked to: their password manager is the copy.
 3. **Prove it right away.** Generated words are typed back from the
    paper, not from memory, before the vault is made. After setup, SafeKeep
    already goes straight to the normal unlock prompt (`setup-vault.sh`,
@@ -216,10 +225,10 @@ losing the funds.
    The reminder can be turned off in Device Options.
 5. **Change it later (Part 3).** A user who starts using a password manager
    can move to a password from it without resetting the stick.
-6. **The phone can't be the only copy.** For the password manager → QR
-   route, setup and the docs say to keep the password in the password
-   manager itself (which has its own backup), not just as a photo of the
-   QR. A lost phone must not mean a lost vault.
+6. **The phone can't be the only copy.** On the QR route, the password and
+   the QR live in the password manager, which has its own backup. The
+   website's docs already say this; setup's QR dialog repeats it in one
+   line. A lost phone must not mean a lost vault.
 7. **Fair is allowed.** Only Weak is refused. A memorable passphrase in
    the Fair band, such as 4 random words, can still be used after the
    warning.
