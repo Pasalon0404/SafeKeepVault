@@ -204,7 +204,7 @@ Setup only runs on a new or factory-reset stick, so use a spare one.
 1. Build the image with the full `sudo bash build.sh` and flash a spare
    stick. A quick update covers it too, followed by a Factory Reset.
 2. **Setup, typed:**
-   - `bitcoin2024`: refused, with "a common word and a year", straight
+   - `bitcoin2024`: refused, with "common words and a year", straight
      after the first entry.
    - 4 random words: the Fair list. Close it, and you are asked again.
      Pick **Use this one anyway**, and the confirmation step follows.
