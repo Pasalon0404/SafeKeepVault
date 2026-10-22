@@ -290,7 +290,7 @@ support, so unlock stays under about 5 seconds. Computers with under
 Existing vaults keep their settings until the passphrase is changed
 (Part 3), which writes the new key with the new settings.
 
-### Testing Parts 1 and 2 on a stick
+### Testing on a stick
 
 Setup only runs on a new or factory-reset stick, so use a spare one.
 1. Build the image with the full `sudo bash build.sh` and flash a spare
@@ -315,6 +315,20 @@ Setup only runs on a new or factory-reset stick, so use a spare one.
 6. **Encrypted Backup:** the bar shows Weak for 4 random words and Fair
    for 5. Export refuses the Weak one. A password-manager password shows
    Strong and exports.
+7. **Change Master Passphrase** (Part 3; a quick update is enough):
+   - Unlock with a weak passphrase on a test vault made before the check
+     (or set one with Part 3 itself, choosing Use this one anyway on a Fair
+     one): a Weak one shows the red banner on the dashboard.
+   - Device Options → Master Passphrase shows the rating. Click **Change
+     Master Passphrase**, then **Lock and Change**: the vault locks and
+     "Change Master Passphrase" appears instead of the unlock prompt.
+   - Enter a wrong current passphrase (refused), then the right one.
+     Choose the new one on the setup screens. Entering the current one
+     again is refused.
+   - "Master Passphrase Changed", then the unlock prompt: the new
+     passphrase opens the vault, the old one doesn't.
+   - Try again and close a choice at each step: every way out says the
+     passphrase wasn't changed, and the old one still unlocks.
 
 ## Not locking yourself out
 
