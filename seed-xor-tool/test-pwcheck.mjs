@@ -260,6 +260,12 @@ exit "$rc"
     ck('setup: Cancel on the welcome dialog asks instead of quitting',
         /until zenity --question --title="SafeKeepVault — First Boot Setup"[\s\S]*?do\n\s*setup_not_finished\n\s*done/.test(setup));
     ck('setup: no Cancel path exits any more', !/No passphrase received/.test(setup.slice(0, setup.indexOf('# --- Create the LUKS vault'))) || /\[ -n "\$PASSWORD" \] && break\n    done/.test(setup));
+    // Heights checked by rendering each list with zenity 4.0.1 (Ubuntu 24.04)
+    // at 1366x768: lower ones hide the last choice below a scroll bar.
+    for (const [title, min] of [['Lock Your Vault', 380], ["Setup Isn't Finished", 360], ['Passphrase Could Be Stronger', 400]]) {
+        const h = (setup.match(new RegExp('--list --title="' + title + '" --width=\\d+ --height=(\\d+)')) || [])[1];
+        ck(`setup: "${title}" is tall enough to show every choice`, Number(h) >= min, h);
+    }
     ck('boot: an unfinished setup shuts down instead of a black screen',
         /title="Setup Incomplete"[\s\S]*?sudo systemctl poweroff 2>\/dev\/null \|\| sudo poweroff \|\| true\n\s*exec sleep infinity/.test(bootSh));
     const gcli = execFileSync('python3', ['-I', PY, '--generate', '6'], { env: { SAFEKEEP_PWCHECK_LISTS: LISTS_PATH.pathname } }).toString();
