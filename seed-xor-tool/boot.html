@@ -6754,11 +6754,12 @@
             <!-- Amnesia and Vault Fingerprint now live in the unified
                  Command Center status bar at the top of the page. -->
 
-            <!-- Transfer Drive mount prompt — sits at the very top of the
-                 dashboard body, above the tool grids. Hides completely once
-                 the drive is mounted (status light in the Command Center
-                 takes over as the sole indicator). -->
-            <div id="dash-mount-btn-wrap" style="margin: 1rem 0 0; padding: 0.75rem 1.25rem; text-align: center;">
+            <!-- Transfer Drive mount prompt — a fallback only. The drive
+                 mounts by itself (_transferAutoMount), so this stays hidden
+                 unless that attempt fails; it used to flash on screen for an
+                 instant at every unlock. Once mounted, the status light in
+                 the Command Center is the sole indicator. -->
+            <div id="dash-mount-btn-wrap" style="display: none; margin: 1rem 0 0; padding: 0.75rem 1.25rem; text-align: center;">
                 <button type="button" class="skb-btn skb-btn-primary" onclick="dashMountTransferDrive()" style="padding: 0.65rem 2rem; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.06em;">
                     MOUNT TRANSFER DRIVE
                 </button>
@@ -36675,11 +36676,13 @@ function _dashSyncMountStatus() {
             delete _skuiFadeTimers[FADE_KEY];
         }, TOTAL_MS);
     } else {
-        // Unmounted: snap back to fully visible immediately. No fade-in —
-        // a re-appearing CTA should be assertive, not coy. Restore the
-        // original shorthand margin/padding so the box returns to its
-        // shipped geometry rather than to cleared (zero) longhands.
-        btnWrap.style.display       = '';
+        // Unmounted: the automatic mount comes first, so the button only
+        // appears once that has been tried and failed. Then it snaps back
+        // to fully visible immediately. No fade-in — a re-appearing CTA
+        // should be assertive, not coy. Restore the original shorthand
+        // margin/padding so the box returns to its shipped geometry rather
+        // than to cleared (zero) longhands.
+        btnWrap.style.display       = _transferAutoMountTried ? '' : 'none';
         btnWrap.style.maxHeight     = '';
         btnWrap.style.overflow      = '';
         btnWrap.style.opacity       = '';
@@ -36738,10 +36741,11 @@ function _archiveAdoptHandle(handle) {
 
 /**
  * Silent auto-mount — called whenever the dashboard is shown. No-op if the
- * drive is already mounted or the bridge is unavailable (the manual
- * "Mount Transfer Drive" button then remains as the fallback).
+ * drive is already mounted. If the bridge is unavailable, the manual
+ * "Mount Transfer Drive" button appears as the fallback.
  */
 var _transferAutoMountBusy = false;
+var _transferAutoMountTried = false;   // shows the manual button if it failed
 async function _transferAutoMount() {
     if (window.vaultTransferDriveHandle || _transferAutoMountBusy) return;
     _transferAutoMountBusy = true;
@@ -36753,6 +36757,8 @@ async function _transferAutoMount() {
         }
     } finally {
         _transferAutoMountBusy = false;
+        _transferAutoMountTried = true;
+        if (!window.vaultTransferDriveHandle) _dashSyncMountStatus();
     }
 }
 
