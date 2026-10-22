@@ -142,8 +142,10 @@ own.**
 
 **The recommended route doesn't change.** The website's docs recommend:
 generate a fully random password of 20+ characters in a password manager,
-turn it into a QR code with the website's in-browser QR generator, keep
-the QR in the password manager, and scan it at setup and at every unlock.
+turn it into a QR code with the website's in-browser QR generator, save
+the QR on the phone (as a file, or in the password manager), and scan it
+at setup and at every unlock. The QR opens nothing without the stick, so
+keeping it on the phone is a fair trade for never typing the password.
 That keeps working exactly as today:
 - **Scan QR Code** stays the first choice in setup, so Enter still picks
   it.
@@ -225,10 +227,10 @@ losing the funds.
    The reminder can be turned off in Device Options.
 5. **Change it later (Part 3).** A user who starts using a password manager
    can move to a password from it without resetting the stick.
-6. **The phone can't be the only copy.** On the QR route, the password and
-   the QR live in the password manager, which has its own backup. The
-   website's docs already say this; setup's QR dialog repeats it in one
-   line. A lost phone must not mean a lost vault.
+6. **The phone can't be the only copy.** On the QR route, the password
+   itself stays in the password manager, which has its own backup. The
+   website's docs say this; setup's QR dialog repeats it in one line. A
+   lost phone must not mean a lost vault.
 7. **Fair is allowed.** Only Weak is refused. A memorable passphrase in
    the Fair band, such as 4 random words, can still be used after the
    warning.
@@ -236,8 +238,10 @@ losing the funds.
 **Encrypted Backup passwords** have the same risk with a twist: a backup
 is made to be restored, often long after. The backup screen says to keep
 its password on the Master Passphrase card or in a password manager, and
-notes that it can be the same as the Master Passphrase only if that is
-Strong for a backup (65 bits or more, such as 6 random words).
+to use a different password from the Master Passphrase. A backup can sit
+on a computer without the stick, so if it shared the vault password,
+anyone with a copy of the unlock QR could open it (the website's docs say
+the same).
 
 ## Risks and open questions
 
