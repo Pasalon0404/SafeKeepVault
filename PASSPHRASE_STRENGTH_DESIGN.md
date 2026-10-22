@@ -1,7 +1,8 @@
 # Design note: refusing weak passwords
 
-Status: **Part 1 built** (Oct 22, 2026), not yet tested on a stick or
-released. Parts 2–4 are proposals.
+Status: **Parts 1 and 2 built** (Oct 22, 2026). Part 1 was tested on a
+stick (Weak refused at setup); Part 2 is not yet tested on a stick.
+Neither is released. Parts 3 and 4 are proposals.
 The owner decided (Oct 22, 2026) that a weak Master Passphrase is refused,
 not just warned about.
 
@@ -149,7 +150,7 @@ same file, which adds about 0.6 MB to `boot.html`.
    one-time warning on the dashboard recommending a new one (Part 3).
    Nothing is refused, since the user already depends on that vault.
 
-### Part 2: offer a strong passphrase at setup
+### Part 2: offer a strong passphrase at setup — built
 
 **The recommended route doesn't change.** The website's docs recommend:
 generate a fully random password of 20+ characters in a password manager,
@@ -165,13 +166,35 @@ That keeps working exactly as today:
 - No "write it down" step: the docs tell these users the password
   manager is its home and not to write it down, and setup follows that.
 
-**Generate one for me** is added as a third choice, after **Scan QR Code**
-and **Type Password**, for users without a password manager:
-- It draws 6 words from the BIP39 list with the stick's random number
-  generator (`/dev/urandom`) and shows them large, with "Write these down
-  now".
-- The user then types them back from the paper, which also proves they
-  wrote them down correctly.
+**Generate One for Me** is added as a third choice, after **Scan QR Code**
+and **Type Password**, for users without a password manager. The choice
+list now shows even without a camera (Type, Generate), and its text points
+users without a password manager to it.
+- `safekeep-pwcheck.py --generate 6` draws 6 words from the BIP39 list
+  with Python's `secrets` module (the kernel's random number generator):
+  about 66 bits, Strong for the vault and for a backup.
+- Setup shows them large and numbered, three to a line, with "Write these
+  6 words on paper now". The text says they are typed in lowercase with
+  one space between words at every unlock, to keep the paper with the seed
+  backup or somewhere separate, and that SafeKeepVault can't show them
+  again.
+- **I've Written Them Down** asks for the words typed back from the paper.
+  They must match exactly, which proves the paper is right before the vault
+  is locked with them. A wrong retype says so and asks again;
+  **Show the Words Again** goes back to the words. Closing the words dialog
+  goes back to the method choice, and a new Generate gives new words.
+
+**No more dead ends on Cancel.** Before, Cancel anywhere in setup ended
+it, and the boot script then showed "Setup Incomplete" and left a black
+screen. Now:
+- Cancel in a typed entry, its confirmation, or Generate One for Me goes
+  back to the method choice.
+- Cancel on the welcome dialog, or closing the method choice, asks
+  **Setup Isn't Finished**: **Go back to setup** (highlighted, and also
+  what closing the dialog does) or **Shut down**. After shutting down,
+  setup starts again at the next power-on.
+- If setup still fails for a real reason (no room for the vault), the
+  boot script says so and shuts down instead of leaving a black screen.
 
 ### Part 3: change the Master Passphrase
 
@@ -198,7 +221,7 @@ support, so unlock stays under about 5 seconds. Computers with under
 Existing vaults keep their settings until the passphrase is changed
 (Part 3), which writes the new key with the new settings.
 
-### Testing Part 1 on a stick
+### Testing Parts 1 and 2 on a stick
 
 Setup only runs on a new or factory-reset stick, so use a spare one.
 1. Build the image with the full `sudo bash build.sh` and flash a spare
@@ -210,7 +233,14 @@ Setup only runs on a new or factory-reset stick, so use a spare one.
      Pick **Use this one anyway**, and the confirmation step follows.
 3. **Setup, QR:** the password-manager QR goes straight through, with no
    extra dialog. A QR of `password` is refused.
-4. **Encrypted Backup:** the bar shows Weak for 4 random words and Fair
+4. **Cancel:** after a Weak passphrase, press Cancel in the typed entry:
+   you're back at the method choice. Close the method choice: **Setup
+   Isn't Finished** asks, and **Go back to setup** returns to it.
+5. **Generate One for Me:** 6 numbered words appear. Type a wrong word:
+   "That Doesn't Match". Type them correctly: setup goes on to create the
+   vault, and the unlock prompt that follows takes the same 6 words
+   (Type Password).
+6. **Encrypted Backup:** the bar shows Weak for 4 random words and Fair
    for 5. Export refuses the Weak one. A password-manager password shows
    Strong and exports.
 
@@ -298,12 +328,11 @@ everyday computer: away from the stick, a copy needs only the password
 
 ## Suggested order
 
-1. **Part 1, setup and backup**, with the shared test list. This is the
-   change the owner asked for.
+1. **Part 1, setup and backup**, with the shared test list — built.
 2. **Part 3, change passphrase**, so the unlock warning in Part 1 has
    somewhere to send users. The unlock warning and the practice unlock
    ("Not locking yourself out") ship with it.
-3. **Part 2, Generate one for me.**
+3. **Part 2, Generate One for Me** — built (with the Cancel fixes).
 4. **Part 4, fixed Argon2 cost**, after measuring unlock times.
 
 Parts 1–3 can ship in one release.

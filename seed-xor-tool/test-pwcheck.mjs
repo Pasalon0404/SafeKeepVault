@@ -198,6 +198,74 @@ try {
     const broken = runSetup('Michael1985', '', join(tmp, 'missing.py'));
     ck('setup: a broken checker warns and continues', broken.rc === 'rc=0' && broken.log.includes('Strength Check Unavailable'), broken);
 
+    // setup-vault.sh: the whole passphrase loop, with a stand-in zenity that
+    // plays back a script of answers ("exit code<TAB>output" per dialog).
+    // "@WORDS" answers with the words the last dialog showed.
+    const bin2 = join(tmp, 'bin2');
+    mkdirSync(bin2);
+    writeFileSync(join(bin2, 'zenity'), `#!/bin/bash
+printf '%s\\n' "$*" >> "$ZLOG"
+line=$(head -n1 "$ZQUEUE"); sed -i 1d "$ZQUEUE"
+if [ -z "$line" ]; then echo "QUEUE EMPTY" >> "$ZLOG"; kill -TERM "$TESTPID"; exit 1; fi
+rc=\${line%%$'\\t'*}; out=\${line#*$'\\t'}
+if [ "$out" = "@WORDS" ]; then
+    out=$(grep -o '<b>.*</b>' "$ZLOG" | tail -1 | sed -e 's/<[^>]*>//g' -e 's/\\\\n/ /g' -e 's/[0-9]\\. //g' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//')
+fi
+printf '%s' "$out"
+exit "$rc"
+`);
+    chmodSync(join(bin2, 'zenity'), 0o755);
+    const pyPath = '/usr/local/lib/safekeep/safekeep-pwcheck.py';
+    const cut = (from, to) => { const i = setup.indexOf(from); return setup.slice(i, setup.indexOf(to, i)); };
+    const loop = (cut('    setup_not_finished() {', '    # --- Welcome dialog ---') +
+        cut('    # STRENGTH CHECK', '\n    if [ -z "$PASSWORD" ]; then')).split(pyPath).join('"$CHECKER"');
+    const runLoop = (answers, camera = true) => {
+        writeFileSync(join(tmp, 'queue'), answers.map((a) => a.join('\t')).join('\n') + '\n');
+        writeFileSync(join(tmp, 'zlog'), '');
+        const r = spawnSync('bash', ['-c', 'set -euo pipefail\nTESTPID=$$\n' + loop + '\nprintf "PASSWORD=%s" "$PASSWORD"'], {
+            timeout: 20000,
+            env: { PATH: bin2 + ':' + process.env.PATH, HAS_CAMERA: String(camera), QR_SCAN_TIMEOUT: '1', DATA_MOUNT: tmp,
+                CHECKER: PY, SAFEKEEP_PWCHECK_LISTS: LISTS_PATH.pathname, ZLOG: join(tmp, 'zlog'), ZQUEUE: join(tmp, 'queue') },
+        });
+        const log = readFileSync(join(tmp, 'zlog'), 'utf8');
+        const m = r.stdout.toString().match(/PASSWORD=(.*)$/s);
+        return { password: m ? m[1] : null, log, status: r.status, left: readFileSync(join(tmp, 'queue'), 'utf8').trim() };
+    };
+    const PM = 'x7#Qp9!vLm2@Zr8$Tq4w';
+    let r = runLoop([['1', ''], ['0', 'Go back to setup'], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
+    ck('setup: closing the method choice asks, and "Go back" returns to it', r.password === PM && r.log.includes("Setup Isn't Finished") && !r.left, r);
+    r = runLoop([['0', 'Type Password'], ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
+    ck('setup: Cancel in the typed entry goes back to the method choice', r.password === PM && !r.left, r);
+    r = runLoop([['0', 'Type Password'], ['0', PM], ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
+    ck('setup: Cancel in the confirmation goes back to the method choice', r.password === PM && !r.left, r);
+    r = runLoop([['0', 'Type Password'], ['0', 'Michael1985'], ['0', ''], ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
+    ck('setup: Weak, then Cancel, goes back to the method choice', r.password === PM && r.log.includes('Passphrase Too Easy to Guess') && !r.left, r);
+    ck('setup: with a camera the choices are Scan, Type, Generate (Scan first)', /--hide-header Scan QR Code Type Password Generate One for Me$/m.test(r.log), r.log);
+    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', 'wrong words here'], ['0', ''], ['0', '@WORDS']]);
+    const gen = r.password || '';
+    ck('setup: Generate makes 6 BIP39 words', gen.split(' ').length === 6 && gen.split(' ').every((w) => wordlist.includes(w)), r);
+    ck('setup: a wrong retype is refused, then the right one sets the passphrase', r.log.includes("That Doesn't Match") && !r.left, r);
+    ck('setup: generated words are Strong for the vault and a backup', rate(gen, 'vault').band === 'strong' && rate(gen, 'backup').band === 'strong');
+    ck('setup: words shown numbered, three to a line', /<b>1\. [a-z]+ +2\. [a-z]+ +3\. [a-z]+ +\\n4\. [a-z]+ +5\. [a-z]+ +6\. [a-z]+ *<\/b>/.test(r.log), r.log);
+    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['1', ''], ['0', ''], ['0', '@WORDS']]);
+    const shows = r.log.match(/<b>[^<]*<\/b>/g) || [];
+    ck('setup: "Show the Words Again" shows the same words', shows.length === 2 && shows[0] === shows[1] && r.password && !r.left, r);
+    r = runLoop([['0', 'Generate One for Me'], ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
+    ck('setup: closing the words dialog goes back to the method choice', r.password === PM && !r.left, r);
+    const g1 = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS']]).password;
+    const g2 = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS']]).password;
+    ck('setup: each Generate gives new words', g1 && g2 && g1 !== g2);
+    r = runLoop([['0', 'Type Password'], ['0', PM], ['0', PM]], false);
+    ck('setup: without a camera the choices are Type and Generate', /--hide-header Type Password Generate One for Me$/m.test(r.log) && r.password === PM, r);
+    ck('setup: Cancel on the welcome dialog asks instead of quitting',
+        /until zenity --question --title="SafeKeepVault — First Boot Setup"[\s\S]*?do\n\s*setup_not_finished\n\s*done/.test(setup));
+    ck('setup: no Cancel path exits any more', !/No passphrase received/.test(setup.slice(0, setup.indexOf('# --- Create the LUKS vault'))) || /\[ -n "\$PASSWORD" \] && break\n    done/.test(setup));
+    ck('boot: an unfinished setup shuts down instead of a black screen',
+        /title="Setup Incomplete"[\s\S]*?sudo systemctl poweroff 2>\/dev\/null \|\| sudo poweroff \|\| true\n\s*exec sleep infinity/.test(bootSh));
+    const gcli = execFileSync('python3', ['-I', PY, '--generate', '6'], { env: { SAFEKEEP_PWCHECK_LISTS: LISTS_PATH.pathname } }).toString();
+    ck('CLI --generate 6: one line of 6 BIP39 words', /^([a-z]+ ){5}[a-z]+\n$/.test(gcli) && gcli.trim().split(' ').every((w) => wordlist.includes(w)), gcli);
+    ck('Python generator uses the secrets module', pySrc.includes('secrets.choice(words)'));
+
     // Backup watcher: run its Python helper with a stand-in 7z.
     const helper = bootSh.slice(bootSh.indexOf("<<'RELIQUARY_PY'\n") + 16, bootSh.indexOf('\nRELIQUARY_PY\n') + 1);
     writeFileSync(join(tmp, 'reliquary.py'), helper);

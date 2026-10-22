@@ -14,6 +14,9 @@
 #        → one line of JSON: {"bits", "band", "reasons", "message"}
 #     printf '%s' "$PASSWORD" | safekeep-pwcheck.py --lines vault|backup
 #        → three lines, for bash: band, whole bits, message
+#     safekeep-pwcheck.py --generate 6
+#        → 6 random BIP39 words, one space between them, for setup's
+#          "Generate One for Me" (secrets module: the kernel's RNG)
 #     safekeep-pwcheck.py --batch vault|backup   (tests)
 #        stdin: a JSON list of passwords → a JSON list of results
 #
@@ -25,6 +28,7 @@
 import json
 import math
 import os
+import secrets
 import sys
 
 BANDS = {
@@ -81,12 +85,23 @@ class Dictionary:
         self.bip39 = set(lists["bip39"].split(","))
 
 
-def load_dictionary():
+def load_lists():
     for path in LISTS_PATHS:
         if path and os.path.isfile(path):
             with open(path, encoding="utf-8") as f:
-                return Dictionary(json.load(f)["lists"])
+                return json.load(f)["lists"]
     raise FileNotFoundError("pwcheck-lists.json not found")
+
+
+def load_dictionary():
+    return Dictionary(load_lists())
+
+
+def generate_words(count):
+    words = load_lists()["bip39"].split(",")
+    if len(words) != 2048:
+        raise ValueError("the BIP39 list must have 2048 words")
+    return " ".join(secrets.choice(words) for _ in range(count))
 
 
 def char_bits(c):
@@ -308,6 +323,9 @@ def _result(password, context, d):
 
 
 def main(argv):
+    if len(argv) == 3 and argv[1] == "--generate" and argv[2] in ("4", "5", "6", "7", "8", "9", "10", "11", "12"):
+        sys.stdout.write(generate_words(int(argv[2])) + "\n")
+        return 0
     mode = argv[1] if len(argv) == 3 and argv[1] in ("--batch", "--lines") else ""
     context = argv[2] if mode else (argv[1] if len(argv) == 2 else "")
     if context not in BANDS:

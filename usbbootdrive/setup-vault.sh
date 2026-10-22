@@ -147,11 +147,33 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
         exit 1
     fi
 
+    # --- Cancel never leaves a dead end ---
+    # SafeKeepVault can't start without a vault, so cancelling any step
+    # of setup asks: go back, or shut down (setup starts again at the next
+    # power-on). Closing this dialog also goes back. Before, a Cancel
+    # aborted setup and left a black screen.
+    setup_not_finished() {
+        local choice
+        choice=$(zenity --list --title="Setup Isn't Finished" --width=450 --height=300 \
+            --text="SafeKeepVault can't start until your encrypted vault is set up.\n\nGo back to finish setup now, or shut down and finish it the next time you start the computer from this stick." \
+            --column="Choice" --hide-header \
+            "Go back to setup" "Shut down") || true
+        if [ "$choice" = "Shut down" ]; then
+            sudo umount "$DATA_MOUNT" 2>/dev/null || true
+            sync
+            # Fenced like the shutdown at the end of this script.
+            sudo systemctl poweroff 2>/dev/null || sudo poweroff || true
+            exec sleep infinity
+        fi
+    }
+
     # --- Welcome dialog ---
-    zenity --question --title="SafeKeepVault — First Boot Setup" --width=450 \
+    until zenity --question --title="SafeKeepVault — First Boot Setup" --width=450 \
         --text="Welcome to SafeKeepVault!\n\nThis one-time setup will:\n\n  1. Set your Master Passphrase\n  2. Create an encrypted vault for your seed words, passphrases, encrypted notes and other data\n  3. Unlock the new vault and start SafeKeepVault\n\nNetworks and the computer's own drives are already blocked.\n\nThis takes about 60 seconds. Continue?" \
         --ok-label="Begin Setup" \
-        --cancel-label="Cancel"
+        --cancel-label="Cancel"; do
+        setup_not_finished
+    done
 
     # --- Get the master passphrase ---
     # KEYBOARD UX (Enter-to-submit, no mouse required):
@@ -169,8 +191,9 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     #   column name ("Method") is redundant given the --text label above.
     #
     # A failed or timed-out QR scan returns to this method choice (as in
-    # unlock-vault) instead of leaving the user stuck at the camera.
-    # Cancelling the choice or a typed entry still aborts setup.
+    # unlock-vault) instead of leaving the user stuck at the camera, and
+    # so does Cancel in a typed entry or in Generate One for Me.
+    # Cancelling the choice itself asks setup_not_finished.
     HAS_CAMERA=false
     if ls /dev/video* 1>/dev/null 2>&1; then
         HAS_CAMERA=true
@@ -215,19 +238,61 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
         esac
     }
 
+    # GENERATE ONE FOR ME (PASSPHRASE_STRENGTH_DESIGN.md, Part 2):
+    #   6 random BIP39 words (about 66 bits) from the kernel's random
+    #   number generator, for users without a password manager. They are
+    #   shown once to be written down, then typed back from the paper,
+    #   which proves the paper is right before the vault is locked with
+    #   it. The words are the passphrase exactly as shown: lowercase, one
+    #   space between them, which is also how they are typed at unlock.
+    # Returns 0 with PASSWORD set, 1 to go back to the method choice.
+    generate_passphrase() {
+        local words shown typed
+        words=$(python3 -I /usr/local/lib/safekeep/safekeep-pwcheck.py --generate 6 2>/dev/null) || words=""
+        if [ "$(printf '%s' "$words" | wc -w)" -ne 6 ]; then
+            zenity --warning --title="Can't Generate a Passphrase" --width=400 \
+                --text="SafeKeepVault couldn't generate a passphrase.\n\nChoose another way to set your Master Passphrase." || true
+            return 1
+        fi
+        shown=$(printf '%s\n' $words | awk '{ printf "%d. %-10s", NR, $0; if (NR % 3 == 0 && NR < 6) printf "\\n" }')
+        while true; do
+            zenity --info --title="Your Master Passphrase" --width=560 \
+                --ok-label="I've Written Them Down" \
+                --text="Write these 6 words on paper now, in this order. Together they are your Master Passphrase.\n\n<span font_family='monospace' size='x-large'><b>${shown}</b></span>\n\nYou will type them, in lowercase with one space between each word, every time you unlock the vault. Keep the paper with your seed backup, or somewhere separate.\n\nSafeKeepVault can't show these words again, and without them the vault can't be opened." || return 1
+            while true; do
+                typed=$(zenity --entry --title="Check Your Paper" --width=500 \
+                    --text="Type the 6 words from your paper, in lowercase with one space between each word:" \
+                    --ok-label="Set Passphrase" --cancel-label="Show the Words Again") || break
+                if [ "$typed" = "$words" ]; then
+                    PASSWORD="$words"
+                    return 0
+                fi
+                zenity --warning --title="That Doesn't Match" --width=420 \
+                    --text="What you typed doesn't match the 6 words.\n\nCheck the spelling and the order on your paper, and use one space between words." || true
+            done
+        done
+    }
+
+    METHODS=("Type Password" "Generate One for Me")
+    if [ "$HAS_CAMERA" = true ]; then
+        METHODS=("Scan QR Code" "${METHODS[@]}")
+    fi
+
     PASSWORD=""
     while true; do
-        if [ "$HAS_CAMERA" = true ]; then
-            INPUT_METHOD=$(zenity --list --title="Lock Your Vault" \
-                --text="How would you like to set your Master Passphrase?" \
-                --column="Method" --hide-header \
-                "Scan QR Code" "Type Password") || true
-            if [ -z "$INPUT_METHOD" ]; then
-                sudo umount "$DATA_MOUNT"
-                exit 1
-            fi
-        else
-            INPUT_METHOD="Type Password"
+        INPUT_METHOD=$(zenity --list --title="Lock Your Vault" --width=450 --height=300 \
+            --text="How would you like to set your Master Passphrase?\n\nNo password manager? Choose Generate One for Me: SafeKeepVault makes a strong passphrase of 6 words for you to write down." \
+            --column="Method" --hide-header \
+            "${METHODS[@]}") || true
+        if [ -z "$INPUT_METHOD" ]; then
+            setup_not_finished
+            continue
+        fi
+
+        if [ "$INPUT_METHOD" = "Generate One for Me" ]; then
+            generate_passphrase && break
+            PASSWORD=""
+            continue
         fi
 
         if [ "$INPUT_METHOD" = "Scan QR Code" ]; then
@@ -276,6 +341,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
                 --text="Type your Master Passphrase again to confirm:" \
                 --ok-label="Set Passphrase") || true
             if [ -z "$PASSWORD_CONFIRM" ]; then
+                unset PASSWORD_CONFIRM
                 PASSWORD=""
                 break
             fi
@@ -290,7 +356,8 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
             zenity --warning --title="Passphrases Don't Match" --width=400 \
                 --text="The two passphrases you typed are different.\n\nPlease type it again." || true
         done
-        break
+        # Cancel in either typed entry goes back to the method choice.
+        [ -n "$PASSWORD" ] && break
     done
 
     if [ -z "$PASSWORD" ]; then
