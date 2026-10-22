@@ -183,6 +183,17 @@ users without a password manager to it.
   is locked with them. A wrong retype says so and asks again;
   **Show the Words Again** goes back to the words. Closing the words dialog
   goes back to the method choice, and a new Generate gives new words.
+- **Save It on Your Phone Too (optional).** After the retype, setup shows
+  the same words as a QR code, drawn with `qrencode` in block characters,
+  for a phone's camera or the Courier Tool to read into a password manager
+  as a second copy. It holds exactly the words, so **Scan QR Code** at
+  unlock works with it. It shows nothing the words screen didn't and is
+  never written anywhere. **Done**, or closing it, finishes setup.
+  - Checked by rendering it with zenity 4.0.1 at 1366×768 and decoding the
+    screenshot with `zbarimg`, including the longest possible words (53
+    characters, still a version 3 QR). It fits a 768-pixel-high screen.
+  - `qrencode` is a new package in `chroot-setup.sh`, so it needs a full
+    build. A stick without it skips this step: the paper is enough.
 
 **No more dead ends on Cancel.** Before, Cancel anywhere in setup ended
 it, and the boot script then showed "Setup Incomplete" and left a black
@@ -239,7 +250,9 @@ Setup only runs on a new or factory-reset stick, so use a spare one.
 5. **Generate One for Me:** 6 numbered words appear. Type a wrong word:
    "That Doesn't Match". Type them correctly: setup goes on to create the
    vault, and the unlock prompt that follows takes the same 6 words
-   (Type Password).
+   (Type Password). On a full build, the **Save It on Your Phone Too**
+   QR code shows after the retype: scan it with a phone and check it reads
+   the same 6 words.
 6. **Encrypted Backup:** the bar shows Weak for 4 random words and Fair
    for 5. Export refuses the Weak one. A password-manager password shows
    Strong and exports.
