@@ -2816,7 +2816,7 @@ except Exception as e:
         # Read the first line and trim whitespace/newlines.
         REQUESTED=$(head -n 1 "$POWER_ACTION_READ_PATH" 2>/dev/null | tr -d '[:space:]')
         case "$REQUESTED" in
-            reboot|poweroff|lock)
+            reboot|poweroff|lock|passphrase)
                 POWER_ACTION="$REQUESTED"
                 ;;
             *)
@@ -2906,8 +2906,11 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
     #  This branch never returns; it always restarts or halts safely — it never
     #  powers the machine off.
     # ==================================================================
-    if [ "$POWER_ACTION" = "lock" ]; then
-        echo "Lock requested — evicting vault keys and restarting the session."
+    #  "passphrase" (Device Options → Change Master Passphrase) locks the same
+    #  way, then the re-exec'd run shows change-passphrase before the unlock
+    #  prompt (SAFEKEEP_CHANGE_PASSPHRASE=1, see UNLOCK THE VAULT below).
+    if [ "$POWER_ACTION" = "lock" ] || [ "$POWER_ACTION" = "passphrase" ]; then
+        echo "Lock requested ($POWER_ACTION) — evicting vault keys and restarting the session."
         if [ -w /dev/tty1 ]; then
             {
                 printf '\033[2J\033[H\r'
@@ -2967,6 +2970,9 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
         # unlock prompt → cryptsetup open → relaunch Chromium. exec only returns
         # if it FAILS to replace the image.
         echo "Lock: re-exec'ing /usr/local/bin/safekeep-boot in place → native unlock prompt."
+        if [ "$POWER_ACTION" = "passphrase" ]; then
+            exec env SAFEKEEP_CHANGE_PASSPHRASE=1 /usr/local/bin/safekeep-boot
+        fi
         exec /usr/local/bin/safekeep-boot
 
         # FALLBACK 1 — exec failed (binary missing/non-exec). Ask systemd to
@@ -3267,6 +3273,21 @@ else
     #
     # We still wrap this in a loop so that if the user cancels (exit 2),
     # we give them one more chance rather than halting immediately.
+
+    # ---- CHANGE MASTER PASSPHRASE (Device Options) ----
+    # The session locked for it (POWER_ACTION=passphrase): change-passphrase
+    # asks for the current and new passphrase in native dialogs and runs
+    # luksChangeKey. Whatever happens (changed, kept or failed), the normal
+    # unlock prompt follows, and opening the vault there proves the result.
+    if [ "${SAFEKEEP_CHANGE_PASSPHRASE:-}" = "1" ]; then
+        unset SAFEKEEP_CHANGE_PASSPHRASE
+        if [ -x /usr/local/bin/change-passphrase ]; then
+            CHANGE_EXIT=0
+            change-passphrase || CHANGE_EXIT=$?
+            echo "change-passphrase exited with code $CHANGE_EXIT"
+        fi
+    fi
+
     UNLOCK_ATTEMPT=0
 
     while ! mountpoint -q "$VAULT_MOUNT" 2>/dev/null; do

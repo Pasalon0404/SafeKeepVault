@@ -143,11 +143,14 @@ ck('Python reads the password only from stdin', pySrc.includes('sys.stdin.buffer
 
 // --- 5. Wiring and the OS-side checks ---
 const read = (u) => readFileSync(new URL(u, USB), 'utf8');
-const setup = read('setup-vault.sh'), bootSh = read('safekeep-boot.sh'), build = read('build.sh'), quick = read('quick-update.sh');
+// The passphrase screens live in passphrase-dialogs.sh, which setup-vault.sh
+// sources; the checks below read both as "setup".
+const setupOnly = read('setup-vault.sh'), dialogs = read('passphrase-dialogs.sh');
+const setup = setupOnly + dialogs, bootSh = read('safekeep-boot.sh'), build = read('build.sh'), quick = read('quick-update.sh');
 const entry = readFileSync(new URL('./boot-entry.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('./boot.html', import.meta.url), 'utf8');
 ck('build.sh requires and installs the checker and its lists',
-    build.includes('safekeep-pwcheck.py pwcheck-lists.json; do') &&
+    build.includes('safekeep-pwcheck.py pwcheck-lists.json ') &&
     build.includes('install -m 755 safekeep-pwcheck.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-pwcheck.py"') &&
     build.includes('install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-lists.json"'));
 ck('quick-update.sh installs them too',
@@ -156,9 +159,12 @@ ck('the app bundles the module with the same lists',
     entry.includes("import pwcheckLists from '../usbbootdrive/pwcheck-lists.json'") && entry.includes('window.PwCheck'));
 ck('setup checks a scanned passphrase', /if \[ -n "\$PASSWORD" \]; then\n\s*passphrase_ok && break/.test(setup));
 ck('setup checks a typed passphrase before the confirmation',
-    setup.indexOf('if ! passphrase_ok; then') > setup.indexOf('Enter your Master Passphrase (visible)') &&
-    setup.indexOf('if ! passphrase_ok; then') < setup.indexOf('Type your Master Passphrase again to confirm'));
-ck('setup passes the passphrase on stdin', setup.includes(`printf '%s' "$PASSWORD" | python3 -I /usr/local/lib/safekeep/safekeep-pwcheck.py --lines vault`));
+    dialogs.indexOf('if ! passphrase_ok; then') > dialogs.indexOf('Enter your ${PP_NOUN} (visible)') &&
+    dialogs.indexOf('if ! passphrase_ok; then') < dialogs.indexOf('Type your ${PP_NOUN} again to confirm'));
+ck('setup passes the passphrase on stdin', dialogs.includes(`printf '%s' "$PASSWORD" | python3 -I "$PWCHECK" --lines vault`) &&
+    dialogs.includes('PWCHECK=${PWCHECK:-/usr/local/lib/safekeep/safekeep-pwcheck.py}'));
+ck('setup sources the shared screens and uses them', setupOnly.includes('source /usr/local/lib/safekeep/passphrase-dialogs.sh') &&
+    setupOnly.includes('choose_new_passphrase setup_not_finished'));
 const exportFn = html.slice(html.indexOf('async function rlq_export()'), html.indexOf('function rlq_showRestore()'));
 ck('backup export refuses a Weak password before writing',
     exportFn.indexOf("rating.band === 'weak'") > 0 && exportFn.indexOf("rating.band === 'weak'") < exportFn.indexOf('os.createReliquary('));
@@ -175,8 +181,8 @@ try {
     mkdirSync(bin);
     writeFileSync(join(bin, 'zenity'), `#!/bin/bash\nprintf '%s\\n' "$*" >> "${tmp}/zenity.log"\nfor a in "$@"; do case "$a" in --list) printf '%s' "$ZENITY_PICK"; exit 0;; esac; done\nexit 0\n`);
     chmodSync(join(bin, 'zenity'), 0o755);
-    const fnStart = setup.indexOf('    passphrase_ok() {');
-    const fn = setup.slice(fnStart, setup.indexOf('\n    }\n', fnStart) + 7).replace('/usr/local/lib/safekeep/safekeep-pwcheck.py', '"$CHECKER"');
+    const fnStart = dialogs.indexOf('\npassphrase_ok() {') + 1;
+    const fn = dialogs.slice(fnStart, dialogs.indexOf('\n}\n', fnStart) + 3).split('"$PWCHECK"').join('"$CHECKER"');
     const runSetup = (password, pick = '', checker = PY) => {
         rmSync(join(tmp, 'zenity.log'), { force: true });
         const r = spawnSync('bash', ['-c', fn + '\npassphrase_ok; echo "rc=$?"'], {
@@ -230,10 +236,10 @@ if [ -n "$ZBAR_OUT" ]; then printf '%s\\n' "$ZBAR_OUT"; exit 0; fi
 cat "$QRIN"; echo
 `);
     chmodSync(join(bin2, 'zbarcam'), 0o755);
-    const pyPath = '/usr/local/lib/safekeep/safekeep-pwcheck.py';
-    const cut = (from, to) => { const i = setup.indexOf(from); return setup.slice(i, setup.indexOf(to, i)); };
-    const loop = (cut('    setup_not_finished() {', '    # --- Welcome dialog ---') +
-        cut('    # STRENGTH CHECK', '\n    if [ -z "$PASSWORD" ]; then')).split(pyPath).join('"$CHECKER"');
+    // The shared screens, setup's setup_not_finished, and setup's call.
+    const cut = (from, to) => { const i = setupOnly.indexOf(from); return setupOnly.slice(i, setupOnly.indexOf(to, i)); };
+    const loop = 'PWCHECK="$CHECKER"\n' + dialogs + '\n' + cut('    setup_not_finished() {', '    # --- Welcome dialog ---') +
+        '\nchoose_new_passphrase setup_not_finished || true\n';
     const runLoop = (answers, camera = true, fakeQr = '', zbar = '') => {
         writeFileSync(join(tmp, 'queue'), answers.map((a) => a.join('\t')).join('\n') + '\n');
         writeFileSync(join(tmp, 'zlog'), '');
@@ -310,8 +316,8 @@ cat "$QRIN"; echo
     ck('setup: no Cancel path exits any more', !/No passphrase received/.test(setup.slice(0, setup.indexOf('# --- Create the LUKS vault'))) || /\[ -n "\$PASSWORD" \] && break\n    done/.test(setup));
     // Heights checked by rendering each list with zenity 4.0.1 (Ubuntu 24.04)
     // at 1366x768: lower ones hide the last choice below a scroll bar.
-    for (const [title, min] of [['Lock Your Vault', 380], ["Setup Isn't Finished", 360], ['Passphrase Could Be Stronger', 480], ['Check Your Copy', 380]]) {
-        const h = (setup.match(new RegExp('--list --title="' + title + '" --width=\\d+ --height=(\\d+)')) || [])[1];
+    for (const [title, min] of [['$PP_TITLE', 380], ["Setup Isn't Finished", 360], ['Passphrase Could Be Stronger', 480], ['Check Your Copy', 380]]) {
+        const h = (setup.match(new RegExp('--list --title="' + title.replace('$', '\\$') + '" --width=\\d+ --height=(\\d+)')) || [])[1];
         ck(`setup: "${title}" is tall enough to show every choice`, Number(h) >= min, h);
     }
     // Setup runs at GDK_SCALE=2, and zenity doesn't wrap the text above a

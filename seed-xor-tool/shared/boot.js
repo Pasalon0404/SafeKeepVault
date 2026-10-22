@@ -2011,10 +2011,10 @@ const SafeKeepOS = (() => {
    * to give Chromium's download layer time to flush the file to disk
    * before the process exits.
    *
-   * @param {'poweroff'|'reboot'} action
+   * @param {'poweroff'|'reboot'|'lock'|'passphrase'} action
    */
   async function _submitPowerAction(action) {
-    if (action !== 'poweroff' && action !== 'reboot' && action !== 'lock') {
+    if (action !== 'poweroff' && action !== 'reboot' && action !== 'lock' && action !== 'passphrase') {
       throw new Error('Invalid power action: ' + action);
     }
     try {
@@ -2111,6 +2111,37 @@ const SafeKeepOS = (() => {
     // daemon log), then close. The lock outcome does not depend on it.
     setTimeout(function () { try { window.close(); } catch (_) {} }, 300);
     return Promise.resolve(true);
+  }
+
+  /**
+   * Device Options → Change Master Passphrase (PASSPHRASE_STRENGTH_DESIGN.md,
+   * Part 3). Locks exactly as lock() does, then safekeep-boot.sh runs
+   * change-passphrase in native dialogs before the unlock prompt, so the
+   * passphrases never pass through the browser. The signal must land (it is
+   * read back, as for reboot); if it is lost, the daemon's default is a plain
+   * lock, so nothing worse can happen than having to try again.
+   */
+  function changeMasterPassphrase() {
+    return _submitPowerAction('passphrase');
+  }
+
+  /**
+   * How strong the Master Passphrase that unlocked this session is, as
+   * unlock-vault.sh rated it: { band: 'weak'|'fair'|'strong', bits }, or null
+   * (a temporary session, or a build without the rating). Only the result is
+   * kept, in RAM; never the passphrase.
+   */
+  async function getPassphraseRating() {
+    if (!isBootDrive()) return null;
+    try {
+      const r = await fetch('file:///tmp/safekeep-signals/PASSPHRASE_RATING.json', { cache: 'no-store' });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || ['weak', 'fair', 'strong'].indexOf(j.band) === -1) return null;
+      return { band: j.band, bits: Number(j.bits) || 0 };
+    } catch (_) {
+      return null;
+    }
   }
 
 
@@ -2852,6 +2883,8 @@ const SafeKeepOS = (() => {
     powerOff,
     restart,
     lock,
+    changeMasterPassphrase,
+    getPassphraseRating,
 
     // Display sleep (DPMS timer)
     setDisplaySleep,
