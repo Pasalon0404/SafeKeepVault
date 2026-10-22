@@ -1,9 +1,9 @@
 # Design note: refusing weak passwords
 
-Status: **Parts 1, 2 and 3 built** (Oct 22, 2026). Parts 1 and 2 were
-tested on a stick (Weak refused at setup; Generate One for Me with its QR
-code scanned back and used to unlock). Part 3 is not yet tested on a
-stick. None is released. Part 4 is a proposal.
+Status: **Parts 1, 2 and 3 built and tested on a stick** (Oct 22, 2026),
+released in v1.51. **Part 4 was skipped** by the owner (Oct 22): vaults
+keep cryptsetup's per-computer default, which is Argon2id with 1 GiB of
+memory on any recent computer.
 The owner decided (Oct 22, 2026) that a weak Master Passphrase is refused,
 not just warned about.
 
@@ -224,7 +224,8 @@ screen. Now:
 
 ### Part 3: change the Master Passphrase — built
 
-Built Oct 22, 2026; not yet tested on a stick.
+Built Oct 22, 2026, and tested on a stick: changing the passphrase works,
+and the new one unlocks the vault.
 
 **Lock, change, unlock.** The owner chose this over a form in the app
 (Oct 22, 2026). The app would have had to pass the old and new passphrase
@@ -277,7 +278,9 @@ mount and losetup (where `cryptsetup` is installed; it says so where it
 isn't), plus the wiring. The dialogs were rendered at double size on
 1920×1080.
 
-### Part 4: a fixed minimum cost for the vault
+### Part 4: a fixed minimum cost for the vault — skipped
+
+Skipped by the owner (Oct 22, 2026). Kept here in case it comes back.
 
 Make `luksFormat` (and `luksChangeKey`) use explicit settings instead of
 whatever the setup computer's benchmark gives: LUKS2, Argon2id, 1 GiB of
@@ -416,6 +419,6 @@ everyday computer: away from the stick, a copy needs only the password
 2. **Part 3, change passphrase**, with the weak-passphrase warning —
    built.
 3. **Part 2, Generate One for Me** — built (with the Cancel fixes).
-4. **Part 4, fixed Argon2 cost**, after measuring unlock times.
+4. **Part 4, fixed Argon2 cost** — skipped.
 
 Parts 1–3 can ship in one release.
