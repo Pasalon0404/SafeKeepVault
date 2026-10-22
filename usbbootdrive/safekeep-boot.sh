@@ -3238,11 +3238,17 @@ if [ ! -f "$DATA_MOUNT/$SETUP_MARKER" ]; then
         exec sleep infinity
     fi
 
+    # setup-vault no longer gives up when the user cancels (it asks to go
+    # back or shut down), so this is a real failure, such as no room for
+    # the vault. Shut down rather than leave a black screen: setup starts
+    # again at the next power-on.
     if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
         zenity --warning --title="Setup Incomplete" --width=400 \
-            --text="First-boot setup was not completed.\n\nSafeKeep cannot start without an encrypted vault and OS hardening.\nPlease restart and try again."
+            --text="First-boot setup was not completed.\n\nSafeKeep cannot start without an encrypted vault.\n\nClick OK to shut down, then power on to try again." || true
         sudo umount "$DATA_MOUNT" 2>/dev/null || true
-        exit 1
+        sync
+        sudo systemctl poweroff 2>/dev/null || sudo poweroff || true
+        exec sleep infinity
     fi
 fi
 
