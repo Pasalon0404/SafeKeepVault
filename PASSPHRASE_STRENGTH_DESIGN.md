@@ -1,6 +1,7 @@
 # Design note: refusing weak passwords
 
-Status: **proposal, for the owner to approve.** Nothing here is built yet.
+Status: **Part 1 built** (Oct 22, 2026), not yet tested on a stick or
+released. Parts 2–4 are proposals.
 The owner decided (Oct 22, 2026) that a weak Master Passphrase is refused,
 not just warned about.
 
@@ -49,8 +50,8 @@ derivation makes each guess cheap.
     tool, `pp_generate`), using `crypto.getRandomValues`, with an entropy
     readout for what it generates.
   - The app has the BIP39 English wordlist.
-- **The app is 3.6 MB built.** Word and password lists add to that, so
-  they need a size budget (below).
+- **The app was 3.7 MB built** before Part 1; the word lists bring it
+  to 4.3 MB (see Part 1).
 
 ## How strong is strong enough
 
@@ -77,62 +78,72 @@ words or a password-manager password are Strong for both.
 
 ## Proposal
 
-### Part 1: a strength check, with a bar
+### Part 1: a strength check, with a bar — built
 
-**The estimator.** One small, cautious estimator, written twice from one
-spec: in Python for the OS side, which enforces the rule, and in
-JavaScript for the app, which shows the bar while the user types. Both
-are tested against the same list of test passwords and expected bits, so
-they can't drift apart.
+Built Oct 22, 2026; not yet tested on a stick or released. Item 3 below
+(the unlock warning) is not built: it ships with Part 3.
+
+**The estimator.** One small, cautious estimator, written twice:
+`seed-xor-tool/shared/pwcheck.js` draws the bar in the app, and
+`usbbootdrive/safekeep-pwcheck.py`, a line-by-line port, enforces the
+rule on the stick. `test-pwcheck.mjs` runs both on about 2,800 passwords
+and requires the same bits, band, reasons and message, so they can't
+drift apart.
 
 It splits the password into the cheapest pieces an attacker would guess
-and adds up their cost:
-- **Common passwords**, including reversed, capitalised and l33t-speak
-  forms: a bundled list of the most common passwords.
-- **Words:** BIP39 words, and an English word list.
-- **Patterns:** years and dates, repeats (`aaaa`), sequences (`abcd`,
-  `1234`), keyboard runs (`qwerty`), and a word with digits or a symbol
-  on the end.
-- **Everything else** counts as random characters, at the size of the
-  character set they come from.
+and adds up their bits:
+- **Words:** a piece found in the word lists costs log2 of its rank,
+  times its capitalisation and l33t-speak variations, times 2 if
+  reversed. This catches common passwords, English words and names.
+- **Patterns:** years 1900–2049, repeats (`aaaa`, `abcabc`) and
+  sequences (`abcd`, `4321`). Keyboard runs such as `qwerty` are in the
+  common-password list.
+- **Everything else** counts character by character: 10 for a digit, 26
+  for a letter, 33 for other printable ASCII, 100 for anything else.
+- Each word or pattern adds 1 bit for "which kind of piece comes next".
+- **Separators:** a password made of parts joined by one separator
+  (space, `-`, `_`, `.`, `,`, `+`, `/`) pays for the separator once
+  (3 bits), not at every join.
+- **Random words:** 3 or more lowercase BIP39 words joined by a separator
+  count a full 11 bits each, since that is what a generator makes. A
+  phrase someone made up from BIP39 words is overrated by this; nothing
+  can tell. Too few of them gets its own message: "Random words are good,
+  but each adds only about 11 bits: use more of them."
 
-Words from the BIP39 list are counted as randomly chosen, which is what
-the generator does. A phrase the user made up from real words, such as
-a line from a song, scores higher than it should. No estimator can tell;
-the meter's wording says so ("a phrase you made up yourself is weaker
-than it looks").
+Results: `bitcoin2024` 23 bits, `Summer1990!` 21, `Tr0ub4dor&3` 44,
+4 random words 47, 5 random words 58, 6 random words 69, a 20-character
+password-manager password about 88.
 
-**Size budget:** about 500 KB of lists in the app, for example the 30,000
-most common passwords and 30,000 English words. The BIP39 list is already
-there.
-
-An alternative is to bundle zxcvbn, the best-known estimator (MIT
-licence). It is about 800 KB, and its Python port is a separate project
-whose results don't always match the JavaScript. Writing our own small
-one keeps both sides identical and reviewable. **Recommendation: our
-own.**
+**Word lists** (`usbbootdrive/pwcheck-lists.json`, 580 KB): zxcvbn
+4.4.2's lists (MIT licence), cut to the 30,000 most common passwords,
+20,000 English words, 10,000 words from TV and film, 5,000 surnames and
+about 3,000 first names, plus the BIP39 list.
+`usbbootdrive/make-pwcheck-lists.py` makes the file. The app bundles the
+same file, which adds about 0.6 MB to `boot.html`.
 
 **Where it runs:**
-1. **First-boot setup (`setup-vault.sh`).** After the passphrase is typed
-   or scanned, a helper (`safekeep-pwcheck.py`) rates it, and setup shows
-   the result in a dialog:
-   - **Weak:** "This passphrase is too easy to guess" with the reason (for
-     example "a common password with a year added"), and back to the
-     choice of Scan or Type. There is no way past it.
-   - **Fair:** a warning that explains the risk and recommends 6 random
-     words or a password manager, with **Use anyway** and **Choose
-     another**.
-   - **Strong:** setup continues without an extra dialog.
-
-   The check works the same for a scanned QR, so a weak password put into
-   a QR is still caught. The dialog never shows the passphrase itself.
-   zenity can't update a bar while the user types, so setup shows the bar
-   once, after entry.
-2. **Encrypted Backup screen (`boot.html`).** A live bar under the
-   password field, from Weak to Strong, with the reason. The Export button
-   stays disabled while the password is Weak. The backup watcher in
-   `safekeep-boot.sh` runs the same Python check and refuses a Weak
-   password too, so the rule doesn't depend on the app alone.
+1. **First-boot setup (`setup-vault.sh`).** A scanned passphrase is rated
+   straight after the scan; a typed one after the first entry, before the
+   confirmation, so a Weak one isn't typed twice. The passphrase goes to
+   the checker on stdin and no dialog shows it.
+   - **Weak:** "Passphrase Too Easy to Guess", with the strength in bits
+     and the reason (for example "It is mostly a name and a year, which
+     attackers try first"), and back to choosing a passphrase. There is no
+     way past it.
+   - **Fair:** a list with **Choose another passphrase** (highlighted, so
+     Enter picks it) and **Use this one anyway**. Closing the dialog also
+     means choose another, so only a deliberate pick keeps it.
+   - **Strong:** setup continues without an extra dialog, so the password
+     manager → QR route looks exactly as before.
+   - If the checker itself fails (it can't on a correct build: `build.sh`
+     stops without it), setup says the strength couldn't be checked and
+     continues, rather than leaving a stick that can't be set up.
+2. **Encrypted Backup screen (`boot.html`).** A bar under the password
+   field shows Weak, Fair or Strong, the bits and the reason, updated as
+   the user types or scans. **Export Backup** refuses a Weak password
+   with a message. The backup watcher in `safekeep-boot.sh` runs the
+   Python check too and refuses a Weak password without running 7z, so
+   the rule doesn't depend on the app alone.
 3. **Unlock (`unlock-vault.sh`), for existing vaults.** After a
    successful unlock, if the Master Passphrase rates Weak, the app shows a
    one-time warning on the dashboard recommending a new one (Part 3).
@@ -186,6 +197,22 @@ support, so unlock stays under about 5 seconds. Computers with under
 
 Existing vaults keep their settings until the passphrase is changed
 (Part 3), which writes the new key with the new settings.
+
+### Testing Part 1 on a stick
+
+Setup only runs on a new or factory-reset stick, so use a spare one.
+1. Build the image with the full `sudo bash build.sh` and flash a spare
+   stick. A quick update covers it too, followed by a Factory Reset.
+2. **Setup, typed:**
+   - `bitcoin2024`: refused, with "a common word and a year", straight
+     after the first entry.
+   - 4 random words: the Fair list. Close it, and you are asked again.
+     Pick **Use this one anyway**, and the confirmation step follows.
+3. **Setup, QR:** the password-manager QR goes straight through, with no
+   extra dialog. A QR of `password` is refused.
+4. **Encrypted Backup:** the bar shows Weak for 4 random words and Fair
+   for 5. Export refuses the Weak one. A password-manager password shows
+   Strong and exports.
 
 ## Not locking yourself out
 

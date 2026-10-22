@@ -1232,6 +1232,20 @@ if action == 'create':
     if not isinstance(password, str) or not password or '\x00' in password:
         fail('Encryption password is required.')
 
+    # A Weak backup password is refused here too, not only by the app's
+    # bar (PASSPHRASE_STRENGTH_DESIGN.md). The checker reads it on stdin.
+    # If the checker can't run (it can't fail on a correct build), the
+    # backup goes ahead, as the app has already rated the password.
+    checker = os.environ.get('SAFEKEEP_PWCHECK', '/usr/local/lib/safekeep/safekeep-pwcheck.py')
+    try:
+        check = subprocess.run(['python3', '-I', checker, 'backup'], input=password.encode('utf-8'),
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60)
+        band = json.loads(check.stdout.decode('utf-8')).get('band') if check.returncode == 0 else None
+    except Exception:
+        band = None
+    if band == 'weak':
+        fail('This password is too easy to guess for a backup. Choose a stronger one.')
+
     date_str = data.get('dateStr')
     if not isinstance(date_str, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', date_str):
         fail('Backup request has an invalid date.')

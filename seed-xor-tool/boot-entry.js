@@ -118,6 +118,18 @@ import './shared/entropy-sources.js';
 // core-import.js exposes window.CoreImport — the Descriptor tool's Bitcoin Core
 // importdescriptors (watch-only) export.
 import './shared/core-import.js';
+// pwcheck.js rates the Encrypted Backup password (window.PwCheck); its word
+// lists are the ones usbbootdrive/safekeep-pwcheck.py uses on the stick.
+import pwcheckLists from '../usbbootdrive/pwcheck-lists.json';
+import { buildDictionary, ratePassword, describeRating } from './shared/pwcheck.js';
+let _pwcheckDict = null;
+window.PwCheck = {
+    rate(password, context) {
+        if (!_pwcheckDict) _pwcheckDict = buildDictionary(pwcheckLists.lists);
+        return ratePassword(password, context, _pwcheckDict);
+    },
+    describe: describeRating,
+};
 // lifehash-icons.js draws a LifeHash beside every [data-lifehash] fingerprint
 // (dashboard badge, sidebar, PSBT signer) — the same picture Sparrow shows.
 import './shared/lifehash-icons.js';

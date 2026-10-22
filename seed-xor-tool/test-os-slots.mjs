@@ -130,7 +130,7 @@ console.log('3. build.sh');
   ck('slot.cfg written', b.includes(`printf 'set slot=a\\n' > "$WORKSPACE/mnt-os/slot.cfg"`));
   ck('grub.cfg used for BIOS and UEFI', b.includes('cp grub.cfg "$WORKSPACE/mnt-efi/boot/grub/grub.cfg"') && b.includes('"boot/grub/grub.cfg=$WORKSPACE/mnt-efi/boot/grub/grub.cfg"'));
   ck('GRUB gets test + configfile (UEFI and BIOS)', (b.match(/gzio test configfile"/g) || []).length === 2);
-  ck('missing grub.cfg / key stops the build early', b.indexOf('for f in grub.cfg "$MAINTAINER_KEY"; do') > 0 && b.indexOf('for f in grub.cfg "$MAINTAINER_KEY"; do') < b.indexOf('echo "Phase 2:'));
+  ck('missing grub.cfg / key stops the build early', b.indexOf('for f in grub.cfg "$MAINTAINER_KEY" ') > 0 && b.indexOf('for f in grub.cfg "$MAINTAINER_KEY" ') < b.indexOf('echo "Phase 2:'));
   const fpr = (read('VERIFYING.md').match(/A333 EB82[0-9A-F ]+/) || [''])[0].replace(/\s+/g, '');
   ck('pinned fingerprint matches VERIFYING.md', b.includes(`MAINTAINER_FPR="${fpr}"`) && fpr.length === 40);
   ck('image key identical to developer-pubkey.asc', read('usbbootdrive/config/maintainer-pubkey.asc') === read('developer-pubkey.asc'));
