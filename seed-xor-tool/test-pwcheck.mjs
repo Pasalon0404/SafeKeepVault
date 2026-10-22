@@ -272,7 +272,7 @@ cat "$QRIN"; echo
     const showLine = r.log.split('\n').find((l) => l.includes('--title=Your Master Passphrase')) || '';
     ck('generate: the QR code and the words are on the same screen',
         /QRBLOCKS-LINE-1\nQRBLOCKS-LINE-2/.test(r.log.slice(r.log.indexOf('--title=Your Master Passphrase'))) && /<b>1\. [a-z]+ +2\. [a-z]+ +3\. [a-z]+ +\\n4\. [a-z]+ +5\. [a-z]+ +6\. [a-z]+ *<\/b>/.test(r.log), r.log);
-    ck('generate: the screen offers phone or paper, one way or both', showLine.includes('one way or both') && showLine.includes('<b>Phone:</b>') && showLine.includes('<b>Paper:</b>'), showLine);
+    ck('generate: the screen offers phone or paper, one way or both', showLine.includes('one way or both') && showLine.includes("phone's password manager") && showLine.includes('write down the words'), showLine);
     ck('generate: the QR code holds exactly the words', r.qrin === gen, r.qrin);
     ck('generate: with a camera, Scan it back is the first check', /--hide-header Scan it back from my phone Type the words Show the passphrase again$/m.test(r.log), r.log);
 
@@ -310,10 +310,18 @@ cat "$QRIN"; echo
     ck('setup: no Cancel path exits any more', !/No passphrase received/.test(setup.slice(0, setup.indexOf('# --- Create the LUKS vault'))) || /\[ -n "\$PASSWORD" \] && break\n    done/.test(setup));
     // Heights checked by rendering each list with zenity 4.0.1 (Ubuntu 24.04)
     // at 1366x768: lower ones hide the last choice below a scroll bar.
-    for (const [title, min] of [['Lock Your Vault', 380], ["Setup Isn't Finished", 360], ['Passphrase Could Be Stronger', 400], ['Check Your Copy', 380]]) {
+    for (const [title, min] of [['Lock Your Vault', 380], ["Setup Isn't Finished", 360], ['Passphrase Could Be Stronger', 480], ['Check Your Copy', 380]]) {
         const h = (setup.match(new RegExp('--list --title="' + title + '" --width=\\d+ --height=(\\d+)')) || [])[1];
         ck(`setup: "${title}" is tall enough to show every choice`, Number(h) >= min, h);
     }
+    // Setup runs at GDK_SCALE=2, and zenity doesn't wrap the text above a
+    // list: a line longer than about 66 characters runs off a 1920-pixel
+    // screen (checked by rendering at 1920x1080).
+    const listTexts = [...setup.matchAll(/zenity --list[^\n]*\\\n\s*--text="((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
+    const tooLong = listTexts.flatMap((t) => t.split('\\n')).filter((l) => l.replace(/\$\{[a-z_]+\}/gi, 'x'.repeat(10)).length > 66);
+    ck(`setup: every list's text is in lines short enough for 1080p at double size (${listTexts.length} lists)`, listTexts.length >= 5 && tooLong.length === 0, tooLong);
+    ck('setup: the Fair message is wrapped too', setup.includes(`message=$(printf '%s' "$message" | fold -s -w 60)`));
+    ck('setup: the generated QR code is drawn small enough to fit 1080p at double size', setup.includes("size='small' line_height='0.85'>${qr}"));
     ck('boot: an unfinished setup shuts down instead of a black screen',
         /title="Setup Incomplete"[\s\S]*?sudo systemctl poweroff 2>\/dev\/null \|\| sudo poweroff \|\| true\n\s*exec sleep infinity/.test(bootSh));
     const gcli = execFileSync('python3', ['-I', PY, '--generate', '6'], { env: { SAFEKEEP_PWCHECK_LISTS: LISTS_PATH.pathname } }).toString();

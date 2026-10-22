@@ -192,12 +192,21 @@ users without a password manager to it.
     screen with the QR code and words. Closing that screen goes back to the
     method choice, and a new Generate gives new words.
 - The QR code is drawn with `qrencode` in block characters and never
-  written anywhere. Checked by rendering the real screen with zenity 4.0.1
-  at 1366×768 and decoding the screenshot with `zbarimg`, including the
-  longest possible words (53 characters, still a version 3 QR). It fits a
-  768-pixel-high screen. `qrencode` is a package added in `chroot-setup.sh`,
-  so it needs a full build; a stick without it shows the words only, and
-  the check is typing.
+  written anywhere. `qrencode` is a package added in `chroot-setup.sh`, so
+  it needs a full build; a stick without it shows the words only, and the
+  check is typing.
+- **Screen size.** Setup's dialogs run at double size (`GDK_SCALE=2`), so a
+  1920×1080 screen gives them only 960×540 to work with. Checked by
+  rendering the real dialogs with zenity 4.0.1 at double size on
+  1920×1080:
+  - the QR code is drawn at Pango size `small`, which fits the passphrase
+    screen in 1,016 pixels and still decodes with `zbarimg`, including
+    with the longest possible words (53 characters, a version 3 QR);
+  - zenity doesn't wrap the text above a list, so every list's text is
+    broken into lines of at most about 64 characters, and the strength
+    message is wrapped with `fold`. Before, the Fair warning and the older
+    Vault Created dialog ran off the side of a 1080p screen.
+  `test-pwcheck.mjs` checks the line lengths and the list heights.
 
 **No more dead ends on Cancel.** Before, Cancel anywhere in setup ended
 it, and the boot script then showed "Setup Incomplete" and left a black

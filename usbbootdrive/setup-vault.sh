@@ -155,7 +155,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     setup_not_finished() {
         local choice
         choice=$(zenity --list --title="Setup Isn't Finished" --width=450 --height=360 \
-            --text="SafeKeepVault can't start until your encrypted vault is set up.\n\nGo back to finish setup now, or shut down and finish it the next time you start the computer from this stick." \
+            --text="SafeKeepVault can't start until your encrypted vault is set up.\n\nGo back to finish setup now, or shut down and finish it\nthe next time you start the computer from this stick." \
             --column="Choice" --hide-header \
             "Go back to setup" "Shut down") || true
         if [ "$choice" = "Shut down" ]; then
@@ -221,12 +221,15 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
                     --text="Strength: Weak (about ${bits} bits)\n\nThis Master Passphrase is too easy to guess. ${message}\n\nAnyone who finds this stick can copy the vault and try likely passwords on their own computers, as fast as they can.\n\nUse a long random password from a password manager (as a QR code), or 6 or more random words." || true
                 return 1 ;;
             fair)
+                # zenity doesn't wrap the text above a list, and at GDK_SCALE=2
+                # a long line runs off a 1920-pixel screen: break lines by hand.
+                message=$(printf '%s' "$message" | fold -s -w 60)
                 # Plain --list (see the Method dialog below): Enter picks the
                 # highlighted first row, and closing the dialog also means
                 # "Choose another", so only a deliberate pick keeps it.
                 local choice
-                choice=$(zenity --list --title="Passphrase Could Be Stronger" --width=450 --height=400 \
-                    --text="Strength: Fair (about ${bits} bits)\n\nThis Master Passphrase would take a determined attacker a long time to guess, but not forever. ${message}\n\nFor a vault that protects your bitcoin, we recommend a long random password from a password manager (as a QR code), or 6 or more random words." \
+                choice=$(zenity --list --title="Passphrase Could Be Stronger" --width=450 --height=480 \
+                    --text="Strength: Fair (about ${bits} bits)\n\nThis Master Passphrase would take a determined attacker\na long time to guess, but not forever.\n${message}\n\nFor a vault that protects your bitcoin, we recommend a long\nrandom password from a password manager (as a QR code),\nor 6 or more random words." \
                     --column="Choice" --hide-header \
                     "Choose another passphrase" "Use this one anyway") || true
                 [ "$choice" = "Use this one anyway" ]
@@ -270,8 +273,8 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
 
         checks=()
         if [ -n "$qr" ]; then
-            intro="Save your new Master Passphrase now, one way or both:\n\n•  <b>Phone:</b> scan this QR code into your password manager, with your phone's camera or the Courier Tool.\n•  <b>Paper:</b> write down the 6 words, in order."
-            body="<span font_family='DejaVu Sans Mono, monospace' size='x-large' line_height='0.85'>${qr}</span>\n\n"
+            intro="Save it one way or both: scan the QR code into your phone's password manager, or write down the words."
+            body="<span font_family='DejaVu Sans Mono, monospace' size='small' line_height='0.85'>${qr}</span>\n\n"
             [ "$HAS_CAMERA" = true ] && checks+=("Scan it back from my phone")
         else
             intro="Write these 6 words on paper now, in this order. Together they are your Master Passphrase. Keep the paper with your seed backup, or somewhere separate."
@@ -282,12 +285,12 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
         while true; do
             LC_ALL=C.UTF-8 zenity --info --title="Your Master Passphrase" --width=560 \
                 --ok-label="Next: Check Your Copy" \
-                --text="${intro}\n\n${body}<span font_family='monospace' size='large'><b>${shown}</b></span>\n\nNext you'll check your copy. SafeKeepVault can't show this again after setup." || return 1
+                --text="${intro}\n\n${body}<span font_family='monospace' size='large'><b>${shown}</b></span>\n\nNext you'll check your copy. It can't be shown again after setup." || return 1
             while true; do
                 # Plain --list (see the Method dialog below). Closing it
                 # shows the passphrase again rather than losing it.
                 check=$(zenity --list --title="Check Your Copy" --width=450 --height=380 \
-                    --text="Before your vault is locked with this passphrase, check that your copy is right.\n\nTo unlock the vault, you will scan the QR code, or type the words in lowercase with one space between each word." \
+                    --text="Before your vault is locked with this passphrase,\ncheck that your copy is right.\n\nTo unlock the vault, you will scan the QR code, or type the\nwords in lowercase with one space between each word." \
                     --column="Check" --hide-header \
                     "${checks[@]}") || check=""
                 case "$check" in
@@ -335,7 +338,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     PASSWORD=""
     while true; do
         INPUT_METHOD=$(zenity --list --title="Lock Your Vault" --width=450 --height=380 \
-            --text="How would you like to set your Master Passphrase?\n\nNo password manager? Choose Generate One for Me: SafeKeepVault makes a strong passphrase of 6 words for you to write down." \
+            --text="How would you like to set your Master Passphrase?\n\nNo password manager? Choose Generate One for Me:\nSafeKeepVault makes a strong passphrase of 6 words for you." \
             --column="Method" --hide-header \
             "${METHODS[@]}") || true
         if [ -z "$INPUT_METHOD" ]; then
@@ -519,7 +522,7 @@ if [ -n "${VAULT_MB:-}" ]; then
 fi
 
 NEXT_STEP=$(zenity --list --title="SafeKeepVault — Vault Created" --width=520 --height=420 \
-    --text="Your ${VAULT_DESC} is created and locked.\n\nNext, unlock it with the Master Passphrase you just set.\n\nRestoring from a .7z backup? It must be on the stick's TRANSFER drive first. Choose \"Shut down\", copy the backup onto TRANSFER from another computer, then put the stick back and power on." \
+    --text="Your ${VAULT_DESC} is created and locked.\n\nNext, unlock it with the Master Passphrase you just set.\n\nRestoring from a .7z backup? It must be on the stick's TRANSFER\ndrive first. Choose \"Shut down\", copy the backup onto TRANSFER\nfrom another computer, then put the stick back and power on." \
     --column="Next step" --hide-header \
     "Continue now" \
     "Shut down to copy a backup onto the stick") || true
