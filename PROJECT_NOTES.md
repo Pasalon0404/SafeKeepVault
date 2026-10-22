@@ -9,15 +9,46 @@
 
 ---
 
-## Current state (Oct 21, 2026) — v1.50
+## Current state (Oct 22, 2026) — v1.51
 
-The last release is **v1.50** (Oct 21, `v1.50 · build 315 · ff1e6c3`):
-safer seed generation (see "Seed entropy" below). v1.47, v1.48 and v1.49
-sticks install it in place from Device Options → Update SafeKeep.
-v1.49 (Oct 20) added the boot logo, the visible shutdown screen and the
-clean restart after an update. `seed-xor-tool/VERSION` says 1.50: features
-merge to `main` without a bump, and builds from `main` are for the owner's
-own use until the owner says it's release time (see `CLAUDE.md`).
+**v1.51** (Oct 22) is the Master Passphrase release
+(`PASSPHRASE_STRENGTH_DESIGN.md`, Parts 1–3, all tested on Dave's spare
+stick):
+- a strength check refuses a Weak Master Passphrase at setup and a Weak
+  Encrypted Backup password (with a bar on the backup screen);
+- **Generate One for Me** at setup: 6 BIP39 words shown as a QR code and as
+  words, saved one way or both, then checked by scanning the QR code back
+  from the phone or typing the words back;
+- **Device Options → Master Passphrase → Change Master Passphrase**: lock,
+  change in native dialogs, unlock with the new one;
+- a red dashboard banner when the vault was unlocked with a Weak passphrase;
+- Cancel in setup no longer ends at a black screen; setup's dialogs fit a
+  1080p screen at double size.
+
+v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
+(see "Seed entropy" below). v1.47 and later sticks install each release in
+place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
+1.51: features merge to `main` without a bump, and builds from `main` are
+for the owner's own use until the owner says it's release time (see
+`CLAUDE.md`).
+
+Release notes for v1.51:
+- **v1.51 adds an OS package, `qrencode`** (`chroot-setup.sh`), so the
+  image needs the full `build.sh`; the update file carries it like the rest
+  of the OS. A quick update of a stick built before it skips the QR code
+  (Generate One for Me then shows the words only).
+- **Setup and unlock dialogs run at `GDK_SCALE=2`.** On a 1920×1080 screen
+  they get 960×540. Check new dialogs by rendering them that way (Xvfb +
+  the real zenity 4.0.1 + `import`), not at normal size. zenity doesn't
+  wrap the text above a `--list`: break it by hand (`test-pwcheck.mjs`
+  checks line lengths and list heights).
+- **zenity refuses non-ASCII text in a C locale** ("This option is not
+  available"); the QR code dialog runs with `LC_ALL=C.UTF-8`.
+- **The Courier Tool reads the setup QR code** (Receive → Copy to
+  clipboard, and Transmit shows it again for the scan-back): checked with
+  its own `html5-qrcode` on a rendered screen.
+- **Part 4 (a fixed minimum Argon2 cost) was skipped** by Dave; vaults
+  keep cryptsetup's per-computer default (1 GiB on any recent machine).
 
 Release notes for v1.50:
 - **Version numbers are two whole numbers.** The updater compares
@@ -152,8 +183,9 @@ How every change to the boot scripts or the OS was tested on Oct 20
   sandbox after `npm ci` (the old "rolldown binding missing" problem is
   gone). Playwright with the preinstalled Chromium can drive the dev server
   for screenshots at laptop size (1366×900).
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **44 files**,
-  all passing on Linux at `e86560c` (Oct 20). On macOS three always fail
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **47 files**,
+  all passing on Linux at `0e0f42e` (Oct 22). `test-change-passphrase.mjs`
+  needs `cryptsetup` for its LUKS checks and says SKIP without it. On macOS three always fail
   because they need Linux tools: `test-auto-off.mjs`, `test-os-lockdown.mjs`
   (GNU `sed`) and `test-updater.mjs` (`gpgv`). Nothing runs tests on push —
   only the release workflow, after the tag is pushed — so before tagging,
@@ -201,6 +233,17 @@ How every change to the boot scripts or the OS was tested on Oct 20
   `seeds/` that contains them.
 
 ### How key subsystems work now
+
+**Master Passphrase** (`PASSPHRASE_STRENGTH_DESIGN.md`). One strength
+estimator in two copies: `shared/pwcheck.js` (the app's bars) and
+`usbbootdrive/safekeep-pwcheck.py` (enforcement on the stick), kept equal
+by `test-pwcheck.mjs`; word lists in `usbbootdrive/pwcheck-lists.json`.
+Setup's passphrase screens live in `passphrase-dialogs.sh`, sourced by
+`setup-vault.sh` and `change-passphrase.sh`. Change Master Passphrase is the
+power action `passphrase`: lock, then `change-passphrase` before the
+unlock prompt, then `safekeep-passphrase.py` (`luksChangeKey`, passphrases
+through pipes). `unlock-vault.sh` leaves only the rating in
+`/tmp/safekeep-signals/PASSPHRASE_RATING.json`.
 
 **Seed entropy** (reviewed after COLDCARD's 2026 weak-seed losses, whose
 cause was a build change that quietly swapped the random generator).
@@ -379,9 +422,9 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
 
 ### Open items / next steps
 
-1. **After v1.50:** merge Safekeep-Website #19. The v1.50 update file has
-   not yet been installed on a stick from the release itself; the same
-   code was tested on Dave's stick as build 313.
+1. **After v1.51:** merge the v1.51 website PR, and install
+   `SafeKeep-Update-v1.51.tar` on a stick from the release itself (the same
+   code was tested on Dave's spare stick as builds 324–336).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
@@ -422,6 +465,14 @@ auto-mount is in daily use on hardware.
 ### Recent work (newest first)
 
 ```
+764f409 Change Master Passphrase: lock, change, unlock                                   (#53)
+ae59ea2 Setup: make every dialog fit a 1080p screen at double size                       (#53)
+ebf0e5b Generate One for Me: QR code and words together, check by scanning back          (#52)
+31905b9 Generate One for Me: offer the words as a QR code (qrencode)                     (#51)
+8852544 Setup: make the choice lists tall enough to show every choice                    (#50)
+8dbce81 Setup: Generate One for Me, and no dead end on Cancel                            (#49)
+9863b5c Refuse weak passwords: strength check at setup and on backups                    (#48)
+846bed0 Entropy: refuse patterned dice, health-check the RNG, hash-mix the pool          (v1.50)
 e86560c Boot splash: redraw it after the graphics driver takes over the console
 eabb41a Boot logo: orange not bold yellow; no font reload under the early splash
 9cb6de6 OS: keep the kernel console font and palette for the boot logo
