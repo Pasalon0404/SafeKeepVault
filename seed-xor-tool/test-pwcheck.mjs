@@ -200,7 +200,7 @@ try {
 
     // setup-vault.sh: the whole passphrase loop, with a stand-in zenity that
     // plays back a script of answers ("exit code<TAB>output" per dialog).
-    // "@WORDS" answers with the words the last dialog showed.
+    // "@WORDS" answers with the numbered words the last screen showed.
     const bin2 = join(tmp, 'bin2');
     mkdirSync(bin2);
     writeFileSync(join(bin2, 'zenity'), `#!/bin/bash
@@ -209,7 +209,7 @@ line=$(head -n1 "$ZQUEUE"); sed -i 1d "$ZQUEUE"
 if [ -z "$line" ]; then echo "QUEUE EMPTY" >> "$ZLOG"; kill -TERM "$TESTPID"; exit 1; fi
 rc=\${line%%$'\\t'*}; out=\${line#*$'\\t'}
 if [ "$out" = "@WORDS" ]; then
-    out=$(grep -o '<b>.*</b>' "$ZLOG" | tail -1 | sed -e 's/<[^>]*>//g' -e 's/\\\\n/ /g' -e 's/[0-9]\\. //g' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//')
+    out=$(grep -o "size='large'><b>[^<]*</b>" "$ZLOG" | tail -1 | sed -e 's/<[^>]*>//g' -e "s/size='large'>//" -e 's/\\\\n/ /g' -e 's/[0-9]\\. //g' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//')
 fi
 printf '%s' "$out"
 exit "$rc"
@@ -222,23 +222,34 @@ cat > "$QRIN"
 printf '%s\\n' 'QRBLOCKS-LINE-1' 'QRBLOCKS-LINE-2'
 `);
     chmodSync(join(bin2, 'qrencode'), 0o755);
+    // Stand-in zbarcam: "scans" the QR code that qrencode was given, unless
+    // ZBAR_OUT says otherwise (__none__ = nothing read).
+    writeFileSync(join(bin2, 'zbarcam'), `#!/bin/bash
+if [ "$ZBAR_OUT" = __none__ ]; then exit 0; fi
+if [ -n "$ZBAR_OUT" ]; then printf '%s\\n' "$ZBAR_OUT"; exit 0; fi
+cat "$QRIN"; echo
+`);
+    chmodSync(join(bin2, 'zbarcam'), 0o755);
     const pyPath = '/usr/local/lib/safekeep/safekeep-pwcheck.py';
     const cut = (from, to) => { const i = setup.indexOf(from); return setup.slice(i, setup.indexOf(to, i)); };
     const loop = (cut('    setup_not_finished() {', '    # --- Welcome dialog ---') +
         cut('    # STRENGTH CHECK', '\n    if [ -z "$PASSWORD" ]; then')).split(pyPath).join('"$CHECKER"');
-    const runLoop = (answers, camera = true, fakeQr = '') => {
+    const runLoop = (answers, camera = true, fakeQr = '', zbar = '') => {
         writeFileSync(join(tmp, 'queue'), answers.map((a) => a.join('\t')).join('\n') + '\n');
         writeFileSync(join(tmp, 'zlog'), '');
+        rmSync(join(tmp, 'qrin'), { force: true });
         const r = spawnSync('bash', ['-c', 'set -euo pipefail\nTESTPID=$$\n' + loop + '\nprintf "PASSWORD=%s" "$PASSWORD"'], {
             timeout: 20000,
             env: { PATH: bin2 + ':' + process.env.PATH, HAS_CAMERA: String(camera), QR_SCAN_TIMEOUT: '1', DATA_MOUNT: tmp,
                 CHECKER: PY, SAFEKEEP_PWCHECK_LISTS: LISTS_PATH.pathname, ZLOG: join(tmp, 'zlog'), ZQUEUE: join(tmp, 'queue'),
-                QRIN: join(tmp, 'qrin'), FAKE_QR: fakeQr },
+                QRIN: join(tmp, 'qrin'), FAKE_QR: fakeQr, ZBAR_OUT: zbar },
         });
         const log = readFileSync(join(tmp, 'zlog'), 'utf8');
         const m = r.stdout.toString().match(/PASSWORD=(.*)$/s);
-        return { password: m ? m[1] : null, log, status: r.status, left: readFileSync(join(tmp, 'queue'), 'utf8').trim() };
+        const qrin = existsSync(join(tmp, 'qrin')) ? readFileSync(join(tmp, 'qrin'), 'utf8') : null;
+        return { password: m ? m[1] : null, log, qrin, status: r.status, left: readFileSync(join(tmp, 'queue'), 'utf8').trim() };
     };
+    const isSix = (p) => !!p && p.split(' ').length === 6 && p.split(' ').every((w) => wordlist.includes(w));
     const PM = 'x7#Qp9!vLm2@Zr8$Tq4w';
     let r = runLoop([['1', ''], ['0', 'Go back to setup'], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
     ck('setup: closing the method choice asks, and "Go back" returns to it', r.password === PM && r.log.includes("Setup Isn't Finished") && !r.left, r);
@@ -249,31 +260,49 @@ printf '%s\\n' 'QRBLOCKS-LINE-1' 'QRBLOCKS-LINE-2'
     r = runLoop([['0', 'Type Password'], ['0', 'Michael1985'], ['0', ''], ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
     ck('setup: Weak, then Cancel, goes back to the method choice', r.password === PM && r.log.includes('Passphrase Too Easy to Guess') && !r.left, r);
     ck('setup: with a camera the choices are Scan, Type, Generate (Scan first)', /--hide-header Scan QR Code Type Password Generate One for Me$/m.test(r.log), r.log);
-    rmSync(join(tmp, 'qrin'), { force: true });
-    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', 'wrong words here'], ['0', ''], ['0', '@WORDS'], ['0', '']]);
+
+    // Generate One for Me: QR code and words on one screen, then a check.
+    const GEN = ['0', 'Generate One for Me'], SHOW = ['0', ''];
+    const SCAN = ['0', 'Scan it back from my phone'], TYPE = ['0', 'Type the words'], AGAIN = ['0', 'Show the passphrase again'];
+    r = runLoop([GEN, SHOW, TYPE, ['0', 'wrong words here'], ['0', ''], TYPE, ['0', '@WORDS']]);
     const gen = r.password || '';
-    ck('setup: Generate makes 6 BIP39 words', gen.split(' ').length === 6 && gen.split(' ').every((w) => wordlist.includes(w)), r);
-    ck('setup: a wrong retype is refused, then the right one sets the passphrase', r.log.includes("That Doesn't Match") && !r.left, r);
-    ck('setup: generated words are Strong for the vault and a backup', rate(gen, 'vault').band === 'strong' && rate(gen, 'backup').band === 'strong');
-    ck('setup: after the retype, the words are offered as a QR code', /Save It on Your Phone Too \(Optional\)[^\n]*QRBLOCKS-LINE-1\nQRBLOCKS-LINE-2/.test(r.log), r.log);
-    ck('setup: the QR code holds exactly the words', existsSync(join(tmp, 'qrin')) && readFileSync(join(tmp, 'qrin'), 'utf8') === gen);
-    ck('setup: the QR step comes after the words are confirmed', r.log.indexOf('Save It on Your Phone Too') > r.log.lastIndexOf('Check Your Paper'));
-    ck('setup: words shown numbered, three to a line', /<b>1\. [a-z]+ +2\. [a-z]+ +3\. [a-z]+ +\\n4\. [a-z]+ +5\. [a-z]+ +6\. [a-z]+ *<\/b>/.test(r.log), r.log);
-    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['1', ''], ['0', ''], ['0', '@WORDS'], ['0', '']]);
-    const shows = r.log.match(/<b>[^<]*<\/b>/g) || [];
-    ck('setup: "Show the Words Again" shows the same words', shows.length === 2 && shows[0] === shows[1] && r.password && !r.left, r);
-    r = runLoop([['0', 'Generate One for Me'], ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
-    ck('setup: closing the words dialog goes back to the method choice', r.password === PM && !r.left, r);
-    const g1 = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS'], ['0', '']]).password;
-    const g2 = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS'], ['0', '']]).password;
-    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS']], true, 'fail');
-    ck('setup: if the QR code can\'t be drawn, setup goes on without it', r.password && r.password.split(' ').length === 6 && !r.log.includes('Save It on Your Phone') && !r.left, r);
-    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS'], ['1', '']]);
-    ck('setup: closing the QR screen still finishes setup', r.password && r.password.split(' ').length === 6 && !r.left, r);
-    ck('setup: the QR step is skipped without qrencode, and runs in a UTF-8 locale',
-        setup.includes('command -v qrencode >/dev/null 2>&1 || return 0') && setup.includes('LC_ALL=C.UTF-8 zenity --info --title="Save It on Your Phone Too (Optional)"'));
+    ck('generate: 6 BIP39 words', isSix(gen), r);
+    ck('generate: Strong for the vault and a backup', rate(gen, 'vault').band === 'strong' && rate(gen, 'backup').band === 'strong');
+    ck('generate: a wrong retype is refused, then the right one sets the passphrase', r.log.includes("That Doesn't Match") && !r.left, r);
+    const showLine = r.log.split('\n').find((l) => l.includes('--title=Your Master Passphrase')) || '';
+    ck('generate: the QR code and the words are on the same screen',
+        /QRBLOCKS-LINE-1\nQRBLOCKS-LINE-2/.test(r.log.slice(r.log.indexOf('--title=Your Master Passphrase'))) && /<b>1\. [a-z]+ +2\. [a-z]+ +3\. [a-z]+ +\\n4\. [a-z]+ +5\. [a-z]+ +6\. [a-z]+ *<\/b>/.test(r.log), r.log);
+    ck('generate: the screen offers phone or paper, one way or both', showLine.includes('one way or both') && showLine.includes('<b>Phone:</b>') && showLine.includes('<b>Paper:</b>'), showLine);
+    ck('generate: the QR code holds exactly the words', r.qrin === gen, r.qrin);
+    ck('generate: with a camera, Scan it back is the first check', /--hide-header Scan it back from my phone Type the words Show the passphrase again$/m.test(r.log), r.log);
+
+    r = runLoop([GEN, SHOW, SCAN, ['0', '']]);
+    ck('generate: scanning the QR code back sets the passphrase, with nothing typed', isSix(r.password) && r.password === r.qrin && !r.log.includes('Check Your Paper') && !r.left, r);
+    r = runLoop([GEN, SHOW, SCAN, ['0', ''], ['0', ''], TYPE, ['0', '@WORDS']], true, '', 'some other passphrase');
+    ck('generate: a different QR code is refused', r.log.includes("That QR code isn't this passphrase") && isSix(r.password) && !r.left, r);
+    r = runLoop([GEN, SHOW, SCAN, ['0', ''], ['0', ''], SCAN, ['0', '']], true, '', '__none__');
+    ck('generate: nothing scanned says so, and asks again', r.log.includes('Nothing Was Scanned') && r.password === null, r);
+    r = runLoop([GEN, SHOW, AGAIN, SHOW, TYPE, ['0', '@WORDS']]);
+    let shows = r.log.match(/size='large'><b>[^<]*<\/b>/g) || [];
+    ck('generate: "Show the passphrase again" shows the same words', shows.length === 2 && shows[0] === shows[1] && isSix(r.password) && !r.left, r);
+    r = runLoop([GEN, SHOW, ['1', ''], SHOW, TYPE, ['0', '@WORDS']]);
+    shows = r.log.match(/size='large'><b>[^<]*<\/b>/g) || [];
+    ck('generate: closing the check shows the passphrase again', shows.length === 2 && isSix(r.password) && !r.left, r);
+    r = runLoop([GEN, SHOW, TYPE, ['1', ''], TYPE, ['0', '@WORDS']]);
+    ck('generate: Back in the typed check returns to the check choice', isSix(r.password) && !r.left, r);
+    r = runLoop([GEN, ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
+    ck('generate: closing the passphrase screen goes back to the method choice', r.password === PM && !r.left, r);
+    const g1 = runLoop([GEN, SHOW, SCAN, ['0', '']]).password;
+    const g2 = runLoop([GEN, SHOW, SCAN, ['0', '']]).password;
+    ck('generate: each Generate gives new words', isSix(g1) && isSix(g2) && g1 !== g2);
+    r = runLoop([GEN, SHOW, TYPE, ['0', '@WORDS']], true, 'fail');
+    ck('generate: without a QR code, the words only and the check is typing',
+        isSix(r.password) && !r.log.includes('QRBLOCKS') && !r.log.includes('Scan it back') && r.log.includes('Write these 6 words on paper now') && !r.left, r);
+    r = runLoop([GEN, SHOW, TYPE, ['0', '@WORDS']], false);
+    ck('generate: without a camera, the QR code shows but the check is typing',
+        isSix(r.password) && r.log.includes('QRBLOCKS') && !r.log.includes('Scan it back') && !r.left, r);
+    ck('generate: the passphrase screen runs in a UTF-8 locale', setup.includes('LC_ALL=C.UTF-8 zenity --info --title="Your Master Passphrase"'));
     ck('image installs qrencode', /\n    qrencode \\\n/.test(readFileSync(new URL('chroot-setup.sh', USB), 'utf8')));
-    ck('setup: each Generate gives new words', g1 && g2 && g1 !== g2);
     r = runLoop([['0', 'Type Password'], ['0', PM], ['0', PM]], false);
     ck('setup: without a camera the choices are Type and Generate', /--hide-header Type Password Generate One for Me$/m.test(r.log) && r.password === PM, r);
     ck('setup: Cancel on the welcome dialog asks instead of quitting',
@@ -281,7 +310,7 @@ printf '%s\\n' 'QRBLOCKS-LINE-1' 'QRBLOCKS-LINE-2'
     ck('setup: no Cancel path exits any more', !/No passphrase received/.test(setup.slice(0, setup.indexOf('# --- Create the LUKS vault'))) || /\[ -n "\$PASSWORD" \] && break\n    done/.test(setup));
     // Heights checked by rendering each list with zenity 4.0.1 (Ubuntu 24.04)
     // at 1366x768: lower ones hide the last choice below a scroll bar.
-    for (const [title, min] of [['Lock Your Vault', 380], ["Setup Isn't Finished", 360], ['Passphrase Could Be Stronger', 400]]) {
+    for (const [title, min] of [['Lock Your Vault', 380], ["Setup Isn't Finished", 360], ['Passphrase Could Be Stronger', 400], ['Check Your Copy', 380]]) {
         const h = (setup.match(new RegExp('--list --title="' + title + '" --width=\\d+ --height=(\\d+)')) || [])[1];
         ck(`setup: "${title}" is tall enough to show every choice`, Number(h) >= min, h);
     }
