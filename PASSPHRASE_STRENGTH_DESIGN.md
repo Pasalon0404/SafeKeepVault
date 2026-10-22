@@ -70,7 +70,7 @@ first, so `Tr0ub4dor&3` is worth far fewer bits than its length suggests.
 | | Weak: refused | Fair: warned, "Use anyway" | Strong |
 |---|---|---|---|
 | Master Passphrase | under 40 bits | 40–59 bits | 60 bits or more |
-| Encrypted Backup password | under 50 bits | 50–69 bits | 70 bits or more |
+| Encrypted Backup password | under 50 bits | 50–64 bits | 65 bits or more |
 
 So 4 random words are Fair for the vault and Weak for a backup; 6 random
 words or a password-manager password are Strong for both.
@@ -177,6 +177,59 @@ support, so unlock stays under about 5 seconds. Computers with under
 Existing vaults keep their settings until the passphrase is changed
 (Part 3), which writes the new key with the new settings.
 
+## Not locking yourself out
+
+Refusing weak passwords protects against a thief, but it raises the other
+risk: a user who can't use an easy password may make up a clever one and
+forget it. There is no recovery without the passphrase; that is what keeps
+the vault safe from a thief. SafeKeep can't keep a copy, so the design has
+to make the passphrase easy to keep.
+
+**What a forgotten Master Passphrase costs.** The bitcoin itself is not
+lost: the paper seed backup restores the wallet on a reset stick, or in
+any wallet. What is lost is everything that lives only in the vault:
+saved BIP39 passphrases, Encrypted Notes, 2FA backups and saved wallets.
+For a user whose BIP39 passphrase exists only in the vault, that *is*
+losing the funds.
+
+**How the design keeps the passphrase recoverable:**
+1. **Words, not random characters.** "Generate one for me" (Part 2) gives
+   6 BIP39 words. They are Strong, and easy to write down, read back and
+   type, unlike a string such as `x7#Qp…`.
+2. **A Master Passphrase card.** Setup asks the user to write the
+   passphrase on paper and keep it like the seed backup: with it, or
+   somewhere separate. Users already do this for their 12 or 24 words.
+   The docs give the trade-off: kept together, one find gives a thief
+   both; kept apart, both must be found again later.
+3. **Prove it right away.** Generated words are typed back from the
+   paper, not from memory, before the vault is made. After setup, SafeKeep
+   already goes straight to the normal unlock prompt (`setup-vault.sh`,
+   Phase 2), so the first unlock proves the passphrase works before any
+   data goes in. That is true for a scanned QR too.
+4. **Practice unlock.** A dashboard reminder two weeks after setup, then
+   every six months: "Check you can still unlock your vault". It asks for
+   the passphrase and checks it with
+   `cryptsetup open --test-passphrase`, which opens nothing and changes
+   nothing. A forgotten passphrase is then found while the user can still
+   look for where they wrote it, and while the vault is still open, so
+   they can make an Encrypted Backup or change the passphrase (Part 3).
+   The reminder can be turned off in Device Options.
+5. **Change it later (Part 3).** A user who starts using a password manager
+   can move to a password from it without resetting the stick.
+6. **The phone can't be the only copy.** For the password manager → QR
+   route, setup and the docs say to keep the password in the password
+   manager itself (which has its own backup), not just as a photo of the
+   QR. A lost phone must not mean a lost vault.
+7. **Fair is allowed.** Only Weak is refused. A memorable passphrase in
+   the Fair band, such as 4 random words, can still be used after the
+   warning.
+
+**Encrypted Backup passwords** have the same risk with a twist: a backup
+is made to be restored, often long after. The backup screen says to keep
+its password on the Master Passphrase card or in a password manager, and
+notes that it can be the same as the Master Passphrase only if that is
+Strong for a backup (65 bits or more, such as 6 random words).
+
 ## Risks and open questions
 
 - **The estimator is a guess.** It can't know how a password was made, so
@@ -203,7 +256,8 @@ Existing vaults keep their settings until the passphrase is changed
 1. **Part 1, setup and backup**, with the shared test list. This is the
    change the owner asked for.
 2. **Part 3, change passphrase**, so the unlock warning in Part 1 has
-   somewhere to send users. The unlock warning ships with it.
+   somewhere to send users. The unlock warning and the practice unlock
+   ("Not locking yourself out") ship with it.
 3. **Part 2, Generate one for me.**
 4. **Part 4, fixed Argon2 cost**, after measuring unlock times.
 
