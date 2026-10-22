@@ -173,27 +173,31 @@ users without a password manager to it.
 - `safekeep-pwcheck.py --generate 6` draws 6 words from the BIP39 list
   with Python's `secrets` module (the kernel's random number generator):
   about 66 bits, Strong for the vault and for a backup.
-- Setup shows them large and numbered, three to a line, with "Write these
-  6 words on paper now". The text says they are typed in lowercase with
-  one space between words at every unlock, to keep the paper with the seed
-  backup or somewhere separate, and that SafeKeepVault can't show them
-  again.
-- **I've Written Them Down** asks for the words typed back from the paper.
-  They must match exactly, which proves the paper is right before the vault
-  is locked with them. A wrong retype says so and asks again;
-  **Show the Words Again** goes back to the words. Closing the words dialog
-  goes back to the method choice, and a new Generate gives new words.
-- **Save It on Your Phone Too (optional).** After the retype, setup shows
-  the same words as a QR code, drawn with `qrencode` in block characters,
-  for a phone's camera or the Courier Tool to read into a password manager
-  as a second copy. It holds exactly the words, so **Scan QR Code** at
-  unlock works with it. It shows nothing the words screen didn't and is
-  never written anywhere. **Done**, or closing it, finishes setup.
-  - Checked by rendering it with zenity 4.0.1 at 1366×768 and decoding the
-    screenshot with `zbarimg`, including the longest possible words (53
-    characters, still a version 3 QR). It fits a 768-pixel-high screen.
-  - `qrencode` is a new package in `chroot-setup.sh`, so it needs a full
-    build. A stick without it skips this step: the paper is enough.
+- **One screen, phone or paper.** Setup shows the passphrase as a QR code
+  and as 6 numbered words, three to a line, and asks the user to save it
+  "one way or both": scan the QR code into a phone's password manager (with
+  the phone's camera or the Courier Tool), write the words on paper, or do
+  both. Nobody is made to write the words down. The QR code holds exactly
+  the words, lowercase with one space between them, so **Scan QR Code** at
+  unlock works with it, and so does typing the words.
+- **Check Your Copy.** Before the vault is locked with it, the copy is
+  checked:
+  - **Scan it back from my phone** (when there is a camera and a QR code):
+    the user shows the saved QR code to the camera. It must read exactly
+    the words. A different code, or nothing read in 30 seconds, says so
+    and asks again.
+  - **Type the words**: typed back from the paper, exactly. **Back** returns
+    to the check choice.
+  - **Show the passphrase again**, or closing the check, goes back to the
+    screen with the QR code and words. Closing that screen goes back to the
+    method choice, and a new Generate gives new words.
+- The QR code is drawn with `qrencode` in block characters and never
+  written anywhere. Checked by rendering the real screen with zenity 4.0.1
+  at 1366×768 and decoding the screenshot with `zbarimg`, including the
+  longest possible words (53 characters, still a version 3 QR). It fits a
+  768-pixel-high screen. `qrencode` is a package added in `chroot-setup.sh`,
+  so it needs a full build; a stick without it shows the words only, and
+  the check is typing.
 
 **No more dead ends on Cancel.** Before, Cancel anywhere in setup ended
 it, and the boot script then showed "Setup Incomplete" and left a black
@@ -247,12 +251,13 @@ Setup only runs on a new or factory-reset stick, so use a spare one.
 4. **Cancel:** after a Weak passphrase, press Cancel in the typed entry:
    you're back at the method choice. Close the method choice: **Setup
    Isn't Finished** asks, and **Go back to setup** returns to it.
-5. **Generate One for Me:** 6 numbered words appear. Type a wrong word:
-   "That Doesn't Match". Type them correctly: setup goes on to create the
-   vault, and the unlock prompt that follows takes the same 6 words
-   (Type Password). On a full build, the **Save It on Your Phone Too**
-   QR code shows after the retype: scan it with a phone and check it reads
-   the same 6 words.
+5. **Generate One for Me** (full build): the QR code and the 6 numbered
+   words show together. Scan the QR code into your phone's password
+   manager, then **Check Your Copy → Scan it back from my phone**: setup
+   goes on without anything typed. Try once more with **Type the words**
+   and one wrong word: "That Doesn't Match". At the unlock prompt that
+   follows, **Scan QR Code** with the phone, or **Type Password** with the
+   words, opens the vault.
 6. **Encrypted Backup:** the bar shows Weak for 4 random words and Fair
    for 5. Export refuses the Weak one. A password-manager password shows
    Strong and exports.
@@ -282,8 +287,9 @@ losing the funds.
    The docs give the trade-off: kept together, one find gives a thief
    both; kept apart, both must be found again later. Users on the QR
    route are not asked to: their password manager is the copy.
-3. **Prove it right away.** Generated words are typed back from the
-   paper, not from memory, before the vault is made. After setup, SafeKeep
+3. **Prove it right away.** A generated passphrase is checked before the
+   vault is made: scanned back from the phone, or typed back from the
+   paper, not from memory. After setup, SafeKeep
    already goes straight to the normal unlock prompt (`setup-vault.sh`,
    Phase 2), so the first unlock proves the passphrase works before any
    data goes in. That is true for a scanned QR too.

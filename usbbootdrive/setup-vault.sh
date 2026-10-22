@@ -240,16 +240,22 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
 
     # GENERATE ONE FOR ME (PASSPHRASE_STRENGTH_DESIGN.md, Part 2):
     #   6 random BIP39 words (about 66 bits) from the kernel's random
-    #   number generator, for users without a password manager. They are
-    #   shown once to be written down, then typed back from the paper,
-    #   which proves the paper is right before the vault is locked with
-    #   it. The words are the passphrase exactly as shown: lowercase, one
-    #   space between them, which is also how they are typed at unlock.
-    # After the retype, show_passphrase_qr offers the same words as a QR
-    # code, to save in a phone's password manager.
+    #   number generator. One screen shows them as a QR code, for a phone's
+    #   password manager, and as numbered words, for paper: the user saves
+    #   it one way or both. Then the copy is checked before the vault is
+    #   locked with it: scanned back from the phone, or typed back from the
+    #   paper. Nobody has to write the words down if they use the QR code.
+    #   The passphrase is exactly the words: lowercase, one space between
+    #   them, as they are typed at unlock; the QR code holds the same text,
+    #   so Scan QR Code at unlock works with it too.
+    #   The QR code is drawn with qrencode in block characters and is never
+    #   written anywhere. Without qrencode (a stick built before it was
+    #   added) the screen shows the words only and the check is typing.
+    #   LC_ALL=C.UTF-8: zenity refuses non-ASCII text in a C locale.
     # Returns 0 with PASSWORD set, 1 to go back to the method choice.
     generate_passphrase() {
-        local words shown typed
+        local words shown qr intro body check typed scanned
+        local -a checks
         words=$(python3 -I /usr/local/lib/safekeep/safekeep-pwcheck.py --generate 6 2>/dev/null) || words=""
         if [ "$(printf '%s' "$words" | wc -w)" -ne 6 ]; then
             zenity --warning --title="Can't Generate a Passphrase" --width=400 \
@@ -257,41 +263,68 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
             return 1
         fi
         shown=$(printf '%s\n' $words | awk '{ printf "%d. %-10s", NR, $0; if (NR % 3 == 0 && NR < 6) printf "\\n" }')
+        qr=""
+        if command -v qrencode >/dev/null 2>&1; then
+            qr=$(printf '%s' "$words" | qrencode -t UTF8i -m 2 2>/dev/null) || qr=""
+        fi
+
+        checks=()
+        if [ -n "$qr" ]; then
+            intro="Save your new Master Passphrase now, one way or both:\n\n•  <b>Phone:</b> scan this QR code into your password manager, with your phone's camera or the Courier Tool.\n•  <b>Paper:</b> write down the 6 words, in order."
+            body="<span font_family='DejaVu Sans Mono, monospace' size='x-large' line_height='0.85'>${qr}</span>\n\n"
+            [ "$HAS_CAMERA" = true ] && checks+=("Scan it back from my phone")
+        else
+            intro="Write these 6 words on paper now, in this order. Together they are your Master Passphrase. Keep the paper with your seed backup, or somewhere separate."
+            body=""
+        fi
+        checks+=("Type the words" "Show the passphrase again")
+
         while true; do
-            zenity --info --title="Your Master Passphrase" --width=560 \
-                --ok-label="I've Written Them Down" \
-                --text="Write these 6 words on paper now, in this order. Together they are your Master Passphrase.\n\n<span font_family='monospace' size='x-large'><b>${shown}</b></span>\n\nYou will type them, in lowercase with one space between each word, every time you unlock the vault. Keep the paper with your seed backup, or somewhere separate.\n\nSafeKeepVault can't show these words again, and without them the vault can't be opened." || return 1
+            LC_ALL=C.UTF-8 zenity --info --title="Your Master Passphrase" --width=560 \
+                --ok-label="Next: Check Your Copy" \
+                --text="${intro}\n\n${body}<span font_family='monospace' size='large'><b>${shown}</b></span>\n\nNext you'll check your copy. SafeKeepVault can't show this again after setup." || return 1
             while true; do
-                typed=$(zenity --entry --title="Check Your Paper" --width=500 \
-                    --text="Type the 6 words from your paper, in lowercase with one space between each word:" \
-                    --ok-label="Set Passphrase" --cancel-label="Show the Words Again") || break
-                if [ "$typed" = "$words" ]; then
-                    PASSWORD="$words"
-                    show_passphrase_qr "$words"
-                    return 0
-                fi
-                zenity --warning --title="That Doesn't Match" --width=420 \
-                    --text="What you typed doesn't match the 6 words.\n\nCheck the spelling and the order on your paper, and use one space between words." || true
+                # Plain --list (see the Method dialog below). Closing it
+                # shows the passphrase again rather than losing it.
+                check=$(zenity --list --title="Check Your Copy" --width=450 --height=380 \
+                    --text="Before your vault is locked with this passphrase, check that your copy is right.\n\nTo unlock the vault, you will scan the QR code, or type the words in lowercase with one space between each word." \
+                    --column="Check" --hide-header \
+                    "${checks[@]}") || check=""
+                case "$check" in
+                    "Scan it back from my phone")
+                        zenity --info --title="Scan It Back" --width=400 \
+                            --text="Open the QR code you saved on your phone and hold it up to the camera.\nThe window will close automatically once read (or after ${QR_SCAN_TIMEOUT} seconds)." || true
+                        scanned=$(timeout "$QR_SCAN_TIMEOUT" zbarcam -1 --raw \
+                            -Sdisable -Sqr.enable /dev/video0 2>/dev/null | tr -d '\n') || scanned=""
+                        if [ "$scanned" = "$words" ]; then
+                            PASSWORD="$words"
+                            return 0
+                        fi
+                        if [ -z "$scanned" ]; then
+                            zenity --warning --title="Nothing Was Scanned" --width=420 \
+                                --text="No QR code was read.\n\nTry again, or choose another way to check your copy." || true
+                        else
+                            zenity --warning --title="That Doesn't Match" --width=420 \
+                                --text="That QR code isn't this passphrase.\n\nCheck you saved the QR code shown on the previous screen. You can show it again." || true
+                        fi
+                        ;;
+                    "Type the words")
+                        typed=$(zenity --entry --title="Check Your Paper" --width=500 \
+                            --text="Type the 6 words from your paper, in lowercase with one space between each word:" \
+                            --ok-label="Set Passphrase" --cancel-label="Back") || continue
+                        if [ "$typed" = "$words" ]; then
+                            PASSWORD="$words"
+                            return 0
+                        fi
+                        zenity --warning --title="That Doesn't Match" --width=420 \
+                            --text="What you typed doesn't match the 6 words.\n\nCheck the spelling and the order on your paper, and use one space between words." || true
+                        ;;
+                    *)
+                        break
+                        ;;
+                esac
             done
         done
-    }
-
-    # SAVE IT ON YOUR PHONE TOO (optional, after Generate One for Me):
-    #   The generated words as a QR code, drawn with qrencode in block
-    #   characters, so a phone's camera or the Courier Tool can read it into
-    #   a password manager. It holds exactly the words, so Scan QR Code at
-    #   unlock works with it too. It shows nothing the words screen didn't,
-    #   and it is never written anywhere. Without qrencode (a stick built
-    #   before it was added) this step is skipped: the paper is enough.
-    #   LC_ALL=C.UTF-8: zenity refuses non-ASCII text in a C locale.
-    show_passphrase_qr() {
-        local qr
-        command -v qrencode >/dev/null 2>&1 || return 0
-        qr=$(printf '%s' "$1" | qrencode -t UTF8i -m 2 2>/dev/null) || return 0
-        [ -n "$qr" ] || return 0
-        LC_ALL=C.UTF-8 zenity --info --title="Save It on Your Phone Too (Optional)" --width=560 \
-            --ok-label="Done" \
-            --text="This QR code is your Master Passphrase. If you use a password manager on your phone, save it there as a second copy, next to your paper.\n\n<span font_family='DejaVu Sans Mono, monospace' size='x-large' line_height='0.85'>${qr}</span>\n\nScan it with your phone's camera or the Courier Tool. At unlock you can then choose Scan QR Code instead of typing the words.\n\nAnyone with this QR code and this stick can open your vault. Nothing is saved on the stick." || true
     }
 
     METHODS=("Type Password" "Generate One for Me")
