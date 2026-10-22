@@ -237,11 +237,16 @@ losing the funds.
 
 **Encrypted Backup passwords** have the same risk with a twist: a backup
 is made to be restored, often long after. The backup screen says to keep
-its password on the Master Passphrase card or in a password manager, and
-to use a different password from the Master Passphrase. A backup can sit
-on a computer without the stick, so if it shared the vault password,
-anyone with a copy of the unlock QR could open it (the website's docs say
-the same).
+its password on the Master Passphrase card or in a password manager. The
+app already recommends using the Master Passphrase itself ("to prevent
+password fatigue"), and that stays: one less password to lose. The same
+password then needs the backup rules too, so a Master Passphrase that is
+Fair for the vault but Weak for a backup (such as 4 random words) is
+refused on the backup screen, with "choose a longer one for both, or a
+separate one for backups". A password-manager password passes both. The
+backup screen and the docs also say not to leave backup copies on an
+everyday computer: away from the stick, a copy needs only the password
+(or the unlock QR) to open.
 
 ## Risks and open questions
 
