@@ -154,7 +154,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     # aborted setup and left a black screen.
     setup_not_finished() {
         local choice
-        choice=$(zenity --list --title="Setup Isn't Finished" --width=450 --height=300 \
+        choice=$(zenity --list --title="Setup Isn't Finished" --width=450 --height=360 \
             --text="SafeKeepVault can't start until your encrypted vault is set up.\n\nGo back to finish setup now, or shut down and finish it the next time you start the computer from this stick." \
             --column="Choice" --hide-header \
             "Go back to setup" "Shut down") || true
@@ -225,7 +225,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
                 # highlighted first row, and closing the dialog also means
                 # "Choose another", so only a deliberate pick keeps it.
                 local choice
-                choice=$(zenity --list --title="Passphrase Could Be Stronger" --width=450 --height=330 \
+                choice=$(zenity --list --title="Passphrase Could Be Stronger" --width=450 --height=400 \
                     --text="Strength: Fair (about ${bits} bits)\n\nThis Master Passphrase would take a determined attacker a long time to guess, but not forever. ${message}\n\nFor a vault that protects your bitcoin, we recommend a long random password from a password manager (as a QR code), or 6 or more random words." \
                     --column="Choice" --hide-header \
                     "Choose another passphrase" "Use this one anyway") || true
@@ -280,7 +280,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
 
     PASSWORD=""
     while true; do
-        INPUT_METHOD=$(zenity --list --title="Lock Your Vault" --width=450 --height=300 \
+        INPUT_METHOD=$(zenity --list --title="Lock Your Vault" --width=450 --height=380 \
             --text="How would you like to set your Master Passphrase?\n\nNo password manager? Choose Generate One for Me: SafeKeepVault makes a strong passphrase of 6 words for you to write down." \
             --column="Method" --hide-header \
             "${METHODS[@]}") || true
