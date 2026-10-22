@@ -34,6 +34,29 @@ VAULT_MOUNT="/media/.safekeep-vault"
 MAPPER_NAME="vault"
 
 # -------------------------------------------------------------------
+# PASSPHRASE RATING FOR THE APP (PASSPHRASE_STRENGTH_DESIGN.md, Part 3)
+# -------------------------------------------------------------------
+# After a successful unlock, the passphrase is rated with the same check as
+# setup, and only the result ({"band", "bits"}) is left in RAM for the app:
+# Device Options shows it, and the dashboard warns when it is Weak (vaults
+# set up before the check existed). Cleared on every run, so a temporary
+# session never sees an earlier session's result.
+RATING_FILE="/tmp/safekeep-signals/PASSPHRASE_RATING.json"
+rm -f "$RATING_FILE" 2>/dev/null || true
+
+record_passphrase_rating() {
+    local result band bits
+    result=$(printf '%s' "$PASSWORD" | python3 -I /usr/local/lib/safekeep/safekeep-pwcheck.py --lines vault 2>/dev/null) || result=""
+    { read -r band; read -r bits; } <<< "$result"
+    case "$band" in
+        weak|fair|strong)
+            mkdir -p /tmp/safekeep-signals
+            printf '{"band":"%s","bits":%d}\n' "$band" "${bits:-0}" > "$RATING_FILE" 2>/dev/null || true
+            ;;
+    esac
+}
+
+# -------------------------------------------------------------------
 # 1. CHECK IF ALREADY UNLOCKED
 # -------------------------------------------------------------------
 if mountpoint -q "$VAULT_MOUNT" 2>/dev/null; then
@@ -255,7 +278,8 @@ while true; do
 
         # --- ATTEMPT DECRYPTION ---
         if printf '%s' "$PASSWORD" | sudo cryptsetup open "$LOOP_DEV" "$MAPPER_NAME" --key-file=-; then
-            # Success — clear password and break out to mount
+            # Success — rate it for the app, clear it and break out to mount
+            record_passphrase_rating
             PASSWORD=""
             break
         else

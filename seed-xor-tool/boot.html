@@ -6739,6 +6739,18 @@
                 </div>
             </div>
 
+            <!-- Weak Master Passphrase warning (PASSPHRASE_STRENGTH_DESIGN.md,
+                 Part 3): shown when the passphrase that unlocked this session
+                 rates Weak (vaults set up before the strength check existed).
+                 Only the rating reaches the app, never the passphrase. -->
+            <div id="dash-weak-passphrase-banner" role="alert" style="display: none; margin: 1.25rem 0 0; padding: 1rem 1.25rem; background: rgba(255, 60, 60, 0.08); border: 2px solid rgba(255, 60, 60, 0.55); border-left: 6px solid var(--skb-danger);">
+                <div style="font-family: var(--skb-mono); font-size: 0.875rem; font-weight: 900; color: var(--skb-danger); letter-spacing: 0.12em; text-transform: uppercase;">Weak Master Passphrase</div>
+                <div style="font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); margin-top: 0.35rem; letter-spacing: 0.03em; line-height: 1.5;">
+                    The passphrase that unlocked this vault is easy to guess (<span id="dash-weak-passphrase-bits">about 0 bits</span>). Anyone who finds this stick could copy the vault and try likely passwords until one works. Change it to a long random password from a password manager, or 6 or more random words.
+                </div>
+                <button type="button" class="skb-btn" style="margin-top: 0.65rem; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="ppSettingsOpen()">Change Master Passphrase</button>
+            </div>
+
             <!-- Amnesia and Vault Fingerprint now live in the unified
                  Command Center status bar at the top of the page. -->
 
@@ -7063,7 +7075,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh()">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -7196,6 +7208,26 @@
                                 <button type="button" class="skb-btn" id="settings-trezor-log-btn" onclick="tzSettingsShowLog()">Show Trezor log</button>
                             </div>
                             <pre id="settings-trezor-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
+                        </div>
+                        <div id="settings-passphrase-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Master Passphrase</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                Change the passphrase that unlocks this vault. SafeKeep locks the vault first, then asks for your current passphrase and a new one, on the same screens as setup: scan it, type it, or let SafeKeep generate one. Your vault&rsquo;s contents are not changed. Afterwards, unlock with the new passphrase.
+                            </p>
+                            <div id="settings-pp-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;"></div>
+                            <div id="settings-pp-confirm" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
+                                SafeKeep will lock now, as the Lock button does: anything you haven&rsquo;t saved is lost. Have your current passphrase ready, and if you use a password manager, your phone too.
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.65rem;">
+                                    <button type="button" class="skb-btn skb-btn--primary" id="settings-pp-go-btn" onclick="ppSettingsLockAndChange()">Lock and Change</button>
+                                    <button type="button" class="skb-btn" onclick="ppSettingsCancel()">Cancel</button>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="skb-btn" id="settings-pp-change-btn" onclick="ppSettingsStartChange()">Change Master Passphrase</button>
+                            </div>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.75rem; margin: 0.75rem 0 0; line-height: 1.6;">
+                                If you keep a paper copy, check it now and then: lock the vault and unlock it with <strong>Type Password</strong> and the words from your paper.
+                            </p>
                         </div>
                         <div id="settings-update-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Update SafeKeep</h4>
@@ -11614,6 +11646,12 @@ window.addEventListener('DOMContentLoaded', () => {
             console.log('[DEV MOCK] lock() intercepted — no-op on dev host.');
             _devAnnounce('True Lock intercepted (would evict LUKS keys + restart session)');
         },
+        changeMasterPassphrase: function () {
+            console.log('[DEV MOCK] changeMasterPassphrase() intercepted — no-op on dev host.');
+            _devAnnounce('Change Master Passphrase intercepted (would lock, then run change-passphrase)');
+            return Promise.resolve(false);
+        },
+        getPassphraseRating: function () { return Promise.resolve(null); },
 
         // --- Display Sleep bridge (task #198) ---
         // Real backend (shared/boot.js on the live USB) translates this
@@ -25525,6 +25563,89 @@ function updSettingsRestart() {
     const os = window.SafeKeepOS;
     if (os && typeof os.restart === 'function') os.restart();
 }
+
+// ===========================================================================
+// SETTINGS → MASTER PASSPHRASE — strength, and Change Master Passphrase
+// ===========================================================================
+// PASSPHRASE_STRENGTH_DESIGN.md, Part 3. The change itself happens outside
+// the app: SafeKeepOS.changeMasterPassphrase() locks the vault as Lock does,
+// and safekeep-boot.sh runs change-passphrase in native dialogs before the
+// unlock prompt. The app only ever sees the rating unlock-vault.sh left
+// (weak / fair / strong and the bits), never a passphrase.
+const PP_RATING_TEXT = {
+    weak: ['Weak', 'It is easy to guess: change it.'],
+    fair: ['Fair', 'A long random password from a password manager, or 6 or more random words, would be safer.'],
+    strong: ['Strong', ''],
+};
+
+async function ppRefreshRating() {
+    const os = window.SafeKeepOS;
+    const rating = os && typeof os.getPassphraseRating === 'function' ? await os.getPassphraseRating() : null;
+    const banner = document.getElementById('dash-weak-passphrase-banner');
+    if (banner) {
+        banner.style.display = rating && rating.band === 'weak' ? 'block' : 'none';
+        const bits = document.getElementById('dash-weak-passphrase-bits');
+        if (bits && rating) bits.textContent = 'about ' + rating.bits + ' bits';
+    }
+    return rating;
+}
+
+async function ppSettingsRefresh() {
+    const status = document.getElementById('settings-pp-status');
+    const btn = document.getElementById('settings-pp-change-btn');
+    const os = window.SafeKeepOS;
+    const onStick = !!(os && os.isBootDrive && os.isBootDrive());
+    if (btn) btn.disabled = !onStick;
+    if (!status) return;
+    if (!onStick) {
+        status.textContent = 'You can change the Master Passphrase when SafeKeep runs from its USB stick.';
+        status.style.color = 'var(--skb-text-muted)';
+        return;
+    }
+    const rating = await ppRefreshRating();
+    if (!rating) {
+        status.textContent = '';
+        return;
+    }
+    const [label, advice] = PP_RATING_TEXT[rating.band];
+    status.textContent = ('This vault was unlocked with a passphrase rated ' + label + ' (about ' + rating.bits + ' bits). ' + advice).trim();
+    status.style.color = rating.band === 'weak' ? 'var(--skb-danger)' : rating.band === 'fair' ? 'var(--skb-warning, #f59e0b)' : 'var(--skb-text)';
+}
+
+function ppSettingsStartChange() {
+    const box = document.getElementById('settings-pp-confirm');
+    if (box) box.style.display = 'block';
+    const go = document.getElementById('settings-pp-go-btn');
+    if (go) go.focus();
+}
+
+function ppSettingsCancel() {
+    const box = document.getElementById('settings-pp-confirm');
+    if (box) box.style.display = 'none';
+}
+
+/** Dashboard banner → open Device Options at the Master Passphrase section. */
+function ppSettingsOpen() {
+    const details = document.querySelector('details.dash-settings');
+    if (details && !details.open) details.open = true;
+    const section = document.getElementById('settings-passphrase-section');
+    if (section) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    ppSettingsStartChange();
+}
+
+async function ppSettingsLockAndChange() {
+    const os = window.SafeKeepOS;
+    if (!os || typeof os.changeMasterPassphrase !== 'function') return;
+    const go = document.getElementById('settings-pp-go-btn');
+    if (go) { go.disabled = true; go.textContent = 'Locking…'; }
+    // Wipe sensitive session data before the window closes, as Power Options do.
+    try { if (typeof _fullSessionWipe === 'function') _fullSessionWipe(); } catch (_) {}
+    try { await os.changeMasterPassphrase(); } catch (err) { console.error('[PASSPHRASE] change request failed:', err); }
+    // Still here (the dev host, or the signal didn't land): let them try again.
+    if (go) { go.disabled = false; go.textContent = 'Lock and Change'; }
+}
+
+window.addEventListener('load', function () { setTimeout(ppRefreshRating, 800); });
 
 // ===========================================================================
 // SETTINGS → COLDCARD — pair / forget

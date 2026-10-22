@@ -1,8 +1,9 @@
 # Design note: refusing weak passwords
 
-Status: **Parts 1 and 2 built** (Oct 22, 2026). Part 1 was tested on a
-stick (Weak refused at setup); Part 2 is not yet tested on a stick.
-Neither is released. Parts 3 and 4 are proposals.
+Status: **Parts 1, 2 and 3 built** (Oct 22, 2026). Parts 1 and 2 were
+tested on a stick (Weak refused at setup; Generate One for Me with its QR
+code scanned back and used to unlock). Part 3 is not yet tested on a
+stick. None is released. Part 4 is a proposal.
 The owner decided (Oct 22, 2026) that a weak Master Passphrase is refused,
 not just warned about.
 
@@ -81,8 +82,8 @@ words or a password-manager password are Strong for both.
 
 ### Part 1: a strength check, with a bar — built
 
-Built Oct 22, 2026; not yet tested on a stick or released. Item 3 below
-(the unlock warning) is not built: it ships with Part 3.
+Built Oct 22, 2026, and tested on a stick. Item 3 below (the unlock
+warning) was built with Part 3.
 
 **The estimator.** One small, cautious estimator, written twice:
 `seed-xor-tool/shared/pwcheck.js` draws the bar in the app, and
@@ -145,10 +146,11 @@ same file, which adds about 0.6 MB to `boot.html`.
    with a message. The backup watcher in `safekeep-boot.sh` runs the
    Python check too and refuses a Weak password without running 7z, so
    the rule doesn't depend on the app alone.
-3. **Unlock (`unlock-vault.sh`), for existing vaults.** After a
-   successful unlock, if the Master Passphrase rates Weak, the app shows a
-   one-time warning on the dashboard recommending a new one (Part 3).
-   Nothing is refused, since the user already depends on that vault.
+3. **Unlock (`unlock-vault.sh`), for existing vaults.** Built with Part 3:
+   after a successful unlock, the passphrase is rated and only the result
+   is left for the app. If it is Weak, the dashboard shows a warning with a
+   **Change Master Passphrase** button. Nothing is refused, since the user
+   already depends on that vault.
 
 ### Part 2: offer a strong passphrase at setup — built
 
@@ -192,12 +194,21 @@ users without a password manager to it.
     screen with the QR code and words. Closing that screen goes back to the
     method choice, and a new Generate gives new words.
 - The QR code is drawn with `qrencode` in block characters and never
-  written anywhere. Checked by rendering the real screen with zenity 4.0.1
-  at 1366×768 and decoding the screenshot with `zbarimg`, including the
-  longest possible words (53 characters, still a version 3 QR). It fits a
-  768-pixel-high screen. `qrencode` is a package added in `chroot-setup.sh`,
-  so it needs a full build; a stick without it shows the words only, and
-  the check is typing.
+  written anywhere. `qrencode` is a package added in `chroot-setup.sh`, so
+  it needs a full build; a stick without it shows the words only, and the
+  check is typing.
+- **Screen size.** Setup's dialogs run at double size (`GDK_SCALE=2`), so a
+  1920×1080 screen gives them only 960×540 to work with. Checked by
+  rendering the real dialogs with zenity 4.0.1 at double size on
+  1920×1080:
+  - the QR code is drawn at Pango size `small`, which fits the passphrase
+    screen in 1,016 pixels and still decodes with `zbarimg`, including
+    with the longest possible words (53 characters, a version 3 QR);
+  - zenity doesn't wrap the text above a list, so every list's text is
+    broken into lines of at most about 64 characters, and the strength
+    message is wrapped with `fold`. Before, the Fair warning and the older
+    Vault Created dialog ran off the side of a 1080p screen.
+  `test-pwcheck.mjs` checks the line lengths and the list heights.
 
 **No more dead ends on Cancel.** Before, Cancel anywhere in setup ended
 it, and the boot script then showed "Setup Incomplete" and left a black
@@ -211,17 +222,60 @@ screen. Now:
 - If setup still fails for a real reason (no room for the vault), the
   boot script says so and shuts down instead of leaving a black screen.
 
-### Part 3: change the Master Passphrase
+### Part 3: change the Master Passphrase — built
 
-A **Change Master Passphrase** section in Device Options:
-- the user enters the current passphrase and a new one (typed or
-  scanned), with the same strength check;
-- the OS side runs `cryptsetup luksChangeKey` on the vault, which replaces
-  the key in place, so the vault's contents are not re-encrypted or
-  touched.
+Built Oct 22, 2026; not yet tested on a stick.
 
-Without this, the warning in Part 1 has nothing to point to, and a user
-with a weak passphrase can only reset the stick.
+**Lock, change, unlock.** The owner chose this over a form in the app
+(Oct 22, 2026). The app would have had to pass the old and new passphrase
+to the OS through the download folder, which on a normal boot is inside
+the vault, so they would have been written into it and deleted. Instead:
+1. **Device Options → Master Passphrase → Change Master Passphrase**
+   explains that SafeKeep will lock (unsaved work is lost), and **Lock and
+   Change** sends the power action `passphrase`.
+2. `safekeep-boot.sh` locks exactly as Lock does: Chromium closed, the
+   vault unmounted, the LUKS key evicted. It re-runs itself with
+   `SAFEKEEP_CHANGE_PASSPHRASE=1`, and the new run starts
+   `change-passphrase` before the unlock prompt. If the signal is lost, the
+   default is a plain lock.
+3. `change-passphrase.sh`, in native dialogs:
+   - asks for the current passphrase (scan or type) and checks it opens the
+     vault (`cryptsetup open --test-passphrase`);
+   - asks for the new one on the same screens as setup: scan, type twice,
+     or Generate One for Me with its QR code and checked copy, with the
+     same strength check. The screens are shared through
+     `passphrase-dialogs.sh`, which `setup-vault.sh` now sources too;
+   - refuses the same passphrase as now;
+   - runs `safekeep-passphrase.py change` (as root), which runs
+     `cryptsetup luksChangeKey`. That replaces the key slot; the vault's
+     contents and master key are not touched. The helper then checks that
+     the new passphrase opens the vault and the old one doesn't.
+   Every way out (**Keep Current Passphrase**, closing a choice, an error)
+   says the passphrase wasn't changed.
+4. The normal unlock prompt follows, so the first unlock with the new
+   passphrase proves it works.
+
+The passphrases reach `cryptsetup` through pipes (`/dev/fd/N`): never a
+command line, a file or the browser.
+
+**Weak warning.** `unlock-vault.sh` rates the passphrase after a successful
+unlock and leaves only `{"band", "bits"}` in
+`/tmp/safekeep-signals/PASSPHRASE_RATING.json` (RAM, cleared on every
+unlock). The app shows it in the Master Passphrase section, and the
+dashboard shows a red **Weak Master Passphrase** banner with a **Change
+Master Passphrase** button when it is Weak.
+
+**Practice unlock: dropped.** Every SafeKeep session already starts by
+unlocking the vault, so a reminder to check the passphrase still works
+adds nothing. The Master Passphrase section instead suggests checking a
+paper copy now and then: lock, then unlock with **Type Password** and the
+words from the paper.
+
+Tests: `test-change-passphrase.mjs` runs the helper on a real LUKS2 file
+and the whole `change-passphrase.sh` with stand-ins for zenity, blkid,
+mount and losetup (where `cryptsetup` is installed; it says so where it
+isn't), plus the wiring. The dialogs were rendered at double size on
+1920×1080.
 
 ### Part 4: a fixed minimum cost for the vault
 
@@ -236,7 +290,7 @@ support, so unlock stays under about 5 seconds. Computers with under
 Existing vaults keep their settings until the passphrase is changed
 (Part 3), which writes the new key with the new settings.
 
-### Testing Parts 1 and 2 on a stick
+### Testing on a stick
 
 Setup only runs on a new or factory-reset stick, so use a spare one.
 1. Build the image with the full `sudo bash build.sh` and flash a spare
@@ -261,6 +315,20 @@ Setup only runs on a new or factory-reset stick, so use a spare one.
 6. **Encrypted Backup:** the bar shows Weak for 4 random words and Fair
    for 5. Export refuses the Weak one. A password-manager password shows
    Strong and exports.
+7. **Change Master Passphrase** (Part 3; a quick update is enough):
+   - Unlock with a weak passphrase on a test vault made before the check
+     (or set one with Part 3 itself, choosing Use this one anyway on a Fair
+     one): a Weak one shows the red banner on the dashboard.
+   - Device Options → Master Passphrase shows the rating. Click **Change
+     Master Passphrase**, then **Lock and Change**: the vault locks and
+     "Change Master Passphrase" appears instead of the unlock prompt.
+   - Enter a wrong current passphrase (refused), then the right one.
+     Choose the new one on the setup screens. Entering the current one
+     again is refused.
+   - "Master Passphrase Changed", then the unlock prompt: the new
+     passphrase opens the vault, the old one doesn't.
+   - Try again and close a choice at each step: every way out says the
+     passphrase wasn't changed, and the old one still unlocks.
 
 ## Not locking yourself out
 
@@ -293,14 +361,11 @@ losing the funds.
    already goes straight to the normal unlock prompt (`setup-vault.sh`,
    Phase 2), so the first unlock proves the passphrase works before any
    data goes in. That is true for a scanned QR too.
-4. **Practice unlock.** A dashboard reminder two weeks after setup, then
-   every six months: "Check you can still unlock your vault". It asks for
-   the passphrase and checks it with
-   `cryptsetup open --test-passphrase`, which opens nothing and changes
-   nothing. A forgotten passphrase is then found while the user can still
-   look for where they wrote it, and while the vault is still open, so
-   they can make an Encrypted Backup or change the passphrase (Part 3).
-   The reminder can be turned off in Device Options.
+4. **Check the paper copy.** Every session starts by unlocking, which
+   proves the passphrase works, but someone who always scans the QR code
+   never tests their paper. The Master Passphrase section suggests locking
+   now and then and unlocking with the words from the paper. (A reminder
+   was proposed here and dropped for the reason above.)
 5. **Change it later (Part 3).** A user who starts using a password manager
    can move to a password from it without resetting the stick.
 6. **The phone can't be the only copy.** On the QR route, the password
@@ -348,9 +413,8 @@ everyday computer: away from the stick, a copy needs only the password
 ## Suggested order
 
 1. **Part 1, setup and backup**, with the shared test list — built.
-2. **Part 3, change passphrase**, so the unlock warning in Part 1 has
-   somewhere to send users. The unlock warning and the practice unlock
-   ("Not locking yourself out") ship with it.
+2. **Part 3, change passphrase**, with the weak-passphrase warning —
+   built.
 3. **Part 2, Generate One for Me** — built (with the Cancel fixes).
 4. **Part 4, fixed Argon2 cost**, after measuring unlock times.
 

@@ -28,7 +28,8 @@
 #  Covered by a quick update:
 #     src/dist/*            (boot.html, manifest.json, …)
 #     safekeep-boot.sh, unlock-vault.sh, setup-vault.sh, safekeep-update.py,
-#     safekeep-pwcheck.py + pwcheck-lists.json
+#     safekeep-pwcheck.py + pwcheck-lists.json, change-passphrase.sh,
+#     passphrase-dialogs.sh, safekeep-passphrase.py
 #     safekeep-session.service, config/99-hide-drives.rules
 #
 #  NOT covered — run the full `sudo bash build.sh` instead:
@@ -153,6 +154,7 @@ cp -r src/dist/* "$CHROOT_DIR/opt/safekeep/"
 install -m 755 safekeep-boot.sh "$CHROOT_DIR/usr/local/bin/safekeep-boot"
 install -m 755 unlock-vault.sh  "$CHROOT_DIR/usr/local/bin/unlock-vault"
 install -m 755 setup-vault.sh   "$CHROOT_DIR/usr/local/bin/setup-vault"
+install -m 755 change-passphrase.sh "$CHROOT_DIR/usr/local/bin/change-passphrase"
 if [ -d "$CHROOT_DIR/opt/safekeep-ckcc" ]; then
     mkdir -p "$CHROOT_DIR/usr/local/lib/safekeep"
     install -m 755 safekeep-coldcard.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-coldcard.py"
@@ -166,6 +168,8 @@ install -m 755 safekeep-update.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-u
 install -m 755 safekeep-pwcheck.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-pwcheck.py"
 mkdir -p "$CHROOT_DIR/usr/local/share/safekeep"
 install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-lists.json"
+install -m 644 passphrase-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/passphrase-dialogs.sh"
+install -m 755 safekeep-passphrase.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-passphrase.py"
 install -m 644 safekeep-session.service "$CHROOT_DIR/etc/systemd/system/safekeep-session.service"
 [ -f config/99-hide-drives.rules ] && install -m 644 config/99-hide-drives.rules "$CHROOT_DIR/etc/udev/rules.d/99-hide-drives.rules"
 # Full SHA-256 of the app, to compare with a release's SHA256SUMS (VERIFYING.md).

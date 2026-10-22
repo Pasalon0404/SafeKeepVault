@@ -92,7 +92,7 @@ trap cleanup EXIT
 # config/ stops the build.
 MAINTAINER_FPR="A333EB826F70A79A736F09948EA7DD8CEDBA86C2"
 MAINTAINER_KEY="config/maintainer-pubkey.asc"
-for f in grub.cfg "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json; do
+for f in grub.cfg "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh; do
     [ -s "$f" ] || { echo "ERROR: $f is missing (rsync the whole usbbootdrive folder)." >&2; exit 1; }
 done
 
@@ -216,6 +216,8 @@ cp setup-vault.sh "$CHROOT_DIR/usr/local/bin/setup-vault"
 chmod +x "$CHROOT_DIR/usr/local/bin/setup-vault"
 cp unlock-vault.sh "$CHROOT_DIR/usr/local/bin/unlock-vault"
 chmod +x "$CHROOT_DIR/usr/local/bin/unlock-vault"
+cp change-passphrase.sh "$CHROOT_DIR/usr/local/bin/change-passphrase"
+chmod +x "$CHROOT_DIR/usr/local/bin/change-passphrase"
 cp safekeep-boot.sh "$CHROOT_DIR/usr/local/bin/safekeep-boot"
 chmod +x "$CHROOT_DIR/usr/local/bin/safekeep-boot"
 cp safekeep-harden.sh "$CHROOT_DIR/usr/local/bin/safekeep-harden"
@@ -237,6 +239,10 @@ install -m 755 safekeep-update.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-u
 install -m 755 safekeep-pwcheck.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-pwcheck.py"
 mkdir -p "$CHROOT_DIR/usr/local/share/safekeep"
 install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-lists.json"
+# The passphrase screens shared by setup-vault and change-passphrase, and
+# the root helper that checks or changes the Master Passphrase.
+install -m 644 passphrase-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/passphrase-dialogs.sh"
+install -m 755 safekeep-passphrase.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-passphrase.py"
 
 # ---------------------------------------------------------------------------
 # Install safekeep-session.service — the permanent replacement for the
