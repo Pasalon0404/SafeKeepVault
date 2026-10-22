@@ -9,6 +9,9 @@
  *     writes only when the user picks Restore This Wallet.
  *  3. Transfer-drive file names can't inject markup into the backup list.
  *  4. The PSBT review warns on an absurd fee and on outputs > inputs.
+ *  5. The dashboard's "Mount Transfer Drive" button stays hidden while the
+ *     drive mounts by itself; it appears only if that fails (it used to flash
+ *     on screen at every unlock).
  *
  * Run: node test-review-regressions.mjs
  */
@@ -121,6 +124,33 @@ console.log('4. PSBT review fee guard');
   ck('absurd fee (50%) -> warning', /UNUSUALLY HIGH FEE/.test(html(5_000_000n, 10_000_000n)));
   ck('fee exactly 5% -> warning', /UNUSUALLY HIGH FEE/.test(html(500_000n, 10_000_000n)));
   ck('outputs > inputs -> invalid warning', /Invalid transaction/.test(html(-1_000n, 10_000_000n)));
+}
+// ---- 5. Mount Transfer Drive button: a fallback only ----
+{
+  ck('mount button starts hidden in the markup', /<div id="dash-mount-btn-wrap" style="display: none;/.test(SRC));
+  const make = () => {
+    const els = {};
+    const el = (id) => (els[id] ||= { id, style: {}, offsetHeight: 40, textContent: '' });
+    const ctx = vm.createContext({ window: {}, document: { getElementById: el }, _skuiFadeTimers: {}, setTimeout: () => 0, clearTimeout: () => {}, console: { log() {}, warn() {} } });
+    vm.runInContext(['_dashSyncMountStatus', '_transferAutoMount'].map(extract).join('\n') +
+      '\nvar _transferAutoMountBusy = false; var _transferAutoMountTried = false; var bridge = null;' +
+      '\nasync function _transferBridgeHandle() { return bridge; }' +
+      '\nfunction _archiveAdoptHandle(h) { window.vaultTransferDriveHandle = h; _dashSyncMountStatus(); }', ctx);
+    ctx.btn = el('dash-mount-btn-wrap'); ctx.btn.style.display = 'none';
+    return ctx;
+  };
+  const shown = (ctx) => ctx.btn.style.display !== 'none';
+  let c = make();
+  vm.runInContext('_dashSyncMountStatus()', c);
+  ck('before the automatic mount has run: button hidden', !shown(c));
+  vm.runInContext('bridge = { label: "TRANSFER" }', c);
+  await vm.runInContext('_transferAutoMount()', c);
+  ck('automatic mount works: button never shown', !shown(c) && !!c.window.vaultTransferDriveHandle);
+  c = make();
+  await vm.runInContext('_transferAutoMount()', c);
+  ck('automatic mount fails: button appears as the fallback', shown(c) && !c.window.vaultTransferDriveHandle);
+  vm.runInContext('_dashSyncMountStatus()', c);
+  ck('and stays on when the dashboard is shown again', shown(c));
 }
 console.log(`\nREVIEW REGRESSIONS: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
