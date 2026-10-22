@@ -215,17 +215,25 @@ printf '%s' "$out"
 exit "$rc"
 `);
     chmodSync(join(bin2, 'zenity'), 0o755);
+    // Stand-in qrencode: records what it was given; FAKE_QR=fail makes it fail.
+    writeFileSync(join(bin2, 'qrencode'), `#!/bin/bash
+cat > "$QRIN"
+[ "$FAKE_QR" = fail ] && exit 1
+printf '%s\\n' 'QRBLOCKS-LINE-1' 'QRBLOCKS-LINE-2'
+`);
+    chmodSync(join(bin2, 'qrencode'), 0o755);
     const pyPath = '/usr/local/lib/safekeep/safekeep-pwcheck.py';
     const cut = (from, to) => { const i = setup.indexOf(from); return setup.slice(i, setup.indexOf(to, i)); };
     const loop = (cut('    setup_not_finished() {', '    # --- Welcome dialog ---') +
         cut('    # STRENGTH CHECK', '\n    if [ -z "$PASSWORD" ]; then')).split(pyPath).join('"$CHECKER"');
-    const runLoop = (answers, camera = true) => {
+    const runLoop = (answers, camera = true, fakeQr = '') => {
         writeFileSync(join(tmp, 'queue'), answers.map((a) => a.join('\t')).join('\n') + '\n');
         writeFileSync(join(tmp, 'zlog'), '');
         const r = spawnSync('bash', ['-c', 'set -euo pipefail\nTESTPID=$$\n' + loop + '\nprintf "PASSWORD=%s" "$PASSWORD"'], {
             timeout: 20000,
             env: { PATH: bin2 + ':' + process.env.PATH, HAS_CAMERA: String(camera), QR_SCAN_TIMEOUT: '1', DATA_MOUNT: tmp,
-                CHECKER: PY, SAFEKEEP_PWCHECK_LISTS: LISTS_PATH.pathname, ZLOG: join(tmp, 'zlog'), ZQUEUE: join(tmp, 'queue') },
+                CHECKER: PY, SAFEKEEP_PWCHECK_LISTS: LISTS_PATH.pathname, ZLOG: join(tmp, 'zlog'), ZQUEUE: join(tmp, 'queue'),
+                QRIN: join(tmp, 'qrin'), FAKE_QR: fakeQr },
         });
         const log = readFileSync(join(tmp, 'zlog'), 'utf8');
         const m = r.stdout.toString().match(/PASSWORD=(.*)$/s);
@@ -241,19 +249,30 @@ exit "$rc"
     r = runLoop([['0', 'Type Password'], ['0', 'Michael1985'], ['0', ''], ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
     ck('setup: Weak, then Cancel, goes back to the method choice', r.password === PM && r.log.includes('Passphrase Too Easy to Guess') && !r.left, r);
     ck('setup: with a camera the choices are Scan, Type, Generate (Scan first)', /--hide-header Scan QR Code Type Password Generate One for Me$/m.test(r.log), r.log);
-    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', 'wrong words here'], ['0', ''], ['0', '@WORDS']]);
+    rmSync(join(tmp, 'qrin'), { force: true });
+    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', 'wrong words here'], ['0', ''], ['0', '@WORDS'], ['0', '']]);
     const gen = r.password || '';
     ck('setup: Generate makes 6 BIP39 words', gen.split(' ').length === 6 && gen.split(' ').every((w) => wordlist.includes(w)), r);
     ck('setup: a wrong retype is refused, then the right one sets the passphrase', r.log.includes("That Doesn't Match") && !r.left, r);
     ck('setup: generated words are Strong for the vault and a backup', rate(gen, 'vault').band === 'strong' && rate(gen, 'backup').band === 'strong');
+    ck('setup: after the retype, the words are offered as a QR code', /Save It on Your Phone Too \(Optional\)[^\n]*QRBLOCKS-LINE-1\nQRBLOCKS-LINE-2/.test(r.log), r.log);
+    ck('setup: the QR code holds exactly the words', existsSync(join(tmp, 'qrin')) && readFileSync(join(tmp, 'qrin'), 'utf8') === gen);
+    ck('setup: the QR step comes after the words are confirmed', r.log.indexOf('Save It on Your Phone Too') > r.log.lastIndexOf('Check Your Paper'));
     ck('setup: words shown numbered, three to a line', /<b>1\. [a-z]+ +2\. [a-z]+ +3\. [a-z]+ +\\n4\. [a-z]+ +5\. [a-z]+ +6\. [a-z]+ *<\/b>/.test(r.log), r.log);
-    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['1', ''], ['0', ''], ['0', '@WORDS']]);
+    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['1', ''], ['0', ''], ['0', '@WORDS'], ['0', '']]);
     const shows = r.log.match(/<b>[^<]*<\/b>/g) || [];
     ck('setup: "Show the Words Again" shows the same words', shows.length === 2 && shows[0] === shows[1] && r.password && !r.left, r);
     r = runLoop([['0', 'Generate One for Me'], ['1', ''], ['0', 'Type Password'], ['0', PM], ['0', PM]]);
     ck('setup: closing the words dialog goes back to the method choice', r.password === PM && !r.left, r);
-    const g1 = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS']]).password;
-    const g2 = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS']]).password;
+    const g1 = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS'], ['0', '']]).password;
+    const g2 = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS'], ['0', '']]).password;
+    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS']], true, 'fail');
+    ck('setup: if the QR code can\'t be drawn, setup goes on without it', r.password && r.password.split(' ').length === 6 && !r.log.includes('Save It on Your Phone') && !r.left, r);
+    r = runLoop([['0', 'Generate One for Me'], ['0', ''], ['0', '@WORDS'], ['1', '']]);
+    ck('setup: closing the QR screen still finishes setup', r.password && r.password.split(' ').length === 6 && !r.left, r);
+    ck('setup: the QR step is skipped without qrencode, and runs in a UTF-8 locale',
+        setup.includes('command -v qrencode >/dev/null 2>&1 || return 0') && setup.includes('LC_ALL=C.UTF-8 zenity --info --title="Save It on Your Phone Too (Optional)"'));
+    ck('image installs qrencode', /\n    qrencode \\\n/.test(readFileSync(new URL('chroot-setup.sh', USB), 'utf8')));
     ck('setup: each Generate gives new words', g1 && g2 && g1 !== g2);
     r = runLoop([['0', 'Type Password'], ['0', PM], ['0', PM]], false);
     ck('setup: without a camera the choices are Type and Generate', /--hide-header Type Password Generate One for Me$/m.test(r.log) && r.password === PM, r);

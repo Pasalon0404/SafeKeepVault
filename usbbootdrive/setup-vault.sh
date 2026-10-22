@@ -245,6 +245,8 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     #   which proves the paper is right before the vault is locked with
     #   it. The words are the passphrase exactly as shown: lowercase, one
     #   space between them, which is also how they are typed at unlock.
+    # After the retype, show_passphrase_qr offers the same words as a QR
+    # code, to save in a phone's password manager.
     # Returns 0 with PASSWORD set, 1 to go back to the method choice.
     generate_passphrase() {
         local words shown typed
@@ -265,12 +267,31 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
                     --ok-label="Set Passphrase" --cancel-label="Show the Words Again") || break
                 if [ "$typed" = "$words" ]; then
                     PASSWORD="$words"
+                    show_passphrase_qr "$words"
                     return 0
                 fi
                 zenity --warning --title="That Doesn't Match" --width=420 \
                     --text="What you typed doesn't match the 6 words.\n\nCheck the spelling and the order on your paper, and use one space between words." || true
             done
         done
+    }
+
+    # SAVE IT ON YOUR PHONE TOO (optional, after Generate One for Me):
+    #   The generated words as a QR code, drawn with qrencode in block
+    #   characters, so a phone's camera or the Courier Tool can read it into
+    #   a password manager. It holds exactly the words, so Scan QR Code at
+    #   unlock works with it too. It shows nothing the words screen didn't,
+    #   and it is never written anywhere. Without qrencode (a stick built
+    #   before it was added) this step is skipped: the paper is enough.
+    #   LC_ALL=C.UTF-8: zenity refuses non-ASCII text in a C locale.
+    show_passphrase_qr() {
+        local qr
+        command -v qrencode >/dev/null 2>&1 || return 0
+        qr=$(printf '%s' "$1" | qrencode -t UTF8i -m 2 2>/dev/null) || return 0
+        [ -n "$qr" ] || return 0
+        LC_ALL=C.UTF-8 zenity --info --title="Save It on Your Phone Too (Optional)" --width=560 \
+            --ok-label="Done" \
+            --text="This QR code is your Master Passphrase. If you use a password manager on your phone, save it there as a second copy, next to your paper.\n\n<span font_family='DejaVu Sans Mono, monospace' size='x-large' line_height='0.85'>${qr}</span>\n\nScan it with your phone's camera or the Courier Tool. At unlock you can then choose Scan QR Code instead of typing the words.\n\nAnyone with this QR code and this stick can open your vault. Nothing is saved on the stick." || true
     }
 
     METHODS=("Type Password" "Generate One for Me")

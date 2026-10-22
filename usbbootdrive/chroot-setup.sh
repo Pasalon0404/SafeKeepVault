@@ -127,6 +127,7 @@ apt-get install -y --no-install-recommends \
     parted \
     zenity \
     zbar-tools \
+    qrencode \
     gdisk \
     cryptsetup \
     exfatprogs \
