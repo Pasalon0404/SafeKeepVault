@@ -2647,6 +2647,10 @@ except Exception as e:
     #          display even if kiosk mode doesn't auto-detect resolution.
     # --noerrdialogs / --disable-infobars / --disable-session-crashed-bubble:
     #          suppress any pop-over dialogs that could break the kiosk UX.
+    # --load-extension=…/quiet-downloads: hides the "Download started. To
+    #          see it, press Esc." message Chromium shows in kiosk mode for
+    #          every request file the app writes to the download folder
+    #          (quiet-downloads/background.js). The files are still written.
     #
     # The tint2 panel is killed BEFORE Chromium launches so the OS taskbar,
     # system tray, and clock are completely obliterated from the screen.
@@ -2714,6 +2718,7 @@ except Exception as e:
         --disable-session-crashed-bubble \
         --use-fake-ui-for-media-stream \
         --disable-features=XdgDesktopPortalFilePicker,NativeNotifications \
+        --load-extension=/usr/local/lib/safekeep/quiet-downloads \
         --no-sandbox
     CHROMIUM_EXIT=$?
     CHROMIUM_ELAPSED=$(( $(date +%s) - CHROMIUM_START_EPOCH ))

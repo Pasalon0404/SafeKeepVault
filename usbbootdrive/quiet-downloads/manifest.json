@@ -1,0 +1,9 @@
+{
+    "manifest_version": 3,
+    "name": "SafeKeep Quiet Downloads",
+    "description": "Hides Chromium's \"Download started\" message for the app's request files.",
+    "version": "1",
+    "incognito": "spanning",
+    "permissions": ["downloads", "downloads.ui"],
+    "background": { "service_worker": "background.js" }
+}
