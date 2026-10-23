@@ -124,12 +124,13 @@ import pwcheckLists from '../usbbootdrive/pwcheck-lists.json';
 import { buildDictionary, ratePassword, describeRating } from './shared/pwcheck.js';
 // The share tools' guided flow (SHARE_TOOLS_DESIGN.md): word boxes with
 // autocomplete for BIP-39 and SLIP-39, and the write / check / done screens.
-import { mountShareFlow } from './shared/share-flow-ui.js';
+import { mountShareFlow, mountShareChecker } from './shared/share-flow-ui.js';
 import { createWordBoxes } from './shared/word-boxes.js';
 import { compareShare, splitWords } from './shared/share-flow.js';
 import { SLIP39_WORDLIST } from './shared/slip39-wordlist.js';
 window.ShareFlow = Object.freeze({
     mount: mountShareFlow,
+    check: mountShareChecker,
     createWordBoxes,
     compareShare,
     splitWords,

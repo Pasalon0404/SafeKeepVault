@@ -19,6 +19,7 @@
  *     onFinish(), onCancel(),
  *   });
  *   flow.isComplete()   true once every share is checked and recombined
+ *   flow.stopScanning() turns the camera off (e.g. when leaving the tool)
  *   flow.destroy()      clears the screens and forgets the shares
  *
  * Nothing here shows the expected words on the check screen: a wrong box
@@ -57,9 +58,11 @@ export function mountShareFlow(container, opts) {
     let complete = false;
     let destroyed = false;
     let notice = '';   // "Share k matches", shown once on the next screen
+    let resetScanUI = null;   // puts the check screen's Scan button back
 
     function stopScanner() {
         if (stopScan) { try { stopScan(); } catch (_) { /* already stopped */ } stopScan = null; }
+        if (resetScanUI) resetScanUI();
     }
 
     function progress() {
@@ -102,6 +105,7 @@ export function mountShareFlow(container, opts) {
     function render() {
         if (destroyed) return;
         stopScanner();
+        resetScanUI = null;
         if (boxes) { boxes.destroy(); boxes = null; }
         container.innerHTML = '';
         const card = el('div', 'skb-card sf-card');
@@ -192,6 +196,7 @@ export function mountShareFlow(container, opts) {
                 });
             });
             tools.appendChild(scanBtn);
+            resetScanUI = () => { if (reader) reader.style.display = 'none'; scanBtn.textContent = 'Scan QR'; };
         }
         tools.appendChild(button('Clear', 'sf-quiet', () => { boxes.clear(); setStatus(msg, '', ''); boxes.focus(); }));
         card.appendChild(tools);
@@ -264,6 +269,7 @@ export function mountShareFlow(container, opts) {
 
     return {
         isComplete: () => complete,
+        stopScanning: stopScanner,
         state: () => ({ ...state, checked: state.checked.slice() }),
         destroy() {
             destroyed = true;
@@ -271,6 +277,144 @@ export function mountShareFlow(container, opts) {
             if (boxes) { boxes.destroy(); boxes = null; }
             typed.fill(null);
             shares.forEach((s) => s.fill(''));
+            container.innerHTML = '';
+        },
+    };
+}
+
+/**
+ * "Check shares I already have": type in (or scan) shares made earlier and
+ * learn whether they rebuild the vault seed. Nothing is loaded and the
+ * rebuilt seed's words are never shown.
+ *
+ *   const checker = mountShareChecker(container, {
+ *     idPrefix: 'xorc',
+ *     wordlist, wordCount: 24,            // words per share
+ *     shareName: 'XOR share',
+ *     counts: [2, 3, 4], count: 3,        // how many shares to enter
+ *     intro: '…',                         // one or two lines at the top
+ *     scan(readerEl, onWords, onError) → stop function    // optional
+ *     check(typedShares) → Promise<{ ok, message }>,
+ *     onBack(),
+ *   });
+ *   checker.stopScanning(); checker.destroy();
+ */
+export function mountShareChecker(container, opts) {
+    let count = opts.count || opts.counts[0];
+    let boxes = [];
+    let stopScan = null, resetScanUI = null;
+    let destroyed = false;
+
+    function stopScanner() {
+        if (stopScan) { try { stopScan(); } catch (_) { /* already stopped */ } stopScan = null; }
+        if (resetScanUI) { resetScanUI(); resetScanUI = null; }
+    }
+
+    function setStatus(s, kind, text) {
+        s.className = 'sf-status' + (kind ? ' ' + kind : '');
+        s.textContent = text;
+        s.style.display = text ? 'block' : 'none';
+    }
+
+    function render() {
+        if (destroyed) return;
+        const kept = boxes.map((b) => b.getWords());
+        stopScanner();
+        boxes.forEach((b) => b.destroy());
+        boxes = [];
+        container.innerHTML = '';
+        const card = el('div', 'skb-card sf-card');
+        container.appendChild(card);
+
+        const h = el('div', 'sf-head');
+        h.appendChild(el('div', 'sf-title', 'Check shares you already have'));
+        if (opts.intro) h.appendChild(el('div', 'sf-sub', opts.intro));
+        card.appendChild(h);
+
+        if (opts.counts.length > 1) {
+            const row = el('div', 'sf-counts');
+            row.appendChild(el('span', 'sf-counts-label', 'How many shares?'));
+            opts.counts.forEach((c) => {
+                const b = button(String(c), c === count ? 'sf-count active' : 'sf-count', () => { count = c; render(); });
+                b.setAttribute('aria-pressed', c === count ? 'true' : 'false');
+                row.appendChild(b);
+            });
+            card.appendChild(row);
+        }
+
+        const result = el('div', 'sf-status');
+        result.style.display = 'none';
+
+        for (let k = 0; k < count; k++) {
+            const block = el('div', 'sf-share-block');
+            const head = el('div', 'sf-share-head');
+            head.appendChild(el('span', 'sf-share-label', opts.shareName + ' ' + (k + 1)));
+            const host = el('div', 'sf-boxes');
+            const b = createWordBoxes(host, { count: opts.wordCount, wordlist: opts.wordlist, idPrefix: opts.idPrefix + '-' + k });
+            if (kept[k]) b.setWords(kept[k]);
+            b.onChange(() => setStatus(result, '', ''));
+            boxes.push(b);
+            if (opts.scan) {
+                let reader = null;
+                const scanBtn = button('Scan QR', '', () => {
+                    const mine = resetScanUI && resetScanUI.owner === k;
+                    stopScanner();
+                    if (mine) return;   // second click stops this scanner
+                    if (!reader) { reader = el('div', 'sf-reader'); reader.id = opts.idPrefix + '-reader-' + k; head.after(reader); }
+                    reader.style.display = 'block';
+                    scanBtn.textContent = 'Stop scanning';
+                    resetScanUI = () => { reader.style.display = 'none'; scanBtn.textContent = 'Scan QR'; };
+                    resetScanUI.owner = k;
+                    stopScan = opts.scan(reader, (words) => {
+                        stopScanner();
+                        if (!words || words.length !== opts.wordCount) {
+                            setStatus(result, 'error', 'That QR code isn’t a ' + opts.wordCount + '-word ' + opts.shareName.toLowerCase() + '.');
+                            return;
+                        }
+                        b.setWords(words);
+                    }, (err) => {
+                        stopScanner();
+                        setStatus(result, 'error', 'The camera couldn’t start: ' + (err && err.message ? err.message : String(err)));
+                    });
+                });
+                head.appendChild(scanBtn);
+            }
+            block.append(head, host);
+            card.appendChild(block);
+        }
+
+        card.appendChild(result);
+        const actions = el('div', 'sf-actions');
+        actions.appendChild(button('Back', '', () => opts.onBack && opts.onBack()));
+        const go = button('Check these shares', 'skb-btn--primary sf-primary', async () => {
+            stopScanner();
+            const typed = boxes.map((b) => b.getWords());
+            const empty = typed.map((w, k) => (w.some((x) => !x) ? k + 1 : 0)).filter(Boolean);
+            if (empty.length) {
+                setStatus(result, 'error', 'Fill in every word of ' + (empty.length === 1 ? 'share ' + empty[0] : 'shares ' + empty.join(', ')) + '.');
+                return;
+            }
+            go.disabled = true;
+            setStatus(result, 'info', 'Checking…');
+            let r;
+            try { r = await opts.check(typed.map((w) => w.join(' '))); } catch (e) { r = { ok: false, message: e && e.message }; }
+            go.disabled = false;
+            if (destroyed) return;
+            setStatus(result, r && r.ok ? 'ok' : 'error', (r && r.message) || 'The check failed.');
+        });
+        actions.appendChild(go);
+        card.appendChild(actions);
+    }
+
+    render();
+
+    return {
+        stopScanning: stopScanner,
+        destroy() {
+            destroyed = true;
+            stopScanner();
+            boxes.forEach((b) => b.destroy());
+            boxes = [];
             container.innerHTML = '';
         },
     };

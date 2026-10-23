@@ -3,11 +3,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as bip39 from '@scure/bip39'; import { wordlist } from '@scure/bip39/wordlists/english.js'; import { HDKey } from '@scure/bip32';
 /**
- * test-seed-xor-vectors.mjs — Seed XOR through the real xor_handleSplit / xor_handleMerge /
+ * test-seed-xor-vectors.mjs — Seed XOR through the real xor_handleSplit / _xorCombine /
  * xrr_combine: Coldcard's published 12- and 24-word A^B^C examples, bad-checksum, duplicate-share
- * and all-zero rejection, 900 split->merge->recover round trips (subsets of shares must never
- * recover the seed) plus 18-word round trips, the reconstruction drill (xorv_testRecovery), and
- * the standalone seedxor/index.html combine + fingerprint helpers.
+ * and all-zero rejection, 900 split->combine->recover round trips (subsets of shares must never
+ * recover the seed) plus 18-word round trips, the final check of typed shares (_xorVerifyTyped),
+ * and the standalone seedxor/index.html combine + fingerprint helpers.
  * Run: node test-seed-xor-vectors.mjs
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -60,16 +60,20 @@ function ctxFor(values, extra = {}) { const { document } = makeDom(values); let 
     Uint8Array, console, showStatus: (m, t) => { status = t + ':' + m; }, _xorHasWork: false, ...extra });
   return { ctx, status: () => status };
 }
-async function merge(shares) { const vals = {}; shares.forEach((m, s) => m.split(' ').forEach((w, i) => vals['xor-mg-' + s + '-word-' + i] = w));
-  const { ctx, status } = ctxFor(vals, { xor_state: { mergeShares: shares.length, mergeLength: shares[0].split(' ').length } }); const { document } = ctx;
-  vm.runInContext([extract('_xorCheckShares'), extract('_recoveryFingerprint'), extract('xor_handleMerge')].join('\n'), ctx);
-  await ctx.xor_handleMerge(); return { seed: ctx.xor_state.mergedSeed, status: status(), fp: document.getElementById('xor-merge-fp').innerHTML }; }
+// _xorCombine: the tool's combine (used by the final check). Returns { seed } or { error }.
+async function merge(shares) { const { ctx } = ctxFor({});
+  vm.runInContext([extract('_xorCheckShares'), extract('_xorCombine')].join('\n'), ctx);
+  try { return { seed: ctx._xorCombine(shares), status: '' }; } catch (e) { return { seed: null, status: 'error:' + e.message }; } }
 async function recover(shares) { const vals = {}; shares.forEach((m, s) => m.split(' ').forEach((w, i) => vals['xrr-' + s + '-word-' + i] = w));
   const { ctx, status } = ctxFor(vals, { _xrrShareCount: shares.length, _xrrWordCount: shares[0].split(' ').length, _xrrRecoveredMnemonic: null });
   vm.runInContext([extract('_xorCheckShares'), extract('_recoveryFingerprint'), extract('xrr_combine')].join('\n'), ctx); await ctx.xrr_combine(); return { seed: ctx._xrrRecoveredMnemonic, status: status() }; }
-async function split(seed, n) { const { ctx } = ctxFor({}, { xor_state: { loadedSeed: seed, shares: n } });
-  vm.runInContext(['function _xorRenderShareCards(){}', extract('xor_handleSplit')].join('\n'), ctx);
-  await ctx.xor_handleSplit(); return ctx.xor_state.generatedShares; }
+async function split(seed, n) { let flowStarted = false, locked = false;
+  const { ctx, status } = ctxFor({}, { xor_state: { loadedSeed: seed, shares: n } });
+  ctx.window.ShareFlow = {}; ctx._xorStartFlow = () => { flowStarted = true; }; ctx._shardLockEngage = () => { locked = true; };
+  vm.runInContext(['_xorCheckShares', '_xorCombine', '_xorSplitEntropy', '_xorFingerprint', 'xor_handleSplit'].map((f) => extract(f)).join('\n'), ctx);
+  await ctx.xor_handleSplit();
+  if (!flowStarted || !locked) throw new Error('split did not start the flow: ' + status());
+  return ctx.xor_state.generatedShares; }
 // ---- Official Coldcard vector through the app's merge + recovery code ----
 { const r = await merge([CC.A, CC.B, CC.C]); ck('merge(): Coldcard A^B^C', r.seed === CC.R, JSON.stringify(r)); }
 ck('merge(): order independent (C,A,B)', (await merge([CC.C, CC.A, CC.B])).seed === CC.R);
@@ -112,11 +116,8 @@ ck('recovery xrr_combine(): Coldcard 12-word A^B^C', (await recover([C12.A, C12.
     (sh.every(m => m.split(' ').length === 18) && (await merge(sh)).seed === seed && (await recover(sh)).seed === seed) ? ok++ : bad++;
   }
   ck(`18-word split->merge->recover round trips (${ok})`, bad === 0, bad + ' failures'); }
-// ---- Merge shows the recovered fingerprint, never "original seed recovered" ----
-{ const r = await merge([CC.A, CC.B, CC.C]);
-  const seed = await bip39.mnemonicToSeed(CC.R, ''); const fp = (HDKey.fromMasterSeed(seed).fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase();
-  ck('merge(): status and result show recovered fingerprint', r.status.includes(fp) && r.fp.includes(fp), JSON.stringify(r));
-  ck('merge(): no unverified "original seed recovered" claim', !/original seed recovered/i.test(r.status), r.status); }
+// ---- The tool has no Merge tab any more: recovery is Restore via Seed XOR ----
+ck('no Merge tab or merge function in the tool', !/xor_handleMerge|xor-tab-btn-merge|Merge Shares/.test(SRC));
 // ---- Duplicate shares and all-zero results are rejected ----
 { const r = await merge([CC.A, CC.A, CC.B]); ck('merge rejects duplicate share (A,A,B)', !r.seed && /identical/.test(r.status), JSON.stringify(r)); }
 { const r = await merge([CC.C, CC.B, CC.C]); ck('merge rejects non-adjacent duplicate (C,B,C)', !r.seed && /Share 1 and Share 3/.test(r.status), JSON.stringify(r)); }
@@ -126,23 +127,44 @@ ck('recovery xrr_combine(): Coldcard 12-word A^B^C', (await recover([C12.A, C12.
   const sh = [x, y, z].map(e => bip39.entropyToMnemonic(e, wordlist));
   const r = await merge(sh); ck('merge rejects shares that cancel to all-zero', !r.seed && /all-zero/.test(r.status), JSON.stringify(r));
   const q = await recover(sh); ck('recovery rejects shares that cancel to all-zero', !q.seed && /all-zero/.test(q.status), JSON.stringify(q)); }
-// ---- Reconstruction drill (xorv_testRecovery) ----
-async function drill(typed, { loadedSeed = CC.R, vaultFp = null, targetVaultFingerprint = '--------' } = {}) {
+// ---- Final check of the typed shares (_xorVerifyTyped) ----
+async function verifyTyped(typed, loadedSeed = CC.R, targetBip32FP = null) {
   let released = false;
-  const SafeKeepOS = vaultFp ? { vaultFingerprint: async (m) => vaultFp(m) } : null;
-  const { ctx } = ctxFor({}, { window: { BtcMath: { bip39, wordlist, HDKey }, crypto: globalThis.crypto, SafeKeepOS },
-    xor_state: { generatedShares: typed, loadedSeed, targetVaultFingerprint },
-    xvg_getShareWords: (i) => typed[i].split(' '), _shardLockRelease: () => { released = true; } });
-  vm.runInContext(extract('xorv_testRecovery'), ctx); await ctx.xorv_testRecovery();
-  return { released, banner: ctx.document.getElementById('xorv-result-banner').innerHTML };
+  const { ctx } = ctxFor({}, { xor_state: { loadedSeed }, _shardLockRelease: () => { released = true; } });
+  vm.runInContext(['_xorCheckShares', '_xorCombine', '_xorFingerprint', '_xorVerifyTyped'].map((f) => extract(f)).join('\n'), ctx);
+  ctx.xor_state.targetBip32FP = targetBip32FP || await ctx._xorFingerprint(loadedSeed);
+  const r = await ctx._xorVerifyTyped(typed);
+  return { ...r, released };
 }
-{ const r = await drill([CC.A, CC.B, CC.C]); ck('drill passes without SafeKeepOS (preview mode)', r.released && /VERIFICATION PASSED/.test(r.banner), r.banner.slice(0, 200)); }
-{ const r = await drill([CC.A, CC.B, C12.A.split(' ').concat(C12.B.split(' ')).join(' ')]);
-  ck('drill without SafeKeepOS still fails on a wrong share', !r.released && /VERIFICATION FAILED/.test(r.banner)); }
-{ const r = await drill([CC.A, CC.B, CC.C], { vaultFp: async () => 'aaaaaaaa', targetVaultFingerprint: 'aaaaaaaa' });
-  ck('drill passes when vault fingerprints match', r.released); }
-{ const r = await drill([CC.A, CC.B, CC.C], { vaultFp: async () => 'bbbbbbbb', targetVaultFingerprint: 'aaaaaaaa' });
-  ck('drill fails when vault fingerprint was computed at split time and differs', !r.released && /VERIFICATION FAILED/.test(r.banner)); }
+{ const r = await verifyTyped([CC.A, CC.B, CC.C]); ck('final check: the right shares pass and release the warning', r.ok && r.released, JSON.stringify(r)); }
+{ const r = await verifyTyped([CC.C, CC.A, CC.B]); ck('final check: share order does not matter', r.ok); }
+{ const other = bip39.entropyToMnemonic(new Uint8Array(32).fill(1), wordlist);   // valid, but not share C
+  const r = await verifyTyped([CC.A, CC.B, other]);
+  ck('final check: a wrong but valid share fails and keeps the warning', !r.ok && !r.released && /different seed/.test(r.message), JSON.stringify(r)); }
+{ const r = await verifyTyped([CC.A, CC.B, bad.join(' ')]);
+  ck('final check: a bad-checksum share fails with the share number', !r.ok && /Share 3/.test(r.message), JSON.stringify(r)); }
+{ const r = await verifyTyped([CC.A, CC.B, CC.C], CC.R, 'deadbeef');
+  ck('final check: a fingerprint mismatch fails', !r.ok && /deadbeef/.test(r.message), JSON.stringify(r)); }
+{ const r = await verifyTyped([CC.A, CC.A, CC.B]); ck('final check: a share entered twice fails', !r.ok && /different seed/.test(r.message)); }
+{ // the all-zero "abandon … art" seed (the dev app's test seed) still splits and checks
+  const zero = bip39.entropyToMnemonic(new Uint8Array(32), wordlist);
+  const sh = await split(zero, 3); const r = await verifyTyped(sh, zero);
+  ck('the all-zero test seed splits and its shares pass the final check', sh.length === 3 && r.ok, JSON.stringify(r)); }
+// ---- Check shares I already have (_xorCheckExisting) ----
+async function checkExisting(typed, loadedSeed = CC.R) {
+  const { ctx } = ctxFor({}, { xor_state: { loadedSeed } });
+  vm.runInContext(['_xorCheckShares', '_xorCombine', '_xorFingerprint', '_xorCheckExisting'].map((f) => extract(f)).join('\n'), ctx);
+  return ctx._xorCheckExisting(typed);
+}
+{ const r = await checkExisting([CC.B, CC.C, CC.A]);
+  ck('check shares: the right shares rebuild the vault seed', r.ok && /rebuild your vault seed/.test(r.message), JSON.stringify(r));
+  ck('check shares: the message never holds a seed word', !CC.R.split(' ').some((w) => new RegExp('\\b' + w + '\\b').test(r.message))); }
+{ const r = await checkExisting([CC.A, CC.B]); ck('check shares: a missing share → a different seed, both fingerprints named', !r.ok && /different seed/.test(r.message) && (r.message.match(/[0-9a-f]{8}/g) || []).length === 2, JSON.stringify(r)); }
+{ const r = await checkExisting([CC.A, CC.A, CC.B]); ck('check shares: a share entered twice is named', !r.ok && /identical/.test(r.message), JSON.stringify(r)); }
+{ const r = await checkExisting([CC.A, CC.B, bad.join(' ')]); ck('check shares: a bad-checksum share is named', !r.ok && /Share 3/.test(r.message)); }
+{ const zero = bip39.entropyToMnemonic(new Uint8Array(32), wordlist); const sh = await split(zero, 2);
+  ck('check shares: works for the all-zero test seed', (await checkExisting(sh, zero)).ok); }
+
 // ---- Standalone page (seedxor/index.html) helpers ----
 { const PAGE = readFileSync(join(__dirname, 'seedxor', 'index.html'), 'utf8');
   const ctx = vm.createContext({ window: { BtcMath: { bip39, wordlist, HDKey } }, Uint8Array });
@@ -154,7 +176,8 @@ async function drill(typed, { loadedSeed = CC.R, vaultFp = null, targetVaultFing
   const x = randomBytes(16), y = randomBytes(16);
   ck('standalone: rejects all-zero result', throws([x, y, x.map((b, i) => b ^ y[i])].map(e => bip39.entropyToMnemonic(e, wordlist)), /all-zero/));
   const fp = await ctx.xorMasterFingerprint(CC.R);
-  ck('standalone: fingerprint matches app recovery fingerprint', /^[0-9A-F]{8}$/.test(fp) && (await merge([CC.A, CC.B, CC.C])).status.includes(fp), fp); }
+  const { ctx: c2 } = ctxFor({}); vm.runInContext(extract('_xorFingerprint'), c2);
+  ck('standalone: fingerprint matches the tool\'s fingerprint', /^[0-9A-F]{8}$/.test(fp) && (await c2._xorFingerprint(CC.R)).toUpperCase() === fp, fp); }
 console.log(`\nSEED XOR: ${pass} passed, ${fail} failed`);
 
 process.exit(fail === 0 ? 0 : 1);
