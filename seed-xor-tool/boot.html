@@ -2370,9 +2370,7 @@
 
     /* ---- Inactive toggle-button contrast fix ----
        The Script Type selector (Output Descriptor), Number of Shares
-       selector (Seed XOR Splitter — Split tab), word-count and
-       share-count selectors on the Seed XOR Splitter — Merge tab,
-       Threshold preset selector (Shamir Backup), and the word-count /
+       selector (Seed XOR Splitter), Threshold preset selector (Shamir Backup), and the word-count /
        separator / capitalization selectors in the Passphrase Library
        Generator are built from `.skb-btn` buttons whose inactive
        state carries only an inline `background: var(--skb-bg-input)`
@@ -2398,14 +2396,12 @@
        button keeps its black-on-orange look in both themes.
 
        The JS toggle handlers (desc_setScript / xor_setShares /
-       xor_setMergeLength / xor_setMergeShares / s39_setPreset /
+       s39_setPreset /
        pp_setWordCount / pp_setSeparator / pp_setCapitalization) blank
        the inline color back to `''` when a button is deselected, at
        which point the cascade picks this rule up again. */
     button.skb-btn[id^="desc-st-"],
     button.skb-btn[id^="xor-shares-"],
-    button.skb-btn[id^="xor-merge-len-"],
-    button.skb-btn[id^="xor-merge-shares-"],
     button.skb-btn[id^="s39-preset-"],
     button.skb-btn[id^="pp-wc-"],
     button.skb-btn[id^="pp-sep-"],
@@ -7030,7 +7026,7 @@
                                 <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg></span>
                                 <span class="dash-tool-label">
                                     <span class="dash-tool-name">Seed XOR Splitter</span>
-                                    <span class="dash-tool-subtitle">Split or combine seeds with XOR shares</span>
+                                    <span class="dash-tool-subtitle">Split your seed into XOR shares</span>
                                 </span>
                                 <span class="dash-tool-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
                             </button>
@@ -7899,30 +7895,19 @@
         <div id="state-seedxor">
             <div class="tool-hero">
                 <h2 class="tool-hero-title">SeedXOR<span>Splitter</span></h2>
-                <p class="tool-hero-subtitle">Seed XOR Calculator</p>
-                <p class="tool-hero-desc">Split a seed phrase into multiple XOR shares for distributed cold storage, or merge existing shares to reconstruct the original. Each share alone reveals nothing — all shares must be combined to recover the seed.</p>
+                <p class="tool-hero-subtitle">Split Your Seed Into XOR Shares</p>
+                <p class="tool-hero-desc">Split your seed into 2, 3 or 4 shares. Each share looks like an ordinary 12- or 24-word seed and on its own reveals nothing. Every share is needed to recover your seed: on the welcome screen, choose Restore via Seed XOR.</p>
             </div>
 
-            <div class="tool-tabs">
-                <button type="button" class="tool-tab-btn active" id="xor-tab-btn-split" onclick="xor_switchTab('split')">Split Seed</button>
-                <button type="button" class="tool-tab-btn" id="xor-tab-btn-merge" onclick="xor_switchTab('merge')">Merge Shares</button>
-            </div>
-
-            <!-- ======= SPLIT TAB ======= -->
-            <div id="xor-tab-split" class="tool-tab-content active">
-
-                <!-- Seed to Split -->
+            <!-- Step 1: choose (SHARE_TOOLS_DESIGN.md). Steps 2-4 are drawn
+                 into #xor-flow by shared/share-flow-ui.js. -->
+            <div id="xor-setup">
                 <div class="skb-card" style="margin-bottom: 1rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                         <label style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text);">Seed to Split</label>
                         <span style="font-size: 0.6875rem; color: var(--skb-text-muted);" id="xor-seed-source"></span>
                     </div>
-
-                    <!-- Read-only grid display (shown when seed is loaded) -->
                     <div id="xor-seed-display" style="display: none;">
-                        <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id
-                             is xor-seed-accordion; the inner grid keeps id="xor-seed-grid"
-                             so xor_showSeedGrid's existing render code is unchanged. -->
                         <div class="skb-seed-accordion" id="xor-seed-accordion" data-collapsed="1">
                             <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
                                     onclick="seedAccordionToggle('xor-seed-accordion')">
@@ -7941,152 +7926,33 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.75rem; border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); font-size: 0.8125rem;" onclick="xor_clearSeed()">Clear &amp; Enter Different Seed</button>
                     </div>
-
-                    <!-- Manual input (shown when no seed / user cleared) -->
-                    <div id="xor-seed-input-area" style="display: none;">
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
-                            <button type="button" class="skb-btn" id="xor-input-12" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="xor_setInputLength(12)">12 Words</button>
-                            <button type="button" class="skb-btn" id="xor-input-24" style="flex: 1; background: var(--skb-bg-input);" onclick="xor_setInputLength(24)">24 Words</button>
-                        </div>
-                        <div class="rst-grid" id="xor-input-grid">
-                            <!-- Filled by xor_buildInputGrid() -->
-                        </div>
-                        <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-                            <button type="button" class="skb-btn" style="flex: 1; border: 1px dashed var(--skb-border);" onclick="xor_scanSeedQR()">Scan QR</button>
-                            <button type="button" class="skb-btn skb-btn--primary" style="flex: 1;" onclick="xor_confirmManualSeed()">Load Seed</button>
-                        </div>
-                        <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; border: 1px solid var(--skb-primary); color: var(--skb-primary); background: transparent;" onclick="xor_loadFromVault()">Load Active Vault</button>
-                        <div id="xor-input-qr-area" style="display: none; margin-top: 1rem;">
-                            <div id="xor-input-qr-reader" style="width: 100%; min-height: 300px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>
-                            <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem;" onclick="xor_stopSeedQR()">Stop Scanner</button>
-                        </div>
-                    </div>
-
-                    <!-- Empty state -->
                     <div id="xor-seed-empty" style="text-align: center; padding: 1.5rem; color: var(--skb-text-muted); font-size: 0.875rem;">
-                        No master seed loaded. Generate or restore a seed first.
-                        <div style="margin-top: 0.75rem;">
-                            <button type="button" class="skb-btn" style="border: 1px solid var(--skb-primary); color: var(--skb-primary); background: transparent; font-size: 0.8125rem; padding: 0.5rem 1.25rem;" onclick="xor_loadFromVault()">Load Active Vault</button>
-                        </div>
+                        No master seed loaded. Return to the Dashboard and load a seed first.
                     </div>
                 </div>
 
-                <!-- Config: Number of Shares -->
                 <div class="skb-card" style="margin-bottom: 1rem;" id="xor-split-config">
-                    <div style="margin-bottom: 0;">
-                        <label style="font-size: 0.875rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Number of Shares</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button type="button" class="skb-btn" id="xor-shares-2" style="flex: 1; background: var(--skb-bg-input);" onclick="xor_setShares(2)">2-of-2</button>
-                            <button type="button" class="skb-btn" id="xor-shares-3" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="xor_setShares(3)">3-of-3</button>
-                            <button type="button" class="skb-btn" id="xor-shares-4" style="flex: 1; background: var(--skb-bg-input);" onclick="xor_setShares(4)">4-of-4</button>
-                        </div>
+                    <label style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); display: block; margin-bottom: 0.75rem;">Number of Shares</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="button" class="skb-btn" id="xor-shares-2" style="flex: 1; background: var(--skb-bg-input);" onclick="xor_setShares(2)">2 shares</button>
+                        <button type="button" class="skb-btn" id="xor-shares-3" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="xor_setShares(3)">3 shares</button>
+                        <button type="button" class="skb-btn" id="xor-shares-4" style="flex: 1; background: var(--skb-bg-input);" onclick="xor_setShares(4)">4 shares</button>
                     </div>
+                    <p id="xor-shares-note" style="font-size: 0.875rem; color: var(--skb-text-muted); margin: 0.85rem 0 0; line-height: 1.5;">
+                        All 3 shares are needed to recover your seed. Losing any one share loses the seed, so keep each in a different safe place.
+                    </p>
                 </div>
 
-                <button type="button" class="skb-btn skb-btn--primary" style="width: 100%; margin-bottom: 1rem;" id="xor-split-btn" onclick="xor_handleSplit()">Generate XOR Shares</button>
-
-                <!-- Shard Lock Banner removed: obsolete after the hard-lock
-                     was downgraded to the soft warning modal
-                     (#shard-leave-warning-modal). The drill is still required
-                     before Clear/Reset — the interception happens silently
-                     inside _shardSoftIntercept() and surfaces through the
-                     modal only when the user actively tries to leave. -->
-                <div id="xor-lock-banner" style="display: none;"></div>
-
-                <!-- Split Output -->
-                <div id="xor-split-results" style="display: none;">
-                    <div class="skb-card">
-                        <div style="font-size: 0.875rem; color: var(--skb-text-muted); background: rgba(247,147,26,0.1); border: 1px solid rgba(247,147,26,0.3); border-radius: var(--skb-radius-sm); padding: 0.75rem; margin-bottom: 1rem;">
-                            Store ALL shares in separate secure locations. You need every share to reconstruct the original seed.
-                        </div>
-                        <div id="xor-split-shares"></div>
-
-                        <!-- Legacy verification trigger — no longer shown (verification is now mandatory & auto-triggered) -->
-                        <div id="xorv-verify-trigger" style="display: none;"></div>
-                    </div>
-                </div>
-
-                <!-- ---- XOR VERIFICATION SECTION (Mandatory Fire Drill) ---- -->
-                <div id="xorv-verify-section" style="display: none;">
-                    <div class="skb-card" style="border: 3px solid var(--skb-danger); background: rgba(220, 53, 69, 0.05);">
-                        <div style="font-size: 1.125rem; font-weight: 900; color: var(--skb-danger); margin-bottom: 0.4rem; letter-spacing: 0.03em; text-transform: uppercase;">
-                            Reconstruction Drill
-                        </div>
-                        <p style="font-size: 0.875rem; color: var(--skb-text); margin: 0 0 1rem; line-height: 1.5;">
-                            Physically write down every share, then re-type ALL <strong id="xorv-n">0</strong> shares from your physical backup below. The XOR reconstruction must match the seed currently loaded into this tool exactly. <strong style="color: var(--skb-danger);">A single typo in your physical backup will result in permanent loss of funds &mdash; do not skip this drill.</strong>
-                        </p>
-
-                        <!-- Dynamic share input areas (built by xorv_startVerification) -->
-                        <div id="xorv-inputs-container"></div>
-
-                        <!-- Test button -->
-                        <button type="button" class="skb-btn skb-btn--primary" id="xorv-test-btn"
-                                style="width: 100%; margin-top: 1rem; font-size: 0.9375rem; padding: 0.7rem;"
-                                onclick="xorv_testRecovery()">Test Recovery</button>
-
-                        <!-- Result banner (shown after test) -->
-                        <div id="xorv-result-banner" style="display: none; margin-top: 1rem; padding: 1.25rem; border-radius: var(--skb-radius); text-align: center;"></div>
-
-                        <!-- Done section (shown only on success) -->
-                        <div id="xorv-done-section" style="display: none; margin-top: 1rem;">
-                            <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem; border: 1px solid var(--skb-border);"
-                                    onclick="xorv_returnToShares()">Return to Shares</button>
-                        </div>
-
-                        <!-- Return to shares (always available for re-checking) -->
-                        <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); font-size: 0.8125rem;"
-                                onclick="xorv_returnToShares()">&#8592; Return to Shares to Re-check</button>
-                    </div>
-                </div>
+                <button type="button" class="skb-btn skb-btn--primary" style="width: 100%; padding: 0.75rem; font-size: 1rem; font-weight: 700;" id="xor-split-btn" onclick="xor_handleSplit()">Make Shares</button>
+                <p style="font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0.75rem 0 0; text-align: center;">
+                    Next, SafeKeep shows each share in turn. Write it down, then type it back so SafeKeep can check your copy.
+                </p>
             </div>
 
-            <!-- ======= MERGE TAB ======= -->
-            <div id="xor-tab-merge" class="tool-tab-content" style="display: none;">
-                <div class="skb-card" style="margin-bottom: 1rem;">
-                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
-                        <button type="button" class="skb-btn" id="xor-merge-len-12" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="xor_setMergeLength(12)">12 Words</button>
-                        <button type="button" class="skb-btn" id="xor-merge-len-24" style="flex: 1; background: var(--skb-bg-input);" onclick="xor_setMergeLength(24)">24 Words</button>
-                    </div>
-                    <div style="margin-bottom: 0.75rem;">
-                        <label style="font-size: 0.875rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Number of Shares</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button type="button" class="skb-btn" id="xor-merge-shares-2" style="flex: 1; background: var(--skb-bg-input);" onclick="xor_setMergeShares(2)">2</button>
-                            <button type="button" class="skb-btn" id="xor-merge-shares-3" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="xor_setMergeShares(3)">3</button>
-                            <button type="button" class="skb-btn" id="xor-merge-shares-4" style="flex: 1; background: var(--skb-bg-input);" onclick="xor_setMergeShares(4)">4</button>
-                        </div>
-                    </div>
-
-                    <div id="xor-merge-inputs"></div>
-
-                    <button type="button" class="skb-btn skb-btn--primary" style="width: 100%; margin-top: 0.75rem;" onclick="xor_handleMerge()">XOR Merge Shares</button>
-                </div>
-
-                <!-- Merge Output -->
-                <div id="xor-merge-results" style="display: none;">
-                    <div class="skb-card">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                            <span style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text);">Recovered Seed</span>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="xor_copyMerged()">Copy</button>
-                                <button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" id="xor-merge-qr-btn" onclick="xor_toggleMergeQR()">Show QR</button>
-                            </div>
-                        </div>
-                        <div class="bip85-out-grid" id="xor-merge-output-grid"></div>
-                        <div id="xor-merge-fp" style="margin-top: 0.75rem; font-size: 0.8125rem; color: var(--skb-text); line-height: 1.5;"></div>
-                        <div id="xor-merge-qr-wrap" style="display: none; margin-top: 1rem; text-align: center;">
-                            <canvas id="xor-merge-qr-canvas" style="max-width: 300px; width: 100%; height: auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Reset Tool -->
-            <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--skb-border);">
-                <button type="button" class="skb-btn" style="width: 100%; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; font-size: 0.8125rem; padding: 0.6rem;" onclick="xor_clearAll()">Reset Tool — Clear All Data</button>
-            </div>
+            <div id="xor-flow"></div>
         </div>
+
 
         <!-- ============================================
              STATE: BIP-85 CHILD SEED (Tool 3)
@@ -10643,16 +10509,15 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
 
 
 <!-- ======== SHARD LEAVE-WITHOUT-VERIFYING WARNING MODAL ========
-     Soft lock replacement for the old hard navigation block. When the
-     user has generated XOR shares but not yet completed the mandatory
-     reconstruction drill, any attempt to leave The Shard (or reset the
-     tool) routes through this warning first. See _shardSoftIntercept(). -->
+     When the user has made XOR shares but not yet checked every one,
+     leaving the tool, Cancel or a reset shows this warning first.
+     "Leave Anyway" discards the shares. See _shardSoftIntercept(). -->
 <div class="reset-modal-overlay shard-warn-overlay" id="shard-leave-warning-modal">
     <div class="reset-modal shard-warn-modal">
-        <h3>&#9888; Leave without verifying?</h3>
-        <p><strong style="color: var(--skb-text);">You have not verified your Seed XOR shards.</strong> A single typo in your physical backup will result in permanent loss of funds. Are you sure you want to leave without verifying?</p>
+        <h3>&#9888; Leave without checking your shares?</h3>
+        <p><strong style="color: var(--skb-text);">You haven&rsquo;t checked every share against your paper yet.</strong> One wrong word in one share can make your seed impossible to recover. If you leave now, these shares are gone and you&rsquo;ll need to make new ones to check them.</p>
         <div class="reset-modal-actions" style="flex-direction: column; gap: 0.6rem;">
-            <button type="button" class="btn-danger" id="shard-warn-cancel-btn" onclick="_shardWarnCancel()" style="width: 100%; padding: 0.85rem; font-weight: 700;">Cancel (Return to Verification)</button>
+            <button type="button" class="btn-danger" id="shard-warn-cancel-btn" onclick="_shardWarnCancel()" style="width: 100%; padding: 0.85rem; font-weight: 700;">Go Back and Check</button>
             <button type="button" class="skb-btn btn-secondary" id="shard-warn-leave-btn" onclick="_shardWarnLeaveAnyway()" style="width: 100%; padding: 0.7rem; border: 1px solid var(--skb-border); background: transparent; color: var(--skb-text-muted);">Leave Anyway</button>
         </div>
     </div>
@@ -17430,10 +17295,9 @@ var _sensitiveSelectors = [
     '#desc-xpub-output',      // Descriptor xpub output
     '.arm-xpub-val',          // Armory xpub values
     '.arm-addr-cell',         // Armory address cells
-    '#xor-merge-output-grid', // XOR merge output
     '#eob-result-words',      // Entropy result words
     '#s39-shares-container',  // Shamir share cards
-    '#xor-split-shares',      // XOR share cards
+    '#xor-flow',              // XOR share screens
     '#codex-editor',           // Codex note body
     '#codex-title',            // Codex note title
     '#cipher-nickname',        // Cipher passphrase nickname
@@ -17553,10 +17417,10 @@ function _fullSessionWipe() {
     if (typeof xor_state !== 'undefined') {
         xor_state.loadedSeed = null;
         xor_state.generatedShares = [];
-        xor_state.mergedSeed = '';
-        xor_state.targetVaultFingerprint = '';
         xor_state.targetBip32FP = '';
     }
+    if (typeof _xorFlow !== 'undefined' && _xorFlow) { try { _xorFlow.destroy(); } catch (_) {} _xorFlow = null; }
+    try { var _xs = document.getElementById('xor-setup'); if (_xs) _xs.style.display = ''; } catch (_) {}
     if (typeof _psbtTempSeed !== 'undefined') _psbtTempSeed = null;
     if (typeof _bip85LastResult !== 'undefined') {
         _bip85LastResult.childMnemonic = '';
@@ -17620,8 +17484,6 @@ function _resetToolSeedCaches() {
         if (typeof xor_state !== 'undefined') {
             xor_state.loadedSeed         = null;
             xor_state.generatedShares    = [];
-            xor_state.mergedSeed         = '';
-            xor_state.targetVaultFingerprint = '';
             xor_state.targetBip32FP      = '';
             xor_state.locked             = false;
         }
@@ -17662,81 +17524,31 @@ function _resetToolSeedCaches() {
 // ============================================================
 
 /**
- * The Shard — clear all split/merge state and return to fresh tool.
+ * Seed XOR — forget the shares and go back to step 1 (choose).
  */
 function xor_clearAll() {
-    // Reconstruction Drill — soft lock.
-    // If the user generated shares but never verified them, show the
-    // warning modal before wiping state. "Leave Anyway" calls us back
-    // with _shardWarningBypass=true to skip the intercept on retry.
+    // Shares not all checked: warn first. "Leave anyway" calls us back
+    // with _shardWarningBypass set.
     if (typeof isShardLocked === 'function' && isShardLocked() &&
         typeof _shardSoftIntercept === 'function' &&
         _shardSoftIntercept({ kind: 'clear' })) {
         return;
     }
-
-    // Absolute Amnesia: overwrite the system clipboard in case the user
-    // copied a seed word or share during this session.
     _wipeClipboard();
 
-    // Wipe JS state
-    xor_state.loadedSeed = null;
+    if (_xorFlow) { try { _xorFlow.destroy(); } catch (_) {} _xorFlow = null; }
+    (xor_state.generatedShares || []).fill('');
     xor_state.generatedShares = [];
-    xor_state.mergedSeed = '';
-    xor_state.targetVaultFingerprint = '';
+    xor_state.loadedSeed = null;
     xor_state.targetBip32FP = '';
     xor_state.locked = false;
     _xorHasWork = false;
 
-    // Wipe split tab DOM
-    document.getElementById('xor-split-results').style.display = 'none';
-    document.getElementById('xor-split-shares').innerHTML = '';
-    // Kill any live per-share Reconstruction Drill QR scanner before
-    // tearing down the DOM so the camera LED doesn't stay lit.
-    if (typeof xvg_stopAllShareScanners === 'function') { try { xvg_stopAllShareScanners(); } catch (e) {} }
-    var verifySection = document.getElementById('xorv-verify-section');
-    if (verifySection) verifySection.style.display = 'none';
-    var verifyTrigger = document.getElementById('xorv-verify-trigger');
-    if (verifyTrigger) verifyTrigger.style.display = 'none';
-    var verifyInputs = document.getElementById('xorv-inputs-container');
-    if (verifyInputs) verifyInputs.innerHTML = '';
-    // Drop predictive-grid state so a re-entry rebuilds cleanly.
-    if (typeof xvg_clearAllShares === 'function') { try { xvg_clearAllShares(); } catch (e) {} }
-    var resultBanner = document.getElementById('xorv-result-banner');
-    if (resultBanner) { resultBanner.style.display = 'none'; resultBanner.innerHTML = ''; }
-    var doneSection = document.getElementById('xorv-done-section');
-    if (doneSection) doneSection.style.display = 'none';
-
-    // Wipe merge tab DOM
-    document.getElementById('xor-merge-results').style.display = 'none';
-    document.getElementById('xor-merge-output-grid').innerHTML = '';
-    var mergeFp = document.getElementById('xor-merge-fp');
-    if (mergeFp) mergeFp.textContent = '';
-    var mergeQrWrap = document.getElementById('xor-merge-qr-wrap');
-    if (mergeQrWrap) mergeQrWrap.style.display = 'none';
-    // Clear merge input grids
-    for (var s = 0; s < 10; s++) {
-        for (var w = 0; w < 24; w++) {
-            var el = document.getElementById('xor-mg-' + s + '-word-' + w);
-            if (el) el.value = '';
-        }
-    }
-
-    // Wipe QR canvases
-    for (var i = 0; i < 10; i++) {
-        var c = document.getElementById('xor-share-qr-canvas-' + i);
-        if (c) { var cx = c.getContext('2d'); if (cx) cx.clearRect(0, 0, c.width, c.height); }
-    }
-    var mergeQrCanvas = document.getElementById('xor-merge-qr-canvas');
-    if (mergeQrCanvas) { var mcx = mergeQrCanvas.getContext('2d'); if (mcx) mcx.clearRect(0, 0, mergeQrCanvas.width, mergeQrCanvas.height); }
-
-    // Re-run soft init to reload from session
+    var flow = document.getElementById('xor-flow');
+    if (flow) flow.innerHTML = '';
+    var setup = document.getElementById('xor-setup');
+    if (setup) setup.style.display = '';
     xor_autoFillMasterSeed();
-
-    // Switch back to split tab
-    xor_switchTab('split');
-
-    showStatus('The SeedXOR Tool has been reset. All data cleared.', 'info');
 }
 
 /**
@@ -17990,9 +17802,8 @@ function showState(stateId) {
     // sentinel, and the whole attestation pipeline were removed.
     // Tool navigation is unconditional from here down.)
 
-    // Reconstruction Drill — soft lock.
-    // If the Shard has generated shares that were never verified, intercept
-    // any attempt to leave state-seedxor with a warning modal. The user can
+    // Seed XOR: shares made but not all checked — intercept any attempt to
+    // leave state-seedxor with a warning modal. The user can
     // still proceed ("Leave Anyway"), but must make an informed choice.
     // See _shardSoftIntercept() for the modal wiring.
     if (typeof isShardLocked === 'function' && isShardLocked() && stateId !== 'state-seedxor') {
@@ -18037,9 +17848,9 @@ function showState(stateId) {
         try { s39v_stopAllShareScanners(); } catch (_) {}
     }
 
-    // Same teardown for the Seed XOR Reconstruction Drill per-share scanners.
-    if (typeof xvg_stopAllShareScanners === 'function') {
-        try { xvg_stopAllShareScanners(); } catch (_) {}
+    // Same for the Seed XOR share check's scanner.
+    if (typeof xor_stopScanning === 'function') {
+        try { xor_stopScanning(); } catch (_) {}
     }
 
     // ---- Hide everything first ----
@@ -28181,39 +27992,28 @@ async function psbt_loadFromCipher(slug, nickname) {
 }
 
 
-// ---- Tool 2: Seed XOR Calculator (xor_*) ----
+// ---- Tool 2: Seed XOR (xor_*) ----
+// SHARE_TOOLS_DESIGN.md, Part 2. Step 1 (choose the number of shares) is
+// #xor-setup; making the shares hands them to the shared guided flow
+// (window.ShareFlow, shared/share-flow-ui.js), which shows each share,
+// checks the user's copy word by word and finally calls _xorVerifyTyped to
+// rebuild the seed from what was typed. Recovering a seed from shares is on
+// the welcome screen (Restore via Seed XOR, xrr_*), not in this tool.
 
 let xor_state = {
     shares: 3,
-    mergeShares: 3,
-    mergeLength: 12,
-    inputLength: 12,
-    loadedSeed: null,       // mnemonic string currently loaded for split
-    generatedShares: [],    // array of mnemonic strings after split
-    mergedSeed: '',         // recovered mnemonic after merge
-    targetVaultFingerprint: '', // SHA-256(loadedSeed).slice(0,8) — internal cross-check
-                                // used by the verification's secondary vault-fp match.
-    targetBip32FP: '',      // True BIP-32 root fingerprint of loadedSeed.
-                            // mnemonicToSeed → HDKey.fromMasterSeed → root.fingerprint.
-                            // This is the value DISPLAYED in the split UI and stamped
-                            // on printed shares — matches the dashboard's
-                            // #dash-fingerprint exactly when the loaded seed is the
-                            // active master.
-    locked: false           // true between split and successful reconstruction drill
+    loadedSeed: null,       // the vault seed being split
+    generatedShares: [],    // the share mnemonics, once made
+    targetBip32FP: '',      // BIP-32 root fingerprint of loadedSeed, shown on
+                            // every share and printed page; matches the
+                            // dashboard's fingerprint.
+    locked: false           // true from making the shares until every share
+                            // is checked (the "leave anyway" warning)
 };
-let _xorSeedQrScanner = null;
-let _xorMergeQrScanner = null;
+var _xorHasWork = false;    // the tool holds shares; keep them across visits
+var _xorFlow = null;        // the mounted guided flow
 
-// --- Tab switching ---
-function xor_switchTab(tab) {
-    document.getElementById('xor-tab-split').style.display = tab === 'split' ? 'block' : 'none';
-    document.getElementById('xor-tab-merge').style.display = tab === 'merge' ? 'block' : 'none';
-    document.getElementById('xor-tab-btn-split').classList.toggle('active', tab === 'split');
-    document.getElementById('xor-tab-btn-merge').classList.toggle('active', tab === 'merge');
-    if (tab === 'merge') xor_buildMergeInputs();
-}
-
-// --- Shares config (split) ---
+// --- Step 1: number of shares ---
 function xor_setShares(num) {
     xor_state.shares = num;
     [2, 3, 4].forEach(n => {
@@ -28223,396 +28023,210 @@ function xor_setShares(num) {
         el.style.color = n === num ? 'black' : '';
         el.style.fontWeight = n === num ? '600' : '';
     });
+    const note = document.getElementById('xor-shares-note');
+    if (note) note.textContent = 'All ' + num + ' shares are needed to recover your seed. Losing any one share loses the seed, so keep each in a different safe place.';
 }
 
-// --- Seed Display: populate the read-only grid from a mnemonic ---
+// --- The seed being split (the vault seed) ---
 function xor_showSeedGrid(mnemonic, source) {
     xor_state.loadedSeed = mnemonic;
-    const words = mnemonic.trim().split(/\s+/);
     const grid = document.getElementById('xor-seed-grid');
     grid.innerHTML = '';
-    words.forEach((word, i) => {
+    mnemonic.trim().split(/\s+/).forEach((word, i) => {
         const cell = document.createElement('div');
         cell.className = 'bip85-out-cell';
-        cell.innerHTML = '<span class="bip85-out-num">' + (i + 1) + '.</span>' +
-                         '<div class="bip85-out-word">' + word + '</div>';
+        const num = document.createElement('span');
+        num.className = 'bip85-out-num';
+        num.textContent = (i + 1) + '.';
+        const w = document.createElement('div');
+        w.className = 'bip85-out-word';
+        w.textContent = word;
+        cell.append(num, w);
         grid.appendChild(cell);
     });
     document.getElementById('xor-seed-display').style.display = 'block';
-    document.getElementById('xor-seed-input-area').style.display = 'none';
     document.getElementById('xor-seed-empty').style.display = 'none';
     const srcEl = document.getElementById('xor-seed-source');
     if (srcEl) srcEl.textContent = source || '';
-    // Refresh the seed accordion's collapsed summary (last word + FP)
-    // — fires async since BIP-39 seed derivation is async, but the
-    // last-word slot updates synchronously so the visible summary
-    // never lags the grid render.
     if (typeof seedAccordionRefreshSummaryFromMnemonic === 'function') {
         seedAccordionRefreshSummaryFromMnemonic('xor-seed-accordion', mnemonic);
     }
 }
 
-// --- Clear seed: switch to manual input mode ---
-function xor_clearSeed() {
-    xor_state.loadedSeed = null;
-    document.getElementById('xor-seed-display').style.display = 'none';
-    document.getElementById('xor-seed-empty').style.display = 'none';
-    document.getElementById('xor-seed-input-area').style.display = 'block';
-    document.getElementById('xor-seed-source').textContent = '';
-    // Reset the accordion summary so it doesn't briefly show the
-    // previous seed's last word + FP after the user re-enters a
-    // different mnemonic.
-    if (typeof seedAccordionRefreshSummary === 'function') {
-        document.getElementById('xor-seed-grid').innerHTML = '';
-        seedAccordionRefreshSummary('xor-seed-accordion', '--------');
-    }
-    xor_buildInputGrid(xor_state.inputLength);
-}
-
-// --- Load seed directly from the active vault session ---
-function xor_loadFromVault() {
-    var session = window.SeedSession ? window.SeedSession.get() : null;
-    var mnemonic = session ? session.mnemonic : null;
-
-    if (!mnemonic) {
-        showStatus('No active vault — unlock your master seed from the Dashboard first.', 'error');
-        return;
-    }
-
-    // Load into the read-only grid, same as session auto-fill
-    xor_showSeedGrid(mnemonic, 'Loaded from vault');
-    showStatus('Master seed loaded from active vault.', 'success');
-}
-
-// --- Input length toggle (manual input mode) ---
-function xor_setInputLength(len) {
-    xor_state.inputLength = len;
-    document.getElementById('xor-input-12').style.background = len === 12 ? 'var(--skb-primary)' : 'var(--skb-bg-input)';
-    document.getElementById('xor-input-12').style.color = len === 12 ? 'black' : '';
-    document.getElementById('xor-input-12').style.fontWeight = len === 12 ? '600' : '';
-    document.getElementById('xor-input-24').style.background = len === 24 ? 'var(--skb-primary)' : 'var(--skb-bg-input)';
-    document.getElementById('xor-input-24').style.color = len === 24 ? 'black' : '';
-    document.getElementById('xor-input-24').style.fontWeight = len === 24 ? '600' : '';
-    xor_buildInputGrid(len);
-}
-
-// --- Build the BIP-39 autocomplete grid for manual seed input ---
-function xor_buildInputGrid(count) {
-    const grid = document.getElementById('xor-input-grid');
-    grid.innerHTML = '';
-    for (let i = 0; i < count; i++) {
-        const cell = document.createElement('div');
-        cell.className = 'rst-cell';
-        cell.innerHTML =
-            '<span class="rst-cell-num">' + (i + 1) + '</span>' +
-            '<input type="text" id="xor-in-word-' + i + '" data-idx="' + i + '" data-prefix="xor-in" ' +
-            'spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="word ' + (i + 1) + '">' +
-            '<div class="rst-autocomplete" id="xor-in-ac-' + i + '"></div>';
-        grid.appendChild(cell);
-    }
-    // Attach same autocomplete / paste / keydown listeners as rst_ grid
-    grid.querySelectorAll('input').forEach(input => {
-        input.addEventListener('input', xor_onInput);
-        input.addEventListener('keydown', xor_onKeydown);
-        input.addEventListener('paste', xor_onPaste);
-        input.addEventListener('blur', () => {
-            setTimeout(() => xor_hideAC(parseInt(input.dataset.idx)), 150);
-        });
-    });
-    const first = document.getElementById('xor-in-word-0');
-    if (first) setTimeout(() => first.focus(), 50);
-}
-
-// --- Autocomplete handlers (mirror rst_ logic with xor-in prefix) ---
-function xor_getWordlist() { return window.BtcMath?.wordlist || []; }
-
-function xor_hideAC(idx) {
-    const ac = document.getElementById('xor-in-ac-' + idx);
-    if (ac) ac.innerHTML = '';
-}
-
-function xor_onInput(e) {
-    const input = e.target;
-    const idx = parseInt(input.dataset.idx);
-    const val = input.value.trim().toLowerCase();
-    const ac = document.getElementById('xor-in-ac-' + idx);
-    ac.innerHTML = '';
-    if (!val) return;
-    const wordlist = xor_getWordlist();
-    const matches = wordlist.filter(w => w.startsWith(val)).slice(0, 8);
-    if (matches.length === 0) return;
-    matches.forEach((word, mi) => {
-        const item = document.createElement('div');
-        item.className = 'rst-autocomplete-item' + (mi === 0 ? ' active' : '');
-        item.textContent = word;
-        item.addEventListener('mousedown', (ev) => {
-            ev.preventDefault();
-            input.value = word;
-            ac.innerHTML = '';
-            input.classList.remove('valid', 'invalid');
-            input.classList.add(wordlist.includes(word) ? 'valid' : 'invalid');
-            const next = document.getElementById('xor-in-word-' + (idx + 1));
-            if (next) next.focus();
-        });
-        ac.appendChild(item);
-    });
-}
-
-function xor_onKeydown(e) {
-    // ALWAYS block Enter to prevent implicit form submission / page reload
-    if (e.key === 'Enter') e.preventDefault();
-    const input = e.target;
-    const idx = parseInt(input.dataset.idx);
-    const ac = document.getElementById('xor-in-ac-' + idx);
-    const items = ac ? ac.querySelectorAll('.rst-autocomplete-item') : [];
-    // Shift+Tab falls through to native DOM reverse-nav (no autocomplete
-    // hijack) so users can step back even while the dropdown is visible.
-    if (items.length > 0 && ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter')) {
-        if (e.key === 'Tab') e.preventDefault();
-        const active = ac.querySelector('.rst-autocomplete-item.active') || items[0];
-        input.value = active.textContent;
-        ac.innerHTML = '';
-        const wordlist = xor_getWordlist();
-        input.classList.remove('valid', 'invalid');
-        input.classList.add(wordlist.includes(input.value) ? 'valid' : 'invalid');
-        const next = document.getElementById('xor-in-word-' + (idx + 1));
-        if (next) next.focus();
-    } else if (e.key === 'Enter' && items.length === 0) {
-        // No dropdown — just advance to next input
-        const next = document.getElementById('xor-in-word-' + (idx + 1));
-        if (next) next.focus();
-    } else if (items.length > 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-        e.preventDefault();
-        let cur = -1;
-        items.forEach((it, i) => { if (it.classList.contains('active')) cur = i; });
-        items.forEach(it => it.classList.remove('active'));
-        const next = e.key === 'ArrowDown' ? (cur + 1) % items.length : (cur - 1 + items.length) % items.length;
-        items[next].classList.add('active');
+function xor_autoFillMasterSeed() {
+    // Shares already made: keep them (and the flow) across visits.
+    if (_xorHasWork) return;
+    const seed = window.SeedSession?.get()?.mnemonic;
+    if (seed) {
+        xor_showSeedGrid(seed, 'Loaded from session');
+    } else {
+        xor_state.loadedSeed = null;
+        document.getElementById('xor-seed-display').style.display = 'none';
+        document.getElementById('xor-seed-empty').style.display = 'block';
+        document.getElementById('xor-seed-source').textContent = '';
     }
 }
 
-function xor_onPaste(e) {
-    e.preventDefault();
-    const text = (e.clipboardData || window.clipboardData).getData('text');
-    const words = text.trim().split(/\s+/).filter(w => w);
-    if (words.length >= 12) {
-        const len = words.length >= 24 ? 24 : 12;
-        if (len !== xor_state.inputLength) xor_setInputLength(len);
-        setTimeout(() => {
-            const wordlist = xor_getWordlist();
-            for (let i = 0; i < Math.min(words.length, len); i++) {
-                const el = document.getElementById('xor-in-word-' + i);
-                if (el) {
-                    el.value = words[i].toLowerCase();
-                    el.classList.remove('valid', 'invalid');
-                    el.classList.add(wordlist.includes(words[i].toLowerCase()) ? 'valid' : 'invalid');
-                }
-            }
-        }, 20);
-    }
-}
-
-// --- Confirm the manually entered seed ---
-function xor_confirmManualSeed() {
-    const bip39 = window.BtcMath?.bip39;
-    const wordlist = xor_getWordlist();
-    if (!bip39 || !wordlist.length) { showStatus('BIP-39 library not available.', 'error'); return; }
-    const words = [];
-    for (let i = 0; i < xor_state.inputLength; i++) {
-        const el = document.getElementById('xor-in-word-' + i);
-        const val = el ? el.value.trim().toLowerCase() : '';
-        if (!val) { showStatus('Word #' + (i + 1) + ' is missing.', 'error'); return; }
-        if (!wordlist.includes(val)) { showStatus('Word #' + (i + 1) + ' ("' + val + '") is not a valid BIP-39 word.', 'error'); return; }
-        words.push(val);
-    }
-    const mnemonic = words.join(' ');
-    if (!bip39.validateMnemonic(mnemonic, wordlist)) { showStatus('Invalid seed (bad checksum).', 'error'); return; }
-    xor_showSeedGrid(mnemonic, 'Manual entry');
-    showStatus('Seed loaded.', 'success');
-}
-
-// --- QR scanner for split seed input (jsQR) ---
-async function xor_scanSeedQR() {
-    if (!window.jsQR) { showStatus('QR scanner library not available.', 'error'); return; }
-    const area = document.getElementById('xor-input-qr-area');
-    if (_xorSeedQrScanner) { _xorSeedQrScanner.stop(); _xorSeedQrScanner = null; }
-    area.style.display = 'block';
+// --- BIP-32 root fingerprint of a mnemonic (no BIP-39 passphrase) ---
+async function _xorFingerprint(mnemonic) {
+    const bip39 = window.BtcMath.bip39, HDKey = window.BtcMath.HDKey;
+    const seedBytes = await bip39.mnemonicToSeed(mnemonic, '');
     try {
-        _xorSeedQrScanner = SKScanner.create('xor-input-qr-reader');
-        await _xorSeedQrScanner.start({ fps: 10 }, function(text, binaryData) {
-            xor_stopSeedQR();
-            const words = sqr_wordsFromScan(text, binaryData);
-            if (words && (words.length === 12 || words.length === 24)) {
-                xor_showSeedGrid(words.join(' '), 'Scanned from SeedQR');
-                showStatus('SeedQR scanned — ' + words.length + ' words loaded.', 'success');
-            } else {
-                showStatus('QR code does not contain a valid SeedQR.', 'error');
-            }
-        });
-    } catch (err) {
-        showStatus('Camera failed: ' + err.message, 'error');
-        area.style.display = 'none';
+        const root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+        return root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
+    } finally {
+        if (seedBytes instanceof Uint8Array) seedBytes.fill(0);
     }
 }
 
-function xor_stopSeedQR() {
-    if (_xorSeedQrScanner) { _xorSeedQrScanner.stop(); _xorSeedQrScanner = null; }
-    var area = document.getElementById('xor-input-qr-area');
-    if (area) area.style.display = 'none';
+// --- Split: N-1 random shares, the last is the seed XOR all of them ---
+function _xorSplitEntropy(entropy, count) {
+    const shares = [];
+    const last = new Uint8Array(entropy);
+    for (let i = 0; i < count - 1; i++) {
+        const r = new Uint8Array(entropy.length);
+        window.crypto.getRandomValues(r);
+        for (let j = 0; j < last.length; j++) last[j] ^= r[j];
+        shares.push(r);
+    }
+    shares.push(last);
+    return shares;
 }
 
-// =============================================
-// SPLIT — real XOR math
-// =============================================
+// --- Combine share mnemonics into the seed mnemonic they XOR to ---
+// Throws on an invalid share (BIP-39 checksum) or shares of different
+// lengths, and, unless `exact` is set, on a share entered twice or an
+// all-zero result. `exact` is for comparing with a known seed, where
+// equality is the stronger test (and the all-zero "abandon … art" test
+// seed must still split).
+function _xorCombine(shareMnemonics, exact) {
+    const bip39 = window.BtcMath.bip39, wordlist = window.BtcMath.wordlist;
+    const entropies = shareMnemonics.map((m, i) => {
+        if (!bip39.validateMnemonic(m, wordlist)) throw new Error('Share ' + (i + 1) + ' is not a valid BIP-39 phrase (its checksum word does not match).');
+        return bip39.mnemonicToEntropy(m, wordlist);
+    });
+    if (entropies.some(e => e.length !== entropies[0].length)) throw new Error('The shares have different lengths.');
+    const combined = new Uint8Array(entropies[0].length);
+    entropies.forEach(e => { for (let j = 0; j < combined.length; j++) combined[j] ^= e[j]; });
+    if (!exact) _xorCheckShares(entropies, combined);
+    return bip39.entropyToMnemonic(combined, wordlist);
+}
+
 async function xor_handleSplit() {
     try {
         const bip39 = window.BtcMath?.bip39;
         const wordlist = window.BtcMath?.wordlist;
-        const HDKey = window.BtcMath?.HDKey;
-        if (!bip39 || !wordlist) throw new Error('BIP-39 library not available.');
-        if (!HDKey) throw new Error('HDKey library not available.');
-        if (!xor_state.loadedSeed) throw new Error('No seed loaded. Load or enter a seed first.');
+        if (!bip39 || !wordlist || !window.BtcMath?.HDKey) throw new Error('BIP-39 library not available.');
+        if (!xor_state.loadedSeed) throw new Error('No seed loaded. Return to the Dashboard and load a seed first.');
+        if (!window.ShareFlow) throw new Error('The share screens did not load.');
 
-        const origEntropy = bip39.mnemonicToEntropy(xor_state.loadedSeed, wordlist);
-        const sharesCount = xor_state.shares;
+        xor_state.targetBip32FP = await _xorFingerprint(xor_state.loadedSeed);
+        const entropy = bip39.mnemonicToEntropy(xor_state.loadedSeed, wordlist);
+        const shares = _xorSplitEntropy(entropy, xor_state.shares).map(e => bip39.entropyToMnemonic(e, wordlist));
+        // Belt and braces: the shares must rebuild the seed before anyone
+        // is asked to write them down.
+        if (_xorCombine(shares, true) !== xor_state.loadedSeed) throw new Error('The shares did not rebuild the seed. Nothing was shown; try again.');
+        xor_state.generatedShares = shares;
 
-        // ── Target Master Fingerprint (BIP-32) ──
-        // Bug-fix (Task #10 follow-up): the previous implementation rendered
-        // window.SafeKeepOS.vaultFingerprint(loadedSeed) here — that function
-        // returns SHA-256(mnemonic).slice(0,8), which is the SafeKeep "Vault
-        // Fingerprint" hash, NOT the BIP-32 root fingerprint. The dashboard's
-        // #dash-fingerprint badge displays the BIP-32 value, so the two never
-        // matched even when the same mnemonic was loaded — confusing the user
-        // who sees e.g. dashboard "BA55E6CF" vs split UI "8404FFE3".
-        //
-        // The fix mirrors the verification step (xorv_testRecovery): run the
-        // mnemonic through bip39.mnemonicToSeed (PBKDF2 with empty BIP-39
-        // passphrase) → HDKey.fromMasterSeed → root.fingerprint. The resulting
-        // 8-hex string is the canonical BIP-32 master fingerprint that every
-        // wallet, hardware signer, and our own dashboard agrees on. Stamping
-        // this on shares + printed pages makes the split-time identifier
-        // visually verifiable against any other tool that reads the same seed.
-        let targetBip32FP = '--------';
-        try {
-            const mfpSeedBytes = await bip39.mnemonicToSeed(xor_state.loadedSeed, '');
-            const mfpRoot = HDKey.fromMasterSeed(mfpSeedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-            targetBip32FP = mfpRoot.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-            // Zero the seed buffer ASAP — defensive memory hygiene; matches
-            // the pattern used in xorv_testRecovery for recovered seeds.
-            if (mfpSeedBytes instanceof Uint8Array) mfpSeedBytes.fill(0);
-        } catch (fpErr) {
-            console.error('[SHARD] Failed to derive BIP-32 fingerprint:', fpErr);
-        }
-        xor_state.targetBip32FP = targetBip32FP;
-
-        // Also keep the SHA-256 vault fingerprint for the verification step's
-        // secondary cross-check (xorv_testRecovery's vaultFpMatch). Internal
-        // only — never rendered in the user-facing split UI.
-        let targetVaultFP = '--------';
-        try {
-            if (window.SafeKeepOS && typeof window.SafeKeepOS.vaultFingerprint === 'function') {
-                targetVaultFP = await window.SafeKeepOS.vaultFingerprint(xor_state.loadedSeed);
-            }
-        } catch (fpErr) {
-            console.error('[SHARD] Failed to compute Vault Fingerprint:', fpErr);
-        }
-        xor_state.targetVaultFingerprint = targetVaultFP;
-
-        // Generate (N-1) random shares, last share = XOR of original with all others
-        const entropies = [];
-        let rollingXor = new Uint8Array(origEntropy);
-
-        for (let i = 0; i < sharesCount - 1; i++) {
-            const randBytes = new Uint8Array(origEntropy.length);
-            window.crypto.getRandomValues(randBytes);
-            entropies.push(randBytes);
-            // XOR into rolling accumulator
-            for (let j = 0; j < rollingXor.length; j++) {
-                rollingXor[j] ^= randBytes[j];
-            }
-        }
-        entropies.push(rollingXor);
-
-        // Convert each share entropy to a BIP-39 mnemonic and display
-        const container = document.getElementById('xor-split-shares');
-        container.innerHTML = '';
-        xor_state.generatedShares = [];
-
-        // Loud master-level warning banner — one per generation, sits above all shares.
-        const warnBanner = document.createElement('div');
-        warnBanner.style.cssText = 'border: 3px solid var(--skb-danger); background: rgba(239, 68, 68, 0.08); color: var(--skb-danger); font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--skb-mono); font-size: 0.8125rem; text-align: center; padding: 0.75rem; margin-bottom: 1rem; line-height: 1.5;';
-        warnBanner.innerHTML =
-            'ALL ' + sharesCount + ' SHARES REQUIRED FOR RECOVERY<br>' +
-            '<span style="font-size: 0.75rem; font-weight: 700; opacity: 0.9;">NO THRESHOLD RECOVERY &mdash; LOSING ANY ONE SHARE MEANS PERMANENT LOSS OF THE SEED</span><br>' +
-            '<span style="display: inline-block; margin-top: 0.35rem; font-size: 0.75rem; font-weight: 700; color: var(--skb-text); background: rgba(0,0,0,0.15); padding: 0.2rem 0.6rem; border: 1px dashed var(--skb-danger); text-transform: uppercase;">' +
-            'TARGET MASTER FINGERPRINT: ' + targetBip32FP + '</span>';
-        container.appendChild(warnBanner);
-
-        for (let i = 0; i < sharesCount; i++) {
-            const shareMnemonic = bip39.entropyToMnemonic(entropies[i], wordlist);
-            xor_state.generatedShares.push(shareMnemonic);
-
-            const shareWords = shareMnemonic.split(' ');
-            const block = document.createElement('div');
-            block.style.cssText = 'border: 2px solid var(--skb-danger); border-radius: var(--skb-radius-md); padding: 1rem; margin-bottom: 1rem; background: var(--skb-bg-tertiary);';
-            // Loud header: "Share X of N — ALL N REQUIRED FOR RECOVERY — NO THRESHOLD RECOVERY"
-            let header = '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem;">' +
-                '<div style="flex: 1; min-width: 0;">' +
-                    '<div style="font-size: 0.9375rem; font-weight: 900; color: var(--skb-danger); letter-spacing: 0.04em;">Share ' + (i + 1) + ' of ' + sharesCount + '</div>' +
-                    '<div style="font-size: 0.6875rem; font-weight: 800; color: var(--skb-danger); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.2rem;">ALL ' + sharesCount + ' REQUIRED FOR RECOVERY &mdash; NO THRESHOLD RECOVERY</div>' +
-                    '<div style="font-family: var(--skb-mono); font-size: 0.6875rem; font-weight: 800; color: var(--skb-text); margin-top: 0.35rem;">Target Master Fingerprint: <span style="color: var(--skb-secondary, var(--skb-primary)); letter-spacing: 0.12em; text-transform: uppercase;">' + targetBip32FP + '</span></div>' +
-                '</div>' +
-                '<div style="display: flex; gap: 0.5rem; flex-shrink: 0;">' +
-                    '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="xor_copyShare(' + i + ')">Copy</button>' +
-                    '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" id="xor-share-qr-btn-' + i + '" onclick="xor_toggleShareQR(' + i + ')">Show QR</button>' +
-                    '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="xor_printShare(' + i + ')">Print</button>' +
-                '</div></div>';
-            let gridHtml = '<div class="bip85-out-grid">';
-            shareWords.forEach((word, idx) => {
-                gridHtml += '<div class="bip85-out-cell"><span class="bip85-out-num">' + (idx + 1) + '.</span><div class="bip85-out-word">' + word + '</div></div>';
-            });
-            gridHtml += '</div>';
-            let qrHtml = '<div id="xor-share-qr-wrap-' + i + '" style="display: none; margin-top: 0.75rem; text-align: center;">' +
-                '<canvas id="xor-share-qr-canvas-' + i + '" style="max-width: 300px; width: 100%; height: auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);"></canvas></div>';
-            block.innerHTML = header + gridHtml + qrHtml;
-            container.appendChild(block);
-        }
-
-        document.getElementById('xor-split-results').style.display = 'block';
         _xorHasWork = true;
-        showStatus('XOR split complete — ' + sharesCount + ' shares generated. MANDATORY reconstruction drill required.', 'success');
-
-        // MANDATORY Fire Drill: lock navigation + Clear button, auto-start verification.
         _shardLockEngage();
-        xorv_startVerification();
+        _xorStartFlow();
     } catch (e) {
-        showStatus('Split failed: ' + e.message, 'error');
+        showStatus('Could not make the shares: ' + e.message, 'error');
     }
 }
 
-function xor_copyShare(index) {
-    const text = xor_state.generatedShares[index];
-    if (!text) return;
-    navigator.clipboard.writeText(text).then(() => showStatus('Share ' + (index + 1) + ' copied.', 'success'));
+// --- Steps 2-4: the shared guided flow ---
+function _xorStartFlow() {
+    const n = xor_state.generatedShares.length;
+    const all = n === 2 ? 'both' : 'all ' + n;
+    document.getElementById('xor-setup').style.display = 'none';
+    const host = document.getElementById('xor-flow');
+    if (_xorFlow) { _xorFlow.destroy(); _xorFlow = null; }
+    _xorFlow = window.ShareFlow.mount(host, {
+        idPrefix: 'xorf',
+        shares: xor_state.generatedShares,
+        wordlist: window.ShareFlow.wordlists.bip39,
+        shareName: 'XOR share',
+        schemeLine: 'All ' + n + ' shares are needed to recover your seed. On each paper, note which share it is and the fingerprint.',
+        fingerprint: xor_state.targetBip32FP,
+        print: (i) => xor_printShare(i),
+        drawQR: (canvas, i) => window.QRCode.toCanvas(canvas, xor_state.generatedShares[i], { width: 260, margin: 2, color: { dark: '#000000', light: '#ffffff' } }),
+        scan: _xorScanShare,
+        verifyAll: _xorVerifyTyped,
+        doneLines: [
+            'Keep each share in a different safe place. Anyone who gets ' + all + ' can rebuild your seed.',
+            (n === 2 ? 'Both shares are needed to recover it. Losing either one' : 'All ' + n + ' shares are needed to recover it. Losing any one') + ' loses the seed.',
+            'Each share is labelled with your seed’s fingerprint, ' + xor_state.targetBip32FP + ', if you printed it. Write the fingerprint on handwritten shares too.',
+            'To recover: on the welcome screen, choose Restore via Seed XOR and enter ' + all + ' shares.',
+        ],
+        onFinish: () => { xor_clearAll(); showState('state-dashboard'); },
+        onCancel: xor_cancel,
+    });
 }
 
-function xor_toggleShareQR(index) {
-    const wrap = document.getElementById('xor-share-qr-wrap-' + index);
-    const btn = document.getElementById('xor-share-qr-btn-' + index);
-    if (!wrap || !xor_state.generatedShares[index]) return;
-    if (wrap.style.display !== 'none') {
-        wrap.style.display = 'none';
-        if (btn) btn.textContent = 'Show QR';
-    } else {
-        const canvas = document.getElementById('xor-share-qr-canvas-' + index);
-        if (canvas && window.QRCode) {
-            QRCode.toCanvas(canvas, xor_state.generatedShares[index], {
-                width: 300, margin: 2, color: { dark: '#000000', light: '#ffffff' }
-            });
+// The typed shares must XOR back to the exact seed that was split.
+async function _xorVerifyTyped(typedShares) {
+    let combined;
+    try {
+        combined = _xorCombine(typedShares, true);
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
+    if (combined !== xor_state.loadedSeed) {
+        return { ok: false, message: 'The shares you typed rebuild a different seed. Check every share against your paper and start again.' };
+    }
+    const fp = await _xorFingerprint(combined);
+    if (fp !== xor_state.targetBip32FP) {
+        return { ok: false, message: 'The rebuilt seed has fingerprint ' + fp + ', not ' + xor_state.targetBip32FP + '.' };
+    }
+    _shardLockRelease();
+    return { ok: true };
+}
+
+// Scan a share's QR code (plain words or Compact SeedQR) for the check step.
+function _xorScanShare(reader, onWords, onError) {
+    let scanner = null, stopped = false;
+    try {
+        scanner = SKScanner.create(reader.id);
+        scanner.start({ fps: 10 }, function(text, binaryData) {
+            const words = (typeof sqr_wordsFromScan === 'function') ? sqr_wordsFromScan(text, binaryData) : null;
+            onWords(words || null);
+        }).catch(function(err) { if (!stopped) onError(err); });
+    } catch (err) {
+        onError(err);
+    }
+    return function() { stopped = true; if (scanner) { try { scanner.stop(); } catch (_) {} } };
+}
+
+// Cancel in the flow: warn first if shares aren't all checked.
+function xor_cancel() {
+    if (isShardLocked() && _shardSoftIntercept({ kind: 'cancel' })) return;
+    _shardLockRelease();
+    xor_clearAll();
+    showState('state-dashboard');
+}
+
+// Camera off when leaving the tool (showState).
+function xor_stopScanning() {
+    if (_xorFlow) { try { _xorFlow.stopScanning(); } catch (_) {} }
+}
+
+// --- Share sanity checks (also used by Restore via Seed XOR, xrr_combine) ---
+// XOR of ANY set of valid shares is itself a valid seed, so checksums can't
+// catch a share entered twice (the pair cancels out) or a set that XORs to
+// all zeros ("abandon abandon ... art"). Reject both before showing a result.
+function _xorCheckShares(entropies, combined) {
+    for (var a = 0; a < entropies.length; a++) {
+        for (var b = a + 1; b < entropies.length; b++) {
+            var same = entropies[a].length === entropies[b].length;
+            for (var i = 0; same && i < entropies[a].length; i++) same = entropies[a][i] === entropies[b][i];
+            if (same) throw new Error('Share ' + (a + 1) + ' and Share ' + (b + 1) + ' are identical — one share was probably entered twice.');
         }
-        wrap.style.display = 'block';
-        if (btn) btn.textContent = 'Hide QR';
     }
+    var zero = true;
+    for (var j = 0; zero && j < combined.length; j++) zero = combined[j] === 0;
+    if (zero) throw new Error('These shares cancel out to an all-zero seed, which is never a real wallet. Check that every share is entered correctly.');
 }
 
 /**
@@ -28631,12 +28245,9 @@ async function xor_printShare(index) {
     var mnemonic = xor_state.generatedShares[index];
     if (!mnemonic) return;
     var n = xor_state.generatedShares.length;
-    // Use the BIP-32 root fingerprint (matches dashboard + every external
-    // wallet's master-fingerprint readout). Falls back to the SHA-256 vault
-    // fingerprint only on the off-chance the BIP-32 derivation failed at
-    // split time (defensive — should never happen in practice since the
-    // split itself depends on bip39 being loaded).
-    var targetFP = xor_state.targetBip32FP || xor_state.targetVaultFingerprint || '--------';
+    // The BIP-32 root fingerprint (matches the dashboard and every
+    // external wallet's master-fingerprint readout).
+    var targetFP = xor_state.targetBip32FP || '--------';
     var words = mnemonic.split(' ');
 
     var rowsHtml = '';
@@ -28755,1070 +28366,31 @@ async function xor_printShare(index) {
 }
 
 // =============================================
-// MERGE — real XOR math
-// =============================================
-function xor_setMergeLength(len) {
-    xor_state.mergeLength = len;
-    document.getElementById('xor-merge-len-12').style.background = len === 12 ? 'var(--skb-primary)' : 'var(--skb-bg-input)';
-    document.getElementById('xor-merge-len-12').style.color = len === 12 ? 'black' : '';
-    document.getElementById('xor-merge-len-12').style.fontWeight = len === 12 ? '600' : '';
-    document.getElementById('xor-merge-len-24').style.background = len === 24 ? 'var(--skb-primary)' : 'var(--skb-bg-input)';
-    document.getElementById('xor-merge-len-24').style.color = len === 24 ? 'black' : '';
-    document.getElementById('xor-merge-len-24').style.fontWeight = len === 24 ? '600' : '';
-    xor_buildMergeInputs();
-}
-
-function xor_setMergeShares(num) {
-    xor_state.mergeShares = num;
-    [2, 3, 4].forEach(n => {
-        const el = document.getElementById('xor-merge-shares-' + n);
-        if (!el) return;
-        el.style.background = n === num ? 'var(--skb-primary)' : 'var(--skb-bg-input)';
-        el.style.color = n === num ? 'black' : '';
-        el.style.fontWeight = n === num ? '600' : '';
-    });
-    xor_buildMergeInputs();
-}
-
-function xor_buildMergeInputs() {
-    const container = document.getElementById('xor-merge-inputs');
-    if (!container) return;
-    // Preserve existing words before rebuilding
-    const savedWords = {};
-    for (let s = 0; s < 4; s++) {
-        const words = [];
-        for (let w = 0; w < 24; w++) {
-            const el = document.getElementById('xor-mg-' + s + '-word-' + w);
-            if (el) words.push(el.value); else break;
-        }
-        if (words.length) savedWords[s] = words;
-    }
-
-    container.innerHTML = '';
-    for (let s = 0; s < xor_state.mergeShares; s++) {
-        const block = document.createElement('div');
-        block.style.cssText = 'border: 1px solid var(--skb-border); border-radius: var(--skb-radius-md); padding: 1rem; margin-bottom: 0.75rem; background: var(--skb-bg-tertiary);';
-        const header = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">' +
-            '<span style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text);">Share ' + (s + 1) + '</span>' +
-            '<button type="button" class="skb-btn" style="font-size: 0.6875rem; padding: 0.2rem 0.5rem;" onclick="xor_scanMergeQR(' + s + ')">Scan QR</button>' +
-            '</div>';
-        block.innerHTML = header + '<div class="rst-grid" id="xor-mg-grid-' + s + '"></div>' +
-            '<div id="xor-mg-qr-area-' + s + '" style="display: none; margin-top: 0.5rem;">' +
-            '<div id="xor-mg-qr-reader-' + s + '" style="width: 100%; min-height: 250px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>' +
-            '<button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem;" onclick="xor_stopMergeQR(' + s + ')">Stop Scanner</button></div>';
-        container.appendChild(block);
-
-        // Build the grid cells
-        const grid = document.getElementById('xor-mg-grid-' + s);
-        for (let i = 0; i < xor_state.mergeLength; i++) {
-            const cell = document.createElement('div');
-            cell.className = 'rst-cell';
-            cell.innerHTML =
-                '<span class="rst-cell-num">' + (i + 1) + '</span>' +
-                '<input type="text" id="xor-mg-' + s + '-word-' + i + '" data-share="' + s + '" data-idx="' + i + '" ' +
-                'spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="">' +
-                '<div class="rst-autocomplete" id="xor-mg-ac-' + s + '-' + i + '"></div>';
-            grid.appendChild(cell);
-        }
-
-        // Restore saved words
-        if (savedWords[s]) {
-            savedWords[s].forEach((w, i) => {
-                const el = document.getElementById('xor-mg-' + s + '-word-' + i);
-                if (el && w) el.value = w;
-            });
-        }
-
-        // Attach autocomplete listeners to merge inputs
-        grid.querySelectorAll('input').forEach(input => {
-            input.addEventListener('input', xor_onMergeInput);
-            input.addEventListener('keydown', xor_onMergeKeydown);
-            input.addEventListener('paste', (e) => xor_onMergePaste(e, s));
-            input.addEventListener('blur', () => {
-                const si = parseInt(input.dataset.share);
-                const wi = parseInt(input.dataset.idx);
-                setTimeout(() => {
-                    const ac = document.getElementById('xor-mg-ac-' + si + '-' + wi);
-                    if (ac) ac.innerHTML = '';
-                }, 150);
-            });
-        });
-    }
-}
-
-// --- Merge autocomplete handlers ---
-function xor_onMergeInput(e) {
-    const input = e.target;
-    const s = parseInt(input.dataset.share);
-    const idx = parseInt(input.dataset.idx);
-    const val = input.value.trim().toLowerCase();
-    const ac = document.getElementById('xor-mg-ac-' + s + '-' + idx);
-    if (!ac) return;
-    ac.innerHTML = '';
-    if (!val) return;
-    const wordlist = xor_getWordlist();
-    const matches = wordlist.filter(w => w.startsWith(val)).slice(0, 8);
-    matches.forEach((word, mi) => {
-        const item = document.createElement('div');
-        item.className = 'rst-autocomplete-item' + (mi === 0 ? ' active' : '');
-        item.textContent = word;
-        item.addEventListener('mousedown', (ev) => {
-            ev.preventDefault();
-            input.value = word;
-            ac.innerHTML = '';
-            input.classList.remove('valid', 'invalid');
-            input.classList.add(wordlist.includes(word) ? 'valid' : 'invalid');
-            const next = document.getElementById('xor-mg-' + s + '-word-' + (idx + 1));
-            if (next) next.focus();
-        });
-        ac.appendChild(item);
-    });
-}
-
-function xor_onMergeKeydown(e) {
-    // ALWAYS block Enter to prevent implicit form submission / page reload
-    if (e.key === 'Enter') e.preventDefault();
-    const input = e.target;
-    const s = parseInt(input.dataset.share);
-    const idx = parseInt(input.dataset.idx);
-    const ac = document.getElementById('xor-mg-ac-' + s + '-' + idx);
-    const items = ac ? ac.querySelectorAll('.rst-autocomplete-item') : [];
-    // Shift+Tab falls through to native DOM reverse-nav (no autocomplete
-    // hijack) so users can step back even while the dropdown is visible.
-    if (items.length > 0 && ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter')) {
-        if (e.key === 'Tab') e.preventDefault();
-        const active = ac.querySelector('.rst-autocomplete-item.active') || items[0];
-        input.value = active.textContent;
-        ac.innerHTML = '';
-        const wordlist = xor_getWordlist();
-        input.classList.remove('valid', 'invalid');
-        input.classList.add(wordlist.includes(input.value) ? 'valid' : 'invalid');
-        const next = document.getElementById('xor-mg-' + s + '-word-' + (idx + 1));
-        if (next) next.focus();
-    } else if (e.key === 'Enter' && items.length === 0) {
-        const next = document.getElementById('xor-mg-' + s + '-word-' + (idx + 1));
-        if (next) next.focus();
-    } else if (items.length > 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-        e.preventDefault();
-        let cur = -1;
-        items.forEach((it, i) => { if (it.classList.contains('active')) cur = i; });
-        items.forEach(it => it.classList.remove('active'));
-        const nxt = e.key === 'ArrowDown' ? (cur + 1) % items.length : (cur - 1 + items.length) % items.length;
-        items[nxt].classList.add('active');
-    }
-}
-
-function xor_onMergePaste(e, shareIdx) {
-    e.preventDefault();
-    const text = (e.clipboardData || window.clipboardData).getData('text');
-    const words = text.trim().split(/\s+/).filter(w => w);
-    if (words.length >= 12) {
-        const len = words.length >= 24 ? 24 : 12;
-        if (len !== xor_state.mergeLength) xor_setMergeLength(len);
-        setTimeout(() => {
-            const wordlist = xor_getWordlist();
-            for (let i = 0; i < Math.min(words.length, len); i++) {
-                const el = document.getElementById('xor-mg-' + shareIdx + '-word-' + i);
-                if (el) {
-                    el.value = words[i].toLowerCase();
-                    el.classList.remove('valid', 'invalid');
-                    el.classList.add(wordlist.includes(words[i].toLowerCase()) ? 'valid' : 'invalid');
-                }
-            }
-        }, 20);
-    }
-}
-
-// --- QR scanner for merge share inputs (jsQR) ---
-async function xor_scanMergeQR(shareIdx) {
-    if (!window.jsQR) { showStatus('QR scanner library not available.', 'error'); return; }
-    const area = document.getElementById('xor-mg-qr-area-' + shareIdx);
-    if (_xorMergeQrScanner) { _xorMergeQrScanner.stop(); _xorMergeQrScanner = null; }
-    // Hide any other open scanner areas
-    for (let i = 0; i < 4; i++) {
-        const other = document.getElementById('xor-mg-qr-area-' + i);
-        if (other && i !== shareIdx) other.style.display = 'none';
-    }
-    area.style.display = 'block';
-    try {
-        _xorMergeQrScanner = SKScanner.create('xor-mg-qr-reader-' + shareIdx);
-        await _xorMergeQrScanner.start({ fps: 10 }, function(text, binaryData) {
-            xor_stopMergeQR(shareIdx);
-            const words = sqr_wordsFromScan(text, binaryData);
-            if (words && (words.length === 12 || words.length === 24)) {
-                if (words.length !== xor_state.mergeLength) xor_setMergeLength(words.length);
-                setTimeout(() => {
-                    const wordlist = xor_getWordlist();
-                    for (let i = 0; i < words.length; i++) {
-                        const el = document.getElementById('xor-mg-' + shareIdx + '-word-' + i);
-                        if (el) {
-                            el.value = words[i].toLowerCase();
-                            el.classList.remove('valid', 'invalid');
-                            el.classList.add(wordlist.includes(words[i].toLowerCase()) ? 'valid' : 'invalid');
-                        }
-                    }
-                    showStatus('Share ' + (shareIdx + 1) + ' scanned — ' + words.length + ' words loaded.', 'success');
-                }, 20);
-            } else {
-                showStatus('QR does not contain a valid SeedQR.', 'error');
-            }
-        });
-    } catch (err) {
-        showStatus('Camera failed: ' + err.message, 'error');
-        area.style.display = 'none';
-    }
-}
-
-function xor_stopMergeQR(shareIdx) {
-    if (_xorMergeQrScanner) { _xorMergeQrScanner.stop(); _xorMergeQrScanner = null; }
-    var area = document.getElementById('xor-mg-qr-area-' + shareIdx);
-    if (area) area.style.display = 'none';
-}
-
-// --- Share sanity checks (Merge tab + XOR recovery) ---
-// XOR of ANY set of valid shares is itself a valid seed, so checksums can't
-// catch a share entered twice (the pair cancels out) or a set that XORs to
-// all zeros ("abandon abandon ... art"). Reject both before showing a result.
-function _xorCheckShares(entropies, combined) {
-    for (var a = 0; a < entropies.length; a++) {
-        for (var b = a + 1; b < entropies.length; b++) {
-            var same = entropies[a].length === entropies[b].length;
-            for (var i = 0; same && i < entropies[a].length; i++) same = entropies[a][i] === entropies[b][i];
-            if (same) throw new Error('Share ' + (a + 1) + ' and Share ' + (b + 1) + ' are identical — one share was probably entered twice.');
-        }
-    }
-    var zero = true;
-    for (var j = 0; zero && j < combined.length; j++) zero = combined[j] === 0;
-    if (zero) throw new Error('These shares cancel out to an all-zero seed, which is never a real wallet. Check that every share is entered correctly.');
-}
-
-// --- Merge: XOR all share entropies together ---
-async function xor_handleMerge() {
-    try {
-        const bip39 = window.BtcMath?.bip39;
-        const wordlist = window.BtcMath?.wordlist;
-        if (!bip39 || !wordlist) throw new Error('BIP-39 library not available.');
-
-        // Hide any earlier result so a rejected merge never leaves a stale seed on screen.
-        xor_state.mergedSeed = null;
-        document.getElementById('xor-merge-results').style.display = 'none';
-        document.getElementById('xor-merge-fp').textContent = '';
-
-        const entropies = [];
-        let combinedBytes = null;
-        for (let s = 0; s < xor_state.mergeShares; s++) {
-            const words = [];
-            for (let i = 0; i < xor_state.mergeLength; i++) {
-                const el = document.getElementById('xor-mg-' + s + '-word-' + i);
-                const val = el ? el.value.trim().toLowerCase() : '';
-                if (!val) throw new Error('Share ' + (s + 1) + ', word #' + (i + 1) + ' is missing.');
-                if (!wordlist.includes(val)) throw new Error('Share ' + (s + 1) + ', word #' + (i + 1) + ' ("' + val + '") is not valid.');
-                words.push(val);
-            }
-            const mnemonic = words.join(' ');
-            const entropyBytes = bip39.mnemonicToEntropy(mnemonic, wordlist);
-            entropies.push(entropyBytes);
-            if (!combinedBytes) {
-                combinedBytes = new Uint8Array(entropyBytes);
-            } else {
-                for (let j = 0; j < combinedBytes.length; j++) {
-                    combinedBytes[j] ^= entropyBytes[j];
-                }
-            }
-        }
-        _xorCheckShares(entropies, combinedBytes);
-
-        const mergedMnemonic = bip39.entropyToMnemonic(combinedBytes, wordlist);
-        xor_state.mergedSeed = mergedMnemonic;
-
-        // Render output in the grid
-        const grid = document.getElementById('xor-merge-output-grid');
-        grid.innerHTML = '';
-        mergedMnemonic.split(' ').forEach((word, i) => {
-            const cell = document.createElement('div');
-            cell.className = 'bip85-out-cell';
-            cell.innerHTML = '<span class="bip85-out-num">' + (i + 1) + '.</span>' +
-                             '<div class="bip85-out-word">' + word + '</div>';
-            grid.appendChild(cell);
-        });
-        document.getElementById('xor-merge-results').style.display = 'block';
-        document.getElementById('xor-merge-qr-wrap').style.display = 'none';
-        document.getElementById('xor-merge-qr-btn').textContent = 'Show QR';
-        _xorHasWork = true;
-        // A missing or wrong share still yields a valid-looking seed, so the
-        // fingerprint is the only real confirmation (same as xrr_combine).
-        const fpEl = document.getElementById('xor-merge-fp');
-        try {
-            const fp = await _recoveryFingerprint(mergedMnemonic);
-            fpEl.innerHTML = 'Recovered seed fingerprint: <strong style="font-family: var(--skb-mono); letter-spacing: 0.08em;">' + fp + '</strong><br>' +
-                'Confirm it matches the Target Master Fingerprint printed on your share cards. If it does not, a share is wrong, missing, or mistyped.';
-            showStatus('Shares combined. Recovered seed fingerprint: ' + fp + ' — confirm it matches your share cards.', 'success');
-        } catch (_) {
-            fpEl.textContent = 'Confirm the fingerprint matches your share cards before using this seed.';
-            showStatus('Shares combined. Confirm the fingerprint matches your share cards before using this seed.', 'success');
-        }
-    } catch (e) {
-        showStatus('Merge failed: ' + e.message, 'error');
-    }
-}
-
-function xor_copyMerged() {
-    if (!xor_state.mergedSeed) return;
-    navigator.clipboard.writeText(xor_state.mergedSeed).then(() => showStatus('Recovered seed copied.', 'success'));
-}
-
-function xor_toggleMergeQR() {
-    const wrap = document.getElementById('xor-merge-qr-wrap');
-    const btn = document.getElementById('xor-merge-qr-btn');
-    if (!xor_state.mergedSeed) return;
-    if (wrap.style.display !== 'none') {
-        wrap.style.display = 'none';
-        btn.textContent = 'Show QR';
-    } else {
-        const canvas = document.getElementById('xor-merge-qr-canvas');
-        if (canvas && window.QRCode) {
-            QRCode.toCanvas(canvas, xor_state.mergedSeed, {
-                width: 300, margin: 2, color: { dark: '#000000', light: '#ffffff' }
-            });
-        }
-        wrap.style.display = 'block';
-        btn.textContent = 'Hide QR';
-    }
-}
-
-// --- Auto-fill: load master seed from SeedSession on navigation ---
-var _xorHasWork = false; // Tracks whether The Shard has user-generated state to preserve
-
-function xor_autoFillMasterSeed() {
-    // If the tool already has active work (shares generated, merge in progress), preserve state
-    if (_xorHasWork) return;
-
-    // Also preserve if the user has a seed loaded or is mid-input (hasn't reset yet)
-    if (xor_state.loadedSeed) return;
-    var inputArea = document.getElementById('xor-seed-input-area');
-    if (inputArea && inputArea.style.display !== 'none') {
-        // Manual input is visible — check if any words have been typed
-        var hasInput = false;
-        var inputs = inputArea.querySelectorAll('input');
-        for (var i = 0; i < inputs.length; i++) {
-            if (inputs[i].value.trim()) { hasInput = true; break; }
-        }
-        if (hasInput) return;
-    }
-
-    const seed = window.SeedSession?.get()?.mnemonic;
-
-    if (seed) {
-        xor_showSeedGrid(seed, 'Loaded from session');
-    } else {
-        // No seed — show empty state
-        xor_state.loadedSeed = null;
-        document.getElementById('xor-seed-display').style.display = 'none';
-        document.getElementById('xor-seed-input-area').style.display = 'none';
-        document.getElementById('xor-seed-empty').style.display = 'block';
-        document.getElementById('xor-seed-source').textContent = '';
-    }
-}
-
-// =============================================
-// Seed XOR: Reconstruction Drill (Fire Drill)
-// =============================================
-// Mirrors the Shamir Covenant verification pattern.
-// XOR is all-or-nothing: all N shares must be verified.
-//
-// SECURITY MODEL:
-//   After xor_handleSplit() generates N shares, the tool is LOCKED:
-//     - Global navigation is blocked (showState guard)
-//     - Reset/Clear button is disabled
-//     - User MUST type every share back into the verification grid
-//     - XOR reconstruction must match the active Master Seed exactly
-//   Only on successful verification is the lock released.
-
-/**
- * Legacy no-op — verification is now mandatory and auto-triggered.
- * Left in place so any stale callers don't crash.
- */
-function xorv_showVerifyTrigger() { /* no-op: verification is now mandatory */ }
-
-/**
- * Start the Mandatory Fire Drill.
- *
- * Called automatically from xor_handleSplit() right after shares are generated.
- * Builds one textarea per share, clears previous state, and shows the
- * verification panel BELOW the generated shares (not instead of them —
- * users need to see the shares while typing them into the quiz).
- */
-function xorv_startVerification() {
-    var n = xor_state.generatedShares.length;
-    if (n < 2) return;
-
-    // Update instruction text
-    document.getElementById('xorv-n').textContent = n;
-
-    // Publish share/word counts so xvg_* handlers know the grid shape.
-    var wordCount = xor_state.generatedShares[0].split(' ').length;
-    _xvgShareCount = n;
-    _xvgWordCount = wordCount;
-    _xvgSelectedAC = -1;
-
-    // Build N predictive BIP-39 grids (one per share) using the same
-    // rst-grid / rst-cell / rst-autocomplete classes as the rest of
-    // the app, but with `xvg-` element IDs so multiple grids live in
-    // the DOM without colliding.
-    var container = document.getElementById('xorv-inputs-container');
-    container.innerHTML = '';
-    for (var s = 0; s < n; s++) {
-        var block = document.createElement('div');
-        block.className = 'xrr-share-block';
-        // Label styling kept in the danger palette so users know this
-        // section is gated behind the mandatory reconstruction drill.
-        // Each block also gets a "Scan QR" button + hidden per-share
-        // reader so users may optionally scan a Compact SeedQR instead
-        // of retyping. Predictive typing into the grid remains fully
-        // available; scanning just pre-fills the same rst-cell inputs.
-        block.innerHTML =
-            '<div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">' +
-                '<h4 style="color: var(--skb-danger); letter-spacing: 0.08em; margin: 0;">Re-type Share ' + (s + 1) + ' of ' + n + '</h4>' +
-                '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.65rem; border: 1px dashed var(--skb-border);" onclick="xvg_scanShareQR(' + s + ')" title="Scan this share from a QR code">' +
-                    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 0.3rem;"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="14" y1="14" x2="14" y2="17"></line><line x1="17" y1="14" x2="21" y2="14"></line><line x1="14" y1="21" x2="21" y2="21"></line><line x1="17" y1="17" x2="21" y2="17"></line></svg>' +
-                    'Scan QR' +
-                '</button>' +
-            '</div>' +
-            '<div class="rst-grid" id="xvg-grid-' + s + '"></div>' +
-            '<div id="xvg-qr-status-' + s + '" style="display: none; margin-top: 0.4rem; font-size: 0.8125rem; padding: 0.4rem 0.6rem; border-radius: var(--skb-radius-sm);"></div>' +
-            '<div id="xvg-qr-area-' + s + '" style="display: none; margin-top: 0.5rem;">' +
-                '<div id="xvg-qr-reader-' + s + '" style="width: 100%; min-height: 240px; border-radius: var(--skb-radius-sm); overflow: hidden; background: #000;"></div>' +
-                '<button type="button" class="skb-btn" style="width: 100%; margin-top: 0.4rem; font-size: 0.8125rem;" onclick="xvg_stopShareQR(' + s + ')">Stop Scanner</button>' +
-            '</div>' +
-            '<div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">' +
-                '<button type="button" class="skb-btn" style="flex: 1; padding: 0.35rem; font-size: 0.75rem; border: 1px dashed var(--skb-border);" onclick="xvg_clearShare(' + s + ')">Clear Share ' + (s + 1) + '</button>' +
-            '</div>';
-        container.appendChild(block);
-        xvg_buildGrid(s);
-    }
-
-    // Reset result state
-    document.getElementById('xorv-result-banner').style.display = 'none';
-    document.getElementById('xorv-done-section').style.display = 'none';
-    document.getElementById('xorv-test-btn').disabled = false;
-    document.getElementById('xorv-test-btn').textContent = 'Test Recovery';
-
-    // Keep the shares visible — the verification sits BELOW them — and show the quiz.
-    document.getElementById('xor-split-results').style.display = 'block';
-    var legacyTrigger = document.getElementById('xorv-verify-trigger');
-    if (legacyTrigger) legacyTrigger.style.display = 'none';
-    document.getElementById('xorv-verify-section').style.display = 'block';
-
-    // Scroll the verification panel into view so the user can't miss it.
-    try {
-        var sec = document.getElementById('xorv-verify-section');
-        if (sec && sec.scrollIntoView) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (e) { /* non-fatal */ }
-}
-
-// =============================================================================
-// XVG — eXOR Verification Grid (predictive BIP-39 input, multi-instance)
-// =============================================================================
-// This is a purpose-built mirror of the welcome-screen `xrr_*` recovery grid.
-// Each share gets its own rst-grid instance keyed by `xvg-<shareIdx>-word-<i>`
-// and `xvg-ac-<shareIdx>-<i>`, so multiple predictive grids coexist in the DOM
-// without colliding on IDs, focus, or autocomplete state.
-//
-// External entry points used by the verification drill:
-//   xvg_buildGrid(shareIdx)         - build one share's grid
-//   xvg_clearShare(shareIdx)        - wipe one share's inputs
-//   xvg_clearAllShares()            - wipe every grid and drop state
-//   xvg_getShareWords(shareIdx)     - return the word array for a share
-//                                     (throws if any slot is empty or invalid)
-// =============================================================================
-var _xvgShareCount = 0;
-var _xvgWordCount = 0;
-var _xvgSelectedAC = -1;
-
-function xvg_getWordlist() { return (window.BtcMath && window.BtcMath.wordlist) || []; }
-
-function xvg_buildGrid(shareIdx) {
-    var grid = document.getElementById('xvg-grid-' + shareIdx);
-    if (!grid) return;
-    grid.innerHTML = '';
-    for (var i = 0; i < _xvgWordCount; i++) {
-        var cell = document.createElement('div');
-        cell.className = 'rst-cell';
-        cell.innerHTML =
-            '<span class="rst-cell-num">' + (i + 1) + '</span>' +
-            '<input type="text" id="xvg-' + shareIdx + '-word-' + i + '"' +
-            ' data-share="' + shareIdx + '" data-idx="' + i + '"' +
-            ' spellcheck="false" autocomplete="off" autocapitalize="off"' +
-            ' placeholder="word ' + (i + 1) + '">' +
-            '<div class="rst-autocomplete" id="xvg-ac-' + shareIdx + '-' + i + '"></div>';
-        grid.appendChild(cell);
-    }
-    // Attach handlers. IMPORTANT: each input carries its own data-share/data-idx,
-    // so the handlers never depend on a "currently active share" global, which
-    // is what lets multiple grids coexist without state bleed.
-    grid.querySelectorAll('input').forEach(function(input) {
-        input.addEventListener('input', xvg_onInput);
-        input.addEventListener('keydown', xvg_onKeydown);
-        input.addEventListener('paste', xvg_onPaste);
-        input.addEventListener('blur', function() {
-            var si = parseInt(input.dataset.share, 10);
-            var wi = parseInt(input.dataset.idx, 10);
-            setTimeout(function() { xvg_hideAC(si, wi); }, 150);
-        });
-    });
-}
-
-function xvg_onInput(e) {
-    var input = e.target;
-    var si = parseInt(input.dataset.share, 10);
-    var wi = parseInt(input.dataset.idx, 10);
-    var val = input.value.trim().toLowerCase();
-
-    input.classList.remove('valid', 'invalid');
-    if (!val) { xvg_hideAC(si, wi); return; }
-
-    var wordlist = xvg_getWordlist();
-    if (!wordlist.length) return;
-    var matches = wordlist.filter(function(w) { return w.startsWith(val); });
-
-    if (matches.length === 1 && matches[0] === val) {
-        input.classList.add('valid');
-        xvg_hideAC(si, wi);
-    } else if (matches.length > 0 && matches.length <= 8) {
-        xvg_showAC(si, wi, matches, val);
-    } else {
-        xvg_hideAC(si, wi);
-        if (val.length >= 2 && matches.length === 0) input.classList.add('invalid');
-    }
-}
-
-function xvg_onKeydown(e) {
-    var input = e.target;
-    var si = parseInt(input.dataset.share, 10);
-    var wi = parseInt(input.dataset.idx, 10);
-    var acEl = document.getElementById('xvg-ac-' + si + '-' + wi);
-    var items = acEl ? acEl.querySelectorAll('.rst-autocomplete-item') : [];
-
-    // Shift+Tab is reserved for native DOM reverse-navigation so the
-    // user can step back across shares / words. We only intercept bare Tab.
-    if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
-        e.preventDefault();
-        if (acEl && acEl.style.display === 'block' && items.length > 0) {
-            var selIdx = Math.max(0, _xvgSelectedAC);
-            var pickEl = items[selIdx];
-            var pick = pickEl && pickEl.dataset ? pickEl.dataset.word : null;
-            if (pick) {
-                input.value = pick;
-                input.classList.remove('invalid');
-                input.classList.add('valid');
-                xvg_hideAC(si, wi);
-            }
-        } else {
-            // No dropdown open — try to auto-complete from a unique prefix.
-            var val = input.value.trim().toLowerCase();
-            var wordlist = xvg_getWordlist();
-            var matches = wordlist.filter(function(w) { return w.startsWith(val); });
-            if (matches.length === 1) {
-                input.value = matches[0];
-                input.classList.remove('invalid');
-                input.classList.add('valid');
-            }
-        }
-        // Tab/Enter advances: same share → next word, last word → next share.
-        var nextWord = document.getElementById('xvg-' + si + '-word-' + (wi + 1));
-        if (nextWord) { nextWord.focus(); }
-        else if (si + 1 < _xvgShareCount) {
-            var firstNext = document.getElementById('xvg-' + (si + 1) + '-word-0');
-            if (firstNext) firstNext.focus();
-        }
-        _xvgSelectedAC = -1;
-        return;
-    }
-    if (e.key === 'ArrowDown' && acEl && acEl.style.display === 'block') {
-        e.preventDefault();
-        _xvgSelectedAC = Math.min(_xvgSelectedAC + 1, items.length - 1);
-        xvg_highlightAC(items);
-        return;
-    }
-    if (e.key === 'ArrowUp' && acEl && acEl.style.display === 'block') {
-        e.preventDefault();
-        _xvgSelectedAC = Math.max(_xvgSelectedAC - 1, 0);
-        xvg_highlightAC(items);
-        return;
-    }
-    if (e.key === 'Escape') { xvg_hideAC(si, wi); _xvgSelectedAC = -1; }
-}
-
-function xvg_onPaste(e) {
-    var input = e.target;
-    var si = parseInt(input.dataset.share, 10);
-    var startIdx = parseInt(input.dataset.idx, 10);
-    var pasted = (e.clipboardData || window.clipboardData).getData('text').trim();
-    var words = pasted.split(/\s+/).filter(function(w) { return w; });
-
-    // If the user pastes a full share, fill that share's grid from word 0.
-    // If they paste a partial sequence, fill starting from the cursor cell.
-    if (words.length === 0) return;
-    if (words.length >= _xvgWordCount) {
-        e.preventDefault();
-        var wordlist = xvg_getWordlist();
-        for (var i = 0; i < _xvgWordCount; i++) {
-            var el = document.getElementById('xvg-' + si + '-word-' + i);
-            if (!el) continue;
-            el.value = (words[i] || '').toLowerCase();
-            el.classList.remove('valid', 'invalid');
-            if (el.value) {
-                el.classList.add(wordlist.indexOf(el.value) !== -1 ? 'valid' : 'invalid');
-            }
-        }
-        return;
-    }
-    // Partial paste — drop words in starting from the focused cell.
-    if (words.length > 1) {
-        e.preventDefault();
-        var wl = xvg_getWordlist();
-        for (var j = 0; j < words.length && (startIdx + j) < _xvgWordCount; j++) {
-            var cel = document.getElementById('xvg-' + si + '-word-' + (startIdx + j));
-            if (!cel) continue;
-            cel.value = words[j].toLowerCase();
-            cel.classList.remove('valid', 'invalid');
-            cel.classList.add(wl.indexOf(cel.value) !== -1 ? 'valid' : 'invalid');
-        }
-    }
-}
-
-function xvg_showAC(si, wi, matches, partial) {
-    var acEl = document.getElementById('xvg-ac-' + si + '-' + wi);
-    if (!acEl) return;
-    acEl.innerHTML = '';
-    _xvgSelectedAC = -1;
-    matches.forEach(function(word) {
-        var item = document.createElement('div');
-        item.className = 'rst-autocomplete-item';
-        item.dataset.word = word;
-        item.innerHTML = '<strong>' + word.slice(0, partial.length) + '</strong>' + word.slice(partial.length);
-        item.addEventListener('mousedown', function(ev) {
-            ev.preventDefault();
-            var inp = document.getElementById('xvg-' + si + '-word-' + wi);
-            if (inp) {
-                inp.value = word;
-                inp.classList.remove('invalid');
-                inp.classList.add('valid');
-            }
-            xvg_hideAC(si, wi);
-            // Advance focus like Tab/Enter would.
-            var next = document.getElementById('xvg-' + si + '-word-' + (wi + 1));
-            if (next) { next.focus(); }
-            else if (si + 1 < _xvgShareCount) {
-                var firstNext = document.getElementById('xvg-' + (si + 1) + '-word-0');
-                if (firstNext) firstNext.focus();
-            }
-        });
-        acEl.appendChild(item);
-    });
-    acEl.style.display = 'block';
-}
-
-function xvg_hideAC(si, wi) {
-    var acEl = document.getElementById('xvg-ac-' + si + '-' + wi);
-    if (acEl) acEl.style.display = 'none';
-}
-
-function xvg_highlightAC(items) {
-    items.forEach(function(item, i) {
-        item.classList.toggle('selected', i === _xvgSelectedAC);
-        item.classList.toggle('active', i === _xvgSelectedAC);
-    });
-}
-
-function xvg_clearShare(si) {
-    for (var i = 0; i < _xvgWordCount; i++) {
-        var el = document.getElementById('xvg-' + si + '-word-' + i);
-        if (el) { el.value = ''; el.classList.remove('valid', 'invalid'); xvg_hideAC(si, i); }
-    }
-    var first = document.getElementById('xvg-' + si + '-word-0');
-    if (first) first.focus();
-}
-
-function xvg_clearAllShares() {
-    for (var s = 0; s < _xvgShareCount; s++) { xvg_clearShare(s); }
-    _xvgShareCount = 0;
-    _xvgWordCount = 0;
-    _xvgSelectedAC = -1;
-}
-
-// =============================================================================
-// XVG — Per-share QR scanner (Compact SeedQR and plain-text mnemonic)
-// =============================================================================
-// Each share block in the Reconstruction Drill has its own hidden reader
-// area (`xvg-qr-area-<s>`) + camera host (`xvg-qr-reader-<s>`). On a
-// successful scan we reuse sqr_wordsFromScan() — the same decoder the
-// Merge tab uses — then write each word into the existing `xvg-<s>-word-<i>`
-// predictive inputs and apply the valid/invalid CSS classes so the grid
-// matches what the user would see after manual typing.
-//
-// Manual typing into the predictive grid is UNAFFECTED: the scanner is
-// purely an optional alternative input. Keeping only one scanner live
-// at a time avoids holding multiple camera handles open.
-// =============================================================================
-var _xvgQrScanners = {};
-
-function xvg_showShareStatus(shareIdx, message, kind) {
-    var el = document.getElementById('xvg-qr-status-' + shareIdx);
-    if (!el) return;
-    el.textContent = message;
-    el.style.display = 'block';
-    if (kind === 'error') {
-        el.style.background = 'rgba(220, 53, 69, 0.12)';
-        el.style.color = '#ff8a95';
-        el.style.border = '1px solid rgba(220, 53, 69, 0.35)';
-    } else if (kind === 'success') {
-        el.style.background = 'rgba(40, 167, 69, 0.12)';
-        el.style.color = '#66d38a';
-        el.style.border = '1px solid rgba(40, 167, 69, 0.35)';
-    } else {
-        el.style.background = 'rgba(247, 147, 26, 0.1)';
-        el.style.color = 'var(--skb-primary)';
-        el.style.border = '1px solid rgba(247, 147, 26, 0.3)';
-    }
-}
-
-/**
- * Fill the predictive grid for one share with the supplied word array.
- * Mirrors the validity-class logic of xvg_onInput() so the cells look
- * the same whether the user typed them or scanned them.
- */
-function xvg_fillShareWords(shareIdx, words) {
-    var wordlist = xvg_getWordlist();
-    for (var i = 0; i < _xvgWordCount; i++) {
-        var el = document.getElementById('xvg-' + shareIdx + '-word-' + i);
-        if (!el) continue;
-        var val = (words[i] || '').toLowerCase();
-        el.value = val;
-        el.classList.remove('valid', 'invalid');
-        if (val) {
-            if (wordlist.length && wordlist.indexOf(val) !== -1) {
-                el.classList.add('valid');
-            } else {
-                el.classList.add('invalid');
-            }
-        }
-        // Hide any lingering autocomplete panel for this cell.
-        if (typeof xvg_hideAC === 'function') {
-            try { xvg_hideAC(shareIdx, i); } catch (_) {}
-        }
-    }
-}
-
-/**
- * Open the per-share QR scanner. On success, decode via sqr_wordsFromScan
- * (Compact SeedQR binary OR plain-text mnemonic) and pre-fill the existing
- * xvg predictive inputs.
- */
-async function xvg_scanShareQR(shareIdx) {
-    if (!window.jsQR) {
-        xvg_showShareStatus(shareIdx, 'QR scanner library not available.', 'error');
-        return;
-    }
-
-    // Only one share scanner live at a time. Kill every other open reader
-    // (including stale ones left by aborted sessions) before starting.
-    try { if (typeof SKScanner !== 'undefined' && SKScanner.stopAll) SKScanner.stopAll(); } catch (_) {}
-    Object.keys(_xvgQrScanners).forEach(function(k) {
-        try { _xvgQrScanners[k].stop(); } catch (_) {}
-        delete _xvgQrScanners[k];
-        var prevArea = document.getElementById('xvg-qr-area-' + k);
-        if (prevArea) prevArea.style.display = 'none';
-    });
-
-    var area = document.getElementById('xvg-qr-area-' + shareIdx);
-    if (!area) return;
-    area.style.display = 'block';
-    xvg_showShareStatus(shareIdx, 'Point your camera at the share QR code...', 'info');
-
-    try {
-        var scanner = SKScanner.create('xvg-qr-reader-' + shareIdx);
-        _xvgQrScanners[shareIdx] = scanner;
-        await scanner.start({ fps: 10 }, function(text, binaryData) {
-            xvg_stopShareQR(shareIdx);
-            var words = (typeof sqr_wordsFromScan === 'function')
-                ? sqr_wordsFromScan(text, binaryData)
-                : null;
-            if (words && (words.length === 12 || words.length === 24)) {
-                // The drill grid's word count is fixed by the generated
-                // shares themselves — if the scanned seed is a different
-                // length, refuse rather than silently truncate.
-                if (words.length !== _xvgWordCount) {
-                    xvg_showShareStatus(
-                        shareIdx,
-                        'Scanned seed has ' + words.length + ' words; this drill expects ' + _xvgWordCount + '. Ignored.',
-                        'error'
-                    );
-                    return;
-                }
-                xvg_fillShareWords(shareIdx, words);
-                xvg_showShareStatus(
-                    shareIdx,
-                    'Share ' + (shareIdx + 1) + ' scanned — ' + words.length + ' words loaded. Review, then click Test Recovery.',
-                    'success'
-                );
-            } else {
-                xvg_showShareStatus(
-                    shareIdx,
-                    'QR does not contain a valid 12- or 24-word BIP-39 share.',
-                    'error'
-                );
-            }
-        });
-    } catch (err) {
-        xvg_showShareStatus(shareIdx, 'Camera failed: ' + (err && err.message ? err.message : String(err)), 'error');
-        area.style.display = 'none';
-        delete _xvgQrScanners[shareIdx];
-    }
-}
-
-/** Stop the per-share QR scanner and hide its reader area. */
-function xvg_stopShareQR(shareIdx) {
-    var scanner = _xvgQrScanners[shareIdx];
-    if (scanner) {
-        try { scanner.stop(); } catch (_) {}
-        delete _xvgQrScanners[shareIdx];
-    }
-    var area = document.getElementById('xvg-qr-area-' + shareIdx);
-    if (area) area.style.display = 'none';
-}
-
-/** Kill every live per-share scanner. Called on abort/wipe/navigation. */
-function xvg_stopAllShareScanners() {
-    try { if (typeof SKScanner !== 'undefined' && SKScanner.stopAll) SKScanner.stopAll(); } catch (_) {}
-    Object.keys(_xvgQrScanners).forEach(function(k) {
-        try { _xvgQrScanners[k].stop(); } catch (_) {}
-        delete _xvgQrScanners[k];
-        var area = document.getElementById('xvg-qr-area-' + k);
-        if (area) area.style.display = 'none';
-    });
-}
-
-// Pull the word array for a single share out of the predictive grid.
-// Throws Error with a user-friendly message on empty/invalid cells so
-// xorv_testRecovery() can surface it in the result banner verbatim.
-function xvg_getShareWords(shareIdx) {
-    var wordlist = xvg_getWordlist();
-    var words = [];
-    for (var i = 0; i < _xvgWordCount; i++) {
-        var el = document.getElementById('xvg-' + shareIdx + '-word-' + i);
-        var val = el ? el.value.trim().toLowerCase() : '';
-        if (!val) {
-            throw new Error('Share ' + (shareIdx + 1) + ', word #' + (i + 1) + ' is missing. Please fill every cell of every share.');
-        }
-        if (wordlist.length && wordlist.indexOf(val) === -1) {
-            throw new Error('Share ' + (shareIdx + 1) + ', word #' + (i + 1) + ' ("' + val + '") is not a valid BIP-39 word.');
-        }
-        words.push(val);
-    }
-    return words;
-}
-
-/**
- * Run XOR reconstruction from user-entered shares, compare fingerprints.
- * Success → release shard lock. Failure → stay locked.
- */
-async function xorv_testRecovery() {
-    var btn = document.getElementById('xorv-test-btn');
-    var banner = document.getElementById('xorv-result-banner');
-    var doneSection = document.getElementById('xorv-done-section');
-
-    try {
-        if (btn) { btn.disabled = true; btn.textContent = 'Testing recovery...'; }
-        banner.style.display = 'none';
-        doneSection.style.display = 'none';
-
-        var n = xor_state.generatedShares.length;
-        var bip39 = window.BtcMath?.bip39;
-        var wordlist = window.BtcMath?.wordlist;
-        var HDKey = window.BtcMath?.HDKey;
-        if (!bip39 || !wordlist || !HDKey) throw new Error('Core crypto libraries not loaded.');
-
-        // Collect and validate each share out of the predictive grids.
-        // xvg_getShareWords() enforces non-empty cells + BIP-39 wordlist
-        // membership; BIP-39 checksum is enforced by validateMnemonic below.
-        var entropies = [];
-        for (var i = 0; i < n; i++) {
-            var shareWords = xvg_getShareWords(i);
-            var text = shareWords.join(' ');
-            if (!bip39.validateMnemonic(text, wordlist)) {
-                throw new Error('Share ' + (i + 1) + ' is not a valid BIP-39 mnemonic. Check for typos — one or more words fail the checksum.');
-            }
-            // Convert to entropy bytes
-            var entropy = bip39.mnemonicToEntropy(text, wordlist);
-            entropies.push(new Uint8Array(entropy));
-        }
-
-        // Verify all shares have the same entropy length
-        var len = entropies[0].length;
-        for (var j = 1; j < entropies.length; j++) {
-            if (entropies[j].length !== len) {
-                throw new Error('Share ' + (j + 1) + ' has a different word count than Share 1. All shares must be the same length.');
-            }
-        }
-
-        // XOR all shares together to recover the original entropy
-        var combined = new Uint8Array(len);
-        for (var k = 0; k < entropies.length; k++) {
-            for (var b = 0; b < len; b++) {
-                combined[b] ^= entropies[k][b];
-            }
-        }
-
-        // Convert recovered entropy → BIP-39 mnemonic → fingerprints
-        var recoveredMnemonic = bip39.entropyToMnemonic(combined, wordlist);
-        if (!bip39.validateMnemonic(recoveredMnemonic, wordlist)) {
-            throw new Error('XOR recovery produced an invalid mnemonic. One or more shares may be corrupted.');
-        }
-
-        // Vault Fingerprint — SHA-256(mnemonic).slice(0,8). Stable across passphrases.
-        var recoveredVaultFP = '';
-        if (window.SafeKeepOS && typeof window.SafeKeepOS.vaultFingerprint === 'function') {
-            recoveredVaultFP = await window.SafeKeepOS.vaultFingerprint(recoveredMnemonic);
-        }
-
-        // BIP-32 master fingerprint — second check.
-        var seedBytes = await bip39.mnemonicToSeed(recoveredMnemonic, '');
-        var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-        var recoveredFP = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-        // Zero the seed buffer
-        if (seedBytes instanceof Uint8Array) seedBytes.fill(0);
-        combined.fill(0);
-
-        // Compare against the seed that was actually loaded into THIS tool's
-        // local state (xor_state.loadedSeed) — NOT the vault's master seed.
-        //
-        // Bug-fix rationale: the previous implementation pulled the expected
-        // BIP-32 fingerprint from window.SeedSession.get().fingerprint, which
-        // is the vault-level Master Seed identity. That works only in the
-        // common case where the user splits their own master. As soon as the
-        // user clears the panel and loads a different mnemonic — e.g. a
-        // temporary seed they're sharding for a friend — SeedSession still
-        // holds their own master (unrelated to what the shares reconstruct),
-        // so the verification drill always failed even when the shares were
-        // re-typed perfectly. Source of truth must be the seed actually fed
-        // into the split step, which is xor_state.loadedSeed.
-        if (!xor_state.loadedSeed) {
-            throw new Error('No seed is loaded in the XOR tool to verify against. Generate shares first.');
-        }
-        var expectedSeedBytes = await bip39.mnemonicToSeed(xor_state.loadedSeed, '');
-        var expectedRoot = HDKey.fromMasterSeed(expectedSeedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-        var expectedBip32FP = expectedRoot.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-        if (expectedSeedBytes instanceof Uint8Array) expectedSeedBytes.fill(0);
-
-        // The Vault Fingerprint cross-check only applies when SafeKeepOS could
-        // compute one at split time — preview mode's stub has no
-        // vaultFingerprint, and xor_handleSplit leaves the '--------'
-        // placeholder. Without that skip the drill could never pass there.
-        // The BIP-32 fingerprint match is always required.
-        var targetVaultFP = (xor_state.targetVaultFingerprint || '').toLowerCase();
-        var vaultFpChecked = /^[0-9a-f]{8}$/.test(targetVaultFP);
-        var vaultFpMatch = !vaultFpChecked || recoveredVaultFP === targetVaultFP;
-        var bip32FpMatch = (recoveredFP === expectedBip32FP);
-
-        if (vaultFpMatch && bip32FpMatch) {
-            // SUCCESS — release the lock.
-            banner.style.display = 'block';
-            banner.style.background = 'rgba(40, 167, 69, 0.12)';
-            banner.style.border = '2px solid rgba(40, 167, 69, 0.5)';
-            banner.innerHTML =
-                '<div style="font-size: 2.2rem; font-weight: 900; color: #28a745; margin-bottom: 0.5rem;">VERIFICATION PASSED</div>' +
-                '<div style="font-size: 0.9375rem; color: var(--skb-text); line-height: 1.5;">' +
-                (vaultFpChecked ? 'Vault Fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredVaultFP + '</strong>'
-                                : 'Master Fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredFP + '</strong>') +
-                ' matches the seed that was loaded into this tool.' +
-                '<br>Your physical XOR backup is mathematically verified &mdash; the tool has been unlocked.</div>';
-
-            doneSection.style.display = 'block';
-            _shardLockRelease();
-            showStatus('Reconstruction drill passed — navigation unlocked.', 'success');
-
-        } else {
-            // FAILURE — stay locked.
-            banner.style.display = 'block';
-            banner.style.background = 'rgba(220, 53, 69, 0.12)';
-            banner.style.border = '2px solid rgba(220, 53, 69, 0.5)';
-            var detail = '';
-            if (!vaultFpMatch) {
-                detail += 'Expected Vault Fingerprint <strong style="font-family: var(--skb-mono);">' + targetVaultFP + '</strong> ' +
-                          'but reconstructed <strong style="font-family: var(--skb-mono);">' + recoveredVaultFP + '</strong>.<br>';
-            }
-            if (!bip32FpMatch) {
-                detail += 'Expected BIP-32 Fingerprint <strong style="font-family: var(--skb-mono);">' + expectedBip32FP + '</strong> ' +
-                          'but reconstructed <strong style="font-family: var(--skb-mono);">' + recoveredFP + '</strong>.<br>';
-            }
-            banner.innerHTML =
-                '<div style="font-size: 2.2rem; font-weight: 900; color: #dc3545; margin-bottom: 0.5rem;">VERIFICATION FAILED</div>' +
-                '<div style="font-size: 0.9375rem; color: var(--skb-text); line-height: 1.5;">' + detail +
-                '<br><span style="color: var(--skb-danger); font-weight: 700;">Your re-typed shares do NOT reconstruct the seed that was loaded into this tool. Check every word carefully &mdash; the tool remains LOCKED until verification passes.</span></div>';
-
-            doneSection.style.display = 'none';
-        }
-
-    } catch (e) {
-        banner.style.display = 'block';
-        banner.style.background = 'rgba(220, 53, 69, 0.12)';
-        banner.style.border = '2px solid rgba(220, 53, 69, 0.5)';
-        banner.innerHTML =
-            '<div style="font-size: 1.6rem; font-weight: 900; color: #dc3545; margin-bottom: 0.5rem;">VERIFICATION FAILED</div>' +
-            '<div style="font-size: 0.875rem; color: var(--skb-text); line-height: 1.5;">' + e.message +
-            '<br><br><span style="color: var(--skb-danger); font-weight: 700;">Tool remains LOCKED. Re-check every word of every share.</span></div>';
-
-        doneSection.style.display = 'none';
-    } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Test Recovery'; }
-    }
-}
-
-/**
- * Legacy helper — the shares and the verification panel are now shown
- * simultaneously, so "return to shares" is just a scroll-to-top.
- */
-function xorv_returnToShares() {
-    var results = document.getElementById('xor-split-results');
-    if (results) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-// =============================================
 // SHARD LOCK — the Mandatory Fire Drill gate
 // =============================================
-// Engaged the moment shares are generated; released only by a successful
-// xorv_testRecovery(). While engaged:
-//   - Global navigation (showState) refuses to leave state-seedxor
-//   - xor_clearAll() is blocked
-//   - Sidebar shows a locked indicator
+// Engaged the moment shares are made; released once every share is checked
+// and the typed shares rebuild the seed (_xorVerifyTyped). While engaged,
+// leaving the tool, Cancel or a reset first shows the "leave without
+// checking?" warning (_shardSoftIntercept).
 
 function _shardLockEngage() {
     xor_state.locked = true;
     // Disable the Reset Tool button
     _shardLockUpdateUI(true);
-    console.log('[SHARD-LOCK] Engaged — navigation + Clear blocked until verification passes.');
+    console.log('[SHARD-LOCK] Engaged until every share is checked.');
 }
 
 function _shardLockRelease() {
     xor_state.locked = false;
     _shardLockUpdateUI(false);
-    console.log('[SHARD-LOCK] Released — reconstruction drill passed.');
+    console.log('[SHARD-LOCK] Released.');
 }
 
 function isShardLocked() { return !!(xor_state && xor_state.locked); }
 
 function _shardLockUpdateUI(locked) {
-    // Downgraded to a SOFT lock. Reset and nav remain clickable; we
-    // intercept those events via _shardSoftIntercept() and show a
-    // warning modal instead of hard-disabling the buttons.
-    //
-    // The obsolete red "TOOL LOCKED — MANDATORY RECONSTRUCTION DRILL
-    // IN PROGRESS" banner was removed in the 1.0 hardware audit; the
-    // banner DIV is still in the DOM as an empty, always-hidden sink
-    // so this function (and any other legacy callers) remain no-ops.
-    var banner = document.getElementById('xor-lock-banner');
-    if (banner) banner.style.display = 'none';
+    // Nothing on screen changes: the lock only adds the warning
+    // (_shardSoftIntercept) when leaving.
 }
 
 // ---------------------------------------------------------------
@@ -29853,10 +28425,9 @@ function _shardWarnCancel() {
     var modal = document.getElementById('shard-leave-warning-modal');
     if (modal) modal.classList.remove('visible');
     _pendingShardAction = null;
-    // Scroll the verification section into view so the user knows
-    // exactly what's expected of them to clear the soft lock.
+    // Bring the share screens back into view.
     try {
-        var sec = document.getElementById('xorv-verify-section');
+        var sec = document.getElementById('xor-flow');
         if (sec && sec.scrollIntoView) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) { /* non-fatal */ }
 }
@@ -29877,9 +28448,13 @@ function _shardWarnLeaveAnyway() {
     _shardWarningBypass = true;
     try {
         if (action && action.kind === 'nav' && action.stateId) {
+            // Unchecked shares are not kept: leaving discards them.
+            xor_clearAll();
             showState(action.stateId);
         } else if (action && action.kind === 'clear') {
             xor_clearAll();
+        } else if (action && action.kind === 'cancel') {
+            xor_cancel();
         }
     } finally {
         _shardWarningBypass = false;

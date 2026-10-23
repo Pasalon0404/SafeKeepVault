@@ -1,11 +1,14 @@
 # Design note: one guided flow for Seed XOR and Shamir Backup
 
-Status: **Part 1 built** (Oct 23, 2026): `shared/share-flow.js`,
-`shared/word-boxes.js`, `shared/share-flow-ui.js`,
-`shared/slip39-wordlist.js`, exposed as `window.ShareFlow`;
-`test-share-flow.mjs`. No tool uses it yet; Part 2 moves Seed XOR onto it. The owner confirmed the
-three decisions below on Oct 23. The Shamir print-page leak was fixed
-separately the same day.
+Status: **Parts 1 and 2 built** (Oct 23, 2026).
+- Part 1: `shared/share-flow.js`, `shared/word-boxes.js`,
+  `shared/share-flow-ui.js`, `shared/slip39-wordlist.js`, exposed as
+  `window.ShareFlow`; `test-share-flow.mjs`.
+- Part 2: Seed XOR uses the flow. Its Merge tab, manual seed entry, Copy,
+  share cards and Reconstruction Drill are gone; the final check rebuilds
+  the seed from the typed shares (`_xorVerifyTyped`). "Leave anyway"
+  discards unchecked shares. `test-seed-xor-vectors.mjs` covers the new
+  functions.
 
 ## The problem
 

@@ -19,6 +19,7 @@
  *     onFinish(), onCancel(),
  *   });
  *   flow.isComplete()   true once every share is checked and recombined
+ *   flow.stopScanning() turns the camera off (e.g. when leaving the tool)
  *   flow.destroy()      clears the screens and forgets the shares
  *
  * Nothing here shows the expected words on the check screen: a wrong box
@@ -57,9 +58,11 @@ export function mountShareFlow(container, opts) {
     let complete = false;
     let destroyed = false;
     let notice = '';   // "Share k matches", shown once on the next screen
+    let resetScanUI = null;   // puts the check screen's Scan button back
 
     function stopScanner() {
         if (stopScan) { try { stopScan(); } catch (_) { /* already stopped */ } stopScan = null; }
+        if (resetScanUI) resetScanUI();
     }
 
     function progress() {
@@ -102,6 +105,7 @@ export function mountShareFlow(container, opts) {
     function render() {
         if (destroyed) return;
         stopScanner();
+        resetScanUI = null;
         if (boxes) { boxes.destroy(); boxes = null; }
         container.innerHTML = '';
         const card = el('div', 'skb-card sf-card');
@@ -192,6 +196,7 @@ export function mountShareFlow(container, opts) {
                 });
             });
             tools.appendChild(scanBtn);
+            resetScanUI = () => { if (reader) reader.style.display = 'none'; scanBtn.textContent = 'Scan QR'; };
         }
         tools.appendChild(button('Clear', 'sf-quiet', () => { boxes.clear(); setStatus(msg, '', ''); boxes.focus(); }));
         card.appendChild(tools);
@@ -264,6 +269,7 @@ export function mountShareFlow(container, opts) {
 
     return {
         isComplete: () => complete,
+        stopScanning: stopScanner,
         state: () => ({ ...state, checked: state.checked.slice() }),
         destroy() {
             destroyed = true;
