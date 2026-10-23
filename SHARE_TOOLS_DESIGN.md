@@ -159,6 +159,12 @@ passphrase clears them, and leaving the tool wipes them. A check that
 fails outright (a wrong word, a share entered twice, too few shares)
 offers no words.
 
+**Either share length.** Since Check Shares can show another wallet's
+words, its share length is a choice, not fixed by the vault seed: Seed
+XOR offers 12 or 24 words, Shamir 20 or 33 (a 12- or 24-word seed). The
+vault seed's length is the default, and scanning a share of the other
+length switches to it.
+
 ### Leaving early
 
 Leaving before every share is checked shows the existing "leave anyway"

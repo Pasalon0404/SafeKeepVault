@@ -27932,7 +27932,11 @@ function xor_openChecker() {
     _xorChecker = window.ShareFlow.check(document.getElementById('xor-flow'), {
         idPrefix: 'xorc',
         wordlist: window.ShareFlow.wordlists.bip39,
+        // Shares of either length can be checked (and their words shown);
+        // the vault seed's length is the default.
         wordCount: xor_state.loadedSeed.trim().split(/\s+/).length,
+        wordCounts: [12, 24],
+        wordCountLabel: function(n) { return n + ' words'; },
         shareName: 'XOR share',
         counts: [2, 3, 4],
         count: xor_state.shares,
@@ -42076,7 +42080,11 @@ function s39_openChecker() {
     _s39Checker = window.ShareFlow.check(document.getElementById('s39-flow'), {
         idPrefix: 's39c',
         wordlist: window.ShareFlow.wordlists.slip39,
+        // 20-word shares hold a 12-word seed, 33-word shares a 24-word seed;
+        // either can be checked. The vault seed's length is the default.
         wordCount: words === 12 ? 20 : 33,
+        wordCounts: [20, 33],
+        wordCountLabel: function(n) { return n + ' words (' + (n === 20 ? 12 : 24) + '-word seed)'; },
         shareName: 'Shamir share',
         counts: [2, 3, 4, 5, 6, 7, 8],
         count: Math.min(8, s39_state.threshold),
