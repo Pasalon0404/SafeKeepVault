@@ -15,7 +15,9 @@
  *     accepts a private key directly, so a real seed is useless here.
  *   - A freshly generated seed is never shown: replaceGenerated() swaps it
  *     for the public demo seed of the same length.
- *   - A banner that can't be closed, and a watermark on every printout.
+ *   - A banner that can't be closed, explaining that this is a preview of
+ *     the offline vault with public demo seeds, and a watermark on every
+ *     printout.
  *
  * The demo seeds are the all-zero-entropy BIP-39 mnemonics, the most
  * widely published test vectors there are. Anything they control can be
@@ -29,8 +31,8 @@ export const DEMO_SEEDS = Object.freeze(Object.fromEntries(
 ));
 
 export const REFUSAL_MESSAGE =
-    'SafeKeep demo: only the public demo seeds work here. ' +
-    'Never type your real seed words into a website.';
+    'SafeKeep demo: only the public demo seeds work here, so those words were not used. ' +
+    'On the offline vault, your own seed works. As a rule, never type real seed words into a website.';
 
 export function isDemoActive(win = (typeof window !== 'undefined' ? window : undefined)) {
     try {
@@ -101,12 +103,12 @@ function toast(text) {
 }
 
 export function noticeRefused() {
-    toast(REFUSAL_MESSAGE + ' The demo seeds are listed in the banner at the bottom.');
+    toast(REFUSAL_MESSAGE + ' The demo seeds are under \u201cShow the demo seeds\u201d at the bottom.');
 }
 
 export function noticeGenerated() {
-    toast('SafeKeep demo: seeds created online are never shown. On the real vault your own ' +
-          'words appear here; the demo continues with a public demo seed instead.');
+    toast('SafeKeep demo: on the offline vault, your new seed words appear here. ' +
+          'In the demo, a public demo seed is used instead.');
 }
 
 export function installDemoUi() {
@@ -114,10 +116,18 @@ export function installDemoUi() {
     css.id = 'skv-demo-style';
     css.textContent =
         '#skv-demo-banner{position:fixed;left:0;right:0;bottom:0;z-index:2147483646;' +
-        'background:#b91c1c;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;' +
-        'padding:8px 14px;text-align:center;box-shadow:0 -2px 10px rgba(0,0,0,.4)}' +
-        '#skv-demo-banner a{color:#fff;text-decoration:underline}' +
-        '#skv-demo-banner details{display:inline}#skv-demo-banner summary{display:inline;cursor:pointer;text-decoration:underline}' +
+        'background:#141414;color:#f0f0f0;font:500 13px/1.45 system-ui,-apple-system,sans-serif;' +
+        'border-top:2px solid #f7931a;padding:8px 14px;text-align:center;box-shadow:0 -2px 10px rgba(0,0,0,.4)}' +
+        '#skv-demo-banner .skv-demo-tag{display:inline-block;background:#f7931a;color:#111;font-weight:800;' +
+        'letter-spacing:.06em;font-size:11px;padding:1px 7px;border-radius:4px;margin-right:6px;vertical-align:1px}' +
+        '#skv-demo-banner a{color:#f7931a;text-decoration:underline;font-weight:600;white-space:nowrap}' +
+        '@media (max-width:600px){#skv-demo-banner{font-size:12px;padding:6px 10px}}' +
+        // The app is laid out for laptop screens; on a phone a few rows are a
+        // little wider than the screen, which pushed this fixed banner partly
+        // off-screen. Keep the demo page to the screen's width.
+        '@media (max-width:600px){html,body{overflow-x:hidden;max-width:100vw}}' +
+        '#skv-demo-banner .skv-demo-note{display:block;font-size:12px;color:#a8a8a8;margin-top:2px}' +
+        '#skv-demo-banner details{display:inline}#skv-demo-banner summary{display:inline;cursor:pointer;text-decoration:underline;color:#f7931a;font-weight:600;white-space:nowrap}' +
         '#skv-demo-banner .skv-seeds{display:block;margin-top:6px;font:12px/1.5 ui-monospace,Menlo,monospace;text-align:left;' +
         'max-width:900px;margin-left:auto;margin-right:auto;user-select:all}' +
         'body{padding-bottom:64px !important}' +
@@ -132,10 +142,12 @@ export function installDemoUi() {
     banner.id = 'skv-demo-banner';
     banner.setAttribute('role', 'note');
     banner.innerHTML =
-        'DEMO &mdash; this runs online. Never type your real seed words, passphrases or passwords here. ' +
-        'Only the public demo seeds work, and anything sent to a demo address can be taken by anyone. ' +
+        '<span class="skv-demo-tag">DEMO</span>' +
+        'The real SafeKeepVault tools, running on public demo seeds. ' +
+        'The full vault runs them offline from a USB stick, with your own keys. ' +
         '<details><summary>Show the demo seeds</summary><span class="skv-seeds"></span></details> &middot; ' +
-        '<a href="' + REAL_VAULT_URL + '" target="_blank" rel="noopener">Get the real, offline vault</a>';
+        '<a href="' + REAL_VAULT_URL + '" target="_blank" rel="noopener">Get the offline vault</a>' +
+        '<span class="skv-demo-note">Demo wallets are public: never send real bitcoin to them.</span>';
     const seeds = banner.querySelector('.skv-seeds');
     for (const n of Object.keys(DEMO_SEEDS)) {
         const line = document.createElement('div');
