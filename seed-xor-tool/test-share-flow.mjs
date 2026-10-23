@@ -252,6 +252,30 @@ if (!executablePath || !chromium) {
   await clickText('Back');
   ck('checker: Back calls onBack', await page.evaluate(() => chk.back === 1));
   await page.evaluate(() => checker.destroy());
+  // Words per share: either length, and a scanned share of the other length switches it.
+  await page.evaluate(() => {
+    window.scanned = null;
+    window.checker2 = SF.mountShareChecker(document.getElementById('host'), {
+      idPrefix: 'c2', wordlist: BIP39, wordCount: 24, wordCounts: [12, 24], wordCountLabel: (n) => n + ' words',
+      shareName: 'XOR share', counts: [2, 3], count: 2,
+      scan: (reader, onWords) => { window.scanned = onWords; return () => {}; },
+      check: async () => ({ ok: true, message: 'ok' }), onBack() {},
+    });
+  });
+  ck('checker: defaults to the vault seed length (2 × 24 boxes)', (await page.$$('#host .rst-cell input')).length === 48);
+  await clickText('12 words');
+  ck('checker: choosing 12 words gives 2 × 12 boxes', (await page.$$('#host .rst-cell input')).length === 24);
+  await page.fill('#c2-0-word-0', 'abandon'); await clickText('3');
+  ck('checker: changing the share count keeps the length and typed words', (await page.$$('#host .rst-cell input')).length === 36 && (await page.inputValue('#c2-0-word-0')) === 'abandon');
+  await clickText('24 words');
+  ck('checker: changing the length clears typed words of the old length', (await page.$$('#host .rst-cell input')).length === 72 && (await page.inputValue('#c2-0-word-0')) === '');
+  await page.locator('#host .sf-share-head button').nth(1).click();
+  await page.evaluate((w) => window.scanned(w), twelve);
+  ck('checker: scanning a 12-word share switches to 12 words and fills that share', (await page.$$('#host .rst-cell input')).length === 36 && (await page.inputValue('#c2-1-word-0')) === 'abandon' && (await page.inputValue('#c2-1-word-11')) === 'accident');
+  await page.locator('#host .sf-share-head button').nth(0).click();
+  await page.evaluate(() => window.scanned('one two three'.split(' ')));
+  ck('checker: a QR code of neither length is refused, naming both lengths', /isn’t a 12 or 24-word xor share/.test(await text()));
+  await page.evaluate(() => checker2.destroy());
   ck('checker: destroy clears the screen', await page.evaluate(() => document.getElementById('host').innerHTML === ''));
 
   await page.setViewportSize({ width: 1920, height: 1080 });

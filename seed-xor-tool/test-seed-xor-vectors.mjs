@@ -165,6 +165,8 @@ async function checkExisting(typed, loadedSeed = CC.R) {
 { const r = await checkExisting([CC.A, CC.B]); ck('check shares: a missing share → a different seed, both fingerprints named', !r.ok && /different seed/.test(r.message) && (r.message.match(/[0-9a-f]{8}/g) || []).length === 2, JSON.stringify(r));
   const ab = await merge([CC.A, CC.B]);
   ck('check shares: a different seed\'s words are offered, labelled NOT your vault seed', r.words === ab.seed && /NOT your vault seed/.test(r.wordsLabel)); }
+{ const r = await checkExisting([C12.A, C12.B, C12.C]);   // 12-word shares, 24-word vault seed
+  ck('check shares: 12-word shares on a 24-word vault seed → their 12 words, labelled NOT your vault seed', !r.ok && r.words === C12.R && /NOT your vault seed/.test(r.wordsLabel), JSON.stringify(r)); }
 { const r = await checkExisting([CC.A, CC.A, CC.B]); ck('check shares: a share entered twice is named, and no words are offered', !r.ok && /identical/.test(r.message) && !r.words, JSON.stringify(r)); }
 { const r = await checkExisting([CC.A, CC.B, bad.join(' ')]); ck('check shares: a bad-checksum share is named', !r.ok && /Share 3/.test(r.message)); }
 { const zero = bip39.entropyToMnemonic(new Uint8Array(32), wordlist); const sh = await split(zero, 2);

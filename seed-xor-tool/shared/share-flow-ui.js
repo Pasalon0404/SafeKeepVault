@@ -317,12 +317,14 @@ export function mountShareFlow(container, opts) {
 
 /**
  * "Check shares I already have": type in (or scan) shares made earlier and
- * learn whether they rebuild the vault seed. Nothing is loaded and the
- * rebuilt seed's words are never shown.
+ * learn whether they rebuild the vault seed. Nothing is loaded; the
+ * rebuilt seed's words are shown only when the user asks.
  *
  *   const checker = mountShareChecker(container, {
  *     idPrefix: 'xorc',
- *     wordlist, wordCount: 24,            // words per share
+ *     wordlist, wordCount: 24,            // words per share (the default)
+ *     wordCounts: [12, 24],               // optional: lengths to choose from
+ *     wordCountLabel: (n) => '…',         // optional: their button labels
  *     shareName: 'XOR share',
  *     counts: [2, 3, 4], count: 3,        // how many shares to enter
  *     intro: '…',                         // one or two lines at the top
@@ -339,6 +341,7 @@ export function mountShareFlow(container, opts) {
  */
 export function mountShareChecker(container, opts) {
     let count = opts.count || opts.counts[0];
+    let wordCount = opts.wordCount;
     let boxes = [];
     let extraValue = '';
     let stopScan = null, resetScanUI = null;
@@ -357,7 +360,8 @@ export function mountShareChecker(container, opts) {
 
     function render() {
         if (destroyed) return;
-        const kept = boxes.map((b) => b.getWords());
+        // Typed words survive a re-render only while the share length stays.
+        const kept = boxes.map((b) => b.getWords()).map((w) => (w.length === wordCount ? w : null));
         stopScanner();
         boxes.forEach((b) => b.destroy());
         boxes = [];
@@ -369,6 +373,18 @@ export function mountShareChecker(container, opts) {
         h.appendChild(el('div', 'sf-title', 'Check shares you already have'));
         if (opts.intro) h.appendChild(el('div', 'sf-sub', opts.intro));
         card.appendChild(h);
+
+        if (opts.wordCounts && opts.wordCounts.length > 1) {
+            const row = el('div', 'sf-counts');
+            row.appendChild(el('span', 'sf-counts-label', 'Words per share?'));
+            opts.wordCounts.forEach((n) => {
+                const label = opts.wordCountLabel ? opts.wordCountLabel(n) : String(n);
+                const b = button(label, n === wordCount ? 'sf-count active' : 'sf-count', () => { wordCount = n; render(); });
+                b.setAttribute('aria-pressed', n === wordCount ? 'true' : 'false');
+                row.appendChild(b);
+            });
+            card.appendChild(row);
+        }
 
         if (opts.counts.length > 1) {
             const row = el('div', 'sf-counts');
@@ -417,7 +433,7 @@ export function mountShareChecker(container, opts) {
             const head = el('div', 'sf-share-head');
             head.appendChild(el('span', 'sf-share-label', opts.shareName + ' ' + (k + 1)));
             const host = el('div', 'sf-boxes');
-            const b = createWordBoxes(host, { count: opts.wordCount, wordlist: opts.wordlist, idPrefix: opts.idPrefix + '-' + k });
+            const b = createWordBoxes(host, { count: wordCount, wordlist: opts.wordlist, idPrefix: opts.idPrefix + '-' + k });
             if (kept[k]) b.setWords(kept[k]);
             b.onChange(clearResult);
             boxes.push(b);
@@ -434,8 +450,16 @@ export function mountShareChecker(container, opts) {
                     resetScanUI.owner = k;
                     stopScan = opts.scan(reader, (words) => {
                         stopScanner();
-                        if (!words || words.length !== opts.wordCount) {
-                            setStatus(result, 'error', 'That QR code isn’t a ' + opts.wordCount + '-word ' + opts.shareName.toLowerCase() + '.');
+                        if (words && words.length !== wordCount && opts.wordCounts && opts.wordCounts.includes(words.length)) {
+                            // A share of the other length: switch, then fill it in.
+                            wordCount = words.length;
+                            render();
+                            boxes[k].setWords(words);
+                            return;
+                        }
+                        if (!words || words.length !== wordCount) {
+                            const lengths = opts.wordCounts ? opts.wordCounts.join(' or ') : String(wordCount);
+                            setStatus(result, 'error', 'That QR code isn’t a ' + lengths + '-word ' + opts.shareName.toLowerCase() + '.');
                             return;
                         }
                         b.setWords(words);
