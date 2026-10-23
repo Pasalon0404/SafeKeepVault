@@ -9,28 +9,43 @@
 
 ---
 
-## Current state (Oct 22, 2026) — v1.51
+## Current state (Oct 23, 2026) — v1.52
 
-**v1.51** (Oct 22) is the Master Passphrase release
-(`PASSPHRASE_STRENGTH_DESIGN.md`, Parts 1–3, all tested on Dave's spare
-stick):
-- a strength check refuses a Weak Master Passphrase at setup and a Weak
-  Encrypted Backup password (with a bar on the backup screen);
-- **Generate One for Me** at setup: 6 BIP39 words shown as a QR code and as
-  words, saved one way or both, then checked by scanning the QR code back
-  from the phone or typing the words back;
-- **Device Options → Master Passphrase → Change Master Passphrase**: lock,
-  change in native dialogs, unlock with the new one;
-- a red dashboard banner when the vault was unlocked with a Weak passphrase;
-- Cancel in setup no longer ends at a black screen; setup's dialogs fit a
-  1080p screen at double size.
+**v1.52** (Oct 23) is the share tools release (`SHARE_TOOLS_DESIGN.md`,
+Parts 1–4, tested on Dave's stick, including QR scan-back and printing):
+- **Seed XOR and Shamir Backup** use one guided flow: choose the scheme in
+  plain words, write down one share per screen, check each share right
+  away (typed with autocomplete, or scanned), then a final check that the
+  shares rebuild the vault seed. Copy, XOR's Merge tab and the old share
+  pages are gone.
+- **Check Shares I Already Have** in both tools tests old shares against
+  the vault seed without showing it.
+- **Restore panels** (welcome screen) use the same word boxes; Recover
+  Shamir Backup checks each share when added and accepts more shares than
+  the threshold.
+- Fixes: printed Shamir shares no longer show the seed's last word; the
+  BIP-39 passphrase is no longer used as the Shamir share passphrase;
+  Chromium's "Download started" message is hidden (`quiet-downloads`
+  extension); the Mount Transfer Drive box no longer flashes at unlock.
+
+v1.51 (Oct 22, `v1.51 · build 339 · ff93141`) was the Master Passphrase
+release (`PASSPHRASE_STRENGTH_DESIGN.md`): weak passphrases refused,
+Generate One for Me, Change Master Passphrase.
 
 v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
 (see "Seed entropy" below). v1.47 and later sticks install each release in
 place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
-1.51: features merge to `main` without a bump, and builds from `main` are
+1.52: features merge to `main` without a bump, and builds from `main` are
 for the owner's own use until the owner says it's release time (see
 `CLAUDE.md`).
+
+Release notes for v1.52:
+- **shamir-mnemonic-ts combines exactly M shares**; more is an error.
+  The share tools combine every run of M consecutive shares instead.
+- **Chromium has no flag or policy for its kiosk "Download started"
+  message**; an unpacked extension (`usbbootdrive/quiet-downloads/`,
+  `chrome.downloads.setUiOptions`) hides it. Checked on
+  ungoogled-chromium 155 with the stick's flags and policy.
 
 Release notes for v1.51:
 - **v1.51 adds an OS package, `qrencode`** (`chroot-setup.sh`), so the
@@ -431,8 +446,8 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
 
 ### Open items / next steps
 
-1. **After v1.51:** merge the v1.51 website PR, and install
-   `SafeKeep-Update-v1.51.tar` on a stick from the release itself (the same
+1. **After v1.52:** merge the v1.52 website PR, and install
+   `SafeKeep-Update-v1.52.tar` on a stick from the release itself (the same
    code was tested on Dave's spare stick as builds 324–336).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).

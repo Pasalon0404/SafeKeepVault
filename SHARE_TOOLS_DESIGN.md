@@ -1,6 +1,6 @@
 # Design note: one guided flow for Seed XOR and Shamir Backup
 
-Status: **All four parts built** (Oct 23, 2026). Docs and the website's tool pages are updated at release time.
+Status: **All four parts built, tested on Dave's stick and released in v1.52** (Oct 23, 2026).
 - Part 1: `shared/share-flow.js`, `shared/word-boxes.js`,
   `shared/share-flow-ui.js`, `shared/slip39-wordlist.js`, exposed as
   `window.ShareFlow`; `test-share-flow.mjs`.
