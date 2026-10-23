@@ -1,0 +1,165 @@
+# Design note: one guided flow for Seed XOR and Shamir Backup
+
+Status: **Part 1 built** (Oct 23, 2026): `shared/share-flow.js`,
+`shared/word-boxes.js`, `shared/share-flow-ui.js`,
+`shared/slip39-wordlist.js`, exposed as `window.ShareFlow`;
+`test-share-flow.mjs`. No tool uses it yet; Part 2 moves Seed XOR onto it. The owner confirmed the
+three decisions below on Oct 23. The Shamir print-page leak was fixed
+separately the same day.
+
+## The problem
+
+Seed XOR (`state-seedxor`) and Shamir Backup (`state-slip39`) both split
+the vault's seed into shares written on paper. They were among the first
+tools built. They do the same job in different ways, and both feel
+cluttered:
+
+- After a split, each tool shows every share at once, with Copy, Show QR
+  and Print on each, followed by the check, all on one page. A 3-share
+  XOR split is about six laptop screens long; a 2-of-3 Shamir split about
+  five. Almost all of XOR's page is in red warning style.
+- Checking the paper copy works differently in each tool (table below).
+  XOR makes you retype every word of every share at the end (72 words for
+  3 × 24). Shamir's check is optional, uses plain text boxes with no word
+  help, and only tests any M shares, so a typo in another share goes
+  unnoticed.
+- Some buttons don't fit an offline device. Copy puts share words, or
+  the whole recovered seed in XOR's Merge tab, on a clipboard nothing can
+  read. The Merge tab can also show the recovered seed as a QR code.
+
+## Facts the design rests on
+
+| | Seed XOR | Shamir Backup |
+|---|---|---|
+| Share format | BIP-39 phrases, same length as the seed (12 or 24 words) | SLIP-39 shares, 20 words (12-word seed) or 33 words (24-word seed), own 1024-word list |
+| Scheme | N of N (2, 3 or 4); all needed | M of N (2 of 3, 3 of 5, 4 of 7, custom up to 16) |
+| Which seed | Vault seed, or a typed or scanned one ("Clear & Enter Different Seed") | Vault seed only |
+| Check your copy | Required: "Reconstruction Drill" retypes all N shares in word boxes with autocomplete (`xvg_*`), compares fingerprints. Leaving early shows the "leave anyway" warning (`_shardSoftIntercept`) | Optional: "Verify Physical Backup" hides the shares and asks for any M in plain text boxes (`s39v_*`) |
+| Per-share actions | Copy, Show QR (the phrase), Print | Copy, Show QR (the share, uppercase), Print |
+| Recovery | Merge tab in the tool (shows the seed, with Copy and Show QR), and Welcome → Restore via Seed XOR (`xrr_*`, word boxes) | Welcome → Recover Shamir Backup only (`s39r_*`, one text box, shares added one at a time) |
+| Extras | Fingerprint stamped on each share and print page | Optional SLIP-39 passphrase under "Advanced" |
+| Exits | Reset Tool | Cancel, Abort, Reset Tool |
+
+- Both print pages already carry the share, its number, the scheme and
+  the seed's fingerprint. **Shamir's print page also prints the seed's
+  last word** ("Checksum Word") on every share. That word carries part of
+  the seed (3 of its 8 bits are seed data for a 24-word seed, 7 of 11 for
+  a 12-word seed), so one share gives away a little of the seed, which
+  Shamir is meant to prevent. XOR's print page doesn't do this. The
+  fingerprint alone identifies the seed. **Fixed Oct 23:** the Shamir
+  print page no longer shows it (`test-review-regressions.mjs`, section 6).
+- `shamir-mnemonic-ts` exposes the SLIP-39 word list through
+  `wordsFromIndices`, so the SLIP-39 word boxes can autocomplete like the
+  BIP-39 ones.
+- SLIP-39 shares carry their own checksum, so a mistyped Shamir share is
+  usually caught as soon as it is typed. XOR shares are BIP-39 phrases, so
+  their last word is a checksum too.
+
+## Decisions (confirmed by the owner, Oct 23)
+
+1. **Checking each share is required in both tools**, with the existing
+   "leave anyway" warning as the way out. Shamir tolerates a lost share,
+   but a typo found years later is still a lost share.
+2. **Both tools split only the vault seed.** XOR's "Clear & Enter
+   Different Seed" and its seed QR scan go away.
+3. **Shamir's share passphrase stays, still under "Advanced"**, and the
+   check asks for it once if it was set.
+
+## The design: one flow, four steps
+
+Both tools use the same screens and the same code for the steps, with a
+small description of each scheme (word list, share length, how to split,
+how to check).
+
+### Step 1: Choose
+
+- The seed: the vault seed, shown as now (last word and fingerprint).
+- The scheme in plain words:
+  - XOR: "All 2 / 3 / 4 shares needed". One line: "Shares look like
+    ordinary 12/24-word seeds. Losing any one share loses the seed."
+  - Shamir: "Any 2 of 3 / 3 of 5 / 4 of 7 / Custom". One line: "You can
+    lose N−M shares and still recover. Shares use their own word list."
+- Shamir only: "Advanced: share passphrase", as today.
+- One button: "Make shares".
+
+### Step 2: Write down share k of N (one screen per share)
+
+- Heading "Share k of N", the scheme ("all 3 needed" or "any 2 of 3") and
+  the seed's fingerprint.
+- The words, large, in a numbered grid. No hover-to-reveal: this screen
+  exists to be read.
+- Print and Show QR are offered here. No Copy.
+- Button: "I've written it down — check it".
+
+### Step 3: Check share k
+
+- Word boxes with autocomplete from the right word list (BIP-39 or
+  SLIP-39), the same component in both tools. A "Scan QR" button fills
+  the boxes from the share's QR code.
+- SafeKeep compares the typed share with the share it made, word by
+  word, and marks the wrong words. Nothing else is revealed.
+- Correct: "Share k checked", then on to share k+1 (step 2).
+  Wrong: fix the marked words, or go back to step 2 to look again.
+- After the last share, both tools also recombine the typed shares and
+  confirm the fingerprint matches the vault seed. This checks the maths,
+  not just the typing.
+
+### Step 4: Done
+
+- A summary: N shares, how many are needed to recover, the fingerprint,
+  and "Store each share in a different place."
+- How to recover: Welcome → Restore via Seed XOR / Recover Shamir Backup.
+- "Back to Dashboard". The shares are wiped from the screen and memory.
+
+### Leaving early
+
+Leaving before every share is checked shows the existing "leave anyway"
+warning in both tools. One "Cancel" in every step replaces Cancel, Abort
+and Reset Tool.
+
+### What goes away
+
+- Copy, on every share and on the recovered seed.
+- XOR's Merge tab, including its seed QR code. Recovery happens in one
+  place, the welcome screen's Restore.
+- XOR's "Clear & Enter Different Seed" and seed QR scan (decision 2).
+- The seed's last word on Shamir's print page (already removed, Oct 23).
+- The red warning style on everything. One warning stays where it
+  matters: XOR's "all N needed" on step 1 and on each share.
+
+## Restore screens
+
+The welcome screen's two restore panels get the same word boxes:
+
+- **Restore via Seed XOR** (`xrr_*`) already uses word boxes; it gets
+  the shared component and a Scan QR per share.
+- **Recover Shamir Backup** (`s39r_*`) replaces its single text box with
+  SLIP-39 word boxes (20 or 33, picked from the first share), keeping
+  Scan QR and the add-one-share-at-a-time list.
+
+## Parts
+
+1. **Shared flow and word boxes.** The four-step screens and a word-box
+   component that takes a word list and a length, used by both tools.
+   Tests: the flow's state (next, back, wrong word, leave early) with
+   both schemes; autocomplete with both word lists.
+2. **Seed XOR on the new flow.** Remove Merge, Copy and manual seed entry.
+   Tests: split and recombine vectors (existing), per-share check, the
+   fingerprint check, the leave warning.
+3. **Shamir Backup on the new flow.** Same, plus the passphrase. Tests:
+   SLIP-39 vectors (existing), per-share check, a passphrase split.
+4. **Restore screens** use the shared word boxes. Tests: restore from
+   typed and scanned shares for both schemes; a share from the wrong
+   scheme is refused with a clear message.
+
+Each part: browser check at laptop size (1366×900 and 1920×1080), then a
+quick update on a stick. Docs and the website's tool pages are updated at
+release time.
+
+## Out of scope
+
+- Changing the share formats. Existing shares stay readable: XOR is plain
+  BIP-39 and the Shamir shares are standard SLIP-39 holding the seed's
+  entropy.
+- Shamir groups (SLIP-39's two-level groups). Single group only, as now.
+- Opening Trezor-made SLIP-39 wallets (a separate, known limitation).

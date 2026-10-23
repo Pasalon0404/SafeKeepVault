@@ -5451,6 +5451,50 @@
       color: var(--skb-danger);
     }
 
+    /* Share tools' guided flow (shared/share-flow-ui.js, SHARE_TOOLS_DESIGN.md) */
+    .skb-wordboxes .rst-cell input.wrong { border-color: var(--skb-danger); color: var(--skb-danger); background: rgba(239, 68, 68, 0.12); }
+    /* The app's focus ring (section 5 below) uses !important; a wrong word
+       keeps its red border while it has focus. */
+    .skb-wordboxes .rst-cell input.wrong:focus { border-color: var(--skb-danger) !important; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2); }
+    .skb-wordboxes .rst-cell input.right { border-color: var(--skb-secondary); color: var(--skb-secondary); }
+    .sf-card { padding: 1.5rem; }
+    .sf-progress { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem; }
+    .sf-chip {
+      font-family: var(--skb-mono); font-size: 0.75rem; letter-spacing: 0.04em;
+      padding: 0.25rem 0.6rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted);
+    }
+    .sf-chip.current { border-color: var(--skb-primary); color: var(--skb-primary); }
+    .sf-chip.done { border-color: var(--skb-secondary); color: var(--skb-secondary); }
+    .sf-head { margin-bottom: 0.75rem; }
+    .sf-title { font-size: 1.375rem; font-weight: 700; color: var(--skb-text); }
+    .sf-sub { font-size: 0.9375rem; color: var(--skb-text-muted); margin-top: 0.3rem; line-height: 1.5; }
+    .sf-meta { font-size: 0.875rem; color: var(--skb-text-muted); margin-bottom: 1rem; }
+    .sf-fp { font-family: var(--skb-mono); color: var(--skb-secondary); letter-spacing: 0.06em; }
+    .sf-words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1rem; }
+    .sf-words--wide { grid-template-columns: repeat(4, 1fr); }
+    .sf-word {
+      display: flex; align-items: baseline; gap: 0.6rem; padding: 0.55rem 0.75rem;
+      background: var(--skb-bg-input); border: 1px solid var(--skb-border);
+    }
+    .sf-word-num { font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text-muted); min-width: 1.5rem; text-align: right; }
+    .sf-word-text { font-family: var(--skb-mono); font-size: 1.0625rem; font-weight: 600; color: var(--skb-text); }
+    .sf-boxes { margin-bottom: 0.5rem; }
+    .sf-tools { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .sf-tools .skb-btn { font-size: 0.8125rem; padding: 0.4rem 0.9rem; }
+    .sf-qr { text-align: center; margin-bottom: 1rem; }
+    .sf-qr canvas { width: 260px; height: auto; background: #fff; padding: 8px; }
+    .sf-reader { width: 100%; max-width: 420px; min-height: 260px; background: #000; margin-bottom: 1rem; overflow: hidden; }
+    .sf-status { font-size: 0.875rem; padding: 0.6rem 0.8rem; margin-bottom: 1rem; line-height: 1.5; border: 1px solid var(--skb-border); }
+    .sf-status.ok { color: var(--skb-secondary); border-color: var(--skb-secondary); background: rgba(34, 197, 94, 0.08); }
+    .sf-status.error { color: var(--skb-danger); border-color: var(--skb-danger); background: rgba(239, 68, 68, 0.08); }
+    .sf-status.info { color: var(--skb-text-muted); }
+    .sf-actions { display: flex; gap: 0.75rem; }
+    .sf-actions .skb-btn { flex: 1; width: auto; }
+    .sf-primary { width: 100%; padding: 0.75rem; font-size: 1rem; font-weight: 700; }
+    .sf-footer { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--skb-border); }
+    .sf-quiet { background: transparent; color: var(--skb-text-muted); border: 1px solid var(--skb-border); font-size: 0.8125rem; }
+    .sf-done { margin: 0.5rem 0 1.25rem; padding-left: 1.25rem; color: var(--skb-text); font-size: 0.9375rem; line-height: 1.8; }
+
     /* Armory */
     .arm-locked {
       text-align: center;
@@ -43575,7 +43619,7 @@ function s39_copyShare(index) {
  *   - The share mnemonic in a numbered word grid
  *   - Threshold context (M-of-N)
  *   - Master Seed Fingerprint
- *   - BIP-39 checksum word (last word of the master mnemonic)
+ * No word of the master seed: one share must not reveal any of it.
  */
 async function s39_printShare(index) {
     var mnemonic = s39_state.generatedShares[index];
@@ -43585,11 +43629,11 @@ async function s39_printShare(index) {
     var n = s39_state.totalShares;
     var words = mnemonic.trim().split(/\s+/);
 
-    // Cryptographic context from the active session
+    // Cryptographic context from the active session. Only the fingerprint:
+    // a word of the seed (e.g. its last word) would give away part of the
+    // seed to anyone holding this one share.
     var session = window.SeedSession ? window.SeedSession.get() : null;
     var fingerprint = (session && session.fingerprint) || window.SafeKeepOS?.getFingerprint() || '--------';
-    var masterWords = (session && session.mnemonic) ? session.mnemonic.trim().split(/\s+/) : [];
-    var checksumWord = masterWords.length > 0 ? masterWords[masterWords.length - 1] : '--------';
 
     // Build the word grid rows (numbered, monospace via .w/.n/.v CSS)
     var rowsHtml = '';
@@ -43664,7 +43708,6 @@ async function s39_printShare(index) {
         '    <div class="box-label">Master Identity</div>' +
         '    <div class="idrow">' +
         '      <div class="kv"><span class="k">Master Fingerprint</span><span class="val">' + fingerprint + '</span></div>' +
-        '      <div class="kv"><span class="k">Checksum Word</span><span class="val">' + checksumWord.toUpperCase() + '</span></div>' +
         '      <div class="kv"><span class="k">Threshold</span><span class="val">' + m + ' of ' + n + '</span></div>' +
         '    </div>' +
         '  </div>' +
@@ -43675,7 +43718,7 @@ async function s39_printShare(index) {
         qrBlockHtml +
         '  <div class="box">' +
         '    <div class="box-label">Recovery</div>' +
-        '    <div class="note">This is one piece of a Shamir secret-sharing split. Any ' + m + ' of the ' + n + ' total shares reconstruct your BIP-39 master seed. The fingerprint + checksum word identify which master these shares belong to.<br><br>' +
+        '    <div class="note">This is one piece of a Shamir secret-sharing split. Any ' + m + ' of the ' + n + ' total shares reconstruct your BIP-39 master seed. The fingerprint identifies which master these shares belong to.<br><br>' +
         '<strong>How to recover:</strong> use SafeKeepVault&rsquo;s Shamir Recovery tool, which rebuilds your original seed words. ' +
         '<strong>Do NOT restore these shares directly on a Trezor or other SLIP-39 wallet</strong> &mdash; that opens a different, empty wallet (your funds are not lost). ' +
         'Without SafeKeepVault: any SLIP-39 tool that outputs the raw &ldquo;master secret&rdquo; will work &mdash; that secret IS your BIP-39 entropy; convert it to words with any offline BIP-39 tool and confirm the fingerprint above.</div>' +
