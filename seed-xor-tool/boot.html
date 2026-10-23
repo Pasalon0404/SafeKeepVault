@@ -43575,7 +43575,7 @@ function s39_copyShare(index) {
  *   - The share mnemonic in a numbered word grid
  *   - Threshold context (M-of-N)
  *   - Master Seed Fingerprint
- *   - BIP-39 checksum word (last word of the master mnemonic)
+ * No word of the master seed: one share must not reveal any of it.
  */
 async function s39_printShare(index) {
     var mnemonic = s39_state.generatedShares[index];
@@ -43585,11 +43585,11 @@ async function s39_printShare(index) {
     var n = s39_state.totalShares;
     var words = mnemonic.trim().split(/\s+/);
 
-    // Cryptographic context from the active session
+    // Cryptographic context from the active session. Only the fingerprint:
+    // a word of the seed (e.g. its last word) would give away part of the
+    // seed to anyone holding this one share.
     var session = window.SeedSession ? window.SeedSession.get() : null;
     var fingerprint = (session && session.fingerprint) || window.SafeKeepOS?.getFingerprint() || '--------';
-    var masterWords = (session && session.mnemonic) ? session.mnemonic.trim().split(/\s+/) : [];
-    var checksumWord = masterWords.length > 0 ? masterWords[masterWords.length - 1] : '--------';
 
     // Build the word grid rows (numbered, monospace via .w/.n/.v CSS)
     var rowsHtml = '';
@@ -43664,7 +43664,6 @@ async function s39_printShare(index) {
         '    <div class="box-label">Master Identity</div>' +
         '    <div class="idrow">' +
         '      <div class="kv"><span class="k">Master Fingerprint</span><span class="val">' + fingerprint + '</span></div>' +
-        '      <div class="kv"><span class="k">Checksum Word</span><span class="val">' + checksumWord.toUpperCase() + '</span></div>' +
         '      <div class="kv"><span class="k">Threshold</span><span class="val">' + m + ' of ' + n + '</span></div>' +
         '    </div>' +
         '  </div>' +
@@ -43675,7 +43674,7 @@ async function s39_printShare(index) {
         qrBlockHtml +
         '  <div class="box">' +
         '    <div class="box-label">Recovery</div>' +
-        '    <div class="note">This is one piece of a Shamir secret-sharing split. Any ' + m + ' of the ' + n + ' total shares reconstruct your BIP-39 master seed. The fingerprint + checksum word identify which master these shares belong to.<br><br>' +
+        '    <div class="note">This is one piece of a Shamir secret-sharing split. Any ' + m + ' of the ' + n + ' total shares reconstruct your BIP-39 master seed. The fingerprint identifies which master these shares belong to.<br><br>' +
         '<strong>How to recover:</strong> use SafeKeepVault&rsquo;s Shamir Recovery tool, which rebuilds your original seed words. ' +
         '<strong>Do NOT restore these shares directly on a Trezor or other SLIP-39 wallet</strong> &mdash; that opens a different, empty wallet (your funds are not lost). ' +
         'Without SafeKeepVault: any SLIP-39 tool that outputs the raw &ldquo;master secret&rdquo; will work &mdash; that secret IS your BIP-39 entropy; convert it to words with any offline BIP-39 tool and confirm the fingerprint above.</div>' +

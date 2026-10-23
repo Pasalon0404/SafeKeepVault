@@ -1,8 +1,8 @@
 # Design note: one guided flow for Seed XOR and Shamir Backup
 
-Status: **proposed** (Oct 23, 2026). Nothing built yet. The three
-decisions under "Decisions" use the recommended answers until the owner
-says otherwise.
+Status: **Part 1 in progress** (Oct 23, 2026). The owner confirmed the
+three decisions below on Oct 23. The Shamir print-page leak was fixed
+separately the same day.
 
 ## The problem
 
@@ -43,7 +43,8 @@ cluttered:
   the seed (3 of its 8 bits are seed data for a 24-word seed, 7 of 11 for
   a 12-word seed), so one share gives away a little of the seed, which
   Shamir is meant to prevent. XOR's print page doesn't do this. The
-  fingerprint alone identifies the seed.
+  fingerprint alone identifies the seed. **Fixed Oct 23:** the Shamir
+  print page no longer shows it (`test-review-regressions.mjs`, section 6).
 - `shamir-mnemonic-ts` exposes the SLIP-39 word list through
   `wordsFromIndices`, so the SLIP-39 word boxes can autocomplete like the
   BIP-39 ones.
@@ -51,7 +52,7 @@ cluttered:
   usually caught as soon as it is typed. XOR shares are BIP-39 phrases, so
   their last word is a checksum too.
 
-## Decisions (recommended answers, not yet confirmed)
+## Decisions (confirmed by the owner, Oct 23)
 
 1. **Checking each share is required in both tools**, with the existing
    "leave anyway" warning as the way out. Shamir tolerates a lost share,
@@ -119,8 +120,7 @@ and Reset Tool.
 - XOR's Merge tab, including its seed QR code. Recovery happens in one
   place, the welcome screen's Restore.
 - XOR's "Clear & Enter Different Seed" and seed QR scan (decision 2).
-- The seed's last word on Shamir's print page. Part 3 removes it; it
-  could also go out on its own before the rest.
+- The seed's last word on Shamir's print page (already removed, Oct 23).
 - The red warning style on everything. One warning stays where it
   matters: XOR's "all N needed" on step 1 and on each share.
 

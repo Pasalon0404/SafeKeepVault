@@ -9,6 +9,8 @@
  *     writes only when the user picks Restore This Wallet.
  *  3. Transfer-drive file names can't inject markup into the backup list.
  *  4. The PSBT review warns on an absurd fee and on outputs > inputs.
+ *  6. A printed Shamir share carries no word of the seed (it used to print
+ *     the seed's last word, which gives away part of the seed).
  *  5. The dashboard's "Mount Transfer Drive" button stays hidden while the
  *     drive mounts by itself; it appears only if that fails (it used to flash
  *     on screen at every unlock).
@@ -151,6 +153,12 @@ console.log('4. PSBT review fee guard');
   ck('automatic mount fails: button appears as the fallback', shown(c) && !c.window.vaultTransferDriveHandle);
   vm.runInContext('_dashSyncMountStatus()', c);
   ck('and stays on when the dashboard is shown again', shown(c));
+}
+// ---- 6. Shamir print page: no word of the seed ----
+{
+  const fn = extract('s39_printShare');
+  ck('Shamir print page does not read the seed words', !/\.mnemonic\b/.test(fn) && !/checksum ?word/i.test(fn), fn.match(/.*(mnemonic|checksum).*/gi)?.join('\n'));
+  ck('Shamir print page still shows the fingerprint and threshold', fn.includes('Master Fingerprint') && fn.includes('Threshold'));
 }
 console.log(`\nREVIEW REGRESSIONS: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
