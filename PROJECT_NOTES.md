@@ -448,7 +448,7 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
 
 1. **After v1.52:** merge the v1.52 website PR, and install
    `SafeKeep-Update-v1.52.tar` on a stick from the release itself (the same
-   code was tested on Dave's spare stick as builds 324–336).
+   code was tested on Dave's stick as quick-updated builds from `main`).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
