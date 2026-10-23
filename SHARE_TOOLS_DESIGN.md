@@ -1,6 +1,6 @@
 # Design note: one guided flow for Seed XOR and Shamir Backup
 
-Status: **Parts 1 and 2 built** (Oct 23, 2026).
+Status: **Parts 1, 2 and 3 built** (Oct 23, 2026).
 - Part 1: `shared/share-flow.js`, `shared/word-boxes.js`,
   `shared/share-flow-ui.js`, `shared/slip39-wordlist.js`, exposed as
   `window.ShareFlow`; `test-share-flow.mjs`.
@@ -11,6 +11,22 @@ Status: **Parts 1 and 2 built** (Oct 23, 2026).
   functions.
 - Added to Part 2 at the owner's request: **Check shares I already have**
   (see below), shared as `ShareFlow.check` so Shamir gets it in Part 3.
+- Part 3: Shamir Backup uses the flow and the checker. Its share cards,
+  Copy, Dry Run and extra exit buttons are gone. The "leave without
+  checking?" warning is shared by both tools (`_SHARD_TOOLS`). If a share
+  passphrase was set, the final check asks for it again
+  (`finalField`); the checker has a passphrase box (`extraField`).
+  `test-slip39-vectors.mjs` drives the tool's own functions.
+- Learned in Part 3: shamir-mnemonic-ts combines **exactly** M shares;
+  more than M is an error. The final check therefore combines every run
+  of M consecutive shares (wrapping round), so every share takes part,
+  and the checker's messages say how many shares the set needs. The
+  welcome screen's Recover Shamir Backup has the same limit (Part 4).
+- Owner's decision (Oct 23): the share passphrase is only what the user
+  types under Advanced. It is no longer filled in and locked from the
+  Dashboard's BIP-39 passphrase; when one is active, the done screen
+  says to back it up separately, since the shares hold only the seed
+  words.
 
 ## The problem
 

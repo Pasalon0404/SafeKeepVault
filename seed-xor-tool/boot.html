@@ -5497,6 +5497,9 @@
     .sf-share-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
     .sf-share-head .skb-btn { font-size: 0.8125rem; padding: 0.3rem 0.8rem; }
     .sf-share-label { font-size: 0.875rem; font-weight: 600; color: var(--skb-text); }
+    .sf-field { margin-bottom: 1rem; max-width: 520px; }
+    .sf-field-label { display: block; font-size: 0.875rem; color: var(--skb-text-muted); margin-bottom: 0.35rem; }
+    .sf-field input { width: 100%; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.9375rem; }
     .sf-done { margin: 0.5rem 0 1.25rem; padding-left: 1.25rem; color: var(--skb-text); font-size: 0.9375rem; line-height: 1.8; }
 
     /* Armory */
@@ -10134,190 +10137,113 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>SafeKeepVault&rsquo;s Shamir Recovery tool. These shares hold your seed phrase, not a standard SLIP-39 wallet. Recover them with SafeKeep: on a Trezor or in Sparrow they open a <em>different, empty</em> wallet.</span></p>
         </div>
 
-        <!-- ======= SPLIT TAB ======= -->
-        <div class="skb-card" style="margin-bottom: 1rem;">
-            <!-- Seed Source -->
-            <div style="margin-bottom: 1rem;">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text);">Seed to Split</label>
-                    <span style="font-size: 0.7rem; color: var(--skb-text-muted);" id="s39-seed-source"></span>
-                </div>
-                <div id="s39-seed-display" style="display: none;">
-                    <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id is
-                         s39-seed-accordion; inner grid keeps id="s39-seed-grid". -->
-                    <div class="skb-seed-accordion" id="s39-seed-accordion" data-collapsed="1">
-                        <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
-                                onclick="seedAccordionToggle('s39-seed-accordion')">
-                            <span class="skb-seed-accordion__summary">
-                                <span class="skb-seed-accordion__label">Last word</span>
-                                <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
-                                <span class="skb-seed-accordion__sep">·</span>
-                                <span class="skb-seed-accordion__fp-label">fingerprint</span>
-                                <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
-                            </span>
-                            <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
-                        </button>
-                        <div class="skb-seed-accordion__panel">
-                            <div class="skb-seed-accordion__panel-inner">
-                                <div class="bip85-out-grid" id="s39-seed-grid"></div>
+        <!-- Step 1: choose (SHARE_TOOLS_DESIGN.md). Steps 2-4 are drawn
+             into #s39-flow by shared/share-flow-ui.js. -->
+        <div id="s39-setup">
+            <div class="skb-card" style="margin-bottom: 1rem;">
+                <!-- Seed Source -->
+                <div style="margin-bottom: 1rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text);">Seed to Split</label>
+                        <span style="font-size: 0.7rem; color: var(--skb-text-muted);" id="s39-seed-source"></span>
+                    </div>
+                    <div id="s39-seed-display" style="display: none;">
+                        <!-- Seed Accordion (replaces .privacy-mask blur). Wrapper id is
+                             s39-seed-accordion; inner grid keeps id="s39-seed-grid". -->
+                        <div class="skb-seed-accordion" id="s39-seed-accordion" data-collapsed="1">
+                            <button class="skb-seed-accordion__toggle" type="button" aria-expanded="false"
+                                    onclick="seedAccordionToggle('s39-seed-accordion')">
+                                <span class="skb-seed-accordion__summary">
+                                    <span class="skb-seed-accordion__label">Last word</span>
+                                    <span class="skb-seed-accordion__last-word" data-role="last-word">—</span>
+                                    <span class="skb-seed-accordion__sep">·</span>
+                                    <span class="skb-seed-accordion__fp-label">fingerprint</span>
+                                    <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
+                                </span>
+                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            </button>
+                            <div class="skb-seed-accordion__panel">
+                                <div class="skb-seed-accordion__panel-inner">
+                                    <div class="bip85-out-grid" id="s39-seed-grid"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                <div id="s39-seed-empty" style="text-align: center; padding: 1.5rem; color: var(--skb-text-muted); font-size: 0.85rem;">
-                    No master seed loaded. Return to the Dashboard and load a seed first.
+                    <div id="s39-seed-empty" style="text-align: center; padding: 1.5rem; color: var(--skb-text-muted); font-size: 0.85rem;">
+                        No master seed loaded. Return to the Dashboard and load a seed first.
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Threshold Configuration -->
-        <div class="skb-card" style="margin-bottom: 1rem;" id="s39-config">
-            <div style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Recovery Threshold</div>
-            <p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.75rem;">Choose how many shares are needed to recover the seed. The remaining shares serve as redundant backups.</p>
-            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
-                <button type="button" class="skb-btn" id="s39-preset-2of3" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="s39_setPreset(2,3)">2 of 3</button>
-                <button type="button" class="skb-btn" id="s39-preset-3of5" style="flex: 1; background: var(--skb-bg-input);" onclick="s39_setPreset(3,5)">3 of 5</button>
-                <button type="button" class="skb-btn" id="s39-preset-4of7" style="flex: 1; background: var(--skb-bg-input);" onclick="s39_setPreset(4,7)">4 of 7</button>
-                <button type="button" class="skb-btn" id="s39-preset-custom" style="flex: 1; background: var(--skb-bg-input);" onclick="s39_showCustom()">Custom</button>
-            </div>
-            <div id="s39-custom-config" style="display: none; margin-bottom: 0.75rem;">
-                <div style="display: flex; gap: 0.75rem; align-items: center;">
-                    <div style="flex: 1;">
-                        <label style="font-size: 0.75rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.25rem;">Required (M)</label>
-                        <input type="number" id="s39-custom-m" min="1" max="15" value="2"
-                               style="width: 100%; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem; text-align: center;"
-                               onchange="s39_onCustomChange()">
-                    </div>
-                    <span style="font-size: 1.1rem; color: var(--skb-text-muted); padding-top: 1rem;">of</span>
-                    <div style="flex: 1;">
-                        <label style="font-size: 0.75rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.25rem;">Total (N)</label>
-                        <input type="number" id="s39-custom-n" min="2" max="16" value="3"
-                               style="width: 100%; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem; text-align: center;"
-                               onchange="s39_onCustomChange()">
-                    </div>
+            <!-- Threshold Configuration -->
+            <div class="skb-card" style="margin-bottom: 1rem;" id="s39-config">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Recovery Threshold</div>
+                <p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.75rem;">Choose how many shares are needed to recover the seed. The remaining shares serve as redundant backups.</p>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                    <button type="button" class="skb-btn" id="s39-preset-2of3" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="s39_setPreset(2,3)">2 of 3</button>
+                    <button type="button" class="skb-btn" id="s39-preset-3of5" style="flex: 1; background: var(--skb-bg-input);" onclick="s39_setPreset(3,5)">3 of 5</button>
+                    <button type="button" class="skb-btn" id="s39-preset-4of7" style="flex: 1; background: var(--skb-bg-input);" onclick="s39_setPreset(4,7)">4 of 7</button>
+                    <button type="button" class="skb-btn" id="s39-preset-custom" style="flex: 1; background: var(--skb-bg-input);" onclick="s39_showCustom()">Custom</button>
                 </div>
-                <div id="s39-custom-error" style="display: none; font-size: 0.75rem; color: var(--skb-danger); margin-top: 0.5rem;"></div>
-            </div>
-            <div id="s39-threshold-summary" style="font-size: 0.8rem; color: var(--skb-accent); font-weight: 500; text-align: center; padding: 0.5rem; background: rgba(3,218,198,0.08); border-radius: var(--skb-radius-sm);">
-                Any <strong>2</strong> of <strong>3</strong> shares will recover your seed
-            </div>
-        </div>
-
-        <!-- SLIP-39 Passphrase (optional) -->
-        <div class="skb-card" style="margin-bottom: 1rem;" id="s39-passphrase-section">
-            <details>
-                <summary style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text); cursor: pointer; list-style: none;">
-                    <span style="margin-right: 0.5rem;">&#9660;</span> Advanced: Share Encryption Passphrase
-                </summary>
-                <div style="margin-top: 0.75rem;">
-                    <div style="background: rgba(255,60,60,0.1); border: 1px solid rgba(255,60,60,0.4); border-radius: var(--skb-radius-sm); padding: 0.75rem; margin-bottom: 0.75rem;">
-                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--skb-danger); margin-bottom: 0.25rem;">&#9888; PERMANENT LOSS WARNING</div>
-                        <div style="font-size: 0.75rem; color: var(--skb-text);">If you set a SLIP-39 passphrase and forget it, your shares become <strong>permanently unrecoverable</strong> — even if you have all shares. This passphrase is separate from your BIP-39 wallet passphrase. Leave blank if unsure.</div>
+                <div id="s39-custom-config" style="display: none; margin-bottom: 0.75rem;">
+                    <div style="display: flex; gap: 0.75rem; align-items: center;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.75rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.25rem;">Required (M)</label>
+                            <input type="number" id="s39-custom-m" min="1" max="15" value="2"
+                                   style="width: 100%; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem; text-align: center;"
+                                   onchange="s39_onCustomChange()">
+                        </div>
+                        <span style="font-size: 1.1rem; color: var(--skb-text-muted); padding-top: 1rem;">of</span>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.75rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.25rem;">Total (N)</label>
+                            <input type="number" id="s39-custom-n" min="2" max="16" value="3"
+                                   style="width: 100%; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.9rem; text-align: center;"
+                                   onchange="s39_onCustomChange()">
+                        </div>
                     </div>
-                    <label style="font-size: 0.75rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.25rem;">SLIP-39 Passphrase (printable ASCII only)</label>
-                    <input type="password" id="s39-passphrase" placeholder="Leave blank for no passphrase"
-                           style="width: 100%; box-sizing: border-box; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem; margin-bottom: 0.5rem;"
-                           oninput="s39_onPassphraseInput()">
-                    <div id="s39-passphrase-confirm-wrap" style="display: none;">
-                        <label style="font-size: 0.75rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.25rem;">Confirm Passphrase</label>
-                        <input type="password" id="s39-passphrase-confirm" placeholder="Re-enter passphrase to confirm"
+                    <div id="s39-custom-error" style="display: none; font-size: 0.75rem; color: var(--skb-danger); margin-top: 0.5rem;"></div>
+                </div>
+                <div id="s39-threshold-summary" style="font-size: 0.8rem; color: var(--skb-accent); font-weight: 500; text-align: center; padding: 0.5rem; background: rgba(3,218,198,0.08); border-radius: var(--skb-radius-sm);">
+                    Any <strong>2</strong> of <strong>3</strong> shares will recover your seed
+                </div>
+            </div>
+
+            <!-- SLIP-39 Passphrase (optional) -->
+            <div class="skb-card" style="margin-bottom: 1rem;" id="s39-passphrase-section">
+                <details>
+                    <summary style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text); cursor: pointer; list-style: none;">
+                        <span style="margin-right: 0.5rem;">&#9660;</span> Advanced: Share Encryption Passphrase
+                    </summary>
+                    <div style="margin-top: 0.75rem;">
+                        <div style="background: rgba(255,60,60,0.1); border: 1px solid rgba(255,60,60,0.4); border-radius: var(--skb-radius-sm); padding: 0.75rem; margin-bottom: 0.75rem;">
+                            <div style="font-size: 0.8rem; font-weight: 700; color: var(--skb-danger); margin-bottom: 0.25rem;">&#9888; PERMANENT LOSS WARNING</div>
+                            <div style="font-size: 0.75rem; color: var(--skb-text);">If you set a SLIP-39 passphrase and forget it, your shares become <strong>permanently unrecoverable</strong> — even if you have all shares. This passphrase is separate from your BIP-39 wallet passphrase. Leave blank if unsure.</div>
+                        </div>
+                        <label style="font-size: 0.75rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.25rem;">SLIP-39 Passphrase (printable ASCII only)</label>
+                        <input type="password" id="s39-passphrase" placeholder="Leave blank for no passphrase"
                                style="width: 100%; box-sizing: border-box; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem; margin-bottom: 0.5rem;"
-                               oninput="s39_onPassphraseConfirm()">
-                        <div id="s39-passphrase-match" style="display: none; font-size: 0.75rem; margin-top: 0.25rem;"></div>
+                               oninput="s39_onPassphraseInput()">
+                        <div id="s39-passphrase-confirm-wrap" style="display: none;">
+                            <label style="font-size: 0.75rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.25rem;">Confirm Passphrase</label>
+                            <input type="password" id="s39-passphrase-confirm" placeholder="Re-enter passphrase to confirm"
+                                   style="width: 100%; box-sizing: border-box; padding: 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.85rem; margin-bottom: 0.5rem;"
+                                   oninput="s39_onPassphraseConfirm()">
+                            <div id="s39-passphrase-match" style="display: none; font-size: 0.75rem; margin-top: 0.25rem;"></div>
+                        </div>
                     </div>
-                </div>
-            </details>
-        </div>
-
-        <!-- Generate Button + Cancel -->
-        <div style="text-align: center; margin-bottom: 1.5rem;">
-            <button type="button" class="skb-btn skb-btn--primary" id="s39-generate-btn" style="width: 100%; padding: 0.75rem; font-size: 1rem; font-weight: 700;" onclick="s39_generateShares()">
-                Generate Shamir Shares
-            </button>
-            <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; padding: 0.75rem; font-size: 1rem; border-color: var(--skb-text-muted); color: var(--skb-text-muted);" onclick="s39_cancel()">
-                Cancel — Return to Dashboard
-            </button>
-        </div>
-
-        <!-- Results: Generated Shares -->
-        <div id="s39-results" style="display: none;">
-            <div class="skb-card" style="margin-bottom: 1rem;">
-                <div style="font-size: 0.85rem; color: var(--skb-text-muted); background: rgba(247,147,26,0.1); border: 1px solid rgba(247,147,26,0.3); border-radius: var(--skb-radius-sm); padding: 0.75rem; margin-bottom: 1rem;">
-                    <strong>Important:</strong> These are SLIP-39 shares — they use a different wordlist than BIP-39. Store each share in a separate secure location. Any <span id="s39-result-m">2</span> of <span id="s39-result-n">3</span> shares will recover your seed.
-                </div>
-                <div id="s39-shares-container">
-                    <!-- Share cards dynamically inserted by s39_generateShares() -->
-                </div>
-
-                <!-- Verify Physical Backup trigger (shown after share generation) -->
-                <div id="s39-verify-trigger" style="display: none; margin-top: 1rem;">
-                    <div style="padding: 0.75rem; background: rgba(220, 53, 69, 0.08); border: 1px solid rgba(220, 53, 69, 0.25); border-radius: var(--skb-radius-sm); margin-bottom: 0.75rem;">
-                        <p style="font-size: 0.82rem; color: var(--skb-danger); margin: 0; line-height: 1.5; font-weight: 600;">
-                            Do not exit this tool until you have verified your physical backup. A single typo in any share will lock you out permanently.
-                        </p>
-                    </div>
-                    <button type="button" class="skb-btn skb-btn--primary" style="width: 100%; padding: 0.75rem; font-size: 1rem; font-weight: 700;"
-                            onclick="s39v_startVerification()">Verify Physical Backup</button>
-                </div>
-
-                <!-- Cancel from results -->
-                <div style="margin-top: 1rem; border-top: 1px solid var(--skb-border); padding-top: 1rem;">
-                    <button type="button" class="skb-btn" style="width: 100%; border-color: var(--skb-text-muted); color: var(--skb-text-muted);" onclick="s39_cancel()">
-                        Abort — Clear Shares &amp; Return to Dashboard
-                    </button>
-                </div>
+                </details>
             </div>
+
+            <button type="button" class="skb-btn skb-btn--primary" id="s39-generate-btn" style="width: 100%; padding: 0.75rem; font-size: 1rem; font-weight: 700;" onclick="s39_generateShares()">Make Shares</button>
+            <p style="font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0.75rem 0 0; text-align: center;">
+                Next, SafeKeep shows each share in turn. Write it down, then type it back so SafeKeep can check your copy.
+            </p>
+            <button type="button" class="skb-btn" style="width: 100%; margin-top: 1.25rem; padding: 0.65rem;" id="s39-check-btn" onclick="s39_openChecker()">Check Shares I Already Have</button>
         </div>
 
-        <!-- ---- Dry Run Verification Section ---- -->
-        <div id="s39-verify-section" style="display: none;">
-            <div class="skb-card" style="margin-bottom: 1rem;">
-                <div style="font-size: 0.85rem; font-weight: 700; color: var(--skb-primary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.04em;">Backup Verification — Dry Run</div>
-                <p id="s39v-instructions" style="font-size: 0.82rem; color: var(--skb-text-muted); margin: 0 0 1rem; line-height: 1.5;">
-                    To prove your backup is accurate, manually type any <strong><span id="s39v-m">2</span></strong> of your <strong><span id="s39v-n">3</span></strong> shares exactly as you wrote them down.
-                </p>
-
-                <!-- Dynamic share input areas (built by s39v_startVerification) -->
-                <div id="s39v-inputs-container"></div>
-
-                <!-- SLIP-39 passphrase (if one was used during split) -->
-                <div id="s39v-passphrase-section" style="display: none; margin-top: 0.75rem;">
-                    <label style="font-size: 0.82rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">SLIP-39 Passphrase (same as used during split)</label>
-                    <input type="text" id="s39v-passphrase" placeholder="Leave blank if none was used" autocomplete="off" spellcheck="false"
-                           style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);">
-                </div>
-
-                <!-- Test Recovery button -->
-                <button type="button" class="skb-btn skb-btn--primary" id="s39v-test-btn"
-                        style="width: 100%; margin-top: 1rem; padding: 0.75rem; font-size: 1rem; font-weight: 700;"
-                        onclick="s39v_testRecovery()">Test Recovery</button>
-
-                <!-- Result Banner (hidden until test runs) -->
-                <div id="s39v-result-banner" style="display: none; margin-top: 1rem; text-align: center; padding: 1.5rem; border-radius: var(--skb-radius-md);"></div>
-
-                <!-- Done button (hidden until verification succeeds) -->
-                <div id="s39v-done-section" style="display: none; margin-top: 1rem;">
-                    <button type="button" class="skb-btn" style="width: 100%; padding: 0.65rem; font-size: 0.95rem; border: 1px solid var(--skb-border);"
-                            onclick="s39v_returnToShares()">&#8592; Return to Shares</button>
-                    <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; padding: 0.65rem; font-size: 0.95rem; background: var(--skb-secondary, #28a745); color: white; font-weight: 600;"
-                            onclick="showState('state-dashboard')">Backup Verified — Return to Dashboard</button>
-                </div>
-
-                <!-- Cancel from verification -->
-                <div style="margin-top: 1rem; border-top: 1px solid var(--skb-border); padding-top: 1rem;">
-                    <button type="button" class="skb-btn" style="width: 100%; border-color: var(--skb-text-muted); color: var(--skb-text-muted);" onclick="s39_cancel()">
-                        Abort — Clear Shares &amp; Return to Dashboard
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Reset Tool -->
-        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--skb-border);">
-            <button type="button" class="skb-btn" style="width: 100%; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; font-size: 0.82rem; padding: 0.6rem;" onclick="s39_clearAll()">Reset Tool — Clear All Data</button>
-        </div>
-
+        <div id="s39-flow"></div>
     </div>
+
 
     <!-- =============================================
          STATE: THE ARCHIVE (Transfer Drive Manager)
@@ -17305,7 +17231,7 @@ var _sensitiveSelectors = [
     '.arm-xpub-val',          // Armory xpub values
     '.arm-addr-cell',         // Armory address cells
     '#eob-result-words',      // Entropy result words
-    '#s39-shares-container',  // Shamir share cards
+    '#s39-flow',              // Shamir share screens
     '#xor-flow',              // XOR share screens
     '#codex-editor',           // Codex note body
     '#codex-title',            // Codex note title
@@ -17431,6 +17357,16 @@ function _fullSessionWipe() {
     if (typeof _xorFlow !== 'undefined' && _xorFlow) { try { _xorFlow.destroy(); } catch (_) {} _xorFlow = null; }
     if (typeof _xorChecker !== 'undefined' && _xorChecker) { try { _xorChecker.destroy(); } catch (_) {} _xorChecker = null; }
     try { var _xs = document.getElementById('xor-setup'); if (_xs) _xs.style.display = ''; } catch (_) {}
+    if (typeof s39_state !== 'undefined') {
+        (s39_state.generatedShares || []).fill('');
+        s39_state.generatedShares = [];
+        s39_state.seedMnemonic = '';
+        s39_state.fingerprint = '';
+        s39_state.locked = false;
+    }
+    if (typeof _s39Flow !== 'undefined' && _s39Flow) { try { _s39Flow.destroy(); } catch (_) {} _s39Flow = null; }
+    if (typeof _s39Checker !== 'undefined' && _s39Checker) { try { _s39Checker.destroy(); } catch (_) {} _s39Checker = null; }
+    try { var _ss = document.getElementById('s39-setup'); if (_ss) _ss.style.display = ''; } catch (_) {}
     if (typeof _psbtTempSeed !== 'undefined') _psbtTempSeed = null;
     if (typeof _bip85LastResult !== 'undefined') {
         _bip85LastResult.childMnemonic = '';
@@ -17563,55 +17499,28 @@ function xor_clearAll() {
 }
 
 /**
- * The Covenant — clear all generated shares, verification, and passphrase state.
+ * Shamir Backup — forget the shares and passphrase, back to step 1.
  */
 function s39_clearAll() {
-    // Absolute Amnesia: overwrite the system clipboard in case the user
-    // copied a share or passphrase during this session.
     _wipeClipboard();
 
-    // Wipe JS state
-    if (s39_state.generatedShares && s39_state.generatedShares.length > 0) {
-        for (var i = 0; i < s39_state.generatedShares.length; i++) {
-            s39_state.generatedShares[i] = '';
-        }
-    }
+    if (_s39Flow) { try { _s39Flow.destroy(); } catch (_) {} _s39Flow = null; }
+    if (_s39Checker) { try { _s39Checker.destroy(); } catch (_) {} _s39Checker = null; }
+    (s39_state.generatedShares || []).fill('');
     s39_state.generatedShares = [];
+    s39_state.seedMnemonic = '';
+    s39_state.fingerprint = '';
+    s39_state.hasPassphrase = false;
+    s39_state.locked = false;
     _s39HasWork = false;
 
-    // Wipe share cards
-    document.getElementById('s39-results').style.display = 'none';
-    document.getElementById('s39-shares-container').innerHTML = '';
+    _s39ResetPassphraseFields();
 
-    // Wipe verification
-    try { if (typeof s39v_stopAllShareScanners === 'function') s39v_stopAllShareScanners(); } catch (_) {}
-    var verifySection = document.getElementById('s39-verify-section');
-    if (verifySection) verifySection.style.display = 'none';
-    var verifyTrigger = document.getElementById('s39-verify-trigger');
-    if (verifyTrigger) verifyTrigger.style.display = 'none';
-    var verifyInputs = document.getElementById('s39v-inputs-container');
-    if (verifyInputs) verifyInputs.innerHTML = '';
-    var resultBanner = document.getElementById('s39v-result-banner');
-    if (resultBanner) { resultBanner.style.display = 'none'; resultBanner.innerHTML = ''; }
-    var doneSection = document.getElementById('s39v-done-section');
-    if (doneSection) doneSection.style.display = 'none';
-    var verifyPp = document.getElementById('s39v-passphrase');
-    if (verifyPp) verifyPp.value = '';
-
-    // Wipe passphrase fields
-    var pp = document.getElementById('s39-passphrase');
-    if (pp) pp.value = '';
-    var ppConfirm = document.getElementById('s39-passphrase-confirm');
-    if (ppConfirm) ppConfirm.value = '';
-    var confirmWrap = document.getElementById('s39-passphrase-confirm-wrap');
-    if (confirmWrap) confirmWrap.style.display = 'none';
-    var matchEl = document.getElementById('s39-passphrase-match');
-    if (matchEl) matchEl.style.display = 'none';
-
-    // Re-run init to reload seed from session
+    var flow = document.getElementById('s39-flow');
+    if (flow) flow.innerHTML = '';
+    var setup = document.getElementById('s39-setup');
+    if (setup) setup.style.display = '';
     s39_init();
-
-    showStatus('All shares cleared from memory.', 'info');
 }
 
 /**
@@ -17813,11 +17722,11 @@ function showState(stateId) {
     // sentinel, and the whole attestation pipeline were removed.
     // Tool navigation is unconditional from here down.)
 
-    // Seed XOR: shares made but not all checked — intercept any attempt to
-    // leave state-seedxor with a warning modal. The user can
-    // still proceed ("Leave Anyway"), but must make an informed choice.
+    // Seed XOR or Shamir Backup: shares made but not all checked — intercept
+    // any attempt to leave that tool with a warning modal. The user can still
+    // proceed ("Leave Anyway"), but must make an informed choice.
     // See _shardSoftIntercept() for the modal wiring.
-    if (typeof isShardLocked === 'function' && isShardLocked() && stateId !== 'state-seedxor') {
+    if (typeof isShardLocked === 'function' && isShardLocked() && stateId !== _shardLockedScreen()) {
         if (typeof _shardSoftIntercept === 'function' &&
             _shardSoftIntercept({ kind: 'nav', stateId: stateId })) {
             return;
@@ -17853,10 +17762,9 @@ function showState(stateId) {
     // Script, Covenant, Shard, Lineage, and SeedQR tools.
     if (typeof seedAccordionResetAll === 'function') seedAccordionResetAll();
 
-    // Stop any live per-share Shamir verification scanners so the camera
-    // LED doesn't remain lit after the user navigates away mid-quiz.
-    if (typeof s39v_stopAllShareScanners === 'function') {
-        try { s39v_stopAllShareScanners(); } catch (_) {}
+    // Camera off when leaving: the Shamir share check's scanner.
+    if (typeof s39_stopScanning === 'function') {
+        try { s39_stopScanning(); } catch (_) {}
     }
 
     // Same for the Seed XOR share check's scanner.
@@ -28430,25 +28338,51 @@ async function xor_printShare(index) {
 // =============================================
 // SHARD LOCK — the Mandatory Fire Drill gate
 // =============================================
-// Engaged the moment shares are made; released once every share is checked
-// and the typed shares rebuild the seed (_xorVerifyTyped). While engaged,
-// leaving the tool, Cancel or a reset first shows the "leave without
-// checking?" warning (_shardSoftIntercept).
+// Shared by Seed XOR ('xor') and Shamir Backup ('s39'). Engaged the moment
+// a tool makes shares; released once every share is checked and the typed
+// shares rebuild the seed (_xorVerifyTyped / _s39VerifyTyped). While
+// engaged, leaving the tool, Cancel or a reset first shows the "leave
+// without checking?" warning (_shardSoftIntercept). "Leave Anyway"
+// discards that tool's shares.
 
-function _shardLockEngage() {
-    xor_state.locked = true;
+var _SHARD_TOOLS = {
+    xor: { state: function() { return xor_state; }, screen: 'state-seedxor', host: 'xor-flow',
+           clear: function() { xor_clearAll(); }, cancel: function() { xor_cancel(); } },
+    s39: { state: function() { return s39_state; }, screen: 'state-slip39', host: 's39-flow',
+           clear: function() { s39_clearAll(); }, cancel: function() { s39_cancel(); } }
+};
+
+// The tool whose shares aren't all checked yet: 'xor', 's39' or null.
+function _shardLockedTool() {
+    for (var t in _SHARD_TOOLS) {
+        var st = _SHARD_TOOLS[t].state();
+        if (st && st.locked) return t;
+    }
+    return null;
+}
+
+// The screen the locked tool lives on (leaving it shows the warning).
+function _shardLockedScreen() {
+    var t = _shardLockedTool();
+    return t ? _SHARD_TOOLS[t].screen : null;
+}
+
+function _shardLockEngage(tool) {
+    _SHARD_TOOLS[tool || 'xor'].state().locked = true;
     // Disable the Reset Tool button
     _shardLockUpdateUI(true);
     console.log('[SHARD-LOCK] Engaged until every share is checked.');
 }
 
-function _shardLockRelease() {
-    xor_state.locked = false;
+// Releases `tool`'s lock, or every lock when no tool is given.
+function _shardLockRelease(tool) {
+    if (tool) _SHARD_TOOLS[tool].state().locked = false;
+    else for (var t in _SHARD_TOOLS) { var st = _SHARD_TOOLS[t].state(); if (st) st.locked = false; }
     _shardLockUpdateUI(false);
     console.log('[SHARD-LOCK] Released.');
 }
 
-function isShardLocked() { return !!(xor_state && xor_state.locked); }
+function isShardLocked() { return !!_shardLockedTool(); }
 
 function _shardLockUpdateUI(locked) {
     // Nothing on screen changes: the lock only adds the warning
@@ -28489,7 +28423,8 @@ function _shardWarnCancel() {
     _pendingShardAction = null;
     // Bring the share screens back into view.
     try {
-        var sec = document.getElementById('xor-flow');
+        var t = _shardLockedTool();
+        var sec = t ? document.getElementById(_SHARD_TOOLS[t].host) : null;
         if (sec && sec.scrollIntoView) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) { /* non-fatal */ }
 }
@@ -28499,6 +28434,7 @@ function _shardWarnLeaveAnyway() {
     if (modal) modal.classList.remove('visible');
     var action = _pendingShardAction;
     _pendingShardAction = null;
+    var tool = _SHARD_TOOLS[_shardLockedTool() || 'xor'];
     // Release the lock entirely — the user accepted the risk of an
     // unverified backup and we don't want to nag them again this
     // session for this particular share set.
@@ -28511,12 +28447,12 @@ function _shardWarnLeaveAnyway() {
     try {
         if (action && action.kind === 'nav' && action.stateId) {
             // Unchecked shares are not kept: leaving discards them.
-            xor_clearAll();
+            tool.clear();
             showState(action.stateId);
         } else if (action && action.kind === 'clear') {
-            xor_clearAll();
+            tool.clear();
         } else if (action && action.kind === 'cancel') {
-            xor_cancel();
+            tool.cancel();
         }
     } finally {
         _shardWarningBypass = false;
@@ -41699,227 +41635,55 @@ async function s39r_restorePending() {
 }
 
 
-// ---- Tool 13: The Covenant — SLIP-39 Shamir Backup (s39_*) ----
+// ---- Tool 13: Shamir Backup — SLIP-39 shares of the seed (s39_*) ----
 // ======================================================================
-// Splits the master seed into M-of-N threshold shares using SLIP-39.
-// Uses shamir-mnemonic-ts (Trezor reference port) via window.SLIP39.
-// Shares use the SLIP-39 wordlist (1024 words, distinct from BIP-39).
-// No group thresholds in v1 — simple M-of-N only.
+// SHARE_TOOLS_DESIGN.md, Part 3. Step 1 (#s39-setup) picks the threshold
+// (any M of N) and, under Advanced, an optional share passphrase. Making
+// the shares hands them to the shared guided flow (window.ShareFlow): each
+// share is shown, typed back or scanned and checked word by word, then
+// _s39VerifyTyped rebuilds the seed from what was typed (asking for the
+// share passphrase again if one was set). "Check Shares I Already Have"
+// tests old shares against the vault seed without showing it.
+//
+// Shares hold the seed's BIP-39 entropy as the SLIP-39 master secret
+// (shamir-mnemonic-ts via window.SLIP39; one group, M of N). Recovering
+// is on the welcome screen (Recover Shamir Backup, s39r_*).
 // ======================================================================
 
 var s39_state = {
     threshold: 2,       // M — shares required to recover
-    totalShares: 3,     // N — total shares generated
-    isCustom: false,    // Whether custom M/N inputs are visible
-    generatedShares: [] // Array of share mnemonic strings after generation
+    totalShares: 3,     // N — total shares made
+    isCustom: false,    // whether the custom M/N inputs are showing
+    generatedShares: [],// the share mnemonics, once made
+    seedMnemonic: '',   // the vault seed that was split
+    fingerprint: '',    // its BIP-32 fingerprint, shown on every share
+    hasPassphrase: false, // a share passphrase was set (it is not kept)
+    locked: false       // true from making the shares until every share is
+                        // checked (the "leave without checking?" warning)
 };
 
-var _s39HasWork = false; // Tracks whether The Covenant has user-generated state to preserve
+var _s39HasWork = false;  // the tool holds shares; keep them across visits
+var _s39Flow = null;      // the mounted guided flow
+var _s39Checker = null;   // the mounted "check shares I already have" screen
 
 /**
- * Sync the Covenant passphrase field with the global session state.
- *
- * Runs unconditionally on EVERY s39_init() call — even when
- * _s39HasWork is true — so the field always reflects the current
- * session passphrase regardless of navigation history.
- *
- * Bug-fix notes (Sprint 23):
- *   Bug 1 — field was type="password" when auto-populated + readOnly,
- *            making the locked string invisible.  Now toggled to
- *            type="text" so the user can verify the bound passphrase.
- *   Bug 2 — entire sync block lived inside the _s39HasWork guard, so
- *            re-entering the tool after navigating away never refreshed
- *            the passphrase state.  Extracted into its own function that
- *            runs before the guard.
+ * Reset the share passphrase fields to blank. The share passphrase is only
+ * what the user types under Advanced. (It used to be filled in, and
+ * locked, from the Dashboard's BIP-39 passphrase; the two are different
+ * things, and the shares hold only the seed words.)
  */
-function _s39SyncSessionPassphrase() {
-    var pp        = document.getElementById('s39-passphrase');
-    var ppConfirm = document.getElementById('s39-passphrase-confirm');
-    var confirmWrap = document.getElementById('s39-passphrase-confirm-wrap');
-    var matchEl     = document.getElementById('s39-passphrase-match');
-    var ppSection   = document.getElementById('s39-passphrase-section');
-    var ppDetails   = ppSection ? ppSection.querySelector('details') : null;
-    var warningEl   = document.getElementById('s39-session-pp-warning');
-
-    // ── Tear down previous lock state (clean slate every call) ──
-    if (ppDetails && ppDetails._s39LockHandler) {
-        ppDetails.removeEventListener('toggle', ppDetails._s39LockHandler);
-        ppDetails._s39LockHandler = null;
-    }
-
-    // ── Read current session passphrase ──
-    var sessionPP = '';
-    if (window.SeedSession && window.SeedSession.getPassphrase) {
-        sessionPP = window.SeedSession.getPassphrase() || '';
-    } else if (window.SafeKeepOS && window.SafeKeepOS.getPassphrase) {
-        sessionPP = window.SafeKeepOS.getPassphrase() || '';
-    }
-
-    if (sessionPP) {
-        // Populate + lock the field as a visible, read-only confirmation
-        if (pp) {
-            pp.value    = sessionPP;
-            pp.readOnly = true;
-            pp.type     = 'text';    // Bug 1 fix: unmask so the user can read the locked string
-        }
-        if (ppConfirm) { ppConfirm.value = sessionPP; ppConfirm.type = 'text'; }
-        if (confirmWrap) confirmWrap.style.display = 'none';
-        if (matchEl) matchEl.style.display = 'none';
-
-        // Force the accordion open and lock it
-        if (ppDetails) {
-            ppDetails.setAttribute('open', '');
-            ppDetails._s39LockHandler = function(evt) {
-                if (!ppDetails.open) {
-                    evt.preventDefault();
-                    ppDetails.setAttribute('open', '');
-                }
-            };
-            ppDetails.addEventListener('toggle', ppDetails._s39LockHandler);
-        }
-
-        // Inject or show the contextual warning
-        if (!warningEl && ppDetails) {
-            warningEl = document.createElement('div');
-            warningEl.id = 's39-session-pp-warning';
-            warningEl.style.cssText =
-                'background: rgba(247,147,26,0.10); border: 1px solid var(--skb-warning, #f7931a);' +
-                ' border-radius: var(--skb-radius-sm); padding: 0.75rem; margin-bottom: 0.75rem;';
-            warningEl.innerHTML =
-                '<div style="font-size: 0.8125rem; font-weight: 700; color: var(--skb-warning, #f7931a); margin-bottom: 0.25rem;">' +
-                    'SESSION PASSPHRASE ACTIVE</div>' +
-                '<div style="font-size: 0.75rem; color: var(--skb-text); line-height: 1.5;">' +
-                    'This passphrase was loaded from your active session and will be cryptographically ' +
-                    'bound to your Shamir shares. You will need both the required threshold of shares ' +
-                    '<strong>AND</strong> this exact passphrase to restore your wallet.</div>';
-            var detailsContent = ppDetails.querySelector('div');
-            if (detailsContent) detailsContent.insertBefore(warningEl, detailsContent.firstChild);
-        }
-        if (warningEl) warningEl.style.display = '';
-
-        if (typeof s39_onPassphraseInput === 'function') s39_onPassphraseInput();
-    } else {
-        // No session passphrase — reset to default interactive state
-        if (pp) {
-            pp.value    = '';
-            pp.readOnly = false;
-            pp.type     = 'password'; // restore mask for manual entry
-        }
-        if (ppConfirm) { ppConfirm.value = ''; ppConfirm.type = 'password'; }
-        if (confirmWrap) confirmWrap.style.display = 'none';
-        if (matchEl) matchEl.style.display = 'none';
-        if (ppDetails) ppDetails.removeAttribute('open');
-        if (warningEl) warningEl.style.display = 'none';
-    }
-}
-
-/**
- * Initialize the tool state on entry — load seed from session.
- * Soft-init: if the tool already has active work, preserve state
- * (except passphrase sync, which always refreshes).
- */
-function s39_init() {
-    // ── Passphrase sync runs unconditionally on every entry ──
-    // The session passphrase may have changed since the last visit.
-    _s39SyncSessionPassphrase();
-
-    // If shares have been generated or verification is in progress, preserve state
-    if (_s39HasWork) return;
-
-    // Reset results from any previous use
-    document.getElementById('s39-results').style.display = 'none';
-    document.getElementById('s39-shares-container').innerHTML = '';
-    s39_state.generatedShares = [];
-
-    // Reset verification section
-    var verifySection = document.getElementById('s39-verify-section');
-    if (verifySection) verifySection.style.display = 'none';
-    var verifyTrigger = document.getElementById('s39-verify-trigger');
-    if (verifyTrigger) verifyTrigger.style.display = 'none';
-
-    // Load seed from session
-    var seed = window.SeedSession ? window.SeedSession.get() : null;
-    var mnemonic = seed ? seed.mnemonic : null;
-
-    if (mnemonic) {
-        s39_showSeedGrid(mnemonic);
-        document.getElementById('s39-seed-source').textContent = 'Loaded from session';
-        document.getElementById('s39-seed-empty').style.display = 'none';
-        document.getElementById('s39-seed-display').style.display = 'block';
-        document.getElementById('s39-generate-btn').disabled = false;
-    } else {
-        document.getElementById('s39-seed-display').style.display = 'none';
-        document.getElementById('s39-seed-empty').style.display = 'block';
-        document.getElementById('s39-seed-source').textContent = '';
-        document.getElementById('s39-generate-btn').disabled = true;
-    }
-
-    // Reset threshold to default (2-of-3)
-    s39_setPreset(2, 3);
-}
-
-/**
- * Cancel the Covenant workflow: wipe generated shares from memory,
- * reset all UI state, and return to the Dashboard.
- */
-function s39_cancel() {
-    // Wipe shares from memory
-    if (s39_state.generatedShares && s39_state.generatedShares.length > 0) {
-        for (var i = 0; i < s39_state.generatedShares.length; i++) {
-            s39_state.generatedShares[i] = '';
-        }
-    }
-    s39_state.generatedShares = [];
-    _s39HasWork = false;
-
-    // Clear share card HTML (may contain visible share words)
-    var sharesContainer = document.getElementById('s39-shares-container');
-    if (sharesContainer) sharesContainer.innerHTML = '';
-
-    // Reset verification inputs
-    var verifyInputs = document.getElementById('s39v-inputs-container');
-    if (verifyInputs) verifyInputs.innerHTML = '';
-
-    // Clear passphrase fields, restore input type, and release session-passphrase lock
+function _s39ResetPassphraseFields() {
     var pp = document.getElementById('s39-passphrase');
     if (pp) { pp.value = ''; pp.readOnly = false; pp.type = 'password'; }
     var ppConfirm = document.getElementById('s39-passphrase-confirm');
     if (ppConfirm) { ppConfirm.value = ''; ppConfirm.type = 'password'; }
+    var confirmWrap = document.getElementById('s39-passphrase-confirm-wrap');
+    if (confirmWrap) confirmWrap.style.display = 'none';
+    var matchEl = document.getElementById('s39-passphrase-match');
+    if (matchEl) matchEl.style.display = 'none';
     var ppSection = document.getElementById('s39-passphrase-section');
     var ppDetails = ppSection ? ppSection.querySelector('details') : null;
-    if (ppDetails) {
-        ppDetails.removeAttribute('open');
-        if (ppDetails._s39LockHandler) {
-            ppDetails.removeEventListener('toggle', ppDetails._s39LockHandler);
-            ppDetails._s39LockHandler = null;
-        }
-    }
-    var warningEl = document.getElementById('s39-session-pp-warning');
-    if (warningEl) warningEl.style.display = 'none';
-
-    // Navigate back
-    showState('state-dashboard');
-    showStatus('Shamir operation canceled. All generated shares have been cleared from memory.', 'info');
-}
-
-/**
- * Render the loaded seed as a read-only word grid.
- */
-function s39_showSeedGrid(mnemonic) {
-    var words = mnemonic.trim().split(/\s+/);
-    var grid = document.getElementById('s39-seed-grid');
-    grid.innerHTML = '';
-    words.forEach(function(word, i) {
-        var cell = document.createElement('div');
-        cell.className = 'bip85-out-cell';
-        cell.innerHTML = '<span class="bip85-out-num">' + (i + 1) + '.</span>' +
-                         '<div class="bip85-out-word">' + word + '</div>';
-        grid.appendChild(cell);
-    });
-    // Refresh the seed accordion's collapsed summary (last word + FP).
-    if (typeof seedAccordionRefreshSummaryFromMnemonic === 'function') {
-        seedAccordionRefreshSummaryFromMnemonic('s39-seed-accordion', mnemonic);
-    }
+    if (ppDetails) ppDetails.removeAttribute('open');
 }
 
 /**
@@ -42024,16 +41788,6 @@ function s39_onCustomChange() {
 }
 
 /**
- * Update the threshold summary text.
- */
-function s39_updateSummary(m, n) {
-    var el = document.getElementById('s39-threshold-summary');
-    if (el) {
-        el.innerHTML = 'Any <strong>' + m + '</strong> of <strong>' + n + '</strong> shares will recover your seed';
-    }
-}
-
-/**
  * Show/hide passphrase confirmation when the user types a passphrase.
  */
 function s39_onPassphraseInput() {
@@ -42078,176 +41832,6 @@ function s39_validatePassphrase(pp) {
         }
     }
     return true;
-}
-
-/**
- * Core generation: split the master seed into SLIP-39 shares.
- *
- * shamir-mnemonic-ts API:
- *   generateMnemonics(groupThreshold, groups, masterSecret, passphrase?, iterationExponent?)
- *     - groupThreshold: number of groups required (1 for simple M-of-N)
- *     - groups: array of [memberThreshold, memberCount] per group
- *     - masterSecret: Uint8Array (16 or 32 bytes — raw entropy)
- *     - passphrase: string (default "")
- *     - iterationExponent: number (default 1)
- *   Returns: string[][] — array of groups, each group is array of mnemonic strings
- */
-async function s39_generateShares() {
-    var btn = document.getElementById('s39-generate-btn');
-    try {
-        // Disable button during generation (PBKDF2 can take a moment)
-        if (btn) { btn.disabled = true; btn.textContent = 'Generating shares...'; }
-
-        // Get master seed entropy
-        var seed = window.SeedSession ? window.SeedSession.get() : null;
-        if (!seed || !seed.mnemonic) throw new Error('No master seed loaded.');
-        var bip39 = window.BtcMath.bip39;
-        var wordlist = window.BtcMath.wordlist;
-        if (!bip39 || !wordlist) throw new Error('BIP-39 library not available.');
-
-        var rawEntropy = bip39.mnemonicToEntropy(seed.mnemonic, wordlist);
-        // shamir-mnemonic-ts expects a Node.js Buffer (uses .copy()), not a plain Uint8Array.
-        // Buffer is globally available via vite-plugin-node-polyfills.
-        var masterEntropy = Buffer.from(rawEntropy);
-        if (masterEntropy.length !== 16 && masterEntropy.length !== 32) {
-            throw new Error('Master entropy must be 16 or 32 bytes. Got ' + masterEntropy.length + '.');
-        }
-
-        // Validate passphrase
-        var passphrase = document.getElementById('s39-passphrase').value || '';
-        if (passphrase) {
-            if (!s39_validatePassphrase(passphrase)) {
-                throw new Error('Passphrase contains non-ASCII characters. Only printable ASCII (0x20–0x7E) is allowed by SLIP-39.');
-            }
-            var confirm = document.getElementById('s39-passphrase-confirm').value || '';
-            if (passphrase !== confirm) {
-                throw new Error('Passphrases do not match. Please confirm your passphrase.');
-            }
-        }
-
-        var m = s39_state.threshold;
-        var n = s39_state.totalShares;
-
-        // Validate threshold
-        if (m < 1 || n < 2 || m > n || n > 16) {
-            throw new Error('Invalid threshold: ' + m + '-of-' + n + '. M must be 1–N, N must be 2–16.');
-        }
-        if (m === 1) {
-            // SLIP-39 forbids 1-of-N: each "share" would simply BE the whole
-            // secret, so splitting adds risk (N copies) and no protection.
-            throw new Error('A threshold of 1 means every single share is a complete copy of your seed. SLIP-39 does not allow this — choose 2 or more shares required, or use an ordinary seed backup.');
-        }
-
-        // Call shamir-mnemonic-ts
-        var SLIP39 = window.SLIP39;
-        if (!SLIP39 || !SLIP39.generateMnemonics) {
-            throw new Error('SLIP-39 library not loaded. Ensure shamir-mnemonic-ts is bundled.');
-        }
-
-        // Simple M-of-N: 1 group with threshold M and N members
-        var groupThreshold = 1;
-        var groups = [[m, n]];
-        var iterationExponent = 1; // Standard — ~2.5s on Trezor, near-instant in browser
-
-        // generateMnemonics may be async in some builds (PBKDF2)
-        var result = await SLIP39.generateMnemonics(
-            groupThreshold,
-            groups,
-            masterEntropy,
-            passphrase,
-            iterationExponent
-        );
-
-        // result is string[][] — for 1 group, result[0] is array of N mnemonic strings
-        var shareMnemonics = result[0];
-        if (!shareMnemonics || shareMnemonics.length !== n) {
-            throw new Error('Expected ' + n + ' shares but got ' + (shareMnemonics ? shareMnemonics.length : 0) + '.');
-        }
-
-        s39_state.generatedShares = shareMnemonics;
-
-        // Render share cards
-        s39_renderShares(shareMnemonics, m, n);
-
-        // Update result summary
-        document.getElementById('s39-result-m').textContent = m;
-        document.getElementById('s39-result-n').textContent = n;
-        document.getElementById('s39-results').style.display = 'block';
-
-        _s39HasWork = true;
-        showStatus('SLIP-39 split complete — ' + n + ' shares generated (' + m + ' required to recover).', 'success');
-
-        // Enforce mandatory backup verification before exit
-        s39v_showVerifyTrigger();
-
-    } catch (e) {
-        showStatus('Share generation failed: ' + e.message, 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Generate Shamir Shares'; }
-    }
-}
-
-/**
- * Render generated shares as styled cards with word grids, copy, and QR buttons.
- * SLIP-39 shares are 20 words (128-bit secret) or 33 words (256-bit secret).
- */
-function s39_renderShares(shareMnemonics, m, n) {
-    var container = document.getElementById('s39-shares-container');
-    container.innerHTML = '';
-
-    for (var i = 0; i < shareMnemonics.length; i++) {
-        var mnemonic = shareMnemonics[i];
-        var words = mnemonic.trim().split(/\s+/);
-
-        var block = document.createElement('div');
-        block.style.cssText = 'border: 1px solid var(--skb-border); border-radius: var(--skb-radius-md); padding: 1rem; margin-bottom: 1rem; background: var(--skb-bg-tertiary);';
-
-        // Header with share label + action buttons.
-        // Task #96: dropped the inline printer SVG that sat in front of the
-        // "Print" button label. The three action buttons (Copy / Show QR /
-        // Print) now share matching flat-text treatment, which keeps this
-        // row visually consistent with the rest of SafeKeepVault's
-        // professional-typography direction.
-        var header = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">' +
-            '<div>' +
-            '<span style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text);">Share ' + (i + 1) + ' of ' + n + '</span>' +
-            '<span style="font-size: 0.6875rem; color: var(--skb-text-muted); margin-left: 0.5rem;">(' + words.length + ' words · SLIP-39)</span>' +
-            '</div>' +
-            '<div style="display: flex; gap: 0.5rem;">' +
-            '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="s39_copyShare(' + i + ')">Copy</button>' +
-            '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" id="s39-share-qr-btn-' + i + '" onclick="s39_toggleShareQR(' + i + ')">Show QR</button>' +
-            '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="s39_printShare(' + i + ')">Print</button>' +
-            '</div></div>';
-
-        // Word grid — distinct styling from BIP-39 shares (border accent to signal different wordlist)
-        var gridHtml = '<div class="bip85-out-grid" style="border-left: 3px solid var(--skb-accent);">';
-        words.forEach(function(word, idx) {
-            gridHtml += '<div class="bip85-out-cell"><span class="bip85-out-num">' + (idx + 1) + '.</span><div class="bip85-out-word">' + word + '</div></div>';
-        });
-        gridHtml += '</div>';
-
-        // QR code area (hidden until toggled)
-        var qrHtml = '<div id="s39-share-qr-wrap-' + i + '" style="display: none; margin-top: 0.75rem; text-align: center;">' +
-            '<canvas id="s39-share-qr-canvas-' + i + '" style="max-width: 300px; width: 100%; height: auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);"></canvas>' +
-            '<div style="font-size: 0.6875rem; color: var(--skb-text-muted); margin-top: 0.25rem;">Standard Alphanumeric QR — scan with any QR reader</div>' +
-            '</div>';
-
-        block.innerHTML = header + gridHtml + qrHtml;
-        container.appendChild(block);
-    }
-}
-
-/**
- * Copy a share's mnemonic to clipboard.
- */
-function s39_copyShare(index) {
-    var text = s39_state.generatedShares[index];
-    if (!text) return;
-    navigator.clipboard.writeText(text).then(function() {
-        showStatus('Share ' + (index + 1) + ' copied to clipboard.', 'success');
-    }).catch(function() {
-        showStatus('Clipboard access denied.', 'error');
-    });
 }
 
 /**
@@ -42385,357 +41969,293 @@ async function s39_printShare(index) {
 }
 
 /**
- * Toggle QR code display for a share. Generates standard alphanumeric QR
- * containing the plaintext SLIP-39 words (not Compact SeedQR format).
+ * Entering the tool: load the vault seed. Shares already made are kept.
  */
-function s39_toggleShareQR(index) {
-    var wrap = document.getElementById('s39-share-qr-wrap-' + index);
-    var btn = document.getElementById('s39-share-qr-btn-' + index);
-    if (!wrap) return;
+function s39_init() {
+    if (_s39HasWork) return;
+    s39_closeChecker();
+    _s39ResetPassphraseFields();
 
-    if (wrap.style.display === 'none') {
-        wrap.style.display = 'block';
-        if (btn) btn.textContent = 'Hide QR';
-
-        // Generate QR from plaintext mnemonic (uppercase for alphanumeric efficiency)
-        var canvas = document.getElementById('s39-share-qr-canvas-' + index);
-        var text = s39_state.generatedShares[index];
-        if (canvas && text && window.QRCode) {
-            window.QRCode.toCanvas(canvas, text.toUpperCase(), {
-                width: 300,
-                margin: 2,
-                errorCorrectionLevel: 'M',
-                color: { dark: '#000000', light: '#ffffff' }
-            }).catch(function(err) {
-                showStatus('QR generation failed: ' + err.message, 'error');
-            });
-        }
+    var seed = window.SeedSession ? window.SeedSession.get() : null;
+    var mnemonic = seed ? seed.mnemonic : null;
+    if (mnemonic) {
+        s39_showSeedGrid(mnemonic);
+        document.getElementById('s39-seed-source').textContent = 'Loaded from session';
+        document.getElementById('s39-seed-empty').style.display = 'none';
+        document.getElementById('s39-seed-display').style.display = 'block';
+        document.getElementById('s39-generate-btn').disabled = false;
+        document.getElementById('s39-check-btn').disabled = false;
     } else {
-        wrap.style.display = 'none';
-        if (btn) btn.textContent = 'Show QR';
+        document.getElementById('s39-seed-display').style.display = 'none';
+        document.getElementById('s39-seed-empty').style.display = 'block';
+        document.getElementById('s39-seed-source').textContent = '';
+        document.getElementById('s39-generate-btn').disabled = true;
+        document.getElementById('s39-check-btn').disabled = true;
+    }
+    s39_setPreset(2, 3);
+}
+
+/**
+ * Render the vault seed as a read-only word grid (inside the accordion).
+ */
+function s39_showSeedGrid(mnemonic) {
+    var grid = document.getElementById('s39-seed-grid');
+    grid.innerHTML = '';
+    mnemonic.trim().split(/\s+/).forEach(function(word, i) {
+        var cell = document.createElement('div');
+        cell.className = 'bip85-out-cell';
+        var num = document.createElement('span');
+        num.className = 'bip85-out-num';
+        num.textContent = (i + 1) + '.';
+        var w = document.createElement('div');
+        w.className = 'bip85-out-word';
+        w.textContent = word;
+        cell.append(num, w);
+        grid.appendChild(cell);
+    });
+    if (typeof seedAccordionRefreshSummaryFromMnemonic === 'function') {
+        seedAccordionRefreshSummaryFromMnemonic('s39-seed-accordion', mnemonic);
     }
 }
 
-
-// =============================================
-// Covenant Dry Run Verification (s39v_*)
-// Mandatory backup verification before exiting
-// the split tool. User must type M shares from
-// their physical backup and prove they recover
-// the same master fingerprint.
-// =============================================
-
 /**
- * Called after share generation completes.
- * Shows the "Verify Physical Backup" trigger, hides the back button.
+ * The threshold in plain words.
  */
-function s39v_showVerifyTrigger() {
-    var trigger = document.getElementById('s39-verify-trigger');
-    if (trigger) trigger.style.display = 'block';
-
-}
-
-/**
- * Start the dry run verification — hide shares, show quiz inputs.
- */
-function s39v_startVerification() {
-    var m = s39_state.threshold;
-    var n = s39_state.totalShares;
-
-    // Update instruction text
-    document.getElementById('s39v-m').textContent = m;
-    document.getElementById('s39v-n').textContent = n;
-
-    // Build M empty textarea inputs (each with a per-share QR scanner button + hidden reader)
-    var container = document.getElementById('s39v-inputs-container');
-    container.innerHTML = '';
-    for (var i = 0; i < m; i++) {
-        var label = document.createElement('div');
-        label.style.cssText = 'margin-bottom: 0.75rem;';
-        label.innerHTML =
-            '<div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">' +
-                '<label style="font-size: 0.82rem; color: var(--skb-text-muted);">Share ' + (i + 1) + ' of ' + m + ' (any share from your backup)</label>' +
-                '<button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.65rem; border: 1px dashed var(--skb-border);" onclick="s39v_scanShareQR(' + i + ')" title="Scan this share from a QR code">' +
-                    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 0.3rem;"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="14" y1="14" x2="14" y2="17"></line><line x1="17" y1="14" x2="21" y2="14"></line><line x1="14" y1="21" x2="21" y2="21"></line><line x1="17" y1="17" x2="21" y2="17"></line></svg>' +
-                    'Scan QR' +
-                '</button>' +
-            '</div>' +
-            '<textarea id="s39v-share-input-' + i + '" rows="3" placeholder="Type the full SLIP-39 share mnemonic here..." ' +
-            'autocomplete="off" spellcheck="false" ' +
-            'style="width: 100%; box-sizing: border-box; padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); ' +
-            'color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8rem; resize: vertical; line-height: 1.5;"></textarea>' +
-            '<div id="s39v-qr-status-' + i + '" style="display: none; margin-top: 0.4rem; font-size: 0.78rem; padding: 0.4rem 0.6rem; border-radius: var(--skb-radius-sm);"></div>' +
-            '<div id="s39v-qr-area-' + i + '" style="display: none; margin-top: 0.5rem;">' +
-                '<div id="s39v-qr-reader-' + i + '" style="width: 100%; min-height: 240px; border-radius: var(--skb-radius-sm); overflow: hidden; background: #000;"></div>' +
-                '<button type="button" class="skb-btn" style="width: 100%; margin-top: 0.4rem; font-size: 0.8rem;" onclick="s39v_stopShareQR(' + i + ')">Stop Scanner</button>' +
-            '</div>';
-        container.appendChild(label);
-    }
-
-    // Show passphrase field if one was used during split
-    var splitPassphrase = document.getElementById('s39-passphrase')?.value || '';
-    var ppSection = document.getElementById('s39v-passphrase-section');
-    if (ppSection) ppSection.style.display = splitPassphrase ? 'block' : 'none';
-
-    // Reset result state
-    document.getElementById('s39v-result-banner').style.display = 'none';
-    document.getElementById('s39v-done-section').style.display = 'none';
-    document.getElementById('s39v-test-btn').disabled = false;
-    document.getElementById('s39v-test-btn').textContent = 'Test Recovery';
-
-    // Hide the shares, show the verification section
-    document.getElementById('s39-results').style.display = 'none';
-    document.getElementById('s39-verify-section').style.display = 'block';
-}
-
-// Map of active per-share scanners, keyed by share index.
-var _s39vQrScanners = {};
-
-/**
- * Show a transient inline status message under a per-share QR scanner.
- * kind: 'error' | 'success' | 'info'
- */
-function s39v_showShareStatus(index, message, kind) {
-    var el = document.getElementById('s39v-qr-status-' + index);
+function s39_updateSummary(m, n) {
+    var el = document.getElementById('s39-threshold-summary');
     if (!el) return;
-    el.textContent = message;
-    el.style.display = 'block';
-    if (kind === 'error') {
-        el.style.background = 'rgba(220, 53, 69, 0.12)';
-        el.style.color = '#ff8a95';
-        el.style.border = '1px solid rgba(220, 53, 69, 0.35)';
-    } else if (kind === 'success') {
-        el.style.background = 'rgba(40, 167, 69, 0.12)';
-        el.style.color = '#66d38a';
-        el.style.border = '1px solid rgba(40, 167, 69, 0.35)';
-    } else {
-        el.style.background = 'rgba(247, 147, 26, 0.1)';
-        el.style.color = 'var(--skb-primary)';
-        el.style.border = '1px solid rgba(247, 147, 26, 0.3)';
-    }
+    var spare = n - m;
+    el.textContent = 'Any ' + m + ' of ' + n + ' shares recover your seed. ' +
+        (spare === 0 ? 'Every share is needed: losing one loses the seed.'
+                     : 'You can lose ' + spare + (spare === 1 ? ' share' : ' shares') + ' and still recover it.');
 }
 
 /**
- * Start the QR scanner for a specific share textarea in the dry-run
- * verification section. On successful scan, normalizes the text and
- * writes it into the share textarea. Manual typing remains fully available.
+ * Combine SLIP-39 share mnemonics into the BIP-39 seed they hold.
+ * Throws with a plain message on a typo, too few shares, or shares from
+ * different splits.
  */
-async function s39v_scanShareQR(index) {
-    if (!window.jsQR) {
-        s39v_showShareStatus(index, 'QR scanner library not available.', 'error');
-        return;
-    }
-
-    // Stop any other active per-share scanner before starting a new one
-    // so only one camera is live at a time.
-    try { if (typeof SKScanner !== 'undefined' && SKScanner.stopAll) SKScanner.stopAll(); } catch (_) {}
-    Object.keys(_s39vQrScanners).forEach(function(k) {
-        try { _s39vQrScanners[k].stop(); } catch (_) {}
-        delete _s39vQrScanners[k];
-        var prevArea = document.getElementById('s39v-qr-area-' + k);
-        if (prevArea) prevArea.style.display = 'none';
-    });
-
-    var area = document.getElementById('s39v-qr-area-' + index);
-    if (!area) return;
-    area.style.display = 'block';
-    s39v_showShareStatus(index, 'Point your camera at the share QR code...', 'info');
-
+async function _s39Combine(shares, passphrase) {
+    var SLIP39 = window.SLIP39;
+    if (!SLIP39 || !SLIP39.combineMnemonics) throw new Error('SLIP-39 library not loaded.');
+    var secret;
     try {
-        var scanner = SKScanner.create('s39v-qr-reader-' + index);
-        _s39vQrScanners[index] = scanner;
-        await scanner.start({ fps: 10 }, function(text, binaryData) {
-            s39v_stopShareQR(index);
-            // Route through universal QR parser. SLIP-39 share QRs are
-            // plaintext words — they don't match BIP-39 SeedQR signatures,
-            // so the parser is a transparent passthrough here.
-            var parsed = window.QRParser
-                ? window.QRParser.parseQRScan(text, binaryData)
-                : text;
-            if (!parsed) {
-                s39v_showShareStatus(index, 'QR code was empty.', 'error');
-                return;
-            }
-            // SLIP-39 shares are plaintext words in the QR — may be uppercase or padded
-            var normalized = parsed.trim().toLowerCase().replace(/\s+/g, ' ');
-            var words = normalized.split(/\s+/);
-            var ta = document.getElementById('s39v-share-input-' + index);
-            if (ta) ta.value = normalized;
-            if (words.length === 20 || words.length === 33) {
-                s39v_showShareStatus(index, 'Share ' + (index + 1) + ' scanned (' + words.length + ' words). Review, then click Test Recovery.', 'success');
-            } else {
-                s39v_showShareStatus(index, 'Scanned QR has ' + words.length + ' words. Expected 20 or 33 for a SLIP-39 share. Check and correct manually.', 'error');
-            }
-        });
-    } catch (err) {
-        s39v_showShareStatus(index, 'Camera failed: ' + (err && err.message ? err.message : String(err)), 'error');
-        area.style.display = 'none';
-        delete _s39vQrScanners[index];
+        secret = await SLIP39.combineMnemonics(shares, passphrase || '');
+    } catch (libErr) {
+        var msg = (libErr && libErr.message) || String(libErr);
+        // The library combines exactly the threshold number of shares.
+        var count = /Expected (\d+) mnemonics.*but (\d+) were provided/i.exec(msg);
+        if (count) {
+            var need = +count[1], got = +count[2];
+            throw new Error(got < need
+                ? 'Not enough shares: this set needs ' + need + ' shares to recover the seed, and you entered ' + got + '.'
+                : 'Too many shares: this set combines exactly ' + need + ' shares at a time. Enter ' + need + ' of them.');
+        }
+        if (/checksum|invalid mnemonic|not a valid|unknown word/i.test(msg)) throw new Error('A share has a wrong word: its checksum doesn’t match. Check every word against your paper.');
+        if (/threshold|not enough|insufficient/i.test(msg)) throw new Error('Not enough shares: these shares need more of the set to recover the seed.');
+        if (/identifier|different|common|mismatch/i.test(msg)) throw new Error('These shares don’t all come from the same set.');
+        throw new Error('The shares could not be combined: ' + msg);
     }
-}
-
-/**
- * Stop the per-share QR scanner and hide its reader area.
- */
-function s39v_stopShareQR(index) {
-    var scanner = _s39vQrScanners[index];
-    if (scanner) {
-        try { scanner.stop(); } catch (_) {}
-        delete _s39vQrScanners[index];
-    }
-    var area = document.getElementById('s39v-qr-area-' + index);
-    if (area) area.style.display = 'none';
-}
-
-/**
- * Stop every per-share scanner at once. Called on verify abort, tool wipe,
- * or when navigating away so the camera LED doesn't stay lit.
- */
-function s39v_stopAllShareScanners() {
-    try { if (typeof SKScanner !== 'undefined' && SKScanner.stopAll) SKScanner.stopAll(); } catch (_) {}
-    Object.keys(_s39vQrScanners).forEach(function(k) {
-        try { _s39vQrScanners[k].stop(); } catch (_) {}
-        delete _s39vQrScanners[k];
-        var area = document.getElementById('s39v-qr-area-' + k);
-        if (area) area.style.display = 'none';
-    });
-}
-
-/**
- * Run the dry run recovery test.
- * Collects M share inputs, runs combineMnemonics, derives fingerprint,
- * compares against the active session fingerprint.
- */
-async function s39v_testRecovery() {
-    var btn = document.getElementById('s39v-test-btn');
-    var banner = document.getElementById('s39v-result-banner');
-    var doneSection = document.getElementById('s39v-done-section');
-
+    if (!secret || (secret.length !== 16 && secret.length !== 32)) throw new Error('The shares hold a secret of an unexpected length.');
+    var bytes = new Uint8Array(secret);
     try {
-        if (btn) { btn.disabled = true; btn.textContent = 'Testing recovery...'; }
-        banner.style.display = 'none';
-        doneSection.style.display = 'none';
-
-        var m = s39_state.threshold;
-
-        // Collect share inputs
-        var shares = [];
-        for (var i = 0; i < m; i++) {
-            var textarea = document.getElementById('s39v-share-input-' + i);
-            var text = textarea ? textarea.value.trim() : '';
-            if (!text) throw new Error('Share ' + (i + 1) + ' is empty. Please enter all ' + m + ' shares.');
-
-            // Normalize: lowercase, collapse whitespace
-            text = text.toLowerCase().replace(/\s+/g, ' ').trim();
-            shares.push(text);
-        }
-
-        // Get the passphrase used during split (if any)
-        var passphrase = document.getElementById('s39v-passphrase')?.value || '';
-
-        // Run the same combineMnemonics as the real recovery path
-        var SLIP39 = window.SLIP39;
-        if (!SLIP39 || !SLIP39.combineMnemonics) {
-            throw new Error('SLIP-39 library not loaded.');
-        }
-
-        var recoveredSecret;
-        try {
-            recoveredSecret = await SLIP39.combineMnemonics(shares, passphrase);
-        } catch (libErr) {
-            var msg = libErr.message || String(libErr);
-            if (/threshold/i.test(msg) || /not enough/i.test(msg)) {
-                throw new Error('Not enough valid shares to meet the threshold. (' + msg + ')');
-            } else if (/checksum/i.test(msg) || /invalid mnemonic/i.test(msg)) {
-                throw new Error('One or more shares have invalid words or a typo. Check each word carefully. (' + msg + ')');
-            } else if (/different.*set/i.test(msg) || /identifier/i.test(msg)) {
-                throw new Error('These shares don\'t belong to the same split. (' + msg + ')');
-            } else {
-                throw new Error('Recovery failed: ' + msg);
-            }
-        }
-
-        if (!recoveredSecret || (recoveredSecret.length !== 16 && recoveredSecret.length !== 32)) {
-            throw new Error('Recovered secret has unexpected length: ' + (recoveredSecret ? recoveredSecret.length : 0));
-        }
-
-        // Convert recovered entropy → BIP-39 mnemonic → fingerprint
-        var bip39 = window.BtcMath.bip39;
-        var wordlist = window.BtcMath.wordlist;
-        var HDKey = window.BtcMath.HDKey;
-        if (!bip39 || !wordlist || !HDKey) throw new Error('Core crypto libraries not loaded.');
-
-        var entropyBytes = new Uint8Array(recoveredSecret);
-        var mnemonic = bip39.entropyToMnemonic(entropyBytes, wordlist);
-        var valid = bip39.validateMnemonic(mnemonic, wordlist);
-        if (!valid) throw new Error('Recovered entropy produced an invalid BIP-39 mnemonic.');
-
-        // Derive fingerprint from recovered mnemonic (no BIP-39 passphrase — base fingerprint)
-        var seedBytes = await bip39.mnemonicToSeed(mnemonic, '');
-        var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-        var recoveredFP = root.fingerprint.toString(16).padStart(8, '0').toLowerCase();
-
-        // Compare against active session fingerprint
-        var session = window.SeedSession ? window.SeedSession.get() : null;
-        var activeFP = (session && session.fingerprint) ? session.fingerprint.toLowerCase() : '';
-
-        if (!activeFP) throw new Error('No active session fingerprint to compare against.');
-
-        if (recoveredFP === activeFP) {
-            // SUCCESS
-            banner.style.display = 'block';
-            banner.style.background = 'rgba(40, 167, 69, 0.12)';
-            banner.style.border = '2px solid rgba(40, 167, 69, 0.5)';
-            banner.innerHTML =
-                '<div style="font-size: 2.2rem; font-weight: 900; color: #28a745; margin-bottom: 0.5rem;">BACKUP VERIFIED</div>' +
-                '<div style="font-size: 0.9375rem; color: var(--skb-text); line-height: 1.5;">' +
-                'Recovered fingerprint <strong style="font-family: var(--skb-mono);">' + recoveredFP + '</strong> matches your active seed.' +
-                '<br>Your physical backup is accurate and will recover your funds.</div>';
-
-            // Show Done section
-            doneSection.style.display = 'block';
-
-
-        } else {
-            // FAILURE
-            banner.style.display = 'block';
-            banner.style.background = 'rgba(220, 53, 69, 0.12)';
-            banner.style.border = '2px solid rgba(220, 53, 69, 0.5)';
-            banner.innerHTML =
-                '<div style="font-size: 2.2rem; font-weight: 900; color: #dc3545; margin-bottom: 0.5rem;">VERIFICATION FAILED</div>' +
-                '<div style="font-size: 0.9375rem; color: var(--skb-text); line-height: 1.5;">' +
-                'Expected <strong style="font-family: var(--skb-mono);">' + activeFP + '</strong> ' +
-                'but recovered <strong style="font-family: var(--skb-mono);">' + recoveredFP + '</strong>.' +
-                '<br><br><span style="color: var(--skb-danger); font-weight: 600;">Your written shares contain an error and will NOT recover your funds.</span>' +
-                '<br>Return to your shares and check your work carefully.</div>';
-
-            doneSection.style.display = 'none';
-        }
-
-    } catch (e) {
-        // Show error in the banner
-        banner.style.display = 'block';
-        banner.style.background = 'rgba(220, 53, 69, 0.12)';
-        banner.style.border = '2px solid rgba(220, 53, 69, 0.5)';
-        banner.innerHTML =
-            '<div style="font-size: 1.6rem; font-weight: 900; color: #dc3545; margin-bottom: 0.5rem;">VERIFICATION FAILED</div>' +
-            '<div style="font-size: 0.875rem; color: var(--skb-text); line-height: 1.5;">' + e.message +
-            '<br><br><span style="color: var(--skb-danger); font-weight: 600;">Return to your shares and check your work carefully.</span></div>';
-
-        doneSection.style.display = 'none';
+        return window.BtcMath.bip39.entropyToMnemonic(bytes, window.BtcMath.wordlist);
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Test Recovery'; }
+        bytes.fill(0);
     }
 }
 
 /**
- * Return from the verification quiz back to the share view.
+ * Make the shares and start the guided flow.
  */
-function s39v_returnToShares() {
-    // Kill any live per-share cameras before tearing down the quiz UI.
-    try { s39v_stopAllShareScanners(); } catch (_) {}
-    document.getElementById('s39-verify-section').style.display = 'none';
-    document.getElementById('s39-results').style.display = 'block';
+async function s39_generateShares() {
+    var btn = document.getElementById('s39-generate-btn');
+    try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Making shares…'; }
+        var seed = window.SeedSession ? window.SeedSession.get() : null;
+        if (!seed || !seed.mnemonic) throw new Error('No master seed loaded.');
+        var bip39 = window.BtcMath && window.BtcMath.bip39, wordlist = window.BtcMath && window.BtcMath.wordlist;
+        if (!bip39 || !wordlist) throw new Error('BIP-39 library not available.');
+        if (!window.ShareFlow) throw new Error('The share screens did not load.');
+        var SLIP39 = window.SLIP39;
+        if (!SLIP39 || !SLIP39.generateMnemonics) throw new Error('SLIP-39 library not loaded.');
+
+        var passphrase = document.getElementById('s39-passphrase').value || '';
+        if (passphrase) {
+            if (!s39_validatePassphrase(passphrase)) throw new Error('The share passphrase can only use printable ASCII characters (SLIP-39).');
+            if (passphrase !== (document.getElementById('s39-passphrase-confirm').value || '')) throw new Error('The share passphrases don’t match. Type it again in both boxes.');
+        }
+
+        var m = s39_state.threshold, n = s39_state.totalShares;
+        if (m < 1 || n < 2 || m > n || n > 16) throw new Error('Invalid threshold: ' + m + ' of ' + n + '. Choose 2 to 16 shares in total, needing at least 2.');
+        if (m === 1) throw new Error('A threshold of 1 means every single share is a complete copy of your seed. SLIP-39 does not allow this — choose 2 or more shares required, or use an ordinary seed backup.');
+
+        // shamir-mnemonic-ts wants a Buffer (it uses .copy()).
+        var entropy = Buffer.from(bip39.mnemonicToEntropy(seed.mnemonic, wordlist));
+        if (entropy.length !== 16 && entropy.length !== 32) throw new Error('Only 12- and 24-word seeds can be split into Shamir shares.');
+        var result = await SLIP39.generateMnemonics(1, [[m, n]], entropy, passphrase, 1);
+        entropy.fill(0);
+        var shares = result && result[0];
+        if (!shares || shares.length !== n) throw new Error('Expected ' + n + ' shares but got ' + (shares ? shares.length : 0) + '.');
+        // Belt and braces: the shares must rebuild the seed before anyone is
+        // asked to write them down.
+        if (await _s39Combine(shares.slice(0, m), passphrase) !== seed.mnemonic) throw new Error('The shares did not rebuild the seed. Nothing was shown; try again.');
+
+        s39_state.generatedShares = shares;
+        s39_state.seedMnemonic = seed.mnemonic;
+        s39_state.fingerprint = await _xorFingerprint(seed.mnemonic);   // BIP-32 fingerprint (shared helper)
+        s39_state.hasPassphrase = !!passphrase;
+        _s39HasWork = true;
+        _shardLockEngage('s39');
+        _s39StartFlow();
+    } catch (e) {
+        showStatus('Could not make the shares: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Make Shares'; }
+    }
+}
+
+function _s39StartFlow() {
+    var m = s39_state.threshold, n = s39_state.totalShares, spare = n - m;
+    document.getElementById('s39-setup').style.display = 'none';
+    if (_s39Flow) { _s39Flow.destroy(); _s39Flow = null; }
+    var doneLines = [
+        'Keep each share in a different safe place. Anyone who gets ' + m + ' of them can rebuild your seed.',
+        'Any ' + m + ' of the ' + n + ' shares recover it. ' + (spare ? 'You can lose ' + spare + (spare === 1 ? ' share' : ' shares') + ' and still recover.' : 'Losing any share loses the seed.'),
+        'Each share is labelled with your seed’s fingerprint, ' + s39_state.fingerprint + ', if you printed it. Write the fingerprint on handwritten shares too.',
+        'To recover: on the welcome screen, choose Recover Shamir Backup and enter any ' + m + ' shares.'
+    ];
+    if (s39_state.hasPassphrase) doneLines.splice(2, 0, 'You also need the share passphrase to recover. Without it the shares are useless.');
+    var walletPassphrase = window.SeedSession && window.SeedSession.getPassphrase ? window.SeedSession.getPassphrase() : '';
+    if (walletPassphrase) doneLines.push('Your wallet also uses a BIP-39 passphrase. These shares hold only the seed words, so keep a separate backup of that passphrase.');
+    _s39Flow = window.ShareFlow.mount(document.getElementById('s39-flow'), {
+        idPrefix: 's39f',
+        shares: s39_state.generatedShares,
+        wordlist: window.ShareFlow.wordlists.slip39,
+        shareName: 'Shamir share',
+        schemeLine: 'Any ' + m + ' of these ' + n + ' shares recover your seed' + (s39_state.hasPassphrase ? ', with the share passphrase' : '') + '. On each paper, note which share it is and the fingerprint.',
+        fingerprint: s39_state.fingerprint,
+        print: function(i) { s39_printShare(i); },
+        drawQR: function(canvas, i) {
+            // Upper case fits QR alphanumeric mode (a smaller code).
+            window.QRCode.toCanvas(canvas, s39_state.generatedShares[i].toUpperCase(), { width: 260, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
+        },
+        scan: _s39ScanShare,
+        verifyAll: _s39VerifyTyped,
+        finalField: s39_state.hasPassphrase
+            ? { label: 'Share passphrase', hint: 'Type your share passphrase from memory. SafeKeep rebuilds the seed with it and the shares you typed.' }
+            : null,
+        doneLines: doneLines,
+        onFinish: function() { s39_clearAll(); showState('state-dashboard'); },
+        onCancel: s39_cancel
+    });
+}
+
+// The typed shares (with the passphrase, if one was set) must rebuild the
+// exact seed that was split. SLIP-39 combines exactly M shares at a time,
+// so every run of M consecutive shares (wrapping round) is combined: each
+// share takes part, and every run must give the seed.
+async function _s39VerifyTyped(typedShares, passphrase) {
+    var m = s39_state.threshold, n = typedShares.length;
+    var pp = s39_state.hasPassphrase ? (passphrase || '') : '';
+    var different = false;
+    for (var i = 0; i < n && !different; i++) {
+        var run = [];
+        for (var k = 0; k < m; k++) run.push(typedShares[(i + k) % n]);
+        var combined;
+        try {
+            combined = await _s39Combine(run, pp);
+        } catch (e) {
+            return { ok: false, message: e.message };
+        }
+        if (combined !== s39_state.seedMnemonic) different = true;
+        if (m === n) break;   // one run covers every share
+    }
+    if (different) {
+        return { ok: false, message: s39_state.hasPassphrase
+            ? 'That passphrase rebuilds a different seed. Every share matched, so the passphrase is wrong. Try again.'
+            : 'The shares you typed rebuild a different seed. Check every share against your paper and start again.' };
+    }
+    _shardLockRelease('s39');
+    return { ok: true };
+}
+
+// Scan a share's QR code (its words, any case) for the check steps.
+function _s39ScanShare(reader, onWords, onError) {
+    var scanner = null, stopped = false;
+    try {
+        scanner = SKScanner.create(reader.id);
+        scanner.start({ fps: 10 }, function(text, binaryData) {
+            var parsed = window.QRParser ? window.QRParser.parseQRScan(text, binaryData) : text;
+            onWords(parsed ? window.ShareFlow.splitWords(parsed) : null);
+        }).catch(function(err) { if (!stopped) onError(err); });
+    } catch (err) {
+        onError(err);
+    }
+    return function() { stopped = true; if (scanner) { try { scanner.stop(); } catch (_) {} } };
+}
+
+/**
+ * Cancel in the flow: warn first if shares aren't all checked, then wipe
+ * and return to the Dashboard.
+ */
+function s39_cancel() {
+    if (isShardLocked() && _shardSoftIntercept({ kind: 'cancel' })) return;
+    _shardLockRelease('s39');
+    s39_clearAll();
+    showState('state-dashboard');
+}
+
+// Camera off when leaving the tool (showState).
+function s39_stopScanning() {
+    if (_s39Flow) { try { _s39Flow.stopScanning(); } catch (_) {} }
+    if (_s39Checker) { try { _s39Checker.stopScanning(); } catch (_) {} }
+}
+
+// --- Check shares I already have ---
+function s39_openChecker() {
+    var seed = window.SeedSession ? window.SeedSession.get() : null;
+    if (!seed || !seed.mnemonic) { showStatus('No seed loaded. Return to the Dashboard and load a seed first.', 'error'); return; }
+    if (!window.ShareFlow) { showStatus('The share screens did not load.', 'error'); return; }
+    s39_closeChecker();
+    document.getElementById('s39-setup').style.display = 'none';
+    var words = seed.mnemonic.trim().split(/\s+/).length;
+    _s39Checker = window.ShareFlow.check(document.getElementById('s39-flow'), {
+        idPrefix: 's39c',
+        wordlist: window.ShareFlow.wordlists.slip39,
+        wordCount: words === 12 ? 20 : 33,
+        shareName: 'Shamir share',
+        counts: [2, 3, 4, 5, 6, 7, 8],
+        count: Math.min(8, s39_state.threshold),
+        intro: 'Type in as many shares as your split needs (2 for “any 2 of 3”), or scan their QR codes. SafeKeep tells you whether they rebuild your vault seed; it never shows the seed. To recover a different wallet, restart in a Temporary session and choose Recover Shamir Backup.',
+        extraField: { label: 'Share passphrase (leave blank if you didn’t set one)' },
+        scan: _s39ScanShare,
+        check: _s39CheckExisting,
+        onBack: s39_closeChecker
+    });
+}
+
+function s39_closeChecker() {
+    if (_s39Checker) { try { _s39Checker.destroy(); } catch (_) {} _s39Checker = null; }
+    var setup = document.getElementById('s39-setup');
+    if (setup && !_s39Flow) setup.style.display = '';
+}
+
+async function _s39CheckExisting(typedShares, passphrase) {
+    var seed = window.SeedSession ? window.SeedSession.get() : null;
+    if (!seed || !seed.mnemonic) return { ok: false, message: 'No seed loaded.' };
+    var combined;
+    try {
+        combined = await _s39Combine(typedShares, passphrase || '');
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
+    if (combined === seed.mnemonic) {
+        return { ok: true, message: 'These ' + typedShares.length + ' shares rebuild your vault seed (fingerprint ' + await _xorFingerprint(combined) + '). Your Shamir backup is good.' };
+    }
+    return { ok: false, message: 'These shares rebuild a different seed (fingerprint ' + await _xorFingerprint(combined) + '), not your vault seed (fingerprint ' + await _xorFingerprint(seed.mnemonic) + '). ' +
+        (passphrase ? 'Check the share passphrase: a wrong one gives a different seed. ' : 'If you set a share passphrase, type it in: without it the shares give a different seed. ') +
+        'Then check every word against your paper.' };
 }
 
 
