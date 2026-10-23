@@ -8,7 +8,9 @@ import { randomBytes } from 'node:crypto';
  * test-slip39-vectors.mjs — SLIP-39 via shamir-mnemonic-ts (the library the app bundles):
  * official Trezor vectors, in-app round trips 2-of-2..5-of-16, under-threshold rejection.
  * Also DOCUMENTS the design fact behind the UI warning: shares encode BIP-39 entropy, so a
- * Trezor restoring them opens a DIFFERENT wallet (fingerprints printed below).
+ * Trezor restoring them opens a DIFFERENT wallet (fingerprints printed below). Then the
+ * tool's own split, final check and "check shares I already have" (with and without a
+ * share passphrase), run against the real library.
  * Run: node test-slip39-vectors.mjs
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -108,6 +110,83 @@ console.log(`  Trezor restore fingerprint     : ${trezorFp}   ${walletFp === tre
   ck('the Trezor reading has no restore button and says nothing is saved', /SafeKeep can&rsquo;t open this wallet yet, so nothing will be saved/.test(extract('_s39rShowChoice')) &&
     (extract('_s39rShowChoice').match(/onclick=/g) || []).length === 1);
 }
+// ---- The tool's own split and checks (Shamir Backup on the guided flow) ----
+{
+  const vm = await import('node:vm');
+  const toolFns = ['_xorFingerprint', '_s39Combine', 's39_validatePassphrase', 's39_generateShares', '_s39VerifyTyped', '_s39CheckExisting'];
+  function toolCtx(mnemonic, { m = 2, n = 3, pp = '', confirm = pp } = {}) {
+    const { document } = makeDom({ 's39-passphrase': pp, 's39-passphrase-confirm': confirm });
+    const log = { status: '', flow: 0, locked: [], released: [] };
+    const ctx = vm.createContext({
+      window: { BtcMath: { bip39, wordlist, HDKey }, SLIP39: { generateMnemonics, combineMnemonics }, ShareFlow: {}, SeedSession: { get: () => ({ mnemonic }) } },
+      document, Buffer, Uint8Array, console,
+      showStatus: (msg, t) => { log.status = t + ':' + msg; },
+      s39_state: { threshold: m, totalShares: n, generatedShares: [], locked: false },
+      _s39HasWork: false,
+      _s39StartFlow: () => { log.flow++; },
+      _shardLockEngage: (t) => { log.locked.push(t); }, _shardLockRelease: (t) => { log.released.push(t); },
+    });
+    vm.runInContext(toolFns.map((f) => extract(f)).join('\n'), ctx);
+    return { ctx, log };
+  }
+  for (const len of [16, 32]) {
+    const seed = bip39.entropyToMnemonic(randomBytes(len), wordlist);
+    const { ctx, log } = toolCtx(seed);
+    await ctx.s39_generateShares();
+    const shares = ctx.s39_state.generatedShares;
+    const words = len === 16 ? 20 : 33;
+    ck(`split (${len === 16 ? 12 : 24}-word seed): 3 shares of ${words} words, flow started, warning on`, shares.length === 3 && shares.every((x) => x.split(' ').length === words) && log.flow === 1 && log.locked[0] === 's39', log.status);
+    ck(`split: the shares rebuild the seed (any 2)`, (await ctx._s39Combine([shares[2], shares[0]], '')) === seed);
+    ck('split: fingerprint and state kept for the checks', ctx.s39_state.seedMnemonic === seed && /^[0-9a-f]{8}$/.test(ctx.s39_state.fingerprint) && !ctx.s39_state.hasPassphrase);
+    let r = await ctx._s39VerifyTyped(shares);
+    ck('final check: all typed shares rebuild the seed and release the warning', r.ok && log.released.includes('s39'), JSON.stringify(r));
+    { // a valid share from another set in the last place must not pass
+      const t2 = toolCtx(seed); await t2.ctx.s39_generateShares();
+      const mixed = [shares[0], shares[1], t2.ctx.s39_state.generatedShares[2]];
+      const r2 = await ctx._s39VerifyTyped(mixed);
+      ck('final check: every share takes part (a foreign last share fails)', !r2.ok, JSON.stringify(r2)); }
+    r = await ctx._s39CheckExisting([shares[1], shares[2]]);
+    ck('check shares: any 2 rebuild the vault seed', r.ok && /rebuild your vault seed/.test(r.message) && !seed.split(' ').some((w) => r.message.includes(' ' + w + ' ')), r.message);
+    r = await ctx._s39CheckExisting([shares[1]]);
+    ck('check shares: one share is not enough, and the message says how many', !r.ok && /Not enough shares: this set needs 2/.test(r.message), r.message);
+    r = await ctx._s39CheckExisting(shares.slice());
+    ck('check shares: all 3 of a 2-of-3 set → "enter 2 of them"', !r.ok && /Too many shares.*Enter 2/.test(r.message), r.message);
+    const typo = shares[0].split(' '); typo[5] = typo[5] === 'academic' ? 'acid' : 'academic';
+    r = await ctx._s39CheckExisting([typo.join(' '), shares[1]]);
+    ck('check shares: a wrong word is caught', !r.ok && /wrong word/.test(r.message), r.message);
+    const other = (await generateMnemonics(1, [[2, 3]], Buffer.from(randomBytes(len)), '', 1))[0];
+    r = await ctx._s39CheckExisting([shares[0], other[1]]);
+    ck('check shares: shares from two different sets are refused', !r.ok, r.message);
+    r = await ctx._s39CheckExisting(other.slice(0, 2));
+    ck('check shares: another seed\'s shares → a different seed, both fingerprints', !r.ok && /different seed/.test(r.message) && (r.message.match(/[0-9a-f]{8}/g) || []).length === 2, r.message);
+  }
+  { // with a share passphrase
+    const seed = bip39.entropyToMnemonic(randomBytes(16), wordlist);
+    const { ctx, log } = toolCtx(seed, { m: 3, n: 5, pp: 'correct horse' });
+    await ctx.s39_generateShares();
+    const shares = ctx.s39_state.generatedShares;
+    ck('passphrase split: 5 shares, 3 needed, passphrase noted but not kept', shares.length === 5 && ctx.s39_state.hasPassphrase && !JSON.stringify(ctx.s39_state).includes('correct horse'));
+    let r = await ctx._s39VerifyTyped(shares, 'wrong horse');
+    ck('final check: a wrong passphrase says so and keeps the warning', !r.ok && /passphrase is wrong/.test(r.message) && !log.released.length, r.message);
+    r = await ctx._s39VerifyTyped(shares, 'correct horse');
+    ck('final check: the right passphrase passes', r.ok);
+    r = await ctx._s39CheckExisting(shares.slice(1, 4), '');
+    ck('check shares: without the passphrase → a different seed, with a hint', !r.ok && /share passphrase/.test(r.message), r.message);
+    r = await ctx._s39CheckExisting(shares.slice(1, 4), 'correct horse');
+    ck('check shares: with the passphrase they pass', r.ok);
+  }
+  { // refusals
+    const seed = bip39.entropyToMnemonic(randomBytes(16), wordlist);
+    let t = toolCtx(seed, { pp: 'abc', confirm: 'abd' }); await t.ctx.s39_generateShares();
+    ck('split refuses mismatched passphrases', !t.ctx.s39_state.generatedShares.length && /don\u2019t match/.test(t.log.status), t.log.status);
+    t = toolCtx(seed, { pp: 'caf\u00e9', confirm: 'caf\u00e9' }); await t.ctx.s39_generateShares();
+    ck('split refuses a non-ASCII passphrase', !t.ctx.s39_state.generatedShares.length && /ASCII/.test(t.log.status));
+    t = toolCtx(seed, { m: 1, n: 3 }); await t.ctx.s39_generateShares();
+    ck('split refuses a threshold of 1', !t.ctx.s39_state.generatedShares.length && /threshold of 1/.test(t.log.status));
+  }
+  ck('the old share cards, Copy and Dry Run are gone', !/s39_copyShare|s39v_testRecovery|s39-shares-container|Backup Verification — Dry Run/.test(SRC));
+}
+
 console.log(`\nSLIP-39: ${pass} passed, ${fail} failed`);
 
 process.exit(fail === 0 ? 0 : 1);

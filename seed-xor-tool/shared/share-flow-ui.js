@@ -14,7 +14,10 @@
  *     print(i),                            // optional: print share i
  *     drawQR(canvas, i),                   // optional: draw share i's QR
  *     scan(readerEl, onWords, onError) → stop function   // optional
- *     verifyAll(typedShares) → Promise<{ ok, message }>,  // recombine
+ *     verifyAll(typedShares, extra) → Promise<{ ok, message }>,  // recombine
+ *     finalField: { label, hint },         // optional: ask for one more value
+ *                                          // (Shamir's share passphrase) before
+ *                                          // the final check; passed as `extra`
  *     doneLines: ['…', …],                 // the summary on the last screen
  *     onFinish(), onCancel(),
  *   });
@@ -236,24 +239,54 @@ export function mountShareFlow(container, opts) {
     function renderFinal(card) {
         card.appendChild(progress());
         if (notice) { card.appendChild(status('ok', notice)); notice = ''; }
-        card.appendChild(header('Every share checked', 'Rebuilding the seed from the shares you typed…'));
-        const msg = status('info', 'Working…');
+        const ff = opts.finalField;
+        card.appendChild(header('Every share checked', ff ? ff.hint : 'Rebuilding the seed from the shares you typed\u2026'));
+        const msg = status('info', ff ? '' : 'Working\u2026');
+        let input = null, go = null, footerShown = false;
+        if (ff) {
+            const wrap = el('div', 'sf-field');
+            const label = el('label', 'sf-field-label', ff.label);
+            input = document.createElement('input');
+            input.type = 'password';
+            input.id = opts.idPrefix + '-final-field';
+            input.autocomplete = 'off';
+            input.spellcheck = false;
+            label.htmlFor = input.id;
+            wrap.append(label, input);
+            card.appendChild(wrap);
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); run(); } });
+        }
         card.appendChild(msg);
-        Promise.resolve()
-            .then(() => opts.verifyAll(typed.map((w) => w.join(' '))))
-            .then((r) => {
-                if (destroyed || state.step !== 'final') return;
-                if (r && r.ok) { complete = true; state = nextStep(state, 'final-ok'); render(); return; }
-                state = nextStep(state, 'final-failed', r && r.message);
-                setStatus(msg, 'error', state.error);
-                card.appendChild(footer());
-            })
-            .catch((e) => {
-                if (destroyed) return;
-                state = nextStep(state, 'final-failed', e && e.message);
-                setStatus(msg, 'error', state.error);
-                card.appendChild(footer());
-            });
+        if (ff) {
+            go = button('Check', 'skb-btn--primary sf-primary', () => run());
+            card.appendChild(go);
+            setTimeout(() => input && input.focus(), 50);
+        }
+
+        function failed(text) {
+            state = nextStep(state, 'final-failed', text);
+            setStatus(msg, 'error', state.error);
+            if (go) go.disabled = false;
+            if (!footerShown) { card.appendChild(footer()); footerShown = true; }
+        }
+
+        function run() {
+            if (go) { go.disabled = true; }
+            setStatus(msg, 'info', 'Rebuilding the seed from the shares you typed\u2026');
+            Promise.resolve()
+                .then(() => opts.verifyAll(typed.map((w) => w.join(' ')), input ? input.value : undefined))
+                .then((r) => {
+                    if (destroyed || state.step !== 'final') return;
+                    if (r && r.ok) {
+                        if (input) input.value = '';
+                        complete = true; state = nextStep(state, 'final-ok'); render(); return;
+                    }
+                    failed(r && r.message);
+                })
+                .catch((e) => { if (!destroyed) failed(e && e.message); });
+        }
+
+        if (!ff) run();
     }
 
     function renderDone(card) {
@@ -294,7 +327,9 @@ export function mountShareFlow(container, opts) {
  *     counts: [2, 3, 4], count: 3,        // how many shares to enter
  *     intro: '…',                         // one or two lines at the top
  *     scan(readerEl, onWords, onError) → stop function    // optional
- *     check(typedShares) → Promise<{ ok, message }>,
+ *     check(typedShares, extra) → Promise<{ ok, message }>,
+ *     extraField: { label },              // optional: one more value, e.g.
+ *                                         // Shamir's share passphrase
  *     onBack(),
  *   });
  *   checker.stopScanning(); checker.destroy();
@@ -302,6 +337,7 @@ export function mountShareFlow(container, opts) {
 export function mountShareChecker(container, opts) {
     let count = opts.count || opts.counts[0];
     let boxes = [];
+    let extraValue = '';
     let stopScan = null, resetScanUI = null;
     let destroyed = false;
 
@@ -383,6 +419,21 @@ export function mountShareChecker(container, opts) {
             card.appendChild(block);
         }
 
+        let extra = null;
+        if (opts.extraField) {
+            const wrap = el('div', 'sf-field');
+            const label = el('label', 'sf-field-label', opts.extraField.label);
+            extra = document.createElement('input');
+            extra.type = 'password';
+            extra.id = opts.idPrefix + '-extra';
+            extra.autocomplete = 'off';
+            extra.spellcheck = false;
+            extra.value = extraValue;
+            extra.addEventListener('input', () => { extraValue = extra.value; setStatus(result, '', ''); });
+            label.htmlFor = extra.id;
+            wrap.append(label, extra);
+            card.appendChild(wrap);
+        }
         card.appendChild(result);
         const actions = el('div', 'sf-actions');
         actions.appendChild(button('Back', '', () => opts.onBack && opts.onBack()));
@@ -397,7 +448,7 @@ export function mountShareChecker(container, opts) {
             go.disabled = true;
             setStatus(result, 'info', 'Checking…');
             let r;
-            try { r = await opts.check(typed.map((w) => w.join(' '))); } catch (e) { r = { ok: false, message: e && e.message }; }
+            try { r = await opts.check(typed.map((w) => w.join(' ')), extra ? extra.value : undefined); } catch (e) { r = { ok: false, message: e && e.message }; }
             go.disabled = false;
             if (destroyed) return;
             setStatus(result, r && r.ok ? 'ok' : 'error', (r && r.message) || 'The check failed.');
@@ -415,6 +466,7 @@ export function mountShareChecker(container, opts) {
             stopScanner();
             boxes.forEach((b) => b.destroy());
             boxes = [];
+            extraValue = '';
             container.innerHTML = '';
         },
     };
