@@ -184,6 +184,12 @@ console.log(`  Trezor restore fingerprint     : ${trezorFp}   ${walletFp === tre
     t = toolCtx(seed, { m: 1, n: 3 }); await t.ctx.s39_generateShares();
     ck('split refuses a threshold of 1', !t.ctx.s39_state.generatedShares.length && /threshold of 1/.test(t.log.status));
   }
+  { // The Dashboard's BIP-39 passphrase is not used as the share passphrase.
+    const init = extract('s39_init'), reset = extract('_s39ResetPassphraseFields');
+    ck('entering the tool never reads the BIP-39 passphrase into the share passphrase', !/getPassphrase/.test(init + reset) && /pp\.value = ''/.test(reset) && /readOnly = false/.test(reset));
+    ck('the share passphrase comes only from the Advanced field', /getElementById\('s39-passphrase'\)\.value/.test(extract('s39_generateShares')) && !/getPassphrase/.test(extract('s39_generateShares')));
+    ck('a BIP-39 passphrase only adds a "back it up separately" line to the done screen', /keep a separate backup of that passphrase/.test(extract('_s39StartFlow')));
+  }
   ck('the old share cards, Copy and Dry Run are gone', !/s39_copyShare|s39v_testRecovery|s39-shares-container|Backup Verification — Dry Run/.test(SRC));
 }
 

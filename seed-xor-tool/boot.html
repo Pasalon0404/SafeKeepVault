@@ -17514,14 +17514,7 @@ function s39_clearAll() {
     s39_state.locked = false;
     _s39HasWork = false;
 
-    var pp = document.getElementById('s39-passphrase');
-    if (pp) pp.value = '';
-    var ppConfirm = document.getElementById('s39-passphrase-confirm');
-    if (ppConfirm) ppConfirm.value = '';
-    var confirmWrap = document.getElementById('s39-passphrase-confirm-wrap');
-    if (confirmWrap) confirmWrap.style.display = 'none';
-    var matchEl = document.getElementById('s39-passphrase-match');
-    if (matchEl) matchEl.style.display = 'none';
+    _s39ResetPassphraseFields();
 
     var flow = document.getElementById('s39-flow');
     if (flow) flow.innerHTML = '';
@@ -41674,100 +41667,23 @@ var _s39Flow = null;      // the mounted guided flow
 var _s39Checker = null;   // the mounted "check shares I already have" screen
 
 /**
- * Sync the Covenant passphrase field with the global session state.
- *
- * Runs unconditionally on EVERY s39_init() call — even when
- * _s39HasWork is true — so the field always reflects the current
- * session passphrase regardless of navigation history.
- *
- * Bug-fix notes (Sprint 23):
- *   Bug 1 — field was type="password" when auto-populated + readOnly,
- *            making the locked string invisible.  Now toggled to
- *            type="text" so the user can verify the bound passphrase.
- *   Bug 2 — entire sync block lived inside the _s39HasWork guard, so
- *            re-entering the tool after navigating away never refreshed
- *            the passphrase state.  Extracted into its own function that
- *            runs before the guard.
+ * Reset the share passphrase fields to blank. The share passphrase is only
+ * what the user types under Advanced. (It used to be filled in, and
+ * locked, from the Dashboard's BIP-39 passphrase; the two are different
+ * things, and the shares hold only the seed words.)
  */
-function _s39SyncSessionPassphrase() {
-    var pp        = document.getElementById('s39-passphrase');
+function _s39ResetPassphraseFields() {
+    var pp = document.getElementById('s39-passphrase');
+    if (pp) { pp.value = ''; pp.readOnly = false; pp.type = 'password'; }
     var ppConfirm = document.getElementById('s39-passphrase-confirm');
+    if (ppConfirm) { ppConfirm.value = ''; ppConfirm.type = 'password'; }
     var confirmWrap = document.getElementById('s39-passphrase-confirm-wrap');
-    var matchEl     = document.getElementById('s39-passphrase-match');
-    var ppSection   = document.getElementById('s39-passphrase-section');
-    var ppDetails   = ppSection ? ppSection.querySelector('details') : null;
-    var warningEl   = document.getElementById('s39-session-pp-warning');
-
-    // ── Tear down previous lock state (clean slate every call) ──
-    if (ppDetails && ppDetails._s39LockHandler) {
-        ppDetails.removeEventListener('toggle', ppDetails._s39LockHandler);
-        ppDetails._s39LockHandler = null;
-    }
-
-    // ── Read current session passphrase ──
-    var sessionPP = '';
-    if (window.SeedSession && window.SeedSession.getPassphrase) {
-        sessionPP = window.SeedSession.getPassphrase() || '';
-    } else if (window.SafeKeepOS && window.SafeKeepOS.getPassphrase) {
-        sessionPP = window.SafeKeepOS.getPassphrase() || '';
-    }
-
-    if (sessionPP) {
-        // Populate + lock the field as a visible, read-only confirmation
-        if (pp) {
-            pp.value    = sessionPP;
-            pp.readOnly = true;
-            pp.type     = 'text';    // Bug 1 fix: unmask so the user can read the locked string
-        }
-        if (ppConfirm) { ppConfirm.value = sessionPP; ppConfirm.type = 'text'; }
-        if (confirmWrap) confirmWrap.style.display = 'none';
-        if (matchEl) matchEl.style.display = 'none';
-
-        // Force the accordion open and lock it
-        if (ppDetails) {
-            ppDetails.setAttribute('open', '');
-            ppDetails._s39LockHandler = function(evt) {
-                if (!ppDetails.open) {
-                    evt.preventDefault();
-                    ppDetails.setAttribute('open', '');
-                }
-            };
-            ppDetails.addEventListener('toggle', ppDetails._s39LockHandler);
-        }
-
-        // Inject or show the contextual warning
-        if (!warningEl && ppDetails) {
-            warningEl = document.createElement('div');
-            warningEl.id = 's39-session-pp-warning';
-            warningEl.style.cssText =
-                'background: rgba(247,147,26,0.10); border: 1px solid var(--skb-warning, #f7931a);' +
-                ' border-radius: var(--skb-radius-sm); padding: 0.75rem; margin-bottom: 0.75rem;';
-            warningEl.innerHTML =
-                '<div style="font-size: 0.8125rem; font-weight: 700; color: var(--skb-warning, #f7931a); margin-bottom: 0.25rem;">' +
-                    'SESSION PASSPHRASE ACTIVE</div>' +
-                '<div style="font-size: 0.75rem; color: var(--skb-text); line-height: 1.5;">' +
-                    'This passphrase was loaded from your active session and will be cryptographically ' +
-                    'bound to your Shamir shares. You will need both the required threshold of shares ' +
-                    '<strong>AND</strong> this exact passphrase to restore your wallet.</div>';
-            var detailsContent = ppDetails.querySelector('div');
-            if (detailsContent) detailsContent.insertBefore(warningEl, detailsContent.firstChild);
-        }
-        if (warningEl) warningEl.style.display = '';
-
-        if (typeof s39_onPassphraseInput === 'function') s39_onPassphraseInput();
-    } else {
-        // No session passphrase — reset to default interactive state
-        if (pp) {
-            pp.value    = '';
-            pp.readOnly = false;
-            pp.type     = 'password'; // restore mask for manual entry
-        }
-        if (ppConfirm) { ppConfirm.value = ''; ppConfirm.type = 'password'; }
-        if (confirmWrap) confirmWrap.style.display = 'none';
-        if (matchEl) matchEl.style.display = 'none';
-        if (ppDetails) ppDetails.removeAttribute('open');
-        if (warningEl) warningEl.style.display = 'none';
-    }
+    if (confirmWrap) confirmWrap.style.display = 'none';
+    var matchEl = document.getElementById('s39-passphrase-match');
+    if (matchEl) matchEl.style.display = 'none';
+    var ppSection = document.getElementById('s39-passphrase-section');
+    var ppDetails = ppSection ? ppSection.querySelector('details') : null;
+    if (ppDetails) ppDetails.removeAttribute('open');
 }
 
 /**
@@ -42053,13 +41969,12 @@ async function s39_printShare(index) {
 }
 
 /**
- * Entering the tool: load the vault seed. Shares already made are kept;
- * the passphrase field always follows the session (see above).
+ * Entering the tool: load the vault seed. Shares already made are kept.
  */
 function s39_init() {
-    _s39SyncSessionPassphrase();
     if (_s39HasWork) return;
     s39_closeChecker();
+    _s39ResetPassphraseFields();
 
     var seed = window.SeedSession ? window.SeedSession.get() : null;
     var mnemonic = seed ? seed.mnemonic : null;
@@ -42211,6 +42126,8 @@ function _s39StartFlow() {
         'To recover: on the welcome screen, choose Recover Shamir Backup and enter any ' + m + ' shares.'
     ];
     if (s39_state.hasPassphrase) doneLines.splice(2, 0, 'You also need the share passphrase to recover. Without it the shares are useless.');
+    var walletPassphrase = window.SeedSession && window.SeedSession.getPassphrase ? window.SeedSession.getPassphrase() : '';
+    if (walletPassphrase) doneLines.push('Your wallet also uses a BIP-39 passphrase. These shares hold only the seed words, so keep a separate backup of that passphrase.');
     _s39Flow = window.ShareFlow.mount(document.getElementById('s39-flow'), {
         idPrefix: 's39f',
         shares: s39_state.generatedShares,

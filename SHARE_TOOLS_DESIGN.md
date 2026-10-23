@@ -22,6 +22,11 @@ Status: **Parts 1, 2 and 3 built** (Oct 23, 2026).
   of M consecutive shares (wrapping round), so every share takes part,
   and the checker's messages say how many shares the set needs. The
   welcome screen's Recover Shamir Backup has the same limit (Part 4).
+- Owner's decision (Oct 23): the share passphrase is only what the user
+  types under Advanced. It is no longer filled in and locked from the
+  Dashboard's BIP-39 passphrase; when one is active, the done screen
+  says to back it up separately, since the shares hold only the seed
+  words.
 
 ## The problem
 
