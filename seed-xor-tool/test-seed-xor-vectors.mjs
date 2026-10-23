@@ -150,6 +150,21 @@ async function verifyTyped(typed, loadedSeed = CC.R, targetBip32FP = null) {
   const zero = bip39.entropyToMnemonic(new Uint8Array(32), wordlist);
   const sh = await split(zero, 3); const r = await verifyTyped(sh, zero);
   ck('the all-zero test seed splits and its shares pass the final check', sh.length === 3 && r.ok, JSON.stringify(r)); }
+// ---- Check shares I already have (_xorCheckExisting) ----
+async function checkExisting(typed, loadedSeed = CC.R) {
+  const { ctx } = ctxFor({}, { xor_state: { loadedSeed } });
+  vm.runInContext(['_xorCheckShares', '_xorCombine', '_xorFingerprint', '_xorCheckExisting'].map((f) => extract(f)).join('\n'), ctx);
+  return ctx._xorCheckExisting(typed);
+}
+{ const r = await checkExisting([CC.B, CC.C, CC.A]);
+  ck('check shares: the right shares rebuild the vault seed', r.ok && /rebuild your vault seed/.test(r.message), JSON.stringify(r));
+  ck('check shares: the message never holds a seed word', !CC.R.split(' ').some((w) => new RegExp('\\b' + w + '\\b').test(r.message))); }
+{ const r = await checkExisting([CC.A, CC.B]); ck('check shares: a missing share → a different seed, both fingerprints named', !r.ok && /different seed/.test(r.message) && (r.message.match(/[0-9a-f]{8}/g) || []).length === 2, JSON.stringify(r)); }
+{ const r = await checkExisting([CC.A, CC.A, CC.B]); ck('check shares: a share entered twice is named', !r.ok && /identical/.test(r.message), JSON.stringify(r)); }
+{ const r = await checkExisting([CC.A, CC.B, bad.join(' ')]); ck('check shares: a bad-checksum share is named', !r.ok && /Share 3/.test(r.message)); }
+{ const zero = bip39.entropyToMnemonic(new Uint8Array(32), wordlist); const sh = await split(zero, 2);
+  ck('check shares: works for the all-zero test seed', (await checkExisting(sh, zero)).ok); }
+
 // ---- Standalone page (seedxor/index.html) helpers ----
 { const PAGE = readFileSync(join(__dirname, 'seedxor', 'index.html'), 'utf8');
   const ctx = vm.createContext({ window: { BtcMath: { bip39, wordlist, HDKey } }, Uint8Array });

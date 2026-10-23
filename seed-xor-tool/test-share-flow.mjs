@@ -6,9 +6,10 @@
  *   3. compareShare: empty and wrong boxes by position, never the words.
  *   4. The flow: write → check → … → final → done, going back, and actions
  *      that don't fit the step.
- *   5. In a real browser: the word boxes (autocomplete, paste, marks) and
- *      the screens, walked through for an XOR-style and a Shamir-style
- *      split, including a wrong word and a failed recombine. Skipped when
+ *   5. In a real browser: the word boxes (autocomplete, paste, marks), the
+ *      screens walked through for an XOR-style and a Shamir-style split
+ *      (a wrong word, a failed recombine), and "check shares I already
+ *      have". Skipped when
  *      no Chromium is found; CHROMIUM_BINARY picks one.
  * Run: node test-share-flow.mjs
  */
@@ -212,6 +213,37 @@ if (!executablePath || !chromium) {
   ck('Shamir: a failed recombine shows the reason and is not complete', await page.evaluate(() => !flow.isComplete()));
   await clickText('Cancel');
   ck('Shamir: Cancel calls onCancel', await page.evaluate(() => flowLog.cancelled === 1));
+
+  // Check shares I already have
+  await page.evaluate(() => {
+    window.chk = { back: 0, got: null };
+    window.checker = SF.mountShareChecker(document.getElementById('host'), {
+      idPrefix: 'c', wordlist: BIP39, wordCount: 12, shareName: 'XOR share', counts: [2, 3, 4], count: 2,
+      intro: 'Type in each share.', scan: () => () => {},
+      check: async (typed) => { chk.got = typed; return typed[0].startsWith('abandon') ? { ok: true, message: 'They rebuild your vault seed.' } : { ok: false, message: 'They rebuild a different seed.' }; },
+      onBack: () => { chk.back++; },
+    });
+  });
+  ck('checker: two shares of 12 boxes, each with Scan QR', (await page.$$('#host .rst-cell input')).length === 24 && (await page.$$('#host .sf-share-head button')).length === 2);
+  await page.fill('#c-0-word-0', 'abandon');
+  await clickText('3');
+  ck('checker: choosing 3 shares adds a share and keeps typed words', (await page.$$('#host .rst-cell input')).length === 36 && (await page.inputValue('#c-0-word-0')) === 'abandon');
+  await clickText('Check these shares');
+  ck('checker: empty boxes are named by share', /Fill in every word of shares 1, 2, 3/.test(await text()));
+  const twelve = 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' ');
+  await page.evaluate((w) => { document.querySelectorAll('#host .rst-cell input').forEach((inp, i) => { inp.value = w[i % 12]; inp.dispatchEvent(new Event('input')); }); }, twelve);
+  await clickText('Check these shares');
+  await page.waitForFunction(() => /rebuild your vault seed/.test(document.getElementById('host').innerText));
+  ck('checker: passes the typed shares and shows a pass', await page.evaluate(() => chk.got.length === 3 && chk.got[2].split(' ').length === 12) && await page.isVisible('#host .sf-status.ok'));
+  await page.fill('#c-0-word-0', 'zoo');
+  ck('checker: editing a word clears the old result', !(await page.isVisible('#host .sf-status.ok')));
+  await page.fill('#c-0-word-0', 'act'); await clickText('Check these shares');
+  await page.waitForFunction(() => /different seed/.test(document.getElementById('host').innerText));
+  ck('checker: shows a failure', await page.isVisible('#host .sf-status.error'));
+  await clickText('Back');
+  ck('checker: Back calls onBack', await page.evaluate(() => chk.back === 1));
+  await page.evaluate(() => checker.destroy());
+  ck('checker: destroy clears the screen', await page.evaluate(() => document.getElementById('host').innerHTML === ''));
 
   await page.setViewportSize({ width: 1920, height: 1080 });
   await walk('slip');

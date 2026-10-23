@@ -9,6 +9,8 @@ Status: **Parts 1 and 2 built** (Oct 23, 2026).
   the seed from the typed shares (`_xorVerifyTyped`). "Leave anyway"
   discards unchecked shares. `test-seed-xor-vectors.mjs` covers the new
   functions.
+- Added to Part 2 at the owner's request: **Check shares I already have**
+  (see below), shared as `ShareFlow.check` so Shamir gets it in Part 3.
 
 ## The problem
 
@@ -113,6 +115,17 @@ how to check).
   and "Store each share in a different place."
 - How to recover: Welcome → Restore via Seed XOR / Recover Shamir Backup.
 - "Back to Dashboard". The shares are wiped from the screen and memory.
+
+### Check shares I already have
+
+Removing XOR's Merge tab left no way, with a seed in the vault, to test
+shares made months ago. Each tool's setup card therefore has a second
+button, **Check Shares I Already Have**: the user types in (or scans) the
+shares, and SafeKeep says whether they rebuild the vault seed, naming
+both fingerprints if not. The rebuilt seed's words are never shown and
+nothing is loaded, so it is safe to use any time. Shares for a different
+wallet are combined in a Temporary session (welcome screen → Restore),
+which never touches the vault; the screen says so.
 
 ### Leaving early
 

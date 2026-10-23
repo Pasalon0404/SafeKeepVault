@@ -5489,6 +5489,14 @@
     .sf-primary { width: 100%; padding: 0.75rem; font-size: 1rem; font-weight: 700; }
     .sf-footer { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--skb-border); }
     .sf-quiet { background: transparent; color: var(--skb-text-muted); border: 1px solid var(--skb-border); font-size: 0.8125rem; }
+    .sf-counts { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; }
+    .sf-counts-label { font-size: 0.875rem; color: var(--skb-text-muted); margin-right: 0.25rem; }
+    .sf-count { min-width: 3rem; background: var(--skb-bg-input); color: var(--skb-text); }
+    .sf-count.active { background: var(--skb-primary); color: #000; font-weight: 600; }
+    .sf-share-block { margin-bottom: 1rem; }
+    .sf-share-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+    .sf-share-head .skb-btn { font-size: 0.8125rem; padding: 0.3rem 0.8rem; }
+    .sf-share-label { font-size: 0.875rem; font-weight: 600; color: var(--skb-text); }
     .sf-done { margin: 0.5rem 0 1.25rem; padding-left: 1.25rem; color: var(--skb-text); font-size: 0.9375rem; line-height: 1.8; }
 
     /* Armory */
@@ -7948,6 +7956,7 @@
                 <p style="font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0.75rem 0 0; text-align: center;">
                     Next, SafeKeep shows each share in turn. Write it down, then type it back so SafeKeep can check your copy.
                 </p>
+                <button type="button" class="skb-btn" style="width: 100%; margin-top: 1.25rem; padding: 0.65rem;" id="xor-check-btn" onclick="xor_openChecker()">Check Shares I Already Have</button>
             </div>
 
             <div id="xor-flow"></div>
@@ -17420,6 +17429,7 @@ function _fullSessionWipe() {
         xor_state.targetBip32FP = '';
     }
     if (typeof _xorFlow !== 'undefined' && _xorFlow) { try { _xorFlow.destroy(); } catch (_) {} _xorFlow = null; }
+    if (typeof _xorChecker !== 'undefined' && _xorChecker) { try { _xorChecker.destroy(); } catch (_) {} _xorChecker = null; }
     try { var _xs = document.getElementById('xor-setup'); if (_xs) _xs.style.display = ''; } catch (_) {}
     if (typeof _psbtTempSeed !== 'undefined') _psbtTempSeed = null;
     if (typeof _bip85LastResult !== 'undefined') {
@@ -17537,6 +17547,7 @@ function xor_clearAll() {
     _wipeClipboard();
 
     if (_xorFlow) { try { _xorFlow.destroy(); } catch (_) {} _xorFlow = null; }
+    if (_xorChecker) { try { _xorChecker.destroy(); } catch (_) {} _xorChecker = null; }
     (xor_state.generatedShares || []).fill('');
     xor_state.generatedShares = [];
     xor_state.loadedSeed = null;
@@ -28012,6 +28023,7 @@ let xor_state = {
 };
 var _xorHasWork = false;    // the tool holds shares; keep them across visits
 var _xorFlow = null;        // the mounted guided flow
+var _xorChecker = null;     // the mounted "check shares I already have" screen
 
 // --- Step 1: number of shares ---
 function xor_setShares(num) {
@@ -28056,6 +28068,8 @@ function xor_showSeedGrid(mnemonic, source) {
 function xor_autoFillMasterSeed() {
     // Shares already made: keep them (and the flow) across visits.
     if (_xorHasWork) return;
+    // Typed-in shares from "Check shares" are not kept across visits.
+    xor_closeChecker();
     const seed = window.SeedSession?.get()?.mnemonic;
     if (seed) {
         xor_showSeedGrid(seed, 'Loaded from session');
@@ -28210,6 +28224,54 @@ function xor_cancel() {
 // Camera off when leaving the tool (showState).
 function xor_stopScanning() {
     if (_xorFlow) { try { _xorFlow.stopScanning(); } catch (_) {} }
+    if (_xorChecker) { try { _xorChecker.stopScanning(); } catch (_) {} }
+}
+
+// --- Check shares I already have ---
+// Shares made earlier (here or on a Coldcard) are typed in or scanned and
+// combined; the result is compared with the vault seed. The combined
+// seed's words are never shown and nothing is loaded. Shares for a
+// different wallet belong in a Temporary session (Restore via Seed XOR).
+function xor_openChecker() {
+    if (!xor_state.loadedSeed) { showStatus('No seed loaded. Return to the Dashboard and load a seed first.', 'error'); return; }
+    if (!window.ShareFlow) { showStatus('The share screens did not load.', 'error'); return; }
+    xor_closeChecker();
+    document.getElementById('xor-setup').style.display = 'none';
+    _xorChecker = window.ShareFlow.check(document.getElementById('xor-flow'), {
+        idPrefix: 'xorc',
+        wordlist: window.ShareFlow.wordlists.bip39,
+        wordCount: xor_state.loadedSeed.trim().split(/\s+/).length,
+        shareName: 'XOR share',
+        counts: [2, 3, 4],
+        count: xor_state.shares,
+        intro: 'Type in each share from your paper, or scan its QR code. SafeKeep tells you whether they rebuild your vault seed; it never shows the seed. To combine shares for a different wallet, restart in a Temporary session and choose Restore via Seed XOR.',
+        scan: _xorScanShare,
+        check: _xorCheckExisting,
+        onBack: xor_closeChecker,
+    });
+}
+
+function xor_closeChecker() {
+    if (_xorChecker) { try { _xorChecker.destroy(); } catch (_) {} _xorChecker = null; }
+    const setup = document.getElementById('xor-setup');
+    if (setup && !_xorFlow) setup.style.display = '';
+}
+
+async function _xorCheckExisting(typedShares) {
+    const n = typedShares.length;
+    let combined;
+    try {
+        combined = _xorCombine(typedShares, true);
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
+    if (combined === xor_state.loadedSeed) {
+        return { ok: true, message: 'These ' + n + ' shares rebuild your vault seed (fingerprint ' + await _xorFingerprint(combined) + '). Your XOR backup is good.' };
+    }
+    // Not the vault seed: a share entered twice or an all-zero result says
+    // more than "a different seed".
+    try { _xorCombine(typedShares); } catch (e) { return { ok: false, message: e.message }; }
+    return { ok: false, message: 'These shares rebuild a different seed (fingerprint ' + await _xorFingerprint(combined) + '), not your vault seed (fingerprint ' + await _xorFingerprint(xor_state.loadedSeed) + '). Check every word of every share against your paper, and that you have all of them: one wrong word or a missing share changes the result.' };
 }
 
 // --- Share sanity checks (also used by Restore via Seed XOR, xrr_combine) ---
