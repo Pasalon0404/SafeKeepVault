@@ -122,6 +122,19 @@ import './shared/core-import.js';
 // lists are the ones usbbootdrive/safekeep-pwcheck.py uses on the stick.
 import pwcheckLists from '../usbbootdrive/pwcheck-lists.json';
 import { buildDictionary, ratePassword, describeRating } from './shared/pwcheck.js';
+// The share tools' guided flow (SHARE_TOOLS_DESIGN.md): word boxes with
+// autocomplete for BIP-39 and SLIP-39, and the write / check / done screens.
+import { mountShareFlow } from './shared/share-flow-ui.js';
+import { createWordBoxes } from './shared/word-boxes.js';
+import { compareShare, splitWords } from './shared/share-flow.js';
+import { SLIP39_WORDLIST } from './shared/slip39-wordlist.js';
+window.ShareFlow = Object.freeze({
+    mount: mountShareFlow,
+    createWordBoxes,
+    compareShare,
+    splitWords,
+    wordlists: Object.freeze({ bip39: wordlist, slip39: SLIP39_WORDLIST }),
+});
 let _pwcheckDict = null;
 window.PwCheck = {
     rate(password, context) {

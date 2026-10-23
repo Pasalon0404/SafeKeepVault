@@ -183,7 +183,7 @@ How every change to the boot scripts or the OS was tested on Oct 20
   sandbox after `npm ci` (the old "rolldown binding missing" problem is
   gone). Playwright with the preinstalled Chromium can drive the dev server
   for screenshots at laptop size (1366×900).
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **48 files**,
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **49 files**,
   all passing on Linux (Oct 22; `test-entropy-built.mjs` needs
   `CHROMIUM_BINARY=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`). `test-change-passphrase.mjs`
   needs `cryptsetup` for its LUKS checks and says SKIP without it. On macOS three always fail
