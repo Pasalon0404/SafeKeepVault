@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { generateMnemonics, combineMnemonics } from 'shamir-mnemonic-ts';
+import { generateMnemonics, combineMnemonics, Share } from 'shamir-mnemonic-ts';
 import * as bip39 from '@scure/bip39'; import { wordlist } from '@scure/bip39/wordlists/english.js'; import { HDKey } from '@scure/bip32';
 import { randomBytes } from 'node:crypto';
 /**
@@ -191,6 +191,51 @@ console.log(`  Trezor restore fingerprint     : ${trezorFp}   ${walletFp === tre
     ck('a BIP-39 passphrase only adds a "back it up separately" line to the done screen', /keep a separate backup of that passphrase/.test(extract('_s39StartFlow')));
   }
   ck('the old share cards, Copy and Dry Run are gone', !/s39_copyShare|s39v_testRecovery|s39-shares-container|Backup Verification — Dry Run/.test(SRC));
+}
+
+// ---- Welcome screen: Recover Shamir Backup (word boxes, add-time checks, exactly-M) ----
+{
+  const vm = await import('node:vm');
+  const btcSigner = await import('@scure/btc-signer');
+  const shareInfo = (m) => { const x = Share.fromMnemonic(m); return { identifier: x.identifier, groupIndex: x.groupIndex, groupThreshold: x.groupThreshold, groupCount: x.groupCount, index: x.index, memberThreshold: x.memberThreshold }; };
+  function recCtx() {
+    const { document } = makeDom({ 's39r-passphrase': '' });
+    let typed = [], status = '';
+    const boxes = { getWords: () => typed.slice(), clear() { typed = []; }, focus() {} };
+    const ctx = vm.createContext({
+      window: { BtcMath: { bip39, wordlist, HDKey, btcSigner }, SLIP39: { combineMnemonics, shareInfo } },
+      document, Uint8Array, Buffer, console, showStatus() {}, s39r_showLocalStatus: (m) => { status = m; }, s39r_renderShareList() {},
+      _s39rBoxes: boxes, _s39rShares: [], _s39rPending: null,
+    });
+    vm.runInContext(['_s39rNeeded', 's39r_updateRecoverBtn', 's39r_addShare', 's39r_recover', '_s39rReadings', '_s39rShowChoice', '_s39rClearChoice'].map((f) => extract(f)).join('\n'), ctx);
+    return { ctx, type: (m) => { typed = m.split(' '); }, status: () => status, btn: () => ctx.document.getElementById('s39r-recover-btn') };
+  }
+  const seed = bip39.entropyToMnemonic(randomBytes(32), wordlist);
+  const sh = (await generateMnemonics(1, [[2, 3]], Buffer.from(bip39.mnemonicToEntropy(seed, wordlist)), '', 1))[0];
+  const skFp = (HDKey.fromMasterSeed(await bip39.mnemonicToSeed(seed, '')).fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase();
+  const r = recCtx();
+  r.type(sh[0]); r.ctx.s39r_addShare();
+  ck('recover: adding share 1 says the set needs 2', /needs 2 shares: add 1 more/.test(r.status()) && r.btn().disabled, r.status());
+  const typo = sh[1].split(' '); typo[7] = typo[7] === 'academic' ? 'acid' : 'academic';
+  r.type(typo.join(' ')); r.ctx.s39r_addShare();
+  ck('recover: a mistyped share is refused when added', /wrong word/.test(r.status()) && r.ctx._s39rShares.length === 1, r.status());
+  const other = (await generateMnemonics(1, [[2, 3]], Buffer.from(randomBytes(32)), '', 1))[0];
+  r.type(other[1]); r.ctx.s39r_addShare();
+  ck('recover: a share from another set is refused when added', /different set/.test(r.status()) && r.ctx._s39rShares.length === 1, r.status());
+  r.type(sh[0]); r.ctx.s39r_addShare();
+  ck('recover: the same share twice is refused', /already been added/.test(r.status()));
+  r.type(sh[2]); r.ctx.s39r_addShare();
+  ck('recover: 2 shares → enough, Combine enabled', /you have enough/.test(r.status()) && !r.btn().disabled, r.status());
+  r.type(sh[1]); r.ctx.s39r_addShare();
+  ck('recover: a third share can still be added', r.ctx._s39rShares.length === 3);
+  await r.ctx.s39r_recover();
+  ck('recover: 3 shares of a 2-of-3 set combine (every run agrees) and show the seed\'s fingerprint', r.ctx._s39rPending && r.ctx._s39rPending.mnemonic === seed && r.ctx._s39rPending.safekeepFp === skFp, r.status());
+  const t3 = (await generateMnemonics(1, [[3, 5]], Buffer.from(randomBytes(16)), '', 1))[0];
+  const few = recCtx(); few.ctx._s39rShares.push(t3[0], t3[1]);
+  await few.ctx.s39r_recover();
+  ck('recover: too few shares says how many the set needs', /this set needs 3 shares/.test(few.status()), few.status());
+  ck('recover panel: no text box, word boxes and a 20/33 choice', !/id="s39r-share-input"/.test(SRC) && /id="s39r-boxes"/.test(SRC) && /s39r_setWordCount\(20\)/.test(SRC));
+  ck('XOR restore panel: the shared word boxes', /ShareFlow\.createWordBoxes\(document\.getElementById\('xrr-grid-'/.test(SRC) && !/function xrr_onInput/.test(SRC));
 }
 
 console.log(`\nSLIP-39: ${pass} passed, ${fail} failed`);

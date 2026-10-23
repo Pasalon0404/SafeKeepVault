@@ -64,8 +64,10 @@ function ctxFor(values, extra = {}) { const { document } = makeDom(values); let 
 async function merge(shares) { const { ctx } = ctxFor({});
   vm.runInContext([extract('_xorCheckShares'), extract('_xorCombine')].join('\n'), ctx);
   try { return { seed: ctx._xorCombine(shares), status: '' }; } catch (e) { return { seed: null, status: 'error:' + e.message }; } }
-async function recover(shares) { const vals = {}; shares.forEach((m, s) => m.split(' ').forEach((w, i) => vals['xrr-' + s + '-word-' + i] = w));
-  const { ctx, status } = ctxFor(vals, { _xrrShareCount: shares.length, _xrrWordCount: shares[0].split(' ').length, _xrrRecoveredMnemonic: null });
+// xrr_combine reads the shared word boxes; stand-ins return the typed words.
+async function recover(shares) {
+  const _xrrBoxes = shares.map((m) => ({ getWords: () => m.split(' '), markWrong() {} }));
+  const { ctx, status } = ctxFor({}, { _xrrBoxes, _xrrShareCount: shares.length, _xrrWordCount: shares[0].split(' ').length, _xrrRecoveredMnemonic: null });
   vm.runInContext([extract('_xorCheckShares'), extract('_recoveryFingerprint'), extract('xrr_combine')].join('\n'), ctx); await ctx.xrr_combine(); return { seed: ctx._xrrRecoveredMnemonic, status: status() }; }
 async function split(seed, n) { let flowStarted = false, locked = false;
   const { ctx, status } = ctxFor({}, { xor_state: { loadedSeed: seed, shares: n } });
