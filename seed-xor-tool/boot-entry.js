@@ -34,7 +34,7 @@ import { UR, UREncoder, URDecoder } from '@ngraveio/bc-ur';
 import CBOR from 'cbor-sync';
 
 // SLIP-39: Shamir's Secret Sharing for mnemonic backup
-import { generateMnemonics, combineMnemonics } from 'shamir-mnemonic-ts';
+import { generateMnemonics, combineMnemonics, Share as Slip39Share } from 'shamir-mnemonic-ts';
 
 // Online demo safeguards (inactive unless the demo page sets window.SKV_DEMO)
 import { isDemoActive, isDemoSeed, replaceGenerated, wrapBip39, installDemoUi, noticeRefused, REFUSAL_MESSAGE } from './shared/demo-mode.js';
@@ -80,7 +80,14 @@ if (demoActive) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installDemoUi);
   else installDemoUi();
 }
-window.SLIP39 = { generateMnemonics, combineMnemonics };
+// shareInfo: decode one share (throws on a bad checksum) and say which set
+// it belongs to and how many shares that set needs. No secret is returned.
+const slip39ShareInfo = (mnemonic) => {
+    const x = Slip39Share.fromMnemonic(mnemonic);
+    return { identifier: x.identifier, groupIndex: x.groupIndex, groupThreshold: x.groupThreshold,
+             groupCount: x.groupCount, index: x.index, memberThreshold: x.memberThreshold };
+};
+window.SLIP39 = { generateMnemonics, combineMnemonics, shareInfo: slip39ShareInfo };
 window.Miniscript = Miniscript;
 window.QRCode = QRCode;
 window.jsQR = jsQR;

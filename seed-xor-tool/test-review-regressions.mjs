@@ -79,7 +79,7 @@ function recCtx(values, confirmAnswer, extra = {}) {
     showStatus: (m) => { status = m; }, clearStatus() {}, s39r_showLocalStatus: (m) => { status = m; }, _isEphemeralBoot: () => false,
     _showDiskVerification() {}, hideShamirRecoveryPanel() {}, transitionToDashboard() {}, _SKB_DEV_MODE: false, ...extra });
   ctx.window.SLIP39 = ctx.SLIP39;
-  vm.runInContext(['_recoveryFingerprint', 's39r_recover', '_s39rReadings', '_s39rShowChoice', '_s39rClearChoice', 's39r_restorePending', 'xrr_loadIntoVault'].map(extract).join('\n') +
+  vm.runInContext(['_recoveryFingerprint', '_s39rNeeded', 's39r_updateRecoverBtn', 's39r_recover', '_s39rReadings', '_s39rShowChoice', '_s39rClearChoice', 's39r_restorePending', 'xrr_loadIntoVault'].map(extract).join('\n') +
     '\nvar _s39rPending = null;', ctx);
   return { ctx, writes, prompts, status: () => status };
 }

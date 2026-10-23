@@ -1,6 +1,6 @@
 # Design note: one guided flow for Seed XOR and Shamir Backup
 
-Status: **Parts 1, 2 and 3 built** (Oct 23, 2026).
+Status: **All four parts built** (Oct 23, 2026). Docs and the website's tool pages are updated at release time.
 - Part 1: `shared/share-flow.js`, `shared/word-boxes.js`,
   `shared/share-flow-ui.js`, `shared/slip39-wordlist.js`, exposed as
   `window.ShareFlow`; `test-share-flow.mjs`.
@@ -27,6 +27,15 @@ Status: **Parts 1, 2 and 3 built** (Oct 23, 2026).
   Dashboard's BIP-39 passphrase; when one is active, the done screen
   says to back it up separately, since the shares hold only the seed
   words.
+- Part 4: both welcome-screen restore panels use the shared word boxes.
+  Restore via Seed XOR keeps its share count and 12/24 choice, with Scan
+  QR per share; a bad checksum names the share. Recover Shamir Backup
+  replaces its text box with 20/33 SLIP-39 word boxes; each share is
+  checked when added (checksum, same set, not a duplicate) using
+  `SLIP39.shareInfo` (`Share.fromMnemonic`), and the status says how many
+  shares the set needs. More shares than needed now work: every run of M
+  consecutive shares is combined and they must agree. Typed shares are
+  wiped when leaving either panel.
 
 ## The problem
 

@@ -6602,30 +6602,28 @@
                 <div class="restore-panel-inner">
                     <h3>Recover from Shamir Shares</h3>
                     <p style="font-size: 0.875rem; color: var(--skb-text-muted); margin: 0 0 1rem;">
-                        Enter your SLIP-39 shares one at a time. You need the minimum threshold (e.g., 2 of 3) to recover your master seed. Shares use a different wordlist than BIP-39.
+                        Enter your SLIP-39 shares one at a time: type each one into the boxes (or scan its QR code) and press Add Share. You need as many shares as your set requires, for example 2 for &ldquo;any 2 of 3&rdquo;. Shares use a different word list than BIP-39.
                         <strong>Shares made on a Trezor</strong> (or another SLIP-39 wallet) can be checked here, but SafeKeep can&rsquo;t open them as that wallet yet: SafeKeep&rsquo;s own shares hold a 12/24-word phrase, a Trezor&rsquo;s don&rsquo;t. You&rsquo;ll see both readings before anything is saved.
                     </p>
 
-                    <!-- Share entry area -->
+                    <!-- Share entry: word boxes with SLIP-39 autocomplete (ShareFlow) -->
                     <div style="margin-bottom: 1rem;">
-                        <label style="font-size: 0.8125rem; font-weight: 600; color: var(--skb-text); display: block; margin-bottom: 0.5rem;">Enter a SLIP-39 Share</label>
-                        <textarea id="s39r-share-input" rows="3" placeholder="Type or paste a 20-word or 33-word SLIP-39 share mnemonic..."
-                                  spellcheck="false" autocomplete="off" autocapitalize="off"
-                                  style="width: 100%; box-sizing: border-box; padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8125rem; resize: vertical;"></textarea>
-                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                            <button type="button" class="skb-btn" style="flex: 1; border: 1px dashed var(--skb-border); font-size: 0.875rem;" onclick="s39r_scanShareQR()">
-                                Scan QR
-                            </button>
-                            <button type="button" class="skb-btn skb-btn--primary" style="flex: 1; font-size: 0.875rem;" onclick="s39r_addShare()">
-                                Add Share
-                            </button>
+                        <label style="font-size: 0.8125rem; font-weight: 600; color: var(--skb-text); display: block; margin-bottom: 0.5rem;">Words per Share</label>
+                        <div class="rst-word-toggle" style="margin-bottom: 0.5rem;">
+                            <button type="button" id="s39r-btn-20" onclick="s39r_setWordCount(20)">20 Words</button>
+                            <button type="button" id="s39r-btn-33" class="active" onclick="s39r_setWordCount(33)">33 Words</button>
                         </div>
-
-                        <!-- QR Scanner area (hidden until activated) -->
-                        <div id="s39r-qr-area" style="display: none; margin-top: 0.75rem;">
-                            <div id="s39r-qr-reader" style="width: 100%; min-height: 280px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>
-                            <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem;" onclick="s39r_stopQR()">Stop Scanner</button>
+                        <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.75rem;">20 words for a 12-word seed, 33 for a 24-word seed.</p>
+                        <div class="sf-share-head">
+                            <span class="sf-share-label" id="s39r-entry-label">Share 1</span>
+                            <span>
+                                <button type="button" class="skb-btn" id="s39r-scan-btn" onclick="s39r_scanShareQR()">Scan QR</button>
+                                <button type="button" class="skb-btn sf-quiet" onclick="s39r_clearBoxes()">Clear</button>
+                            </span>
                         </div>
+                        <div id="s39r-qr-reader" class="sf-reader" style="display: none;"></div>
+                        <div id="s39r-boxes"></div>
+                        <button type="button" class="skb-btn skb-btn--primary" style="width: 100%; font-size: 0.875rem;" onclick="s39r_addShare()">Add Share</button>
                     </div>
 
                     <!-- Collected shares list -->
@@ -13898,7 +13896,6 @@ async function rst_doRestore() {
 var _xrrShareCount = 3;
 var _xrrWordCount = 24;
 var _xrrQrScanners = {};    // { shareIdx: SKScanner }
-var _xrrSelectedAC = -1;
 var _xrrRecoveredMnemonic = null;
 
 function showXorRecoveryPanel() {
@@ -13915,6 +13912,9 @@ function hideXorRecoveryPanel() {
     document.getElementById('xor-recovery-panel').style.display = 'none';
     document.getElementById('welcome-buttons').style.display = 'flex';
     xrr_stopAllQR();
+    // Typed shares are not kept.
+    _xrrBoxes.forEach(function(b) { b.destroy(); });
+    _xrrBoxes = [];
     clearStatus();
 }
 
@@ -13922,7 +13922,6 @@ function xrr_reset() {
     _xrrShareCount = 3;
     _xrrWordCount = 24;
     _xrrRecoveredMnemonic = null;
-    _xrrSelectedAC = -1;
     document.getElementById('xrr-result').style.display = 'none';
     document.getElementById('xrr-action-btns').style.display = 'flex';
     document.querySelectorAll('#xrr-count-btns button').forEach(function(btn, i) {
@@ -13954,307 +13953,88 @@ function xrr_setWordCount(n) {
     xrr_buildAllGrids();
 }
 
+// The share word boxes (ShareFlow.createWordBoxes), one set per share.
+var _xrrBoxes = [];
+var _xrrStopScan = null;
+
 function xrr_buildAllGrids() {
     xrr_stopAllQR();
+    _xrrBoxes.forEach(function(b) { b.destroy(); });
+    _xrrBoxes = [];
     var container = document.getElementById('xrr-shares-container');
     container.innerHTML = '';
-
     for (var s = 0; s < _xrrShareCount; s++) {
         var block = document.createElement('div');
         block.className = 'xrr-share-block';
         block.innerHTML =
-            '<h4>Share ' + (s + 1) + ' of ' + _xrrShareCount + '</h4>' +
-            '<div class="rst-grid" id="xrr-grid-' + s + '"></div>' +
-            '<div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">' +
-                '<button type="button" class="skb-btn" style="flex: 1; padding: 0.4rem; font-size: 0.8125rem; border: 1px dashed var(--skb-border);" onclick="xrr_scanQR(' + s + ')">Scan QR</button>' +
-                '<button type="button" class="skb-btn" style="flex: 1; padding: 0.4rem; font-size: 0.8125rem; border: 1px dashed var(--skb-border);" onclick="xrr_clearShare(' + s + ')">Clear</button>' +
-            '</div>' +
-            '<div id="xrr-qr-area-' + s + '" style="display: none; margin-top: 0.75rem;">' +
-                '<div id="xrr-qr-reader-' + s + '" style="width: 100%; min-height: 280px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>' +
-                '<button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem;" onclick="xrr_stopQR(' + s + ')">Stop Scanner</button>' +
-            '</div>';
+            '<div class="sf-share-head"><span class="sf-share-label">Share ' + (s + 1) + ' of ' + _xrrShareCount + '</span>' +
+                '<span><button type="button" class="skb-btn" id="xrr-scan-btn-' + s + '" onclick="xrr_scanQR(' + s + ')">Scan QR</button> ' +
+                '<button type="button" class="skb-btn sf-quiet" onclick="xrr_clearShare(' + s + ')">Clear</button></span></div>' +
+            '<div id="xrr-qr-reader-' + s + '" class="sf-reader" style="display: none;"></div>' +
+            '<div id="xrr-grid-' + s + '"></div>';
         container.appendChild(block);
-
-        xrr_buildGrid(s);
-    }
-
-    document.getElementById('xrr-status').textContent = '';
-    document.getElementById('xrr-status').className = 'rst-status';
-    document.getElementById('xrr-combine-btn').disabled = true;
-}
-
-function xrr_buildGrid(shareIdx) {
-    var grid = document.getElementById('xrr-grid-' + shareIdx);
-    if (!grid) return;
-    grid.innerHTML = '';
-
-    for (var i = 0; i < _xrrWordCount; i++) {
-        var cell = document.createElement('div');
-        cell.className = 'rst-cell';
-        cell.innerHTML =
-            '<span class="rst-cell-num">' + (i + 1) + '</span>' +
-            '<input type="text" id="xrr-' + shareIdx + '-word-' + i + '" data-share="' + shareIdx + '" data-idx="' + i + '"' +
-            ' spellcheck="false" autocomplete="off" autocapitalize="off"' +
-            ' placeholder="word ' + (i + 1) + '">' +
-            '<div class="rst-autocomplete" id="xrr-ac-' + shareIdx + '-' + i + '"></div>';
-        grid.appendChild(cell);
-    }
-
-    // Attach events
-    grid.querySelectorAll('input').forEach(function(input) {
-        input.addEventListener('input', xrr_onInput);
-        input.addEventListener('keydown', xrr_onKeydown);
-        input.addEventListener('paste', xrr_onPaste);
-        input.addEventListener('blur', function() {
-            var si = parseInt(input.dataset.share);
-            var wi = parseInt(input.dataset.idx);
-            setTimeout(function() { xrr_hideAC(si, wi); }, 150);
-        });
-    });
-}
-
-function xrr_getWordlist() { return window.BtcMath?.wordlist || []; }
-
-function xrr_onInput(e) {
-    var input = e.target;
-    var si = parseInt(input.dataset.share);
-    var wi = parseInt(input.dataset.idx);
-    var val = input.value.trim().toLowerCase();
-
-    input.classList.remove('valid', 'invalid');
-    if (!val) { xrr_hideAC(si, wi); xrr_validateAll(); return; }
-
-    var wordlist = xrr_getWordlist();
-    if (!wordlist.length) return;
-    var matches = wordlist.filter(function(w) { return w.startsWith(val); });
-
-    if (matches.length === 1 && matches[0] === val) {
-        input.classList.add('valid');
-        xrr_hideAC(si, wi);
-    } else if (matches.length > 0 && matches.length <= 8) {
-        xrr_showAC(si, wi, matches, val);
-    } else {
-        xrr_hideAC(si, wi);
-        if (val.length >= 2 && matches.length === 0) input.classList.add('invalid');
+        var boxes = window.ShareFlow.createWordBoxes(document.getElementById('xrr-grid-' + s),
+            { count: _xrrWordCount, wordlist: window.ShareFlow.wordlists.bip39, idPrefix: 'xrr-' + s });
+        boxes.onChange(xrr_validateAll);
+        _xrrBoxes.push(boxes);
     }
     xrr_validateAll();
-}
-
-function xrr_onKeydown(e) {
-    var input = e.target;
-    var si = parseInt(input.dataset.share);
-    var wi = parseInt(input.dataset.idx);
-    var acEl = document.getElementById('xrr-ac-' + si + '-' + wi);
-    var items = acEl ? acEl.querySelectorAll('.rst-autocomplete-item') : [];
-
-    // Shift+Tab passes through to native DOM reverse-navigation so the
-    // user can step back across shares / words to fix typos.
-    if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
-        e.preventDefault();
-        if (acEl && acEl.style.display === 'block' && items.length > 0) {
-            var selIdx = Math.max(0, _xrrSelectedAC);
-            var pick = items[selIdx]?.dataset?.word;
-            if (pick) {
-                input.value = pick;
-                input.classList.remove('invalid');
-                input.classList.add('valid');
-                xrr_hideAC(si, wi);
-            }
-        } else {
-            var val = input.value.trim().toLowerCase();
-            var wordlist = xrr_getWordlist();
-            var matches = wordlist.filter(function(w) { return w.startsWith(val); });
-            if (matches.length === 1) {
-                input.value = matches[0];
-                input.classList.remove('invalid');
-                input.classList.add('valid');
-            }
-        }
-        // Move to next input — within same share, then to next share
-        var nextWord = document.getElementById('xrr-' + si + '-word-' + (wi + 1));
-        if (nextWord) { nextWord.focus(); }
-        else if (si + 1 < _xrrShareCount) {
-            var firstNext = document.getElementById('xrr-' + (si + 1) + '-word-0');
-            if (firstNext) firstNext.focus();
-        }
-        _xrrSelectedAC = -1;
-        xrr_validateAll();
-        return;
-    }
-    if (e.key === 'ArrowDown' && acEl && acEl.style.display === 'block') {
-        e.preventDefault();
-        _xrrSelectedAC = Math.min(_xrrSelectedAC + 1, items.length - 1);
-        xrr_highlightAC(items);
-        return;
-    }
-    if (e.key === 'ArrowUp' && acEl && acEl.style.display === 'block') {
-        e.preventDefault();
-        _xrrSelectedAC = Math.max(_xrrSelectedAC - 1, 0);
-        xrr_highlightAC(items);
-        return;
-    }
-    if (e.key === 'Escape') { xrr_hideAC(si, wi); _xrrSelectedAC = -1; }
-}
-
-function xrr_onPaste(e) {
-    var input = e.target;
-    var si = parseInt(input.dataset.share);
-    var pasted = (e.clipboardData || window.clipboardData).getData('text').trim();
-    var words = pasted.split(/\s+/).filter(function(w) { return w; });
-
-    if (words.length >= 12) {
-        e.preventDefault();
-        // If pasted count doesn't match, switch
-        if (words.length === 12 && _xrrWordCount !== 12) xrr_setWordCount(12);
-        else if (words.length >= 24 && _xrrWordCount !== 24) xrr_setWordCount(24);
-
-        // After rebuild, fill this share
-        setTimeout(function() {
-            var count = Math.min(words.length, _xrrWordCount);
-            var wordlist = xrr_getWordlist();
-            for (var i = 0; i < count; i++) {
-                var el = document.getElementById('xrr-' + si + '-word-' + i);
-                if (el) {
-                    el.value = words[i].toLowerCase();
-                    el.classList.remove('valid', 'invalid');
-                    el.classList.add(wordlist.includes(words[i].toLowerCase()) ? 'valid' : 'invalid');
-                }
-            }
-            xrr_validateAll();
-        }, 50);
-    }
-}
-
-function xrr_showAC(si, wi, matches, partial) {
-    var acEl = document.getElementById('xrr-ac-' + si + '-' + wi);
-    if (!acEl) return;
-    acEl.innerHTML = '';
-    _xrrSelectedAC = -1;
-    matches.forEach(function(word) {
-        var item = document.createElement('div');
-        item.className = 'rst-autocomplete-item';
-        item.dataset.word = word;
-        item.innerHTML = '<strong>' + word.slice(0, partial.length) + '</strong>' + word.slice(partial.length);
-        item.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            var inp = document.getElementById('xrr-' + si + '-word-' + wi);
-            inp.value = word;
-            inp.classList.remove('invalid');
-            inp.classList.add('valid');
-            xrr_hideAC(si, wi);
-            // Move to next
-            var next = document.getElementById('xrr-' + si + '-word-' + (wi + 1));
-            if (next) next.focus();
-            else if (si + 1 < _xrrShareCount) {
-                var firstNext = document.getElementById('xrr-' + (si + 1) + '-word-0');
-                if (firstNext) firstNext.focus();
-            }
-            xrr_validateAll();
-        });
-        acEl.appendChild(item);
-    });
-    acEl.style.display = 'block';
-}
-
-function xrr_hideAC(si, wi) {
-    var acEl = document.getElementById('xrr-ac-' + si + '-' + wi);
-    if (acEl) acEl.style.display = 'none';
-}
-
-function xrr_highlightAC(items) {
-    items.forEach(function(item, i) {
-        item.classList.toggle('selected', i === _xrrSelectedAC);
-    });
 }
 
 function xrr_clearShare(si) {
-    for (var i = 0; i < _xrrWordCount; i++) {
-        var el = document.getElementById('xrr-' + si + '-word-' + i);
-        if (el) { el.value = ''; el.classList.remove('valid', 'invalid'); }
-    }
+    if (_xrrBoxes[si]) _xrrBoxes[si].clear();
     xrr_validateAll();
 }
 
-// --- QR Scanner per share ---
-async function xrr_scanQR(si) {
-    if (!window.jsQR && !window.SKScanner) { showStatus('QR scanner not available.', 'error'); return; }
-    var area = document.getElementById('xrr-qr-area-' + si);
-    if (_xrrQrScanners[si]) { _xrrQrScanners[si].stop(); delete _xrrQrScanners[si]; }
-    area.style.display = 'block';
-    try {
-        _xrrQrScanners[si] = SKScanner.create('xrr-qr-reader-' + si);
-        await _xrrQrScanners[si].start({ fps: 10 }, function(text, binaryData) {
-            xrr_stopQR(si);
-            var words = sqr_wordsFromScan(text, binaryData);
-            if (words && (words.length === 12 || words.length === 24)) {
-                if (words.length !== _xrrWordCount) xrr_setWordCount(words.length);
-                setTimeout(function() {
-                    var wordlist = xrr_getWordlist();
-                    for (var i = 0; i < words.length; i++) {
-                        var el = document.getElementById('xrr-' + si + '-word-' + i);
-                        if (el) {
-                            el.value = words[i].toLowerCase();
-                            el.classList.remove('valid', 'invalid');
-                            el.classList.add(wordlist.includes(words[i].toLowerCase()) ? 'valid' : 'invalid');
-                        }
-                    }
-                    xrr_validateAll();
-                    showStatus('Share ' + (si + 1) + ' scanned — ' + words.length + ' words loaded.', 'success');
-                }, 50);
-            } else {
-                showStatus('QR code does not contain a valid seed.', 'error');
-            }
-        });
-    } catch (err) {
-        showStatus('Camera failed: ' + err.message, 'error');
-        area.style.display = 'none';
-    }
+// --- QR scan per share (plain words or Compact SeedQR) ---
+function xrr_scanQR(si) {
+    var wasThis = _xrrStopScan && _xrrStopScan.share === si;
+    xrr_stopAllQR();
+    if (wasThis) return;   // second click stops this scanner
+    var reader = document.getElementById('xrr-qr-reader-' + si);
+    var btn = document.getElementById('xrr-scan-btn-' + si);
+    if (!reader) return;
+    reader.style.display = 'block';
+    if (btn) btn.textContent = 'Stop scanning';
+    var stop = _xorScanShare(reader, function(words) {
+        xrr_stopAllQR();
+        if (!words || (words.length !== 12 && words.length !== 24)) {
+            showStatus('That QR code isn\u2019t a 12- or 24-word share.', 'error');
+            return;
+        }
+        if (words.length !== _xrrWordCount) {
+            // Keep what was typed in the other shares when the length changes.
+            var kept = _xrrBoxes.map(function(b) { return b.getWords(); });
+            xrr_setWordCount(words.length);
+            kept.forEach(function(w, k) { if (k !== si && _xrrBoxes[k] && w.length === words.length) _xrrBoxes[k].setWords(w); });
+        }
+        _xrrBoxes[si].setWords(words);
+        xrr_validateAll();
+        showStatus('Share ' + (si + 1) + ' scanned.', 'success');
+    }, function(err) {
+        xrr_stopAllQR();
+        showStatus('The camera couldn\u2019t start: ' + (err && err.message ? err.message : String(err)), 'error');
+    });
+    _xrrStopScan = function() { stop(); reader.style.display = 'none'; if (btn) btn.textContent = 'Scan QR'; };
+    _xrrStopScan.share = si;
 }
 
-function xrr_stopQR(si) {
-    if (_xrrQrScanners[si]) { _xrrQrScanners[si].stop(); delete _xrrQrScanners[si]; }
-    var area = document.getElementById('xrr-qr-area-' + si);
-    if (area) area.style.display = 'none';
-}
+function xrr_stopQR(si) { xrr_stopAllQR(); }
 
 function xrr_stopAllQR() {
-    for (var k in _xrrQrScanners) {
-        if (_xrrQrScanners[k]) _xrrQrScanners[k].stop();
-    }
-    _xrrQrScanners = {};
+    if (_xrrStopScan) { var f = _xrrStopScan; _xrrStopScan = null; try { f(); } catch (_) {} }
 }
 
-// --- Validation ---
+// --- Progress line under the boxes; Combine is enabled once every word is in ---
 function xrr_validateAll() {
-    var wordlist = xrr_getWordlist();
-    var totalWords = 0;
-    var validWords = 0;
-    var allSharesComplete = true;
-
-    for (var s = 0; s < _xrrShareCount; s++) {
-        var shareComplete = true;
-        for (var i = 0; i < _xrrWordCount; i++) {
-            var el = document.getElementById('xrr-' + s + '-word-' + i);
-            if (!el) continue;
-            var val = el.value.trim().toLowerCase();
-            if (!val) { shareComplete = false; continue; }
-            totalWords++;
-            if (wordlist.includes(val)) validWords++;
-        }
-        if (!shareComplete) allSharesComplete = false;
-    }
-
     var statusEl = document.getElementById('xrr-status');
     var combineBtn = document.getElementById('xrr-combine-btn');
-    var expected = _xrrShareCount * _xrrWordCount;
-
-    if (!allSharesComplete) {
-        statusEl.textContent = totalWords + ' / ' + expected + ' words entered across ' + _xrrShareCount + ' shares';
+    if (!statusEl || !combineBtn) return;
+    var filled = 0, expected = _xrrShareCount * _xrrWordCount;
+    _xrrBoxes.forEach(function(b) { b.getWords().forEach(function(w) { if (w) filled++; }); });
+    if (filled < expected) {
+        statusEl.textContent = filled + ' / ' + expected + ' words entered across ' + _xrrShareCount + ' shares';
         statusEl.className = 'rst-status';
-        combineBtn.disabled = true;
-    } else if (validWords < expected) {
-        statusEl.textContent = 'One or more words are not in the BIP-39 wordlist.';
-        statusEl.className = 'rst-status invalid';
         combineBtn.disabled = true;
     } else {
         statusEl.textContent = 'All shares complete. Ready to combine.';
@@ -14288,15 +14068,15 @@ async function xrr_combine() {
         var entropies = [];
 
         for (var s = 0; s < _xrrShareCount; s++) {
-            var words = [];
+            var words = _xrrBoxes[s] ? _xrrBoxes[s].getWords() : [];
             for (var i = 0; i < _xrrWordCount; i++) {
-                var el = document.getElementById('xrr-' + s + '-word-' + i);
-                var val = el ? el.value.trim().toLowerCase() : '';
-                if (!val) throw new Error('Share ' + (s + 1) + ', word #' + (i + 1) + ' is missing.');
-                if (!wordlist.includes(val)) throw new Error('Share ' + (s + 1) + ', word #' + (i + 1) + ' ("' + val + '") is not a valid BIP-39 word.');
-                words.push(val);
+                if (!words[i]) throw new Error('Share ' + (s + 1) + ', word ' + (i + 1) + ' is empty or not a BIP-39 word.');
             }
             var mnemonic = words.join(' ');
+            if (!bip39.validateMnemonic(mnemonic, wordlist)) {
+                if (_xrrBoxes[s]) _xrrBoxes[s].markWrong([]);
+                throw new Error('Share ' + (s + 1) + ' has a wrong word: its checksum doesn\u2019t match. Check every word against your paper.');
+            }
             var entropyBytes = bip39.mnemonicToEntropy(mnemonic, wordlist);
             entropies.push(entropyBytes);
             if (!combinedBytes) {
@@ -41257,6 +41037,9 @@ function hideShamirRecoveryPanel() {
     document.getElementById('shamir-recovery-panel').style.display = 'none';
     document.getElementById('welcome-buttons').style.display = 'flex';
     s39r_stopQR();
+    // Typed shares are not kept.
+    if (_s39rBoxes) { _s39rBoxes.destroy(); _s39rBoxes = null; }
+    _s39rShares = [];
     clearStatus();
 }
 
@@ -41266,38 +41049,80 @@ function hideShamirRecoveryPanel() {
 function s39r_reset() {
     _s39rShares = [];
     _s39rClearChoice();
-    var input = document.getElementById('s39r-share-input');
-    if (input) input.value = '';
     var pp = document.getElementById('s39r-passphrase');
     if (pp) pp.value = '';
     var statusEl = document.getElementById('s39r-status');
     if (statusEl) statusEl.style.display = 'none';
+    s39r_setWordCount(33);
     s39r_renderShareList();
     s39r_updateRecoverBtn();
 }
 
+var _s39rBoxes = null;      // ShareFlow word boxes for the share being entered
+var _s39rWordCount = 33;
+
 /**
- * Add a share from the textarea input.
+ * 20 or 33 words per share (a 12- or a 24-word seed). Rebuilds the boxes.
+ */
+function s39r_setWordCount(n) {
+    _s39rWordCount = n;
+    var b20 = document.getElementById('s39r-btn-20'), b33 = document.getElementById('s39r-btn-33');
+    if (b20) b20.classList.toggle('active', n === 20);
+    if (b33) b33.classList.toggle('active', n === 33);
+    if (_s39rBoxes) { _s39rBoxes.destroy(); _s39rBoxes = null; }
+    var host = document.getElementById('s39r-boxes');
+    if (host && window.ShareFlow) {
+        _s39rBoxes = window.ShareFlow.createWordBoxes(host, { count: n, wordlist: window.ShareFlow.wordlists.slip39, idPrefix: 's39r' });
+    }
+}
+
+function s39r_clearBoxes() {
+    if (_s39rBoxes) { _s39rBoxes.clear(); _s39rBoxes.focus(); }
+}
+
+// How many shares the added set needs: { need, label } for a single-group
+// set (SafeKeep's own, and most Trezor ones), or null if unknown/groups.
+function _s39rNeeded() {
+    if (!_s39rShares.length || !window.SLIP39 || !window.SLIP39.shareInfo) return null;
+    try {
+        var info = window.SLIP39.shareInfo(_s39rShares[0]);
+        if (info.groupCount !== 1 || info.groupThreshold !== 1) return null;
+        return { need: info.memberThreshold };
+    } catch (_) { return null; }
+}
+
+/**
+ * Add the share in the word boxes to the list. Each share is checked on
+ * its own first: its checksum, and that it belongs to the same set as the
+ * shares already added.
  */
 function s39r_addShare() {
-    var input = document.getElementById('s39r-share-input');
-    var text = (input.value || '').trim();
-    if (!text) {
-        s39r_showLocalStatus('Enter a SLIP-39 share mnemonic before adding.', 'error');
+    if (!_s39rBoxes) return;
+    var words = _s39rBoxes.getWords();
+    var empty = words.filter(function(w) { return !w; }).length;
+    if (empty) {
+        s39r_showLocalStatus('Fill in every word: ' + empty + (empty === 1 ? ' box is' : ' boxes are') + ' empty or not a SLIP-39 word.', 'error');
+        _s39rBoxes.focus();
         return;
     }
+    var normalized = words.join(' ');
 
-    // Basic validation: SLIP-39 shares are 20 or 33 words
-    var words = text.split(/\s+/);
-    if (words.length !== 20 && words.length !== 33) {
-        s39r_showLocalStatus('Invalid share length: ' + words.length + ' words. SLIP-39 shares are 20 words (128-bit) or 33 words (256-bit).', 'error');
-        return;
+    var info = null;
+    if (window.SLIP39 && window.SLIP39.shareInfo) {
+        try {
+            info = window.SLIP39.shareInfo(normalized);
+        } catch (e) {
+            s39r_showLocalStatus('This share has a wrong word: its checksum doesn\u2019t match. Check every word against your paper.', 'error');
+            return;
+        }
+        if (_s39rShares.length) {
+            var first = window.SLIP39.shareInfo(_s39rShares[0]);
+            if (first.identifier !== info.identifier) {
+                s39r_showLocalStatus('This share comes from a different set than Share 1. All shares must come from the same backup.', 'error');
+                return;
+            }
+        }
     }
-
-    // Normalize: lowercase, single-space separated
-    var normalized = words.map(function(w) { return w.toLowerCase(); }).join(' ');
-
-    // Check for duplicate
     for (var i = 0; i < _s39rShares.length; i++) {
         if (_s39rShares[i] === normalized) {
             s39r_showLocalStatus('This share has already been added (Share ' + (i + 1) + ').', 'error');
@@ -41306,10 +41131,19 @@ function s39r_addShare() {
     }
 
     _s39rShares.push(normalized);
-    input.value = '';
+    _s39rBoxes.clear();
     s39r_renderShareList();
     s39r_updateRecoverBtn();
-    s39r_showLocalStatus('Share ' + _s39rShares.length + ' added (' + words.length + ' words).', 'success');
+    var label = document.getElementById('s39r-entry-label');
+    if (label) label.textContent = 'Share ' + (_s39rShares.length + 1);
+    var needed = _s39rNeeded();
+    if (needed && _s39rShares.length >= needed.need) {
+        s39r_showLocalStatus('Share ' + _s39rShares.length + ' added. This set needs ' + needed.need + ' shares: you have enough. Press Combine & Recover.', 'success');
+    } else if (needed) {
+        s39r_showLocalStatus('Share ' + _s39rShares.length + ' added. This set needs ' + needed.need + ' shares: add ' + (needed.need - _s39rShares.length) + ' more.', 'success');
+    } else {
+        s39r_showLocalStatus('Share ' + _s39rShares.length + ' added.', 'success');
+    }
 }
 
 /**
@@ -41362,13 +41196,13 @@ function s39r_renderShareList() {
 }
 
 /**
- * Enable/disable the recover button based on minimum share count.
- * SLIP-39 requires at least 1 share, but realistically at least 2 for any
- * M-of-N scheme. We enable at 2+ and let combineMnemonics validate threshold.
+ * Enable Combine once the set's threshold is reached (or 2 shares, when
+ * the set uses groups and the library decides).
  */
 function s39r_updateRecoverBtn() {
     var btn = document.getElementById('s39r-recover-btn');
-    if (btn) btn.disabled = (_s39rShares.length < 2);
+    var needed = _s39rNeeded();
+    if (btn) btn.disabled = _s39rShares.length < (needed ? needed.need : 2);
 }
 
 /**
@@ -41395,51 +41229,38 @@ function s39r_showLocalStatus(msg, type) {
 }
 
 /**
- * Start QR scanner for a SLIP-39 share. Scans standard alphanumeric QR
- * containing the plaintext share words.
+ * Scan a share's QR code into the word boxes, then add it.
  */
-async function s39r_scanShareQR() {
-    if (!window.jsQR) { s39r_showLocalStatus('QR scanner library not available.', 'error'); return; }
-    var area = document.getElementById('s39r-qr-area');
-    if (_s39rQrScanner) { _s39rQrScanner.stop(); _s39rQrScanner = null; }
-    area.style.display = 'block';
-    try {
-        _s39rQrScanner = SKScanner.create('s39r-qr-reader');
-        await _s39rQrScanner.start({ fps: 10 }, function(text, binaryData) {
-            s39r_stopQR();
-            // Route through universal QR parser. SLIP-39 share QRs are
-            // plaintext words — they don't match the 48/96-digit or
-            // 16/32-byte BIP-39 SeedQR signatures, so the parser is a
-            // transparent passthrough here.
-            var parsed = window.QRParser
-                ? window.QRParser.parseQRScan(text, binaryData)
-                : text;
-            if (!parsed) { s39r_showLocalStatus('QR code was empty.', 'error'); return; }
-            // SLIP-39 shares are plaintext words in the QR — may be uppercase
-            var normalized = parsed.trim().toLowerCase();
-            var words = normalized.split(/\s+/);
-            if (words.length === 20 || words.length === 33) {
-                // Auto-fill the textarea and add immediately
-                document.getElementById('s39r-share-input').value = normalized;
-                s39r_addShare();
-            } else {
-                document.getElementById('s39r-share-input').value = normalized;
-                s39r_showLocalStatus('Scanned QR has ' + words.length + ' words. Expected 20 or 33 for a SLIP-39 share. Check and add manually.', 'error');
-            }
-        });
-    } catch (err) {
-        s39r_showLocalStatus('Camera failed: ' + err.message, 'error');
-        area.style.display = 'none';
-    }
+function s39r_scanShareQR() {
+    if (_s39rQrScanner) { s39r_stopQR(); return; }   // second click stops it
+    var reader = document.getElementById('s39r-qr-reader');
+    var btn = document.getElementById('s39r-scan-btn');
+    reader.style.display = 'block';
+    if (btn) btn.textContent = 'Stop scanning';
+    _s39rQrScanner = { stop: _s39ScanShare(reader, function(words) {
+        s39r_stopQR();
+        if (!words || (words.length !== 20 && words.length !== 33)) {
+            s39r_showLocalStatus('That QR code isn\u2019t a 20- or 33-word SLIP-39 share.', 'error');
+            return;
+        }
+        if (words.length !== _s39rWordCount) s39r_setWordCount(words.length);
+        _s39rBoxes.setWords(words);
+        s39r_addShare();
+    }, function(err) {
+        s39r_stopQR();
+        s39r_showLocalStatus('The camera couldn\u2019t start: ' + (err && err.message ? err.message : String(err)), 'error');
+    }) };
 }
 
 /**
  * Stop the share QR scanner.
  */
 function s39r_stopQR() {
-    if (_s39rQrScanner) { _s39rQrScanner.stop(); _s39rQrScanner = null; }
-    var area = document.getElementById('s39r-qr-area');
-    if (area) area.style.display = 'none';
+    if (_s39rQrScanner) { var sc = _s39rQrScanner; _s39rQrScanner = null; try { sc.stop(); } catch (_) {} }
+    var reader = document.getElementById('s39r-qr-reader');
+    if (reader) reader.style.display = 'none';
+    var btn = document.getElementById('s39r-scan-btn');
+    if (btn) btn.textContent = 'Scan QR';
 }
 
 /**
@@ -41473,13 +41294,37 @@ async function s39r_recover() {
         var passphrase = document.getElementById('s39r-passphrase').value || '';
 
         // combineMnemonics expects an array of mnemonic strings + optional passphrase
+        // SLIP-39 combines exactly the threshold number of shares. With more
+        // shares of a single-group set, combine every run of that many
+        // consecutive shares: they must all give the same secret.
+        var needed = _s39rNeeded();
+        var runs = [_s39rShares];
+        if (needed && _s39rShares.length > needed.need) {
+            runs = [];
+            for (var r = 0; r < _s39rShares.length; r++) {
+                var run = [];
+                for (var k = 0; k < needed.need; k++) run.push(_s39rShares[(r + k) % _s39rShares.length]);
+                runs.push(run);
+            }
+        }
         var recoveredSecret;
         try {
-            recoveredSecret = await SLIP39.combineMnemonics(_s39rShares, passphrase);
+            for (var ri = 0; ri < runs.length; ri++) {
+                var secretRun = await SLIP39.combineMnemonics(runs[ri], passphrase);
+                if (!recoveredSecret) { recoveredSecret = secretRun; continue; }
+                var same = recoveredSecret.length === secretRun.length;
+                for (var bi = 0; same && bi < secretRun.length; bi++) same = recoveredSecret[bi] === secretRun[bi];
+                if (secretRun.fill) secretRun.fill(0);
+                if (!same) throw new Error('The shares you added don\u2019t all agree: one of them is probably mistyped. Remove the shares one at a time and try again.');
+            }
         } catch (libErr) {
+            if (/don\u2019t all agree/.test(libErr.message || '')) throw libErr;
             // Map library errors to user-friendly messages
             var msg = libErr.message || String(libErr);
-            if (/threshold/i.test(msg) || /not enough/i.test(msg) || /insufficient/i.test(msg)) {
+            var count = /Expected (\d+) mnemonics.*but (\d+) were provided/i.exec(msg);
+            if (count && +count[2] < +count[1]) {
+                throw new Error('Not enough shares: this set needs ' + count[1] + ' shares to recover the seed, and you added ' + count[2] + '.');
+            } else if (/threshold/i.test(msg) || /not enough/i.test(msg) || /insufficient/i.test(msg)) {
                 throw new Error('Not enough shares to meet the threshold. You need more shares to recover. (' + msg + ')');
             } else if (/checksum/i.test(msg) || /invalid mnemonic/i.test(msg)) {
                 throw new Error('One or more shares are invalid or corrupted. Check your share words carefully. (' + msg + ')');
@@ -41540,7 +41385,8 @@ async function s39r_recover() {
         s39r_showLocalStatus(e.message, 'error');
         showStatus('SLIP-39 recovery failed: ' + e.message, 'error');
     } finally {
-        if (btn) { btn.disabled = (_s39rShares.length < 2); btn.textContent = 'Combine & Recover'; }
+        if (btn) btn.textContent = 'Combine & Recover';
+        s39r_updateRecoverBtn();
     }
 }
 
