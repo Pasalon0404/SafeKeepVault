@@ -147,18 +147,20 @@ console.log(`  Trezor restore fingerprint     : ${trezorFp}   ${walletFp === tre
       ck('final check: every share takes part (a foreign last share fails)', !r2.ok, JSON.stringify(r2)); }
     r = await ctx._s39CheckExisting([shares[1], shares[2]]);
     ck('check shares: any 2 rebuild the vault seed', r.ok && /rebuild your vault seed/.test(r.message) && !seed.split(' ').some((w) => r.message.includes(' ' + w + ' ')), r.message);
+    ck('check shares: the words come back separately, labelled as the vault seed', r.words === seed && /your vault seed/.test(r.wordsLabel));
     r = await ctx._s39CheckExisting([shares[1]]);
     ck('check shares: one share is not enough, and the message says how many', !r.ok && /Not enough shares: this set needs 2/.test(r.message), r.message);
     r = await ctx._s39CheckExisting(shares.slice());
     ck('check shares: all 3 of a 2-of-3 set → "enter 2 of them"', !r.ok && /Too many shares.*Enter 2/.test(r.message), r.message);
     const typo = shares[0].split(' '); typo[5] = typo[5] === 'academic' ? 'acid' : 'academic';
     r = await ctx._s39CheckExisting([typo.join(' '), shares[1]]);
-    ck('check shares: a wrong word is caught', !r.ok && /wrong word/.test(r.message), r.message);
+    ck('check shares: a wrong word is caught, and no words are offered', !r.ok && /wrong word/.test(r.message) && !r.words, r.message);
     const other = (await generateMnemonics(1, [[2, 3]], Buffer.from(randomBytes(len)), '', 1))[0];
     r = await ctx._s39CheckExisting([shares[0], other[1]]);
     ck('check shares: shares from two different sets are refused', !r.ok, r.message);
     r = await ctx._s39CheckExisting(other.slice(0, 2));
     ck('check shares: another seed\'s shares → a different seed, both fingerprints', !r.ok && /different seed/.test(r.message) && (r.message.match(/[0-9a-f]{8}/g) || []).length === 2, r.message);
+    ck('check shares: that seed\'s words are offered, labelled NOT your vault seed', r.words && r.words !== seed && r.words.split(' ').length === len * 3 / 4 && /NOT your vault seed/.test(r.wordsLabel));
   }
   { // with a share passphrase
     const seed = bip39.entropyToMnemonic(randomBytes(16), wordlist);

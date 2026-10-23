@@ -5500,6 +5500,10 @@
     .sf-field { margin-bottom: 1rem; max-width: 520px; }
     .sf-field-label { display: block; font-size: 0.875rem; color: var(--skb-text-muted); margin-bottom: 0.35rem; }
     .sf-field input { width: 100%; box-sizing: border-box; padding: 0.55rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.9375rem; }
+    .sf-reveal { margin-bottom: 1rem; }
+    .sf-reveal .skb-btn { font-size: 0.875rem; padding: 0.45rem 1rem; }
+    .sf-reveal .sf-words { margin-top: 0.75rem; }
+    .sf-reveal-label { font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-top: 0.25rem; }
     .sf-done { margin: 0.5rem 0 1.25rem; padding-left: 1.25rem; color: var(--skb-text); font-size: 0.9375rem; line-height: 1.8; }
 
     /* Armory */
@@ -27932,7 +27936,7 @@ function xor_openChecker() {
         shareName: 'XOR share',
         counts: [2, 3, 4],
         count: xor_state.shares,
-        intro: 'Type in each share from your paper, or scan its QR code. SafeKeep tells you whether they rebuild your vault seed; it never shows the seed. To combine shares for a different wallet, restart in a Temporary session and choose Restore via Seed XOR.',
+        intro: 'Type in each share from your paper, or scan its QR code. SafeKeep tells you whether they rebuild your vault seed, and can show the rebuilt seed\u2019s words if you ask. Nothing is loaded or saved.',
         scan: _xorScanShare,
         check: _xorCheckExisting,
         onBack: xor_closeChecker,
@@ -27953,13 +27957,16 @@ async function _xorCheckExisting(typedShares) {
     } catch (e) {
         return { ok: false, message: e.message };
     }
+    var fp = await _xorFingerprint(combined);
     if (combined === xor_state.loadedSeed) {
-        return { ok: true, message: 'These ' + n + ' shares rebuild your vault seed (fingerprint ' + await _xorFingerprint(combined) + '). Your XOR backup is good.' };
+        return { ok: true, message: 'These ' + n + ' shares rebuild your vault seed (fingerprint ' + fp + '). Your XOR backup is good.',
+                 words: combined, wordsLabel: 'These are your vault seed\u2019s words (fingerprint ' + fp + ').' };
     }
     // Not the vault seed: a share entered twice or an all-zero result says
     // more than "a different seed".
     try { _xorCombine(typedShares); } catch (e) { return { ok: false, message: e.message }; }
-    return { ok: false, message: 'These shares rebuild a different seed (fingerprint ' + await _xorFingerprint(combined) + '), not your vault seed (fingerprint ' + await _xorFingerprint(xor_state.loadedSeed) + '). Check every word of every share against your paper, and that you have all of them: one wrong word or a missing share changes the result.' };
+    return { ok: false, message: 'These shares rebuild a different seed (fingerprint ' + fp + '), not your vault seed (fingerprint ' + await _xorFingerprint(xor_state.loadedSeed) + '). Check every word of every share against your paper, and that you have all of them: one wrong word or a missing share changes the result.',
+             words: combined, wordsLabel: 'This is NOT your vault seed. It is the seed these shares rebuild (fingerprint ' + fp + '). If you expected your own seed, a share is wrong or missing.' };
 }
 
 // --- Share sanity checks (also used by Restore via Seed XOR, xrr_combine) ---
@@ -42073,7 +42080,7 @@ function s39_openChecker() {
         shareName: 'Shamir share',
         counts: [2, 3, 4, 5, 6, 7, 8],
         count: Math.min(8, s39_state.threshold),
-        intro: 'Type in as many shares as your split needs (2 for “any 2 of 3”), or scan their QR codes. SafeKeep tells you whether they rebuild your vault seed; it never shows the seed. To recover a different wallet, restart in a Temporary session and choose Recover Shamir Backup.',
+        intro: 'Type in as many shares as your split needs (2 for \u201cany 2 of 3\u201d), or scan their QR codes. SafeKeep tells you whether they rebuild your vault seed, and can show the rebuilt seed\u2019s words if you ask. Nothing is loaded or saved.',
         extraField: { label: 'Share passphrase (leave blank if you didn’t set one)' },
         scan: _s39ScanShare,
         check: _s39CheckExisting,
@@ -42096,12 +42103,15 @@ async function _s39CheckExisting(typedShares, passphrase) {
     } catch (e) {
         return { ok: false, message: e.message };
     }
+    var fp = await _xorFingerprint(combined);
     if (combined === seed.mnemonic) {
-        return { ok: true, message: 'These ' + typedShares.length + ' shares rebuild your vault seed (fingerprint ' + await _xorFingerprint(combined) + '). Your Shamir backup is good.' };
+        return { ok: true, message: 'These ' + typedShares.length + ' shares rebuild your vault seed (fingerprint ' + fp + '). Your Shamir backup is good.',
+                 words: combined, wordsLabel: 'These are your vault seed\u2019s words (fingerprint ' + fp + ').' };
     }
-    return { ok: false, message: 'These shares rebuild a different seed (fingerprint ' + await _xorFingerprint(combined) + '), not your vault seed (fingerprint ' + await _xorFingerprint(seed.mnemonic) + '). ' +
+    return { ok: false, message: 'These shares rebuild a different seed (fingerprint ' + fp + '), not your vault seed (fingerprint ' + await _xorFingerprint(seed.mnemonic) + '). ' +
         (passphrase ? 'Check the share passphrase: a wrong one gives a different seed. ' : 'If you set a share passphrase, type it in: without it the shares give a different seed. ') +
-        'Then check every word against your paper.' };
+        'Then check every word against your paper.',
+        words: combined, wordsLabel: 'This is NOT your vault seed. It is the seed these shares rebuild as SafeKeep shares (fingerprint ' + fp + '). A wrong share passphrase also gives a different seed, and shares made on a Trezor hold a different wallet that has no such words.' };
 }
 
 

@@ -160,9 +160,12 @@ async function checkExisting(typed, loadedSeed = CC.R) {
 }
 { const r = await checkExisting([CC.B, CC.C, CC.A]);
   ck('check shares: the right shares rebuild the vault seed', r.ok && /rebuild your vault seed/.test(r.message), JSON.stringify(r));
-  ck('check shares: the message never holds a seed word', !CC.R.split(' ').some((w) => new RegExp('\\b' + w + '\\b').test(r.message))); }
-{ const r = await checkExisting([CC.A, CC.B]); ck('check shares: a missing share → a different seed, both fingerprints named', !r.ok && /different seed/.test(r.message) && (r.message.match(/[0-9a-f]{8}/g) || []).length === 2, JSON.stringify(r)); }
-{ const r = await checkExisting([CC.A, CC.A, CC.B]); ck('check shares: a share entered twice is named', !r.ok && /identical/.test(r.message), JSON.stringify(r)); }
+  ck('check shares: the message never holds a seed word', !CC.R.split(' ').some((w) => new RegExp('\\b' + w + '\\b').test(r.message)));
+  ck('check shares: the words come back separately, labelled as the vault seed', r.words === CC.R && /your vault seed/.test(r.wordsLabel)); }
+{ const r = await checkExisting([CC.A, CC.B]); ck('check shares: a missing share → a different seed, both fingerprints named', !r.ok && /different seed/.test(r.message) && (r.message.match(/[0-9a-f]{8}/g) || []).length === 2, JSON.stringify(r));
+  const ab = await merge([CC.A, CC.B]);
+  ck('check shares: a different seed\'s words are offered, labelled NOT your vault seed', r.words === ab.seed && /NOT your vault seed/.test(r.wordsLabel)); }
+{ const r = await checkExisting([CC.A, CC.A, CC.B]); ck('check shares: a share entered twice is named, and no words are offered', !r.ok && /identical/.test(r.message) && !r.words, JSON.stringify(r)); }
 { const r = await checkExisting([CC.A, CC.B, bad.join(' ')]); ck('check shares: a bad-checksum share is named', !r.ok && /Share 3/.test(r.message)); }
 { const zero = bip39.entropyToMnemonic(new Uint8Array(32), wordlist); const sh = await split(zero, 2);
   ck('check shares: works for the all-zero test seed', (await checkExisting(sh, zero)).ok); }

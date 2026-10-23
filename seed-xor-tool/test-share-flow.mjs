@@ -220,7 +220,9 @@ if (!executablePath || !chromium) {
     window.checker = SF.mountShareChecker(document.getElementById('host'), {
       idPrefix: 'c', wordlist: BIP39, wordCount: 12, shareName: 'XOR share', counts: [2, 3, 4], count: 2,
       intro: 'Type in each share.', scan: () => () => {},
-      check: async (typed) => { chk.got = typed; return typed[0].startsWith('abandon') ? { ok: true, message: 'They rebuild your vault seed.' } : { ok: false, message: 'They rebuild a different seed.' }; },
+      check: async (typed) => { chk.got = typed; return typed[0].startsWith('abandon')
+        ? { ok: true, message: 'They rebuild your vault seed.', words: 'zoo zone zero youth young you wrong write wrist wreck wrap worth', wordsLabel: 'These are your vault seed words.' }
+        : { ok: false, message: 'They rebuild a different seed.' }; },
       onBack: () => { chk.back++; },
     });
   });
@@ -235,11 +237,18 @@ if (!executablePath || !chromium) {
   await clickText('Check these shares');
   await page.waitForFunction(() => /rebuild your vault seed/.test(document.getElementById('host').innerText));
   ck('checker: passes the typed shares and shows a pass', await page.evaluate(() => chk.got.length === 3 && chk.got[2].split(' ').length === 12) && await page.isVisible('#host .sf-status.ok'));
+  ck('checker: the rebuilt words stay hidden until asked for', !(await page.evaluate(() => document.getElementById('host').innerText.includes('youth'))) && await page.isVisible('#host .sf-reveal button'));
+  await clickText('Show the seed words');
+  ck('checker: Show the seed words shows the numbered words and the label', (await page.$$('#host .sf-reveal .sf-word')).length === 12 && /youth/.test(await text()) && /These are your vault seed words/.test(await text()));
+  ck('checker: no Copy next to the words', !(await page.$$eval('#host button', (bs) => bs.map((b) => b.textContent))).includes('Copy'));
+  await clickText('Hide the seed words');
+  ck('checker: Hide the seed words hides them again', !(await page.evaluate(() => document.getElementById('host').innerText.includes('youth'))) && await page.isVisible('#host .sf-reveal button'));
+  await clickText('Show the seed words');
   await page.fill('#c-0-word-0', 'zoo');
-  ck('checker: editing a word clears the old result', !(await page.isVisible('#host .sf-status.ok')));
+  ck('checker: editing a word clears the old result and the words', !(await page.isVisible('#host .sf-status.ok')) && !(await page.evaluate(() => document.getElementById('host').innerText.includes('youth'))) && (await page.$$('#host .sf-reveal *')).length === 0);
   await page.fill('#c-0-word-0', 'act'); await clickText('Check these shares');
   await page.waitForFunction(() => /different seed/.test(document.getElementById('host').innerText));
-  ck('checker: shows a failure', await page.isVisible('#host .sf-status.error'));
+  ck('checker: shows a failure (no words offered when the check returns none)', await page.isVisible('#host .sf-status.error') && (await page.$$('#host .sf-reveal *')).length === 0);
   await clickText('Back');
   ck('checker: Back calls onBack', await page.evaluate(() => chk.back === 1));
   await page.evaluate(() => checker.destroy());
