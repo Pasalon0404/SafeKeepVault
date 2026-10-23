@@ -327,7 +327,10 @@ export function mountShareFlow(container, opts) {
  *     counts: [2, 3, 4], count: 3,        // how many shares to enter
  *     intro: '…',                         // one or two lines at the top
  *     scan(readerEl, onWords, onError) → stop function    // optional
- *     check(typedShares, extra) → Promise<{ ok, message }>,
+ *     check(typedShares, extra) → Promise<{ ok, message, words?, wordsLabel? }>,
+ *                                         // words: the rebuilt seed, shown only
+ *                                         // when the user presses "Show the
+ *                                         // seed words" (no Copy, no QR)
  *     extraField: { label },              // optional: one more value, e.g.
  *                                         // Shamir's share passphrase
  *     onBack(),
@@ -380,6 +383,34 @@ export function mountShareChecker(container, opts) {
 
         const result = el('div', 'sf-status');
         result.style.display = 'none';
+        // The rebuilt seed's words, hidden until asked for; cleared with the
+        // result whenever a share or the passphrase changes.
+        const reveal = el('div', 'sf-reveal');
+        let revealWords = null;
+        function clearResult() {
+            setStatus(result, '', '');
+            revealWords = null;
+            reveal.innerHTML = '';
+        }
+        function offerWords(words, label) {
+            revealWords = words.split(' ');
+            reveal.innerHTML = '';
+            const show = button('Show the seed words', '', () => {
+                if (!revealWords) return;
+                reveal.innerHTML = '';
+                if (label) reveal.appendChild(el('div', 'sf-reveal-label', label));
+                const grid = el('div', 'sf-words' + (revealWords.length > 24 ? ' sf-words--wide' : ''));
+                revealWords.forEach((w, i) => {
+                    const cell = el('div', 'sf-word');
+                    cell.appendChild(el('span', 'sf-word-num', String(i + 1)));
+                    cell.appendChild(el('span', 'sf-word-text', w));
+                    grid.appendChild(cell);
+                });
+                reveal.appendChild(grid);
+                reveal.appendChild(button('Hide the seed words', 'sf-quiet', () => offerWords(revealWords.join(' '), label)));
+            });
+            reveal.appendChild(show);
+        }
 
         for (let k = 0; k < count; k++) {
             const block = el('div', 'sf-share-block');
@@ -388,7 +419,7 @@ export function mountShareChecker(container, opts) {
             const host = el('div', 'sf-boxes');
             const b = createWordBoxes(host, { count: opts.wordCount, wordlist: opts.wordlist, idPrefix: opts.idPrefix + '-' + k });
             if (kept[k]) b.setWords(kept[k]);
-            b.onChange(() => setStatus(result, '', ''));
+            b.onChange(clearResult);
             boxes.push(b);
             if (opts.scan) {
                 let reader = null;
@@ -429,12 +460,13 @@ export function mountShareChecker(container, opts) {
             extra.autocomplete = 'off';
             extra.spellcheck = false;
             extra.value = extraValue;
-            extra.addEventListener('input', () => { extraValue = extra.value; setStatus(result, '', ''); });
+            extra.addEventListener('input', () => { extraValue = extra.value; clearResult(); });
             label.htmlFor = extra.id;
             wrap.append(label, extra);
             card.appendChild(wrap);
         }
         card.appendChild(result);
+        card.appendChild(reveal);
         const actions = el('div', 'sf-actions');
         actions.appendChild(button('Back', '', () => opts.onBack && opts.onBack()));
         const go = button('Check these shares', 'skb-btn--primary sf-primary', async () => {
@@ -446,12 +478,14 @@ export function mountShareChecker(container, opts) {
                 return;
             }
             go.disabled = true;
+            clearResult();
             setStatus(result, 'info', 'Checking…');
             let r;
             try { r = await opts.check(typed.map((w) => w.join(' ')), extra ? extra.value : undefined); } catch (e) { r = { ok: false, message: e && e.message }; }
             go.disabled = false;
             if (destroyed) return;
             setStatus(result, r && r.ok ? 'ok' : 'error', (r && r.message) || 'The check failed.');
+            if (r && r.words) offerWords(r.words, r.wordsLabel);
         });
         actions.appendChild(go);
         card.appendChild(actions);

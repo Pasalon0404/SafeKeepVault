@@ -147,10 +147,17 @@ Removing XOR's Merge tab left no way, with a seed in the vault, to test
 shares made months ago. Each tool's setup card therefore has a second
 button, **Check Shares I Already Have**: the user types in (or scans) the
 shares, and SafeKeep says whether they rebuild the vault seed, naming
-both fingerprints if not. The rebuilt seed's words are never shown and
-nothing is loaded, so it is safe to use any time. Shares for a different
-wallet are combined in a Temporary session (welcome screen → Restore),
-which never touches the vault; the screen says so.
+both fingerprints if not. Nothing is loaded.
+
+**Show the seed words** (added after v1.52, at the owner's request: the
+words are the point of combining shares). Below the result, a button
+shows the rebuilt seed's words, hidden until pressed, with no Copy or QR
+code. They are labelled either "These are your vault seed's words" or
+"This is NOT your vault seed" with its fingerprint, so a different
+wallet can't be mistaken for the user's own. Editing any share or the
+passphrase clears them, and leaving the tool wipes them. A check that
+fails outright (a wrong word, a share entered twice, too few shares)
+offers no words.
 
 ### Leaving early
 
