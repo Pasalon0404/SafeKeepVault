@@ -311,7 +311,10 @@ if [ "$SAFEKEEP_DEV_SHELL" = "1" ]; then
     echo "!!! DEVELOPER BUILD: Terminal (Ctrl+Alt+T) and File Explorer enabled — NOT for release !!!"
     echo ""
 fi
-chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" /bin/bash -c "/chroot-setup.sh"
+# UC_*: Chromium pin overrides (chroot-setup.sh); empty means its defaults.
+chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" \
+    UC_PIN_TAG="${UC_PIN_TAG:-}" UC_EXPECTED_SHA256="${UC_EXPECTED_SHA256:-}" UC_ALLOW_UNPINNED="${UC_ALLOW_UNPINNED:-}" \
+    /bin/bash -c "/chroot-setup.sh"
 
 # Run OS hardening inside the chroot.
 # This bakes module blacklists (/etc/modprobe.d/), udev rules, polkit/dconf

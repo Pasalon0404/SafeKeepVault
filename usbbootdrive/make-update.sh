@@ -42,10 +42,21 @@ STAMP=$(unsquashfs -cat "$STAGING/filesystem.squashfs" opt/safekeep/boot.html \
 [ -n "$STAMP" ] || die "could not read the build stamp of the app inside the OS."
 VERSION=$(echo "$STAMP" | sed -n 's/^v\([0-9]*\.[0-9]*\) · .*/\1/p')
 BUILDNO=$(echo "$STAMP" | sed -n 's/^v[0-9.]* · build \([0-9]*\) · .*/\1/p')
+# Which Chromium the build installed (chroot-setup.sh); an unpinned one is
+# never a release.
+CHROMIUM=$(unsquashfs -cat "$STAGING/filesystem.squashfs" etc/safekeep-chromium 2>/dev/null | head -1 || true)
+NOT_RELEASE_WHY=""
 case "$STAMP" in
-    *"+ "*) NAME="SafeKeep-Update-v${VERSION}-build${BUILDNO}.tar"; NOT_RELEASE=1 ;;
-    *)      NAME="SafeKeep-Update-v${VERSION}.tar"; NOT_RELEASE=0 ;;
+    *"+ "*) NOT_RELEASE_WHY="the build stamp has local changes" ;;
 esac
+case "$CHROMIUM" in
+    UNPINNED*) NOT_RELEASE_WHY="${NOT_RELEASE_WHY:+$NOT_RELEASE_WHY; }Chromium was not pinned (UC_ALLOW_UNPINNED=1)" ;;
+esac
+if [ -n "$NOT_RELEASE_WHY" ]; then
+    NAME="SafeKeep-Update-v${VERSION}-build${BUILDNO}.tar"; NOT_RELEASE=1
+else
+    NAME="SafeKeep-Update-v${VERSION}.tar"; NOT_RELEASE=0
+fi
 
 OUT="workspace/update"
 rm -rf "$OUT"
@@ -88,10 +99,11 @@ echo "========================================="
 echo "  File       : $NAME ($(( $(stat -c%s "$NAME") / 1048576 )) MB)"
 echo "  Build      : $STAMP"
 echo "  app sha256 : $APP_SHA"
+echo "  Chromium   : ${CHROMIUM:-not recorded (built before the pin)}"
 echo "  Also wrote : manifest.json (to sign)"
 if [ "$NOT_RELEASE" = 1 ]; then
     echo ""
-    echo "  NOT FOR A RELEASE: the build stamp has local changes."
+    echo "  NOT FOR A RELEASE: $NOT_RELEASE_WHY."
 fi
 echo ""
 echo "  On the Mac, copy both files over, then sign and add the signature:"

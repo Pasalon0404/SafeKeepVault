@@ -75,8 +75,9 @@ sh('bash', ['-c', `gpg --homedir "${gh}" --batch --export ${MFPR} > "${KEYRING}"
 ck('maintainer keyring for gpgv', statSync(KEYRING).size > 0);
 
 // Make an OS staging folder whose squashfs holds a test app with a stamp.
-function makeStaging(dir, stamp, tag) {
+function makeStaging(dir, stamp, tag, chromium) {
   mkdirSync(join(dir, 'tree/opt/safekeep'), { recursive: true });
+  if (chromium) { mkdirSync(join(dir, 'tree/etc'), { recursive: true }); writeFileSync(join(dir, 'tree/etc/safekeep-chromium'), chromium + '\n'); }
   writeFileSync(join(dir, 'tree/opt/safekeep/boot.html'), `<span data-skv-version>${stamp}</span>${tag}`);
   const st = join(dir, 'workspace/staging/casper'); mkdirSync(st, { recursive: true });
   if (has('mksquashfs')) {
@@ -94,8 +95,8 @@ function makeStaging(dir, stamp, tag) {
 
 // Build an update file: with make-update.sh when squashfs-tools exist,
 // otherwise the same format by hand.
-function makeUpdate(dir, stamp, tag) {
-  const st = makeStaging(dir, stamp, tag);
+function makeUpdate(dir, stamp, tag, chromium) {
+  const st = makeStaging(dir, stamp, tag, chromium);
   if (has('unsquashfs') && has('mksquashfs')) {
     const r = sh('bash', [join(OS, 'make-update.sh')], { cwd: dir });
     const name = readdirSync(dir).find((n) => n.startsWith('SafeKeep-Update-') && n.endsWith('.tar'));
@@ -135,6 +136,14 @@ if (has('unsquashfs')) {
   const B9 = join(T, 'build9'); mkdirSync(B9);
   const U9 = makeUpdate(B9, STAMP_NEW + ' + local changes', 'dev');
   ck('a build with local changes gets a -build<N> name and a warning', U9.tar && U9.tar.endsWith('SafeKeep-Update-v1.47-build290.tar') && U9.r.stdout.includes('NOT FOR A RELEASE'));
+  // Chromium: chroot-setup.sh records the installed browser in /etc/safekeep-chromium.
+  const B10 = join(T, 'build10'); mkdirSync(B10);
+  const U10 = makeUpdate(B10, STAMP_NEW, 'pinned', 'pinned 155.0.8059.84-1 ' + 'b'.repeat(64));
+  ck('a pinned Chromium: release name, and the version is printed', U10.tar && U10.tar.endsWith('SafeKeep-Update-v1.47.tar') && U10.r.stdout.includes('Chromium   : pinned 155.0.8059.84-1') && !U10.r.stdout.includes('NOT FOR A RELEASE'), U10.r.stdout);
+  const B11 = join(T, 'build11'); mkdirSync(B11);
+  const U11 = makeUpdate(B11, STAMP_NEW, 'unpinned', 'UNPINNED ' + 'c'.repeat(64));
+  ck('an unpinned Chromium is never a release: -build<N> name and a warning', U11.tar && U11.tar.endsWith('-build290.tar') && /NOT FOR A RELEASE: Chromium was not pinned/.test(U11.r.stdout), U11.r.stdout);
+  ck('an older build without the record still works and says so', U1.r.stdout.includes('Chromium   : not recorded'));
 } else {
   console.log('  (squashfs-tools not installed: make-update.sh run skipped; update made by hand)');
 }
