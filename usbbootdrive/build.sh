@@ -92,7 +92,7 @@ trap cleanup EXIT
 # config/ stops the build.
 MAINTAINER_FPR="A333EB826F70A79A736F09948EA7DD8CEDBA86C2"
 MAINTAINER_KEY="config/maintainer-pubkey.asc"
-for f in grub.cfg "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh quiet-downloads/manifest.json quiet-downloads/background.js; do
+for f in grub.cfg .disk_label .disk_label_2x "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh quiet-downloads/manifest.json quiet-downloads/background.js; do
     [ -s "$f" ] || { echo "ERROR: $f is missing (rsync the whole usbbootdrive folder)." >&2; exit 1; }
 done
 
@@ -521,6 +521,14 @@ grub-mkstandalone \
     --fonts="" \
     --modules="part_gpt ext2 fat search search_label normal linux gzio test configfile" \
     "boot/grub/grub.cfg=$WORKSPACE/mnt-efi/boot/grub/grub.cfg"
+
+# Name the stick in Mac boot menus: "SafeKeep" instead of "EFI Boot".
+# Apple's Option-key menu shows .disk_label (_2x on Retina screens), a small
+# picture of the name made once on a Mac with `bless --label SafeKeep`.
+# OpenCore's menu shows the plain-text .contentDetails. PC boot menus name
+# the stick after its hardware, which nothing on the stick can change.
+cp .disk_label .disk_label_2x "$WORKSPACE/mnt-efi/EFI/BOOT/"
+printf 'SafeKeep' > "$WORKSPACE/mnt-efi/EFI/BOOT/.contentDetails"
 
 # --- BIOS GRUB ---
 # Install GRUB for BIOS/legacy boot to the loop device's MBR
