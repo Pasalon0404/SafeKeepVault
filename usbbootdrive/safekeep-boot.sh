@@ -2388,7 +2388,7 @@ except Exception as e:
 
                 if [ -z "$PROBE_ROOT" ]; then
                     echo "Restore Watcher: FATAL — no vault directories found anywhere in extraction"
-                    echo "{\"ok\":false,\"error\":\"Archive extracted but contains no vault data (no codex/, passphrases/, settings/, or seeds/ found).\"}" > "$RESTORE_INSPECT_RESULT"
+                    echo "{\"ok\":false,\"error\":\"This backup holds no vault data: no notes, saved passphrases, settings or seed.\"}" > "$RESTORE_INSPECT_RESULT"
                     rm -f "$RESTORE_INSPECT_TRIGGER"
                     rm -rf "$RELIQUARY_TMP"
                     sleep 1
