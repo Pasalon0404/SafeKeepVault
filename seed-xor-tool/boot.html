@@ -8156,6 +8156,7 @@
                 <h2 class="tool-hero-title">Output<span>Descriptor</span></h2>
                 <p class="tool-hero-subtitle">Output Descriptor Builder</p>
                 <p class="tool-hero-desc">Build standardized output descriptors for importing watch-only wallets into any descriptor-aware Bitcoin wallet software. Supports single-sig and multisig configurations with derivation path control.</p>
+                <p class="tool-hero-desc">Need an xpub, or a hardware-wallet JSON file? Use <a href="#" onclick="showState('state-armory'); return false;" style="color: var(--skb-primary);">Seed Management</a>.</p>
                 <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>Any BSMS-compliant coordinator (Sparrow, Specter, Nunchuk)</span></p>
             </div>
 
@@ -9742,6 +9743,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <h2 class="tool-hero-title">Seed<span>Management</span></h2>
                 <p class="tool-hero-subtitle">Key Management &amp; Derivation</p>
                 <p class="tool-hero-desc">Derive extended public keys, define derivation paths, and export key material for watch-only wallet setup. Third party wallet manufacturers support various key formats.</p>
+                <p class="tool-hero-desc">Setting up a new wallet in Sparrow, Bitcoin Core or another descriptor wallet? <a href="#" onclick="showState('state-descriptor'); return false;" style="color: var(--skb-primary);">Output Descriptor</a> gives the full wallet description, with address checks.</p>
                 <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>Any BIP-39 wallet (Trezor, Coldcard, Sparrow)</span></p>
             </div>
 
@@ -9836,9 +9838,16 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <input type="password" id="arm-passphrase"
                                spellcheck="false" autocomplete="off"
                                style="flex: 1 1 auto; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);"
-                               oninput="arm_onConfigChange()">
+                               oninput="arm_onPassphraseInput()">
                         <button type="button" class="skb-btn arm-no-print" onclick="arm_clearPassphrase()"
                                 style="flex: 0 0 auto; padding: 0.4rem 0.75rem; font-size: 0.72rem; font-family: var(--skb-mono); border: 1px dashed var(--skb-border); background: transparent; color: var(--skb-text-muted); white-space: nowrap;">CLEAR</button>
+                    </div>
+                    <!-- Typed passphrases must be typed twice: a typo here shows, and
+                         exports, a different and empty wallet. -->
+                    <div id="arm-passphrase-confirm-row" class="desc-pp-confirm arm-no-print" style="display: none; margin-bottom: 0.5rem;">
+                        <input type="password" id="arm-passphrase-confirm" class="desc-pp-confirm__input" style="max-width: none;" placeholder="Type the passphrase again to confirm it" autocomplete="off" spellcheck="false"
+                               onpaste="return cipher_blockPaste(event)" ondrop="return false" oninput="arm_onPassphraseInput()">
+                        <div id="arm-passphrase-confirm-note" class="desc-pp-confirm__note"></div>
                     </div>
                     <div style="font-size: 0.7rem; color: var(--skb-text-muted);">
                         A passphrase creates a completely separate wallet. Leave blank for the default wallet.
@@ -9902,7 +9911,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                             <select id="arm-key-format" onchange="arm_onConfigChange()">
                                 <option value="slip132" selected>SLIP-132 (zpub / ypub / xpub)</option>
                                 <option value="bip380">BIP-32 Standard (xpub only)</option>
-                                <option value="descriptor_text">BIP-380</option>
+                                <option value="descriptor_text">Output Descriptor (BIP-380)</option>
                                 <option value="coldcard_json">Hardware Wallet JSON</option>
                                 <option value="nunchuk_json">Hardware Wallet JSON (Minimal)</option>
                                 <option value="electrum_json">BIP-32 Watch-Only JSON</option>
@@ -29428,6 +29437,48 @@ async function desc_generate() {
 // =============================================
 // SINGLE-SIG GENERATION (unchanged from before)
 // =============================================
+/* The single-sig descriptor for one seed (with its passphrase already
+   applied) and script type 84/86/49/44. Seed Management's "Output
+   Descriptor (BIP-380)" key format uses it too, so both tools agree. */
+function _descSingleSig(seedBytes, scriptType) {
+    var HDKey = window.BtcMath.HDKey;
+    var derivationPath = "m/" + scriptType + "'/0'/0'";
+    var rootNode = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+    var fingerprint = rootNode.fingerprint.toString(16).padStart(8, '0');
+
+    var accountNode = rootNode.derive(derivationPath);
+    // BIP-380: descriptors require standard xpub prefix regardless of
+    // script type (the wpkh/wsh/sh/tr wrapper carries the script-type
+    // information). The accountNode already serializes as xpub by
+    // default because rootNode was created with the standard
+    // { public: 0x0488b21e, private: 0x0488ade4 } version pair, which
+    // it inherits during .derive(). DO NOT mutate accountNode.versions
+    // here — replacing it with a single-property { public: ... } object
+    // strips the matching `private` field that the library's internal
+    // child-derivation pipeline expects, which broke the verification-
+    // address derivation loop in multisig builds (regression hunt of
+    // task #188). Output is normalized via _descNormalizeXpub instead
+    // — a no-op for the locally-derived key, but kept as defense in
+    // depth in case a future HDKey upgrade changes the default
+    // serialization.
+    var extPubKey = _descNormalizeXpub(accountNode.publicExtendedKey);
+
+    var cleanPath = derivationPath.replace('m/', '');
+    var keyOrigin = '[' + fingerprint + '/' + cleanPath + ']' + extPubKey;
+
+    var descriptorBody = '';
+    var keyStr = keyOrigin + '/<0;1>/*';
+    if (scriptType === '84')      descriptorBody = 'wpkh(' + keyStr + ')';
+    else if (scriptType === '86') descriptorBody = 'tr(' + keyStr + ')';
+    else if (scriptType === '49') descriptorBody = 'sh(wpkh(' + keyStr + '))';
+    else if (scriptType === '44') descriptorBody = 'pkh(' + keyStr + ')';
+    else throw new Error('Unknown script type: ' + scriptType);
+
+    var checksum = desc_checksum(descriptorBody);
+    if (!checksum) throw new Error('BIP-380 checksum computation failed.');
+    return { descriptor: descriptorBody + '#' + checksum, fingerprint: fingerprint, accountNode: accountNode };
+}
+
 async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
     if (!desc_state.loadedSeed) {
         throw new Error('No seed loaded. Load a seed from session or enter one manually.');
@@ -29481,42 +29532,11 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
         return;
     }
 
-    var derivationPath = "m/" + scriptType + "'/0'/0'";
-
     var seedBytes = await bip39.mnemonicToSeed(desc_state.loadedSeed, passphrase);
-    var rootNode = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
-    var fingerprint = rootNode.fingerprint.toString(16).padStart(8, '0');
-
-    var accountNode = rootNode.derive(derivationPath);
-    // BIP-380: descriptors require standard xpub prefix regardless of
-    // script type (the wpkh/wsh/sh/tr wrapper carries the script-type
-    // information). The accountNode already serializes as xpub by
-    // default because rootNode was created with the standard
-    // { public: 0x0488b21e, private: 0x0488ade4 } version pair, which
-    // it inherits during .derive(). DO NOT mutate accountNode.versions
-    // here — replacing it with a single-property { public: ... } object
-    // strips the matching `private` field that the library's internal
-    // child-derivation pipeline expects, which broke the verification-
-    // address derivation loop in multisig builds (regression hunt of
-    // task #188). Output is normalized via _descNormalizeXpub instead
-    // — a no-op for the locally-derived key, but kept as defense in
-    // depth in case a future HDKey upgrade changes the default
-    // serialization.
-    var extPubKey = _descNormalizeXpub(accountNode.publicExtendedKey);
-
-    var cleanPath = derivationPath.replace('m/', '');
-    var keyOrigin = '[' + fingerprint + '/' + cleanPath + ']' + extPubKey;
-
-    var descriptorBody = '';
-    var keyStr = keyOrigin + '/<0;1>/*';
-    if (scriptType === '84')      descriptorBody = 'wpkh(' + keyStr + ')';
-    else if (scriptType === '86') descriptorBody = 'tr(' + keyStr + ')';
-    else if (scriptType === '49') descriptorBody = 'sh(wpkh(' + keyStr + '))';
-    else if (scriptType === '44') descriptorBody = 'pkh(' + keyStr + ')';
-
-    var checksum = desc_checksum(descriptorBody);
-    if (!checksum) throw new Error('BIP-380 checksum computation failed.');
-    var finalDescriptor = descriptorBody + '#' + checksum;
+    var single = _descSingleSig(seedBytes, scriptType);
+    var fingerprint = single.fingerprint;
+    var accountNode = single.accountNode;
+    var finalDescriptor = single.descriptor;
     desc_state.currentDescriptor = finalDescriptor;
     desc_state.imported = null;
 
@@ -36597,6 +36617,12 @@ function arm_init() {
     // Load existing passphrase from session if any
     const pp = window.SeedSession?.getPassphrase?.() || window.SafeKeepOS?.getPassphrase?.() || '';
     document.getElementById('arm-passphrase').value = pp;
+    // The session's passphrase was confirmed when it was set, so it
+    // needs no second typing here (same rule as a Library pick).
+    if (pp) _ppFromLibrary['arm-passphrase'] = pp;
+    else delete _ppFromLibrary['arm-passphrase'];
+    document.getElementById('arm-passphrase-confirm').value = '';
+    desc_onPassphraseInput('arm-passphrase');
 
     // Make sure the Wallet Type / Key Format gate reflects the current
     // dropdown values before the first derivation runs. The dropdowns
@@ -36686,9 +36712,23 @@ function arm_enforceCompatibility() {
     if (electrumOpt) electrumOpt.disabled = false;
 }
 
+function arm_onPassphraseInput() {
+    desc_onPassphraseInput('arm-passphrase');
+    arm_onConfigChange();
+}
+
+// The passphrase to derive with. Throws while a typed passphrase has
+// not been typed a second time, so no export uses an unchecked one.
+function _armPassphrase() {
+    if (!_descPassphraseConfirmed('arm-passphrase')) {
+        throw new Error('Type the passphrase a second time to confirm it.');
+    }
+    return document.getElementById('arm-passphrase').value || '';
+}
+
 function arm_clearPassphrase() {
     document.getElementById('arm-passphrase').value = '';
-    arm_onConfigChange();
+    arm_onPassphraseInput();
 }
 
 function arm_clearSeed() {
@@ -37256,14 +37296,22 @@ async function arm_deriveWallet() {
     const pathEl = document.getElementById('arm-path');
     const addrBody = document.getElementById('arm-addr-body');
 
-    xpubEl.textContent = 'Calculating...';
+    xpubEl.style.color = '';
     addrBody.innerHTML = '';
+
+    if (!_descPassphraseConfirmed('arm-passphrase')) {
+        xpubEl.textContent = 'Confirm the passphrase above to see this wallet.';
+        const ppFpPanel = document.getElementById('arm-pp-fingerprint');
+        if (ppFpPanel) ppFpPanel.style.display = 'none';
+        return;
+    }
+    xpubEl.textContent = 'Calculating...';
 
     try {
         const { bip39, HDKey, btcSigner } = window.BtcMath;
         if (!bip39 || !HDKey || !btcSigner) throw new Error('Crypto libraries not available');
 
-        const passphrase = document.getElementById('arm-passphrase').value || '';
+        const passphrase = _armPassphrase();
         const pathType = document.getElementById('arm-derivation').value;
         const walletType = document.getElementById('arm-wallet-type').value;
         const keyFormat = document.getElementById('arm-key-format').value;
@@ -37413,27 +37461,13 @@ async function arm_deriveWallet() {
                 displayValue = 'Coldcard JSON build failed: ' + jsonErr.message;
             }
         } else if (effectiveKeyFormat === 'descriptor_text') {
-            // BIP-380 key-origin descriptor: [<fp>/<deriv-h>]<xpub>
-            //
-            // The transformation is a pair of regex string substitutions
-            // on the basePath we already computed for this derivation:
-            //   1) /^m\//      → ''     drops the leading "m/" (the
-            //                           BIP-380 grammar omits the master
-            //                           token; the bracket implies it).
-            //   2) /'/g        → 'h'    swaps every apostrophe for "h"
-            //                           (key-expression form — the older
-            //                           "h" notation is what most legacy
-            //                           wallet parsers accept; the newer
-            //                           "'" notation isn't universally
-            //                           supported in QR-scanned input).
-            // Fingerprint is the passphrase-augmented `exportFP` (already
-            // 8-hex lowercase). xpubValue is `accountNode.publicExtendedKey`
-            // which has the right SLIP-132 prefix because versionBytes
-            // earlier in this function is `slip132Map[pathType]` — the
-            // single-vs-multi-aware map. So Multi+84 → Zpub, Multi+49 →
-            // Ypub, Single+84 → zpub, Single+49 → ypub, 44/86 → xpub.
-            var descPath = basePath.replace(/^m\//, '').replace(/'/g, 'h');
-            displayValue = '[' + exportFP.toLowerCase() + '/' + descPath + ']' + xpubValue;
+            // The same text Output Descriptor makes, from the same code:
+            // single-sig is the full wallet descriptor with its checksum;
+            // multi-sig is this seed's cosigner key, which the
+            // coordinator puts into the multi-sig descriptor.
+            displayValue = isMulti
+                ? (await _descLocalKeyOrigin(mnemonic, passphrase, pathType)).origin
+                : _descSingleSig(seedBytes, pathType).descriptor;
         } else if (effectiveKeyFormat === 'nunchuk_json') {
             // Nunchuk-specific minimal schema. Strictly:
             //   { xfp, bipNN_or_bip48_N: { deriv, xpub, path, name } }
@@ -37695,6 +37729,7 @@ function arm_copyXpub() {
     const text = document.getElementById('arm-xpub').textContent;
     if (!text
         || text.startsWith('Calculating')
+        || text.startsWith('Confirm the passphrase')
         || text.startsWith('Derivation')
         || text.startsWith('Coldcard JSON build failed')
         || text.startsWith('Nunchuk JSON build failed')
@@ -37876,7 +37911,7 @@ async function arm_computeColdcardSnapshot() {
     if (!bip39 || !HDKey || !btcSigner) throw new Error('Crypto libraries not available.');
 
     // Read DOM inputs at call time — never captured into closures.
-    const passphrase = document.getElementById('arm-passphrase').value || '';
+    const passphrase = _armPassphrase();
     const pathType   = document.getElementById('arm-derivation').value;
     const walletType = document.getElementById('arm-wallet-type').value;
     const isMulti    = walletType === 'multi';
@@ -38478,7 +38513,7 @@ async function arm_computeNunchukSnapshot() {
     const { bip39, HDKey } = window.BtcMath || {};
     if (!bip39 || !HDKey) throw new Error('Crypto libraries not available.');
 
-    const passphrase = document.getElementById('arm-passphrase').value || '';
+    const passphrase = _armPassphrase();
     const pathType   = document.getElementById('arm-derivation').value;
     const walletType = document.getElementById('arm-wallet-type').value;
     const isMulti    = walletType === 'multi';
@@ -38581,7 +38616,7 @@ async function arm_computeElectrumSnapshot() {
     const { bip39, HDKey } = window.BtcMath || {};
     if (!bip39 || !HDKey) throw new Error('Crypto libraries not available.');
 
-    const passphrase = document.getElementById('arm-passphrase').value || '';
+    const passphrase = _armPassphrase();
     const pathType   = document.getElementById('arm-derivation').value;
     const walletType = document.getElementById('arm-wallet-type').value;
     const isMulti    = walletType === 'multi';
@@ -38763,7 +38798,7 @@ async function arm_computeElectrumColdcardSnapshot() {
     const { bip39, HDKey } = window.BtcMath || {};
     if (!bip39 || !HDKey) throw new Error('Crypto libraries not available.');
 
-    const passphrase = document.getElementById('arm-passphrase').value || '';
+    const passphrase = _armPassphrase();
     const pathType   = document.getElementById('arm-derivation').value;
     const walletType = document.getElementById('arm-wallet-type').value;
     const isMulti    = walletType === 'multi';
@@ -38935,7 +38970,7 @@ async function arm_toggleXpubQR() {
         container.style.display = 'block';
         if (qrBtn) qrBtn.textContent = 'Hide QR';
         const payload = document.getElementById('arm-xpub').textContent;
-        if (payload && !payload.startsWith('Calculating') && window.QRCode) {
+        if (payload && !payload.startsWith('Calculating') && !payload.startsWith('Confirm the passphrase') && window.QRCode) {
             const canvas = document.getElementById('arm-xpub-qr-canvas');
             try {
                 // Render at 580px module density (matches PSBT Signer) so
@@ -39072,6 +39107,10 @@ async function _armBuildPrintDoc(fp) {
 }
 
 async function arm_print() {
+    if (!_descPassphraseConfirmed('arm-passphrase')) {
+        showStatus('Type the passphrase a second time to confirm it before printing.', 'error');
+        return;
+    }
     // Set document title for the print filename. Use the passphrase-derived
     // fingerprint when a passphrase is active so the sheet matches the exports.
     const origTitle = document.title;

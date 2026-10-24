@@ -14,6 +14,10 @@
  *  5. The dashboard's "Mount Transfer Drive" button stays hidden while the
  *     drive mounts by itself; it appears only if that fails (it used to flash
  *     on screen at every unlock).
+ *  7. Seed Management: a typed passphrase must be typed twice before any key
+ *     is shown or exported, and its "Output Descriptor (BIP-380)" format is
+ *     the same descriptor Output Descriptor makes (it used to be a bare
+ *     [fp/path]zpub key, which isn't a valid descriptor).
  *
  * Run: node test-review-regressions.mjs
  */
@@ -159,6 +163,42 @@ console.log('4. PSBT review fee guard');
   const fn = extract('s39_printShare');
   ck('Shamir print page does not read the seed words', !/\.mnemonic\b/.test(fn) && !/checksum ?word/i.test(fn), fn.match(/.*(mnemonic|checksum).*/gi)?.join('\n'));
   ck('Shamir print page still shows the fingerprint and threshold', fn.includes('Master Fingerprint') && fn.includes('Threshold'));
+}
+// ---- 7. Seed Management: passphrase typed twice, real descriptor ----
+console.log('7. Seed Management passphrase check and descriptor');
+{
+  const els = {};
+  const el = (id) => (els[id] ||= { id, value: '', style: {}, textContent: '', className: '' });
+  const ctx = vm.createContext({ window: { BtcMath: { HDKey } }, document: { getElementById: el } });
+  vm.runInContext(['_descPassphraseConfirmed', 'desc_onPassphraseInput', '_armPassphrase', 'desc_checksum', '_descSingleSig'].map(extract).join('\n') +
+    '\nvar _ppFromLibrary = {}; function _descNormalizeXpub(x) { return x; }', ctx);
+  const pp = (v) => { el('arm-passphrase').value = v; vm.runInContext("desc_onPassphraseInput('arm-passphrase')", ctx); };
+  const usable = () => { try { return vm.runInContext('_armPassphrase()', ctx); } catch (e) { return null; } };
+  pp('');
+  ck('no passphrase: usable, no confirm box', usable() === '' && el('arm-passphrase-confirm-row').style.display === 'none');
+  pp('Secret');
+  ck('typed once: refused, confirm box shown', usable() === null && el('arm-passphrase-confirm-row').style.display === 'block');
+  el('arm-passphrase-confirm').value = 'secret'; pp('Secret');
+  ck('different capitals: still refused', usable() === null);
+  el('arm-passphrase-confirm').value = 'Secret'; pp('Secret');
+  ck('typed twice: usable', usable() === 'Secret');
+  vm.runInContext("_ppFromLibrary['arm-passphrase'] = 'From Library'", ctx); el('arm-passphrase-confirm').value = ''; pp('From Library');
+  ck('loaded passphrase (Library or session): usable without retyping', usable() === 'From Library');
+  pp('From Library!');
+  ck('edited after loading: must be typed twice again', usable() === null);
+
+  const seed = bip39.mnemonicToSeedSync('abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
+  const d = vm.runInContext('(s) => _descSingleSig(s, "84")', ctx)(seed);
+  ck('BIP-84 descriptor: standard xpub, script wrapper, checksum',
+    d.descriptor.startsWith("wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/<0;1>/*)#") &&
+    d.descriptor.split('#')[1] === vm.runInContext('desc_checksum', ctx)(d.descriptor.split('#')[0]), d.descriptor);
+  const arm = extract('arm_deriveWallet');
+  ck("Seed Management's descriptor format uses Output Descriptor's builders",
+    /descriptor_text[\s\S]{0,600}_descLocalKeyOrigin[\s\S]{0,200}_descSingleSig/.test(arm) && extract('desc_generateSingle').includes('_descSingleSig('));
+  ck('Seed Management exports and print wait for the confirmed passphrase',
+    ['arm_computeColdcardSnapshot', 'arm_computeNunchukSnapshot', 'arm_computeElectrumSnapshot', 'arm_computeElectrumColdcardSnapshot', 'arm_deriveWallet']
+      .every((f) => extract(f).includes('_armPassphrase()') && !extract(f).includes("getElementById('arm-passphrase').value")) &&
+    extract('arm_print').includes("_descPassphraseConfirmed('arm-passphrase')"));
 }
 console.log(`\nREVIEW REGRESSIONS: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
