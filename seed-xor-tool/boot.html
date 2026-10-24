@@ -13528,6 +13528,7 @@ function showRestorePanel() {
     document.getElementById('shamir-recovery-panel').style.display = 'none';
     clearStatus();
     rst_init();
+    skui_revealPanel('restore-panel');
 }
 
 function hideRestorePanel() {
@@ -13930,6 +13931,7 @@ function showXorRecoveryPanel() {
     document.getElementById('xor-recovery-panel').style.display = 'block';
     clearStatus();
     xrr_reset();
+    skui_revealPanel('xor-recovery-panel');
 }
 
 function hideXorRecoveryPanel() {
@@ -14652,6 +14654,16 @@ function skui_reveal(el) {
     var r = el.getBoundingClientRect(), vh = window.innerHeight;
     if (r.top >= 0 && r.bottom <= vh) return;
     el.scrollIntoView({ block: r.height > vh ? 'start' : 'center', behavior: 'smooth' });
+}
+
+/* Scroll so a panel that has just opened starts at the top of the screen,
+   showing as much of it as fits. Nothing moves if it all fits already. */
+function skui_revealPanel(el) {
+    if (typeof el === 'string') el = document.getElementById(el);
+    if (!el || !el.getClientRects().length) return;
+    var r = el.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= window.innerHeight) return;
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 /* Called after every QR code is drawn (boot-entry.js). Scrolls to it once
@@ -41149,6 +41161,7 @@ function showShamirRecoveryPanel() {
     document.getElementById('shamir-recovery-panel').style.display = 'block';
     clearStatus();
     s39r_reset();
+    skui_revealPanel('shamir-recovery-panel');
 }
 
 /**
