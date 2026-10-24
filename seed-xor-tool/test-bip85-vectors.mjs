@@ -5,7 +5,8 @@ import * as bip39 from '@scure/bip39'; import { wordlist } from '@scure/bip39/wo
 /**
  * test-bip85-vectors.mjs — BIP-85 child-seed derivation through the real bip85_generate
  * against the official BIP-85 test vectors (12- and 24-word, index 0), plus
- * determinism and index separation.
+ * determinism and index separation, and the passphrase check (a typed
+ * passphrase must be typed twice before any child seed is made).
  * Run: node test-bip85-vectors.mjs
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -47,20 +48,23 @@ function makeDom(values = {}) {
  import vm from 'node:vm';
 const VECTOR_MASTER = 'xprv9s21ZrQH143K2LBWUUQRFXhucrQqBpKdRRxNVq2zBqsx8HVqFk2uYo8kmbaLLHRdqtQpUm98uKfu3vca1LqdGhUtyoFnCNkfmXRyPXLjbKb';
 let pass = 0, fail = 0; const ck = (n, c, x) => { c ? pass++ : fail++; console.log((c ? '  PASS ' : '  FAIL ') + n + (c ? '' : '  got: ' + x)); };
-async function runBip85({ length, index, masterXprv, mnemonic }) {
+async function runBip85({ length, index, masterXprv, mnemonic, passphrase = '', confirm = '' }) {
   const els = {}; const el = (id) => (els[id] ||= { value: '', textContent: '', style: {}, innerHTML: '', appendChild(){}, querySelectorAll: () => [] });
   const words = mnemonic.split(' ');
   el('bip85-master-grid').querySelectorAll = () => words.map(w => ({ textContent: w }));
-  el('bip85-passphrase').value = ''; el('bip85-child-length').value = String(length); el('bip85-child-index').value = String(index);
+  el('bip85-passphrase').value = passphrase; el('bip85-passphrase-confirm').value = confirm; el('bip85-passphrase-confirm').focus = () => {}; el('bip85-child-length').value = String(length); el('bip85-child-index').value = String(index);
   let first = true;
   const HD = masterXprv ? { fromMasterSeed: (s, v) => { if (first) { first = false; return HDKey.fromExtendedKey(masterXprv); } return HDKey.fromMasterSeed(s, v); } } : HDKey;
   let status = '';
   const ctx = vm.createContext({ window: { BtcMath: { bip39, wordlist, HDKey: HD } }, document: { getElementById: el, createElement: () => ({ style: {} }) },
-    crypto: globalThis.crypto, TextEncoder, Uint8Array, showStatus: (m) => { status = m; }, QRCode: undefined, console, _bip85HasWork: false, _bip85LastResult: null });
-  vm.runInContext(extract('bip85_generate'), ctx);
+    crypto: globalThis.crypto, TextEncoder, Uint8Array, showStatus: (m) => { status = m; }, QRCode: undefined, console, _bip85HasWork: false, _bip85LastResult: null, _ppFromLibrary: {} });
+  vm.runInContext(extract('_descPassphraseConfirmed') + '\n' + extract('bip85_generate'), ctx);
   await ctx.bip85_generate();
   if (!ctx._bip85LastResult) throw new Error('no result: ' + status);
   return ctx._bip85LastResult;
+}
+async function refused(args) {
+  try { await runBip85(args); return false; } catch (e) { return /confirm/.test(e.message); }
 }
 const DUMMY = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const r12 = await runBip85({ length: 12, index: 0, masterXprv: VECTOR_MASTER, mnemonic: DUMMY });
@@ -74,6 +78,11 @@ ck('deterministic (same input -> same child)', a.childMnemonic === b.childMnemon
 ck('index 0 != index 1', a.childMnemonic !== c.childMnemonic);
 ck('child != parent', a.childMnemonic !== DUMMY);
 ck('parent fp = 73c5da0a', a.parentFP === '73c5da0a', a.parentFP);
+ck('passphrase typed once: no child seed', await refused({ length: 12, index: 0, mnemonic: DUMMY, passphrase: 'secret' }));
+ck('passphrase typed differently: no child seed', await refused({ length: 12, index: 0, mnemonic: DUMMY, passphrase: 'secret', confirm: 'Secret' }));
+{ const a = await runBip85({ length: 12, index: 0, mnemonic: DUMMY, passphrase: 'secret', confirm: 'secret' });
+  const b = await runBip85({ length: 12, index: 0, mnemonic: DUMMY });
+  ck('passphrase typed twice: child seed from the passphrase wallet', a.childMnemonic !== b.childMnemonic && a.parentFP !== b.parentFP, a.parentFP); }
 console.log(`\nBIP-85: ${pass} passed, ${fail} failed`);
 
 process.exit(fail === 0 ? 0 : 1);
