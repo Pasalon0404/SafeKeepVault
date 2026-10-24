@@ -10,6 +10,9 @@
  *   4. Network watchdog: an interface other than lo (or a missing firewall)
  *      writes NETWORK_ALERT.json; none → no file.
  *   5. The app's warning text: names filtered, firewall message.
+ *   6. Chromium is pinned: the build downloads the pinned release's file,
+ *      stops on a hash mismatch or a missing pin, records the browser in
+ *      /etc/safekeep-chromium, and build.sh passes the overrides through.
  * Needs bash. Run: node test-os-lockdown.mjs
  */
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, rmSync } from 'node:fs';
@@ -62,7 +65,7 @@ const between = (s, a, b) => { const i = s.indexOf(a); if (i < 0) throw new Erro
   ck('splash redrawn after udev settles (graphics driver takeover)', /After=systemd-udev-settle\.service safekeep-splash\.service[\s\S]*ExecStart=\/bin\/cat \/etc\/safekeep-splash\.txt[\s\S]*systemctl enable safekeep-splash-redraw\.service/.test(setup));
   ck('boot logo colours reset bold (22) so colour 3 is not bright yellow', !/\\033\[3[37]m/.test(setup) && !/\\033\[3[37]m/.test(read('safekeep-boot.sh')));
   const build = read('build.sh');
-  ck('build.sh passes SAFEKEEP_DEV_SHELL into the chroot', /\/usr\/bin\/env SAFEKEEP_DEV_SHELL="\$SAFEKEEP_DEV_SHELL" \/bin\/bash -c "\/chroot-setup.sh"/.test(build));
+  ck('build.sh passes SAFEKEEP_DEV_SHELL into the chroot', /\/usr\/bin\/env SAFEKEEP_DEV_SHELL="\$SAFEKEEP_DEV_SHELL" [^;]{0,240}\/bin\/bash -c "\/chroot-setup.sh"/.test(build));
   ck('build.sh: chroot gets its own /run, not the build machine\'s', !/mount --bind \/run\b/.test(build) && /mount -t tmpfs [^\n]*"\$CHROOT_DIR\/run"/.test(build));
   ck('build.sh: anything but 1 means off', /\[ "\$SAFEKEEP_DEV_SHELL" = "1" \] \|\| SAFEKEEP_DEV_SHELL=0/.test(build));
   ck('quick-update.sh warns about a developer OS tree', /etc\/safekeep-dev-shell/.test(read('quick-update.sh')));
@@ -176,6 +179,48 @@ const runDrop = (root, block = dropBlock) => bash('set -euo pipefail\n' + block.
   ck('nothing to report → no warning', t({ interfaces: [], firewall: true }) === '' && t({}) === '');
   ck('tells the user what to do', /Unplug any network cable/.test(t({ interfaces: ['eth0'] })));
   ck('polled only on the boot drive', /if \(isBootDrive\(\) && typeof document !== 'undefined'\)/.test(src) && /textContent = text/.test(src));
+}
+
+// ---- 6. Chromium pin (chroot-setup.sh) ----
+{
+  const setup = read('chroot-setup.sh');
+  const tag = (setup.match(/^UC_PIN_TAG_DEFAULT="([^"]*)"/m) || [])[1];
+  const hash = (setup.match(/^UC_EXPECTED_SHA256_DEFAULT="([^"]*)"/m) || [])[1];
+  ck('a Chromium release and its SHA-256 are pinned by default', /^\d+\.\d+\.\d+\.\d+-\d+$/.test(tag || '') && /^[0-9a-f]{64}$/.test(hash || ''), tag + ' ' + hash);
+  // Run the download gate with stand-ins: wget writes a known file, the
+  // version check sees a known version line.
+  const gate = between(setup, 'UC_PIN_TAG_DEFAULT=', 'chmod +x /tmp/uc.AppImage\n');
+  const record = between(setup, 'if ! UC_VERSION_LINE=$(ungoogled-chromium --version); then', '> /etc/safekeep-chromium\nfi\n');
+  function runGate(env, { version } = {}) {
+    const root = mkdtempSync(join(tmpdir(), 'sk-uc-'));
+    const bin = join(root, 'bin'); mkdirSync(bin); mkdirSync(join(root, 'etc'));
+    writeFileSync(join(bin, 'wget'), '#!/bin/bash\nout=""; while [ $# -gt 0 ]; do [ "$1" = -O ] && { out="$2"; shift; }; url="$1"; shift; done\necho "$url" > "' + root + '/url"\nprintf "fake appimage" > "$out"\n', { mode: 0o755 });
+    writeFileSync(join(bin, 'curl'), '#!/bin/bash\necho \'"browser_download_url": "https://example.invalid/latest-x86_64.AppImage"\'\n', { mode: 0o755 });
+    writeFileSync(join(bin, 'ungoogled-chromium'), '#!/bin/bash\necho "Chromium ' + (version || '155.0.8059.84') + '"\n', { mode: 0o755 });
+    const script = 'set -e\n' + ('UC_PIN_TAG_DEFAULT=' + gate.slice('UC_PIN_TAG_DEFAULT='.length)).replaceAll('/tmp/uc.AppImage', root + '/uc.AppImage') +
+      record.replaceAll('/etc/safekeep-chromium', root + '/etc/safekeep-chromium');
+    const r = bash(script, { PATH: bin + ':' + process.env.PATH, ...env });
+    const url = existsSync(join(root, 'url')) ? readFileSync(join(root, 'url'), 'utf8').trim() : '';
+    const rec = existsSync(join(root, 'etc/safekeep-chromium')) ? readFileSync(join(root, 'etc/safekeep-chromium'), 'utf8').trim() : '';
+    rmSync(root, { recursive: true, force: true });
+    return { r, url, rec };
+  }
+  const fakeSha = (spawnSync('bash', ['-c', 'printf "fake appimage" | sha256sum | cut -d" " -f1'], { encoding: 'utf8' }).stdout || '').trim();
+  let g = runGate({});
+  ck('default build: downloads the pinned release\'s file directly', g.url === `https://github.com/ungoogled-software/ungoogled-chromium-portablelinux/releases/download/${tag}/ungoogled-chromium-${tag}-x86_64.AppImage`, g.url);
+  ck('default build: a file that doesn\'t match the pinned hash stops the build', g.r.status !== 0 && /SHA-256 mismatch/.test(g.r.stderr), g.r.stderr);
+  g = runGate({ UC_PIN_TAG: '155.0.8059.84-1', UC_EXPECTED_SHA256: fakeSha });
+  ck('matching hash and version: passes and records the pinned browser', g.r.status === 0 && g.rec === `pinned 155.0.8059.84-1 ${fakeSha}`, g.r.stderr + g.rec);
+  g = runGate({ UC_PIN_TAG: '155.0.8059.84-1', UC_EXPECTED_SHA256: fakeSha }, { version: '156.0.8078.47' });
+  ck('a browser reporting another version stops the build', g.r.status !== 0 && /expected Chromium 155\.0\.8059\.84/.test(g.r.stderr), g.r.stderr);
+  g = runGate({ UC_PIN_TAG: '156.0.8078.47-1' });
+  ck('a new tag without its own hash stops the build (the default hash won\'t match)', g.r.status !== 0 && /mismatch/.test(g.r.stderr));
+  g = runGate({ UC_EXPECTED_SHA256: 'not-a-hash' });
+  ck('a malformed hash stops the build', g.r.status !== 0 && /must be pinned/.test(g.r.stderr));
+  g = runGate({ UC_ALLOW_UNPINNED: '1' });
+  ck('UC_ALLOW_UNPINNED=1: latest, a loud warning, recorded as UNPINNED', g.r.status === 0 && g.url.includes('latest') && /Do not release this image/.test(g.r.stderr) && g.rec.startsWith('UNPINNED '), g.r.stderr + g.rec);
+  const build = read('build.sh');
+  ck('build.sh passes the pin overrides into the chroot', /UC_PIN_TAG="\$\{UC_PIN_TAG:-\}" UC_EXPECTED_SHA256="\$\{UC_EXPECTED_SHA256:-\}" UC_ALLOW_UNPINNED="\$\{UC_ALLOW_UNPINNED:-\}"/.test(build));
 }
 
 console.log(`\nOS LOCKDOWN: ${pass} passed, ${fail} failed`);

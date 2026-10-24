@@ -444,6 +444,26 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
   open a PR for Dave to merge (as for v1.47–v1.50). The v1.50 website PR
   is Safekeep-Website #19 (branch `release-v1.50`).
 
+### Updating Chromium
+
+The image's browser is pinned in `usbbootdrive/chroot-setup.sh`
+(`UC_PIN_TAG_DEFAULT` + `UC_EXPECTED_SHA256_DEFAULT`): every build downloads
+that exact ungoogled-chromium AppImage and stops on any other file or
+version, and `/etc/safekeep-chromium` records it (`make-update.sh` prints
+it). A newer Chromium can drop or change what the kiosk uses (Chrome 137
+dropped `--load-extension`, which `quiet-downloads` needs), so move only
+deliberately:
+
+1. Pick the release on ungoogled-chromium-portablelinux, download
+   `ungoogled-chromium-<tag>-x86_64.AppImage`, and note its SHA-256.
+2. On the ZBook: `sudo UC_PIN_TAG=<tag> UC_EXPECTED_SHA256=<sha256> bash build.sh`,
+   then test the stick: boot, unlock, no "Download started" message,
+   camera scanning, printing, the Transfer Drive.
+3. Change the two defaults in a PR. Release builds then use them.
+
+`UC_ALLOW_UNPINNED=1` builds with the latest release to try one out;
+`make-update.sh` names such a build `-build<N>` and says NOT FOR A RELEASE.
+
 ### Open items / next steps
 
 1. **After v1.52:** merge the v1.52 website PR, and install

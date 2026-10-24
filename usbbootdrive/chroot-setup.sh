@@ -236,43 +236,57 @@ apt-get install -y alsa-utils
 apt-get install -y firmware-sof-signed || echo "  Note: firmware-sof-signed not available, skipping (older laptops do not need it)."
 
 # ============================================================================
-# Supply-chain pinning + integrity verification (SafeKeep hardening)
+# Chromium is pinned (SafeKeep hardening)
 # ----------------------------------------------------------------------------
-# The browser is the one piece of this OS that consumes untrusted data, so the
-# image must be built from a KNOWN-GOOD copy of it — not just "whatever the
-# GitHub API served at build time." Two knobs, overridable at build time:
+# Every release ships the exact browser that was tested on a stick, not
+# "whatever GitHub served at build time": a newer Chromium can change or drop
+# things the kiosk relies on (Chrome 137 dropped --load-extension, which the
+# quiet-downloads extension uses). The build downloads this release's file
+# directly and stops if its SHA-256 differs, or if the installed browser
+# reports a different version.
 #
-#   UC_PIN_TAG         Pin a specific release tag for reproducible builds.
-#                      Empty = latest release (previous behavior).
-#   UC_EXPECTED_SHA256 Known-good SHA-256 of the AppImage. When set, the build
-#                      ABORTS on mismatch (fail-closed). When empty, the build
-#                      prints the downloaded file's hash and continues with a
-#                      loud warning, so you can lock it in next time.
-#
-#   Example (locked build):
-#     UC_PIN_TAG=2026.05.01 UC_EXPECTED_SHA256=<hash> sudo ./build.sh
+# To move to a newer Chromium (PROJECT_NOTES.md, "Updating Chromium"): pick
+# the release, check its SHA-256, build with both overrides and test on a
+# stick, then change the two defaults below in a PR:
+#   sudo UC_PIN_TAG=<tag> UC_EXPECTED_SHA256=<sha256> bash build.sh
+# UC_ALLOW_UNPINNED=1 builds from the latest release instead (to try one
+# out); its image must not be released.
 # ============================================================================
-UC_PIN_TAG="${UC_PIN_TAG:-}"
-UC_EXPECTED_SHA256="${UC_EXPECTED_SHA256:-}"
+UC_PIN_TAG_DEFAULT="155.0.8059.84-1"
+UC_EXPECTED_SHA256_DEFAULT="b90f11bdad66a4b85e7b0235a6e0cb2034e284f26ff091eb974fc8f6f6602e68"
+UC_PIN_TAG="${UC_PIN_TAG:-$UC_PIN_TAG_DEFAULT}"
+UC_EXPECTED_SHA256="${UC_EXPECTED_SHA256:-$UC_EXPECTED_SHA256_DEFAULT}"
+UC_REPO="https://github.com/ungoogled-software/ungoogled-chromium-portablelinux"
 
-if [ -n "$UC_PIN_TAG" ]; then
-    UC_API="https://api.github.com/repos/ungoogled-software/ungoogled-chromium-portablelinux/releases/tags/$UC_PIN_TAG"
-    echo "Fetching pinned ungoogled-chromium release ($UC_PIN_TAG) from GitHub..."
+if [ "${UC_ALLOW_UNPINNED:-}" = "1" ]; then
+    echo "  ###########################################################" >&2
+    echo "  # UC_ALLOW_UNPINNED=1: building with the LATEST Chromium." >&2
+    echo "  # Do not release this image." >&2
+    echo "  ###########################################################" >&2
+    APPIMAGE_URL=$(curl -s "https://api.github.com/repos/ungoogled-software/ungoogled-chromium-portablelinux/releases/latest" \
+        | grep "browser_download_url.*x86_64\.AppImage\"" | cut -d '"' -f 4 | head -n 1)
+    UC_PIN_TAG=""
+    UC_EXPECTED_SHA256=""
 else
-    UC_API="https://api.github.com/repos/ungoogled-software/ungoogled-chromium-portablelinux/releases/latest"
-    echo "Fetching latest ungoogled-chromium AppImage URL from GitHub (no tag pinned)..."
+    if [ -z "$UC_PIN_TAG" ] || ! [[ "$UC_EXPECTED_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+        echo "ERROR: Chromium must be pinned: UC_PIN_TAG and a 64-hex UC_EXPECTED_SHA256." >&2
+        exit 1
+    fi
+    echo "Fetching pinned ungoogled-chromium $UC_PIN_TAG..."
+    APPIMAGE_URL="$UC_REPO/releases/download/$UC_PIN_TAG/ungoogled-chromium-$UC_PIN_TAG-x86_64.AppImage"
 fi
 
-# Queries the GitHub API, filters for the x86_64 AppImage URL, and extracts it
-APPIMAGE_URL=$(curl -s "$UC_API" | grep "browser_download_url.*AppImage" | grep -iv "arm" | grep -iv "aarch64" | cut -d '"' -f 4 | head -n 1)
-
 if [ -z "$APPIMAGE_URL" ]; then
-    echo "ERROR: Failed to fetch AppImage URL from GitHub API." >&2
+    echo "ERROR: Failed to find the Chromium AppImage URL." >&2
     exit 1
 fi
 
 echo "Downloading ungoogled-chromium AppImage..."
-wget -q --show-progress -O /tmp/uc.AppImage "$APPIMAGE_URL"
+if ! wget -q --show-progress -O /tmp/uc.AppImage "$APPIMAGE_URL"; then
+    echo "ERROR: Chromium download failed: $APPIMAGE_URL" >&2
+    rm -f /tmp/uc.AppImage
+    exit 1
+fi
 
 # --- Integrity gate: verify the AppImage before we trust it ---
 UC_GOT_SHA256=$(sha256sum /tmp/uc.AppImage | cut -d' ' -f1)
@@ -287,15 +301,6 @@ if [ -n "$UC_EXPECTED_SHA256" ]; then
         exit 1
     fi
     echo "  OK: AppImage SHA-256 matches the pinned value."
-else
-    echo "  ###########################################################" >&2
-    echo "  # WARNING: the browser AppImage is NOT pinned. This image" >&2
-    echo "  # is being built from an unverified download. To lock it," >&2
-    echo "  # re-run the build with:" >&2
-    echo "  #   UC_EXPECTED_SHA256=$UC_GOT_SHA256" >&2
-    echo "  # (ideally with UC_PIN_TAG too) after independently" >&2
-    echo "  # confirming the release is genuine." >&2
-    echo "  ###########################################################" >&2
 fi
 
 chmod +x /tmp/uc.AppImage
@@ -321,12 +326,25 @@ fi
 
 echo "Testing Chromium execution..."
 # Notice we removed the /dev/null silencers so we can see actual errors
-if ! ungoogled-chromium --version; then
+if ! UC_VERSION_LINE=$(ungoogled-chromium --version); then
     echo "ERROR: ungoogled-chromium exists but crashed on execution." >&2
     echo "Checking for missing libraries:" >&2
     # This will print exactly which library is missing if it fails again
     ldd /opt/ungoogled-chromium/chrome | grep "not found" >&2 || true
     exit 1
+fi
+echo "  $UC_VERSION_LINE"
+# The pinned tag is "<chromium version>-<package revision>".
+if [ -n "$UC_PIN_TAG" ] && [[ "$UC_VERSION_LINE" != *" ${UC_PIN_TAG%-*}"* ]]; then
+    echo "ERROR: expected Chromium ${UC_PIN_TAG%-*}, got: $UC_VERSION_LINE" >&2
+    exit 1
+fi
+# Record which browser this image has; make-update.sh prints it and treats an
+# unpinned one as not for a release.
+if [ -n "$UC_PIN_TAG" ]; then
+    printf 'pinned %s %s\n' "$UC_PIN_TAG" "$UC_EXPECTED_SHA256" > /etc/safekeep-chromium
+else
+    printf 'UNPINNED %s\n' "$UC_GOT_SHA256" > /etc/safekeep-chromium
 fi
 echo "Chromium binary verified at: $(command -v ungoogled-chromium)"
 echo "Chromium version: $(ungoogled-chromium --version)"
