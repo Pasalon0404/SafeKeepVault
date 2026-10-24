@@ -14639,6 +14639,41 @@ async function dash_loadFromCipher(slug) {
  * ═══════════════════════════════════════════════════════════════════
  */
 
+/* Scroll so a QR code or camera view that has just appeared can be seen.
+   Does nothing if it is already fully in view, hidden, being printed, or
+   if the person is typing (a QR code that redraws as they type must not
+   pull the page away from the box they're in). */
+function skui_reveal(el) {
+    if (!el || !el.getClientRects().length) return;
+    if (/\bprinting-/.test(document.body.className)) return;
+    var a = document.activeElement;
+    if (a && (a.tagName === 'TEXTAREA' || a.isContentEditable ||
+              (a.tagName === 'INPUT' && !/^(button|submit|checkbox|radio|range|file)$/i.test(a.type)))) return;
+    var r = el.getBoundingClientRect(), vh = window.innerHeight;
+    if (r.top >= 0 && r.bottom <= vh) return;
+    el.scrollIntoView({ block: r.height > vh ? 'start' : 'center', behavior: 'smooth' });
+}
+
+/* Called after every QR code is drawn (boot-entry.js). Scrolls to it once
+   each time it appears: an animated QR redraws many times a second, and
+   the person must be free to scroll away from it. Hiding the QR code
+   (its size drops to zero) makes the next appearance scroll again. */
+var _skuiQrShown = new WeakSet();
+var _skuiQrHideWatch = typeof ResizeObserver === 'function' ? new ResizeObserver(function (entries) {
+    entries.forEach(function (e) {
+        if (!e.target.getClientRects().length) { _skuiQrShown.delete(e.target); _skuiQrHideWatch.unobserve(e.target); }
+    });
+}) : null;
+function skui_onQrDrawn(canvas) {
+    if (!canvas || typeof canvas.getClientRects !== 'function') return;
+    setTimeout(function () {   // the code that drew it may show its box just after
+        if (!canvas.getClientRects().length || _skuiQrShown.has(canvas)) return;
+        _skuiQrShown.add(canvas);
+        if (_skuiQrHideWatch) _skuiQrHideWatch.observe(canvas);
+        skui_reveal(canvas);
+    }, 60);
+}
+
 /**
  * Toggle a passphrase input between password (redacted) and text (visible).
  * Updates the companion button label to "Show" or "Hide".
@@ -32368,6 +32403,8 @@ var SKScanner = (function() {
                         video.play();
                         canvas.width = video.videoWidth;
                         canvas.height = video.videoHeight;
+                        // Bring the camera view on screen (its size is known now).
+                        if (typeof skui_reveal === 'function') skui_reveal(container);
 
                         // Video preview runs at native framerate (smooth).
                         // QR decode is throttled to decodeFps (CPU-friendly).

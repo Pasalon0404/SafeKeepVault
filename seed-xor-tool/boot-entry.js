@@ -89,7 +89,21 @@ const slip39ShareInfo = (mnemonic) => {
 };
 window.SLIP39 = { generateMnemonics, combineMnemonics, shareInfo: slip39ShareInfo };
 window.Miniscript = Miniscript;
-window.QRCode = QRCode;
+// Every QR code drawn on screen asks the page to bring it into view
+// (skui_onQrDrawn in boot.html), for both the promise and callback styles.
+const qrDrawn = (canvas) => { if (typeof window.skui_onQrDrawn === 'function') window.skui_onQrDrawn(canvas); };
+window.QRCode = Object.assign({}, QRCode, {
+    toCanvas(...args) {
+        const cb = args[args.length - 1];
+        if (typeof cb === 'function') {
+            args[args.length - 1] = (err, ...rest) => { if (!err) qrDrawn(args[0]); return cb(err, ...rest); };
+            return QRCode.toCanvas(...args);
+        }
+        const done = QRCode.toCanvas(...args);
+        if (done && typeof done.then === 'function') done.then(() => qrDrawn(args[0]), () => {});
+        return done;
+    },
+});
 window.jsQR = jsQR;
 window.UR = UR;
 window.UREncoder = UREncoder;
