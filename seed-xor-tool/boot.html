@@ -34545,8 +34545,12 @@ async function rlq_export() {
         if (result.created) {
             resultDiv.innerHTML = '';
             resultDiv.style.display = 'none';
-            var successMsg = 'Export created: ' + result.filename +
-                             ' (' + selections.join(', ') + ')' +
+            // Name the parts as the checkboxes do, not by their vault
+            // folder names (codex, cipher, …), which mean nothing to people.
+            var partNames = { codex: 'Encrypted Notes', settings: 'Application Settings',
+                              cipher: 'Saved Passphrases', twofa: '2FA Backup', seed: 'Master Seed' };
+            var successMsg = 'Backup created: ' + result.filename +
+                             ' (' + selections.map(function (k) { return partNames[k] || k; }).join(', ') + ')' +
                              (result.demo ? ' — demo mode' : '');
             showStatus(successMsg, 'success');
 
@@ -40931,7 +40935,7 @@ async function eob_forgeSeed() {
     _eobForging = true;
 
     var forgeBtn = document.getElementById('eob-forge-btn');
-    if (forgeBtn) { forgeBtn.disabled = true; forgeBtn.textContent = 'Forging...'; }
+    if (forgeBtn) { forgeBtn.disabled = true; forgeBtn.textContent = 'Generating...'; }
 
     try {
         var bip39 = window.BtcMath?.bip39;
