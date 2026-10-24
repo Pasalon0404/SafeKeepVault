@@ -32634,6 +32634,9 @@ async function sqr_generate() {
 
         sqr_state.lastGridSize = gridSize;
         document.getElementById('sqr-output').style.display = 'block';
+        // Painted by hand from an offscreen QR, so the shared toCanvas hook
+        // never sees this canvas: ask for the scroll-into-view directly.
+        if (typeof skui_onQrDrawn === 'function') skui_onQrDrawn(finalCanvas);
 
         showStatus((isStd ? 'Standard' : 'Compact') + ' SeedQR generated — ' + words.length + ' words, ' + gridSize + '×' + gridSize + ' grid.', 'success');
     } catch (err) {
