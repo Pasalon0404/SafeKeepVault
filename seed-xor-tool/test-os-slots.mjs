@@ -130,7 +130,16 @@ console.log('3. build.sh');
   ck('slot.cfg written', b.includes(`printf 'set slot=a\\n' > "$WORKSPACE/mnt-os/slot.cfg"`));
   ck('grub.cfg used for BIOS and UEFI', b.includes('cp grub.cfg "$WORKSPACE/mnt-efi/boot/grub/grub.cfg"') && b.includes('"boot/grub/grub.cfg=$WORKSPACE/mnt-efi/boot/grub/grub.cfg"'));
   ck('GRUB gets test + configfile (UEFI and BIOS)', (b.match(/gzio test configfile"/g) || []).length === 2);
-  ck('missing grub.cfg / key stops the build early', b.indexOf('for f in grub.cfg "$MAINTAINER_KEY" ') > 0 && b.indexOf('for f in grub.cfg "$MAINTAINER_KEY" ') < b.indexOf('echo "Phase 2:'));
+  ck('Mac boot menu name: label files and .contentDetails go into EFI/BOOT',
+    b.includes('cp .disk_label .disk_label_2x "$WORKSPACE/mnt-efi/EFI/BOOT/"') &&
+    b.includes(`printf 'SafeKeep' > "$WORKSPACE/mnt-efi/EFI/BOOT/.contentDetails"`) &&
+    b.indexOf('for f in grub.cfg .disk_label .disk_label_2x ') > 0);
+  for (const [f, w, h] of [['.disk_label', 47, 12], ['.disk_label_2x', 94, 24]]) {
+    const d = readFileSync(join(ROOT, 'usbbootdrive', f));
+    ck(`${f}: Apple label image, ${w}x${h}`, d[0] === 1 && d.readUInt16BE(1) === w && d.readUInt16BE(3) === h && d.length === 5 + w * h);
+  }
+  const early = b.indexOf('for f in grub.cfg .disk_label .disk_label_2x "$MAINTAINER_KEY" ');
+  ck('missing grub.cfg / labels / key stops the build early', early > 0 && early < b.indexOf('echo "Phase 2:'));
   const fpr = (read('VERIFYING.md').match(/A333 EB82[0-9A-F ]+/) || [''])[0].replace(/\s+/g, '');
   ck('pinned fingerprint matches VERIFYING.md', b.includes(`MAINTAINER_FPR="${fpr}"`) && fpr.length === 40);
   ck('image key identical to developer-pubkey.asc', read('usbbootdrive/config/maintainer-pubkey.asc') === read('developer-pubkey.asc'));
