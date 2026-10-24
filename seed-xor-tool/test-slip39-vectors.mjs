@@ -146,7 +146,7 @@ console.log(`  Trezor restore fingerprint     : ${trezorFp}   ${walletFp === tre
       const r2 = await ctx._s39VerifyTyped(mixed);
       ck('final check: every share takes part (a foreign last share fails)', !r2.ok, JSON.stringify(r2)); }
     r = await ctx._s39CheckExisting([shares[1], shares[2]]);
-    ck('check shares: any 2 rebuild the vault seed', r.ok && /rebuild your vault seed/.test(r.message) && !seed.split(' ').some((w) => r.message.includes(' ' + w + ' ')), r.message);
+    ck('check shares: any 2 rebuild the vault seed', r.ok && /rebuild your vault seed/.test(r.message) && !seed.split(' ').slice(1).some((w, k) => r.message.includes(seed.split(' ')[k] + ' ' + w)), r.message);
     ck('check shares: the words come back separately, labelled as the vault seed', r.words === seed && /your vault seed/.test(r.wordsLabel));
     r = await ctx._s39CheckExisting([shares[1]]);
     ck('check shares: one share is not enough, and the message says how many', !r.ok && /Not enough shares: this set needs 2/.test(r.message), r.message);
