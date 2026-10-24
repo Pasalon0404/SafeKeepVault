@@ -8020,8 +8020,19 @@
                     <div id="bip85-lib-dropdown" style="display: none; margin-bottom: 0.5rem; padding: 0.5rem; background: var(--skb-bg-card); border: 1px solid var(--skb-primary); border-radius: var(--skb-radius-sm); max-height: 180px; overflow-y: auto;"></div>
                     <!-- max-width: none overrides the global tool-input 600px readability cap so
                          this full-width field reaches the right edge (no adjacent button here). -->
-                    <input type="password" id="bip85-passphrase" placeholder="Leave blank if none" autocomplete="off"
+                    <input type="password" id="bip85-passphrase" placeholder="Leave blank if none" autocomplete="off" spellcheck="false"
+                           oninput="desc_onPassphraseInput('bip85-passphrase')"
                            style="width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.875rem; color: var(--skb-text);">
+                    <!-- Typed passphrases must be typed twice: a typo here makes child
+                         seeds that the master seed and real passphrase can't rebuild. -->
+                    <div id="bip85-passphrase-confirm-row" class="desc-pp-confirm" style="display: none;">
+                        <input type="password" id="bip85-passphrase-confirm" class="desc-pp-confirm__input" style="max-width: none;" placeholder="Type the passphrase again to confirm it" autocomplete="off" spellcheck="false"
+                               onpaste="return cipher_blockPaste(event)" ondrop="return false" oninput="desc_onPassphraseInput('bip85-passphrase')">
+                        <div id="bip85-passphrase-confirm-note" class="desc-pp-confirm__note"></div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.35rem;">
+                        Filled in from the Dashboard when a passphrase wallet is active. Child seeds come from the master seed and this passphrase together.
+                    </div>
                 </div>
 
                 <div class="tool-grid-2">
@@ -28268,6 +28279,18 @@ function bip85_autoFillMasterSeed() {
     // If the tool already has generated child seed results, preserve state
     if (_bip85HasWork) return;
 
+    // Use the session's passphrase, as Seed Management does. It was
+    // confirmed when it was set, so it needs no second typing here.
+    const pp = window.SeedSession?.getPassphrase?.() || window.SafeKeepOS?.getPassphrase?.() || '';
+    const ppEl = document.getElementById('bip85-passphrase');
+    if (ppEl) {
+        ppEl.value = pp;
+        if (pp) _ppFromLibrary['bip85-passphrase'] = pp;
+        else delete _ppFromLibrary['bip85-passphrase'];
+        document.getElementById('bip85-passphrase-confirm').value = '';
+        desc_onPassphraseInput('bip85-passphrase');
+    }
+
     const seed = window.SeedSession?.get()?.mnemonic;
     const grid = document.getElementById('bip85-master-grid');
     if (!grid) return;
@@ -28308,6 +28331,11 @@ async function bip85_generate() {
         const grid = document.getElementById('bip85-master-grid');
         const masterWords = grid ? Array.from(grid.querySelectorAll('.bip85-out-word')).map(el => el.textContent.trim()) : [];
         const masterMnemonic = masterWords.join(' ');
+        if (!_descPassphraseConfirmed('bip85-passphrase')) {
+            showStatus('Type the passphrase a second time to confirm it.', 'error');
+            document.getElementById('bip85-passphrase-confirm').focus();
+            return;
+        }
         const passphrase = document.getElementById('bip85-passphrase').value || '';
         const childLength = parseInt(document.getElementById('bip85-child-length').value);
         const childIndex = parseInt(document.getElementById('bip85-child-index').value) || 0;
