@@ -109,6 +109,12 @@ window.UR = UR;
 window.UREncoder = UREncoder;
 window.URDecoder = URDecoder;
 window.CBOR = CBOR;
+// Dense QR codes can be played as animated BC-UR (skqr_render in boot.html).
+window.AnimatedQR = {
+    isDense: (text, ecc) => isDense(QRCode, text, ecc),
+    frames: (text) => urBytesFrames({ UR, UREncoder, Buffer }, text),
+    frameMs: QR_FRAME_MS,
+};
 
 // Import shared modules — Vite will bundle these.
 // qr-parser.js must load BEFORE boot.js so the inline scripts in
@@ -149,6 +155,7 @@ import { mountShareFlow, mountShareChecker } from './shared/share-flow-ui.js';
 import { createWordBoxes } from './shared/word-boxes.js';
 import { compareShare, splitWords } from './shared/share-flow.js';
 import { SLIP39_WORDLIST } from './shared/slip39-wordlist.js';
+import { isDense, urBytesFrames, FRAME_MS as QR_FRAME_MS } from './shared/animated-qr.js';
 window.ShareFlow = Object.freeze({
     mount: mountShareFlow,
     check: mountShareChecker,
