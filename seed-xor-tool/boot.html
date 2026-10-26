@@ -2246,6 +2246,9 @@
 
 /* ---- Output Descriptor: passphrase confirmation ---- */
 .desc-pp-confirm { margin-top: 0.5rem; }
+.skqr-bar { margin: 0.6rem auto 0; max-width: 580px; font-size: 0.8rem; color: var(--skb-text-muted); text-align: center; line-height: 1.5; }
+.skqr-bar .skqr-btn { margin-left: 0.4rem; padding: 0.25rem 0.7rem; font-size: 0.78rem; }
+.skqr-bar .skqr-note { font-size: 0.72rem; color: var(--skb-text-dim); margin-top: 0.3rem; }
 .desc-pp-confirm__input { width: 100%; max-width: none; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-passphrase-active, #a78bfa); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.875rem; color: var(--skb-text); }
 .desc-pp-confirm__note { font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.3rem; min-height: 1em; }
 .desc-pp-confirm__note.is-ok { color: var(--skb-secondary); }
@@ -14664,6 +14667,88 @@ function skui_revealPanel(el) {
     var r = el.getBoundingClientRect();
     if (r.top >= 0 && r.bottom <= window.innerHeight) return;
     el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+/* Draw a QR code that may be too dense for a camera to read easily.
+   Small codes draw as usual. A dense one (shared/animated-qr.js) gets a bar
+   underneath offering to play it as an animated BC-UR QR code, which holds
+   the same text in smaller frames; a code too big for any single QR plays
+   animated straight away. opts are QRCode.toCanvas options. */
+var _skqrState = new WeakMap();
+async function skqr_render(canvas, text, opts) {
+    if (!canvas || !window.QRCode) return;
+    skqr_stop(canvas);
+    var ecc = (opts && opts.errorCorrectionLevel) || 'M';
+    var dense = !!(window.AnimatedQR && window.AnimatedQR.isDense(text, ecc));
+    var st = { text: text, opts: opts || {}, timer: null, frames: null };
+    _skqrState.set(canvas, st);
+    var fitsOne = true;
+    try { window.QRCode.create(text, { errorCorrectionLevel: ecc }); } catch (_) { fitsOne = false; }
+    if (dense && !fitsOne) return skqr_play(canvas);
+    await window.QRCode.toCanvas(canvas, text, st.opts);
+    _skqrStripSize(canvas);
+    _skqrBar(canvas, dense ? 'static' : 'none');
+}
+
+/* Play the canvas's current text as animated BC-UR frames. */
+function skqr_play(canvas) {
+    var st = _skqrState.get(canvas);
+    if (!st || !window.AnimatedQR) return;
+    skqr_stop(canvas);
+    st.frames = window.AnimatedQR.frames(st.text);
+    var i = 0;
+    var frameOpts = Object.assign({}, st.opts, { errorCorrectionLevel: 'L' });
+    function paint() {
+        if (!canvas.getClientRects().length) { skqr_stop(canvas); return; }   // tool left or QR hidden
+        window.QRCode.toCanvas(canvas, st.frames[i], frameOpts).then(function () { _skqrStripSize(canvas); }, function () {});
+        _skqrBar(canvas, 'animated', i + 1, st.frames.length);
+        i = (i + 1) % st.frames.length;
+    }
+    paint();
+    st.timer = setInterval(paint, window.AnimatedQR.frameMs);
+}
+
+/* Back to the single static QR code. */
+function skqr_still(canvas) {
+    var st = _skqrState.get(canvas);
+    if (st) skqr_render(canvas, st.text, st.opts);
+}
+
+function skqr_stop(canvas) {
+    var st = canvas && _skqrState.get(canvas);
+    if (st && st.timer) { clearInterval(st.timer); st.timer = null; }
+}
+
+function _skqrStripSize(canvas) {
+    try { canvas.style.removeProperty('width'); canvas.style.removeProperty('height'); } catch (_) {}
+}
+
+/* The bar under the QR code: hidden, "dense: play animated", or "part i of n". */
+function _skqrBar(canvas, mode, part, total) {
+    var id = canvas.id + '-skqr-bar';
+    var bar = document.getElementById(id);
+    if (mode === 'none') { if (bar) bar.style.display = 'none'; return; }
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = id;
+        bar.className = 'skqr-bar';
+        var anchor = canvas.parentElement && /resizer/.test(canvas.parentElement.className) ? canvas.parentElement : canvas;
+        anchor.insertAdjacentElement('afterend', bar);
+    }
+    bar.style.display = 'block';
+    if (mode === 'static') {
+        bar.innerHTML = '<span>This QR code is dense, and some cameras struggle to read it.</span> ' +
+            '<button type="button" class="skb-btn skqr-btn">Play as animated QR</button>' +
+            '<div class="skqr-note">Animated QR codes use BC-UR, which Sparrow, Nunchuk, Keystone, BlueWallet and other wallets can scan.</div>';
+        bar.querySelector('button').onclick = function () { skqr_play(canvas); };
+    } else {
+        if (!bar.querySelector('.skqr-part')) {
+            bar.innerHTML = '<span>Animated QR (BC-UR): <span class="skqr-part"></span>. Keep the camera on it until your wallet finishes.</span> ' +
+                '<button type="button" class="skb-btn skqr-btn">Show as one QR</button>';
+            bar.querySelector('button').onclick = function () { skqr_still(canvas); };
+        }
+        bar.querySelector('.skqr-part').textContent = 'part ' + part + ' of ' + total;
+    }
 }
 
 /* Called after every QR code is drawn (boot-entry.js). Scrolls to it once
@@ -30332,20 +30417,24 @@ function desc_toggleQR() {
     var btn = document.getElementById('desc-qr-toggle-btn');
     if (!desc_state.currentDescriptor) return;
 
+    var canvas = document.getElementById('desc-qr-canvas');
     if (wrap.style.display !== 'none') {
         wrap.style.display = 'none';
         btn.textContent = 'Show QR';
+        skqr_stop(canvas);
     } else {
-        var canvas = document.getElementById('desc-qr-canvas');
+        // Shown first, so a descriptor too big for one QR code can start
+        // playing animated (a hidden canvas stops the animation).
+        wrap.style.display = 'block';
+        btn.textContent = 'Hide QR';
+        // A dense multisig descriptor gets the option to play animated.
         if (canvas && window.QRCode) {
-            QRCode.toCanvas(canvas, desc_state.currentDescriptor, {
+            skqr_render(canvas, desc_state.currentDescriptor, {
                 width: 400,
                 errorCorrectionLevel: 'L',
                 color: { dark: '#000000', light: '#ffffff' }
             });
         }
-        wrap.style.display = 'block';
-        btn.textContent = 'Hide QR';
     }
 }
 
@@ -37749,6 +37838,7 @@ async function arm_deriveWallet() {
             qrWrap.style.display = 'none';
             _armXpubQRVisible = false;
             if (qrBtn) qrBtn.textContent = 'Show QR';
+            skqr_stop(document.getElementById('arm-xpub-qr-canvas'));
         }
 
         // If interactive QR is showing, update it too. Encodes whichever
@@ -39057,28 +39147,13 @@ async function arm_toggleXpubQR() {
         if (payload && !payload.startsWith('Calculating') && !payload.startsWith('Confirm the passphrase') && window.QRCode) {
             const canvas = document.getElementById('arm-xpub-qr-canvas');
             try {
-                // Render at 580px module density (matches PSBT Signer) so
-                // upscaling via the .arm-xpub-qr-resizer wrapper stays
-                // crisp without re-encoding the bitmap.
-                await QRCode.toCanvas(canvas, payload, {
+                // Same 580px bitmap as before. A dense payload (the JSON
+                // formats) gets the option to play as an animated BC-UR QR
+                // code; one too big for any single QR plays animated.
+                await skqr_render(canvas, payload, {
                     width: 580, margin: 2,
                     color: { dark: '#000000', light: '#ffffff' }
                 });
-                // QRCode.toCanvas writes inline width/height matching the
-                // bitmap dimension (580). Those would outrank the
-                // stylesheet's `width:100% !important` rule on the canvas
-                // and lock its on-screen size to 580px, making a user
-                // resize of the wrapper LOOK like a crop. Strip them so
-                // the resizer-scoped CSS wins. Reuse the PSBT helper —
-                // it's a generic canvas inline-style scrubber.
-                if (typeof _psbtStripCanvasInlineSize === 'function') {
-                    _psbtStripCanvasInlineSize(canvas);
-                } else {
-                    try {
-                        canvas.style.removeProperty('width');
-                        canvas.style.removeProperty('height');
-                    } catch (e) { /* belt-and-braces; CSS !important is the primary defense */ }
-                }
             } catch (e) {
                 // Most common failure: payload exceeds v40-H capacity.
                 // Hide the empty canvas + reset the button so the UI
@@ -39096,6 +39171,7 @@ async function arm_toggleXpubQR() {
     } else {
         container.style.display = 'none';
         if (qrBtn) qrBtn.textContent = 'Show QR';
+        skqr_stop(document.getElementById('arm-xpub-qr-canvas'));
     }
 }
 
