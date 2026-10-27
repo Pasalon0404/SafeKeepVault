@@ -9926,6 +9926,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                 <option value="slip132" selected>SLIP-132 (zpub / ypub / xpub)</option>
                                 <option value="bip380">BIP-32 Standard (xpub only)</option>
                                 <option value="descriptor_text">Output Descriptor (BIP-380)</option>
+                                <option value="bcur">BC-UR Account (ur:crypto-account)</option>
                                 <option value="coldcard_json">Hardware Wallet JSON</option>
                                 <option value="nunchuk_json">Hardware Wallet JSON (Minimal)</option>
                                 <option value="electrum_json">BIP-32 Watch-Only JSON</option>
@@ -37441,10 +37442,10 @@ var ARM_URH = (function () {
         // hdkey's origin (both are the base-seed identity FP).
         var masterFpUint = fpHexToUint(masterFpHex);
         var account = buildCryptoAccount(masterFpUint, [scriptExpr]);
-        // Inject a single-frame "1-1" sequence header so Nunchuk's
-        // animated-UR-tuned scanner treats this static payload as a
-        // 1-of-1 fountain frame instead of stalling on missing seq.
-        return toUR('crypto-account', account, '1-1');
+        // A plain single-part UR. It used to carry a "1-1" sequence
+        // header, but a header promises a fountain-coded part, so
+        // standard decoders (Sparrow's included) could not read it.
+        return toUR('crypto-account', account);
     }
 
     return {
