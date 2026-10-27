@@ -542,6 +542,16 @@ grub-install \
     --modules="part_gpt ext2 fat search search_label normal linux gzio test configfile" \
     "$LOOP_DEV"
 
+# Some legacy BIOSes (HP's among them: "Boot Device Not Found (3F0)") only
+# run the MBR's boot code if an MBR partition entry is marked active. The
+# GPT's protective 0xEE entry must not carry that flag, so add an empty
+# (type 0x00) entry covering sector 0 and mark it active, as Ubuntu's ISOs
+# do (xorriso --mbr-force-bootable). UEFI firmware, Linux, macOS and gdisk
+# skip type-0x00 entries, so the disk still reads as plain GPT.
+# Entry 2 at byte 462: active, CHS 0/0/1, type 0x00, LBA 0, 1 sector.
+printf '\x80\x00\x01\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x00' \
+    | dd of="$LOOP_DEV" bs=1 seek=462 count=16 conv=notrunc status=none
+
 echo "GRUB installed for both UEFI and BIOS boot."
 
 # =====================================================================
