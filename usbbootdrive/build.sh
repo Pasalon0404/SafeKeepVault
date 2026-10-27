@@ -120,6 +120,7 @@ command -v mkfs.fat >/dev/null || DEPS_NEEDED="$DEPS_NEEDED dosfstools"
 command -v mkfs.ext4 >/dev/null || DEPS_NEEDED="$DEPS_NEEDED e2fsprogs"
 command -v mtools >/dev/null || DEPS_NEEDED="$DEPS_NEEDED mtools"
 command -v mkfs.exfat >/dev/null || DEPS_NEEDED="$DEPS_NEEDED exfatprogs"
+command -v curl >/dev/null || DEPS_NEEDED="$DEPS_NEEDED curl"
 
 if [ -n "$DEPS_NEEDED" ]; then
     echo "Installing missing dependencies:$DEPS_NEEDED"
@@ -128,6 +129,48 @@ if [ -n "$DEPS_NEEDED" ]; then
 else
     echo "All dependencies present."
 fi
+
+# --- Ubuntu's signed UEFI boot chain, pinned (SECURE_BOOT.md) ---
+# shim (signed by Microsoft) starts GRUB (signed by Canonical), which starts
+# Ubuntu's kernel (signed by Canonical), so the stick boots with Secure Boot
+# on. Both packages are pinned by version and SHA-256, like Chromium; any
+# other file stops the build. Fetched now so a problem shows up in the first
+# minute, not after the 20-minute build. To move to newer ones: change the
+# four values below in a PR (SECURE_BOOT.md, "Updating the signed boot files").
+SHIM_DEB="shim-signed_1.58+15.8-0ubuntu1_amd64.deb"
+SHIM_DEB_SHA256="ba9b5d80e5d886c30664f2bebfb5c2fcce3b9b40f16fc46cba49c19a91c8059c"
+SIGNED_GRUB_DEB="grub-efi-amd64-signed_1.202.5+2.12-1ubuntu7.3_amd64.deb"
+SIGNED_GRUB_DEB_SHA256="8bd5cd99c3af82aab23af0f15f54c91799f343416412e122df661ef36a44a511"
+SIGNED_BOOT="$WORKSPACE/signed-boot"
+fetch_pinned_deb() {   # <pool path> <file> <sha256>
+    local dest="$SIGNED_BOOT/$2" url
+    if [ -f "$dest" ] && [ "$(sha256sum "$dest" | cut -d' ' -f1)" = "$3" ]; then return 0; fi
+    # The archive drops superseded update versions after a while; Launchpad
+    # keeps every version. The pinned hash makes either source safe.
+    for url in "http://archive.ubuntu.com/ubuntu/pool/main/$1/$2" \
+               "https://launchpad.net/ubuntu/+archive/primary/+files/$2"; do
+        if curl -fsSL -o "$dest" "$url" && [ "$(sha256sum "$dest" | cut -d' ' -f1)" = "$3" ]; then
+            return 0
+        fi
+    done
+    rm -f "$dest"
+    echo "ERROR: could not fetch $2 with SHA-256 $3." >&2
+    exit 1
+}
+echo "Fetching the pinned signed boot files..."
+mkdir -p "$SIGNED_BOOT"
+fetch_pinned_deb s/shim-signed "$SHIM_DEB" "$SHIM_DEB_SHA256"
+fetch_pinned_deb g/grub2-signed "$SIGNED_GRUB_DEB" "$SIGNED_GRUB_DEB_SHA256"
+rm -rf "$SIGNED_BOOT/x"
+dpkg-deb -x "$SIGNED_BOOT/$SHIM_DEB" "$SIGNED_BOOT/x"
+dpkg-deb -x "$SIGNED_BOOT/$SIGNED_GRUB_DEB" "$SIGNED_BOOT/x"
+SHIM_EFI="$SIGNED_BOOT/x/usr/lib/shim/shimx64.efi.signed.latest"
+MM_EFI="$SIGNED_BOOT/x/usr/lib/shim/mmx64.efi"
+GRUB_EFI="$SIGNED_BOOT/x/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed"
+for f in "$SHIM_EFI" "$MM_EFI" "$GRUB_EFI"; do
+    [ -s "$f" ] || { echo "ERROR: $f missing from the pinned packages." >&2; exit 1; }
+done
+echo "  OK: $SHIM_DEB, $SIGNED_GRUB_DEB (SHA-256 match)."
 
 # =====================================================================
 # PHASE 2: BUILD THE UBUNTU CHROOT
@@ -512,15 +555,23 @@ cp grub.cfg "$WORKSPACE/mnt-efi/boot/grub/grub.cfg"
 mkdir -p "$WORKSPACE/mnt-os/boot/grub"
 cp "$WORKSPACE/mnt-efi/boot/grub/grub.cfg" "$WORKSPACE/mnt-os/boot/grub/grub.cfg"
 
-# Build the UEFI GRUB binary (standalone, no dependency on installed GRUB)
-# Explicitly include modules needed to find partitions and boot Linux
-grub-mkstandalone \
-    --format=x86_64-efi \
-    --output="$WORKSPACE/mnt-efi/EFI/BOOT/BOOTX64.EFI" \
-    --locales="" \
-    --fonts="" \
-    --modules="part_gpt ext2 fat search search_label normal linux gzio test configfile" \
-    "boot/grub/grub.cfg=$WORKSPACE/mnt-efi/boot/grub/grub.cfg"
+# UEFI: Ubuntu's signed chain, so the stick boots with Secure Boot on.
+#   EFI/BOOT/BOOTX64.EFI  shim, signed by Microsoft; the firmware starts it
+#                         from removable media. It checks and starts:
+#   EFI/BOOT/grubx64.efi  GRUB, signed by Canonical. It has its modules built
+#                         in and reads its config from its prefix, /EFI/ubuntu:
+#   EFI/ubuntu/grub.cfg   the same grub.cfg as the BIOS GRUB uses.
+#   EFI/BOOT/mmx64.efi    MokManager, which shim shows if a check fails.
+# shim's fbx64.efi is left out on purpose: on a stick it would add boot
+# entries to every computer it starts on. shim does record its revocation
+# list (SbatLevel) in each computer's firmware, as Windows Update does.
+cp "$SHIM_EFI" "$WORKSPACE/mnt-efi/EFI/BOOT/BOOTX64.EFI"
+cp "$GRUB_EFI" "$WORKSPACE/mnt-efi/EFI/BOOT/grubx64.efi"
+cp "$MM_EFI"   "$WORKSPACE/mnt-efi/EFI/BOOT/mmx64.efi"
+mkdir -p "$WORKSPACE/mnt-efi/EFI/ubuntu"
+cp grub.cfg "$WORKSPACE/mnt-efi/EFI/ubuntu/grub.cfg"
+echo "  Signed boot files (SHA-256):"
+(cd "$WORKSPACE/mnt-efi/EFI" && sha256sum BOOT/BOOTX64.EFI BOOT/grubx64.efi BOOT/mmx64.efi | sed 's/^/    /')
 
 # Name the stick in Mac boot menus: "SafeKeep" instead of "EFI Boot".
 # Apple's Option-key menu shows .disk_label (_2x on Retina screens), a small

@@ -128,8 +128,21 @@ console.log('3. build.sh');
   ck('build refuses if two OS copies do not fit', b.includes('if [ $(( OS_CONTENT_SIZE * 2 + 160 )) -gt "$OS_SIZE_MB" ]; then'));
   ck('OS goes into casper-a/', b.includes('cp "$STAGING_DIR/casper/vmlinuz" "$WORKSPACE/mnt-os/casper-a/"') && !b.includes('mnt-os/casper/"'));
   ck('slot.cfg written', b.includes(`printf 'set slot=a\\n' > "$WORKSPACE/mnt-os/slot.cfg"`));
-  ck('grub.cfg used for BIOS and UEFI', b.includes('cp grub.cfg "$WORKSPACE/mnt-efi/boot/grub/grub.cfg"') && b.includes('"boot/grub/grub.cfg=$WORKSPACE/mnt-efi/boot/grub/grub.cfg"'));
-  ck('GRUB gets test + configfile (UEFI and BIOS)', (b.match(/gzio test configfile"/g) || []).length === 2);
+  ck('grub.cfg used for BIOS (boot/grub) and UEFI (EFI/ubuntu, the signed GRUB\'s prefix)',
+    b.includes('cp grub.cfg "$WORKSPACE/mnt-efi/boot/grub/grub.cfg"') && b.includes('cp grub.cfg "$WORKSPACE/mnt-efi/EFI/ubuntu/grub.cfg"'));
+  ck('BIOS GRUB gets test + configfile', (b.match(/gzio test configfile"/g) || []).length === 1 && b.includes('--target=i386-pc'));
+  ck('UEFI: no unsigned GRUB any more', !b.includes('grub-mkstandalone'));
+  ck('UEFI: shim as BOOTX64.EFI, signed GRUB and MokManager beside it',
+    b.includes('cp "$SHIM_EFI" "$WORKSPACE/mnt-efi/EFI/BOOT/BOOTX64.EFI"') &&
+    b.includes('cp "$GRUB_EFI" "$WORKSPACE/mnt-efi/EFI/BOOT/grubx64.efi"') &&
+    b.includes('cp "$MM_EFI"   "$WORKSPACE/mnt-efi/EFI/BOOT/mmx64.efi"'));
+  ck('UEFI: shim\'s fallback (fbx64.efi) is not on the stick', !/cp [^\n]*fbx64/.test(b));
+  ck('signed packages pinned by version and SHA-256',
+    /^SHIM_DEB="shim-signed_[0-9][^"]+_amd64\.deb"$/m.test(b) && /^SHIM_DEB_SHA256="[0-9a-f]{64}"$/m.test(b) &&
+    /^SIGNED_GRUB_DEB="grub-efi-amd64-signed_[0-9][^"]+_amd64\.deb"$/m.test(b) && /^SIGNED_GRUB_DEB_SHA256="[0-9a-f]{64}"$/m.test(b));
+  ck('a download with another hash stops the build', /fetch_pinned_deb\(\) \{[\s\S]*?sha256sum "\$dest"[\s\S]*?exit 1/.test(b));
+  ck('signed packages fetched before the long build', b.indexOf('fetch_pinned_deb s/shim-signed') > 0 && b.indexOf('fetch_pinned_deb s/shim-signed') < b.indexOf('echo "Phase 2:'));
+  ck('the Mac boot label files still go into EFI/BOOT', b.includes('cp .disk_label .disk_label_2x "$WORKSPACE/mnt-efi/EFI/BOOT/"'));
   ck('Mac boot menu name: label files and .contentDetails go into EFI/BOOT',
     b.includes('cp .disk_label .disk_label_2x "$WORKSPACE/mnt-efi/EFI/BOOT/"') &&
     b.includes(`printf 'SafeKeep' > "$WORKSPACE/mnt-efi/EFI/BOOT/.contentDetails"`) &&

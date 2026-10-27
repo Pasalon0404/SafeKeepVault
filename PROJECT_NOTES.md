@@ -670,7 +670,7 @@ you iterate on UI without rebuilding the image.
 ┌─────────────────────────────────────────────────────────────────┐
 │ USB layout (5 partitions, GPT)                                  │
 │   1. BIOS Boot   (2 MB)        — GRUB core.img for legacy BIOS  │
-│   2. EFI System  (256 MB FAT32)— GRUB BOOTX64.EFI for UEFI      │
+│   2. EFI System  (256 MB FAT32)— shim + signed GRUB for UEFI    │
 │   3. OS          (3.5 GB ext4) — slots casper-a/, casper-b/     │
 │                                  (squashfs, kernel, initrd)     │
 │                                  + slot.cfg                     │
@@ -761,7 +761,7 @@ entire website folder/                  ← project root
 6. **Partitioning** — sgdisk creates the 5-partition GPT
 7. **Format** — FAT32, ext4×2, exFAT
 8. **Install OS content** — copy squashfs/kernel/initrd into slot A (`casper-a/`) and write `slot.cfg`; slot B is filled by the first update (`os-slots.sh`, `UPDATER_DESIGN.md`)
-9. **GRUB install** — `grub.cfg` (boots the slot in `slot.cfg`) for UEFI (`grub-mkstandalone`) + BIOS (`grub-install`)
+9. **GRUB install** — `grub.cfg` (boots the slot in `slot.cfg`) for UEFI (Ubuntu's signed shim + GRUB, pinned; config in `EFI/ubuntu/`; see `SECURE_BOOT.md`) + BIOS (`grub-install`)
 10. **Finalize** — unmount everything, detach loop
 
 The build is **idempotent** as long as the host network reaches
