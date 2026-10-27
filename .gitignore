@@ -1,3 +1,4 @@
 .DS_Store
 PRIVATE_NOTES.md
 __pycache__/
+usbbootdrive/tests/secure-boot/.cache/
