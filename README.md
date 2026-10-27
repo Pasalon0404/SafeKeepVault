@@ -56,6 +56,8 @@ sudo bash flash-new-stick.sh /dev/sdb
 
 This **erases the whole stick**. The script refuses system disks, asks you to type the device name to confirm, and reads the stick back afterwards to verify the write. To update a stick you already use without wiping its vault, use `sudo bash quick-update.sh --usb /dev/sdb` instead.
 
+**Secure Boot.** SafeKeepVault's boot loader and kernel come from Ubuntu and are signed, so most PCs start the stick with Secure Boot left on (sticks flashed from v1.54 on). Secure Boot does not check the rest of the stick: verify your download with its signature, as before. Some computers still need Secure Boot turned off: see [SECURE_BOOT.md](SECURE_BOOT.md).
+
 **Developer builds.** A normal image has no terminal and no file manager. The session runs as root, so either one would be a root shell, from which the network lock-down could be undone by hand. For troubleshooting only, `sudo SAFEKEEP_DEV_SHELL=1 bash build.sh` adds both: Ctrl+Alt+T for a terminal, Ctrl+Alt+F for the file manager. `quick-update.sh` reminds you when the OS tree is a developer build. Never give a developer build to anyone else.
 
 ### What the OS does to stay offline
