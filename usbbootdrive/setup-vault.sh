@@ -287,8 +287,8 @@ if [ -n "${VAULT_MB:-}" ]; then
     VAULT_DESC="${VAULT_MB} MB encrypted vault"
 fi
 
-NEXT_STEP=$(zenity --list --title="SafeKeepVault — Vault Created" --width=520 --height=420 \
-    --text="Your ${VAULT_DESC} is created and locked.\n\nNext, unlock it with the Master Passphrase you just set.\n\nRestoring from a .7z backup? It must be on the stick's TRANSFER\ndrive first. Choose \"Shut down\", copy the backup onto TRANSFER\nfrom another computer, then put the stick back and power on." \
+NEXT_STEP=$(zenity --list --title="SafeKeepVault — Vault Created" --width=520 --height=470 \
+    --text="Your ${VAULT_DESC} is created and locked.\n\nNext, unlock it with the Master Passphrase you just set.\n\nRestoring from a .7z backup? Choose \"Continue now\", then\n\"Unlock .7z Backup\" and \"Receive a Backup with the Courier\":\nsend it from the Courier Tool on a phone or another computer.\n\nNo camera on this computer? Choose \"Shut down\", copy the backup\nonto the stick's TRANSFER drive from another computer, then put\nthe stick back and power on." \
     --column="Next step" --hide-header \
     "Continue now" \
     "Shut down to copy a backup onto the stick") || true

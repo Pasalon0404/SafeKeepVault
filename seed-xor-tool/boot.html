@@ -9566,6 +9566,20 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <div id="rlq-selected-file" style="display: none; font-size: 0.82rem; color: var(--skb-primary); font-weight: 600; padding: 0.4rem 0.6rem; background: rgba(187, 134, 252, 0.08); border: 1px solid rgba(187, 134, 252, 0.25); border-radius: var(--skb-radius-sm);">
                             Selected: <span id="rlq-selected-file-name"></span>
                         </div>
+
+                        <!-- Bring a backup in with the Courier (animated QR loop from a phone
+                             or computer), so a new stick never has to be plugged into another
+                             computer. The file is saved to the Transfer Drive and selected. -->
+                        <button type="button" id="rlq-courier-start-btn" class="skb-btn" style="width: 100%; margin-top: 0.5rem;" onclick="rlq_courierStart()">Receive a Backup with the Courier</button>
+                        <div id="rlq-courier-area" style="display: none; margin-top: 0.5rem;">
+                            <p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">On your phone or another computer, open the Courier Tool at safekeepbitcoin.com, choose your .7z backup and start the loop. Hold it in front of this computer's camera.</p>
+                            <div id="rlq-courier-reader" style="max-width: 450px; margin: 0 auto 0.5rem; border-radius: 8px; overflow: hidden;"></div>
+                            <div style="width: 100%; height: 8px; background: var(--skb-bg-input); border-radius: 4px; overflow: hidden; margin-bottom: 0.4rem;">
+                                <div id="rlq-courier-progress" style="height: 100%; background: var(--skb-primary); width: 0%; transition: width 0.15s ease;"></div>
+                            </div>
+                            <div id="rlq-courier-status" style="font-size: 0.8rem; color: var(--skb-text-muted); margin-bottom: 0.5rem;">Waiting for the Courier loop...</div>
+                            <button type="button" class="skb-btn" style="width: 100%; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="rlq_courierStop()">Cancel</button>
+                        </div>
                     </div>
 
                     <!-- Decryption Password -->
@@ -17695,6 +17709,7 @@ function showState(stateId) {
     if (typeof xfr_cleanup === 'function') xfr_cleanup();
     if (typeof eob_cleanup === 'function' && stateId !== 'state-entropy') eob_cleanup();
     if (typeof tfa_cleanup === 'function') tfa_cleanup();
+    if (typeof rlq_courierStop === 'function') rlq_courierStop();
 
     // Wipe sensitive DOM remnants from the tool we're leaving,
     // but PRESERVE the 4 persistent tool states (Shard, Covenant, Forge, Lineage)
@@ -34368,8 +34383,9 @@ async function rlq_scanPassword(target) {
 
     if (!window.jsQR) { showStatus('QR scanner library (jsQR) not available.', 'error'); return; }
 
-    // Stop any previous scan
+    // Stop any previous scan (and the Courier receiver: one camera at a time)
     if (_rlqPwScanner) { _rlqPwScanner.stop(); _rlqPwScanner = null; }
+    if (typeof rlq_courierStop === 'function') rlq_courierStop();
 
     // Hide all other scanners
     ['backup', 'confirm', 'restore'].forEach(function(t) {
@@ -34856,10 +34872,10 @@ async function rlq_refreshBackupList() {
             return;
         }
 
-        var files = await os.listBackups();
+        var files = await rlq_mergeDriveListing(await os.listBackups());
 
         if (!files || files.length === 0) {
-            listDiv.innerHTML = '<div style="font-size: 0.8rem; color: var(--skb-text-dim); text-align: center; padding: 0.5rem 0;">No backups or exports found on transfer drive.</div>';
+            listDiv.innerHTML = '<div style="font-size: 0.8rem; color: var(--skb-text-dim); text-align: center; padding: 0.5rem 0;">No backups or exports found on transfer drive. You can receive a backup with the Courier below.</div>';
             return;
         }
 
@@ -34955,6 +34971,147 @@ function rlq_pickBackup(filename) {
                 btn.style.fontWeight = 'normal';
             }
         }
+    }
+}
+
+/**
+ * The backup list comes from .backups-index.json, which the OS rebuilds at
+ * boot and after a backup is made, but not when a file arrives through the
+ * Transfer Drive (Courier, File Transfer Hub). Add the drive's own current
+ * listing so those files show up without a reboot.
+ */
+async function rlq_mergeDriveListing(files) {
+    var out = Array.isArray(files) ? files.slice() : [];
+    var h = window.vaultTransferDriveHandle;
+    if (!h && typeof _transferAutoMount === 'function') {
+        try { await _transferAutoMount(); } catch (_) {}
+        h = window.vaultTransferDriveHandle;
+    }
+    if (!h || !h.isSafeKeepTransfer || typeof h._list !== 'function') return out;
+    try {
+        var onDrive = (await h._list())
+            .filter(function(f) { return rlq_classifyEntry(f.name) !== 'unknown'; })
+            .sort(function(a, b) { return (b.lastModified || 0) - (a.lastModified || 0); })
+            .map(function(f) { return f.name; });
+        var extra = out.filter(function(n) { return onDrive.indexOf(n) === -1; });
+        return onDrive.concat(extra);
+    } catch (_) {
+        return out;
+    }
+}
+
+// ---- Receive a backup with the Courier (restore from Welcome) ----
+var _rlqCourierScanner = null;
+var _rlqCourier = null;
+var _rlqCourierBusy = false;
+
+async function rlq_courierStart() {
+    if (!window.jsQR || !window.QRParser || !window.QRParser.createCourierCollector) {
+        showStatus('QR scanner library not available.', 'error');
+        return;
+    }
+    if (typeof rlq_stopPasswordScan === 'function') rlq_stopPasswordScan('restore');
+    rlq_courierStop();
+    _rlqCourier = window.QRParser.createCourierCollector();
+    _rlqCourierBusy = false;
+    document.getElementById('rlq-courier-start-btn').style.display = 'none';
+    document.getElementById('rlq-courier-area').style.display = 'block';
+    document.getElementById('rlq-courier-progress').style.width = '0%';
+    document.getElementById('rlq-courier-status').textContent = 'Waiting for the Courier loop...';
+    try {
+        _rlqCourierScanner = SKScanner.create('rlq-courier-reader');
+        await _rlqCourierScanner.start({ fps: 15 }, function(text, binaryData) {
+            _rlqCourierOnScan(text, binaryData);
+        });
+    } catch (err) {
+        rlq_courierStop();
+        showStatus('Camera failed: ' + (err && err.message ? err.message : err), 'error');
+    }
+}
+
+function rlq_courierStop() {
+    if (_rlqCourierScanner) { try { _rlqCourierScanner.stop(); } catch (_) {} _rlqCourierScanner = null; }
+    var area = document.getElementById('rlq-courier-area');
+    var btn = document.getElementById('rlq-courier-start-btn');
+    if (area) area.style.display = 'none';
+    if (btn) btn.style.display = '';
+}
+
+function _rlqCourierOnScan(text, binaryData) {
+    if (_rlqCourierBusy || !_rlqCourier) return;
+    var parsed = window.QRParser.parseQRScan ? window.QRParser.parseQRScan(text, binaryData) : text;
+    var frame = window.QRParser.parseCourierFrame(String(parsed || '').trim());
+    var statusEl = document.getElementById('rlq-courier-status');
+    if (!frame) {
+        if (statusEl) statusEl.textContent = 'That QR code is not a Courier file loop. Choose File in the Courier Tool and send the .7z backup.';
+        return;
+    }
+    var r = _rlqCourier.add(frame);
+    var name = rlq_courierFileName(r.filename);
+    document.getElementById('rlq-courier-progress').style.width = (r.total ? (r.received / r.total) * 100 : 0) + '%';
+    if (statusEl) {
+        statusEl.textContent = 'Receiving “' + name + '” — chunk ' + r.received + ' / ' + r.total +
+            (r.status === 'bad-checksum' ? ' (a damaged chunk was skipped, keep scanning)' : '');
+    }
+    if (!r.done) return;
+    _rlqCourierBusy = true;
+    rlq_courierStop();
+    rlq_courierSave(r.bytes, name);
+}
+
+/** A safe Transfer Drive name for a received file (no folders, no dot files, exFAT-legal). */
+function rlq_courierFileName(raw) {
+    var n = String(raw || '').replace(/[\/\\\u0000-\u001f\u007f"*:<>?|]/g, '_').replace(/^[.\s]+/, '').trim();
+    if (n.length > 120) {
+        var dot = n.lastIndexOf('.');
+        var ext = dot > 0 && n.length - dot <= 10 ? n.slice(dot) : '';
+        n = n.slice(0, 120 - ext.length) + ext;
+    }
+    return n || 'courier-backup.7z';
+}
+
+/** True when the bytes start with the 7-Zip signature (37 7A BC AF 27 1C). */
+function rlq_is7z(bytes) {
+    var sig = [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c];
+    if (!bytes || bytes.length < sig.length) return false;
+    for (var i = 0; i < sig.length; i++) if (bytes[i] !== sig[i]) return false;
+    return true;
+}
+
+async function rlq_courierSave(bytes, name) {
+    if (!rlq_is7z(bytes)) {
+        showStatus('The file received with the Courier (“' + _psbtEscape(name) + '”) is not a .7z backup. Send the .7z file made by Encrypted Backup.', 'error');
+        return;
+    }
+    if (!/\.7z$/i.test(name)) name = name.replace(/\.[^.]{0,8}$/, '') + '.7z';
+
+    if (!window.vaultTransferDriveHandle && typeof _transferAutoMount === 'function') {
+        try { await _transferAutoMount(); } catch (_) {}
+    }
+    var dir = window.vaultTransferDriveHandle;
+    if (!dir) {
+        showStatus('The Transfer Drive is not available, so the backup could not be saved. Restart SafeKeep and try again.', 'error');
+        return;
+    }
+    try {
+        // Keep an existing file with the same name: save as "name (2).7z".
+        var base = name.slice(0, -3), finalName = name, n = 2;
+        while (n < 100) {
+            try { await dir.getFileHandle(finalName); } catch (_) { break; }
+            finalName = base + ' (' + n + ').7z';
+            n++;
+        }
+        var fh = await dir.getFileHandle(finalName, { create: true });
+        var w = await fh.createWritable();
+        await w.write(bytes);
+        await w.close();
+        await rlq_refreshBackupList();
+        rlq_pickBackup(finalName);
+        showStatus('Backup received and saved to the Transfer Drive: ' + _psbtEscape(finalName) + '. Enter its password to unlock it.', 'success');
+        var pw = document.getElementById('rlq-restore-password');
+        if (pw) pw.focus();
+    } catch (err) {
+        showStatus('Saving the backup to the Transfer Drive failed: ' + _psbtEscape(err && err.message ? err.message : String(err)), 'error');
     }
 }
 
