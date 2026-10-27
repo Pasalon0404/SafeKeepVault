@@ -172,3 +172,26 @@ that trusts only Microsoft's 2023 CAs (QEMU shows the expected refusal).
 2. Change the four values in `build.sh` (`SHIM_DEB…`, `SIGNED_GRUB_DEB…`).
 3. Run `usbbootdrive/tests/secure-boot/run-all.sh` on an Ubuntu 24.04 machine.
 4. Full build, then the hardware checklist on at least one Secure Boot PC.
+
+## Wording for the website and README (after release)
+
+Keep "turn off Secure Boot" as the fallback for machines that refuse the stick.
+
+Booting section:
+
+> Insert the stick, then power on and open the boot menu (usually F2, F8, F9,
+> F12 or Esc; on Intel Macs, hold Option and choose SafeKeep). Most PCs start
+> SafeKeepVault with Secure Boot left on. If yours refuses the stick, with a
+> "Secure Boot violation" message or no stick in the boot menu, turn off Secure
+> Boot in the firmware setup, or allow the "Microsoft 3rd-party UEFI CA" if your
+> PC offers that option. Turning Secure Boot off can make Windows ask for your
+> BitLocker recovery key the next time it starts, so have it to hand. Intel Macs
+> with the T2 chip (2018–2020) need Startup Security Utility set to "No
+> Security". Sticks made before vX.YY still need Secure Boot off until they are
+> reflashed.
+
+README / FAQ:
+
+> SafeKeepVault's boot loader and kernel come from Ubuntu and are signed, so
+> Secure Boot checks them before they start. Secure Boot does not check the rest
+> of the stick: verify your download with its signature, as before.
