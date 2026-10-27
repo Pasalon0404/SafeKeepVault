@@ -149,9 +149,13 @@ hardware checklist.
 | Same, Secure Boot **off** | boots; everything works |
 | Same, Secure Boot on, **previous unsigned build** (v1.53) | refused, as expected |
 | MacBook Pro 2012 (no Secure Boot) | boots (Option → SafeKeep) |
+| Same ZBook, "Legacy Support Enable and Secure Boot Disable", stick picked under Legacy Boot Sources | **"Boot Device Not Found (3F0)"**, with this build **and with the previous v1.53 stick**: not caused by this change. Setting the protective MBR's boot flag (`parted disk_set pmbr_boot on`) did not help. |
 
-Not tested yet: legacy BIOS / CSM on real hardware (QEMU passes; the BIOS path
-is unchanged), a Windows PC with BitLocker, an Intel Mac with T2, and a PC
+Legacy boot on this HP has never worked (the BIOS path is unchanged by this
+change and boots in QEMU's SeaBIOS); it is a separate, low-priority item, as
+only computers without UEFI (roughly pre-2012) need it.
+
+Not tested yet: a Windows PC with BitLocker, an Intel Mac with T2, and a PC
 that trusts only Microsoft's 2023 CAs (QEMU shows the expected refusal).
 
 ### Hardware checklist
