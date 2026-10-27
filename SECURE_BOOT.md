@@ -1,7 +1,7 @@
 # Secure Boot: Ubuntu's signed boot chain on the stick
 
-Status: **on branch `claude/secure-boot`, tested in QEMU, not yet on real
-hardware, not merged.** See "Hardware checklist" below.
+Status: **on branch `claude/secure-boot`, tested in QEMU and on real
+hardware (Oct 27, 2026), not merged.** See "Hardware results" below.
 
 ## Why
 
@@ -140,7 +140,21 @@ third-party CA; the `SbatLevel` write. It uses its own small initramfs, not
 SafeKeep's, so it stops at "the kernel is running"; the full system is for the
 hardware checklist.
 
-### Hardware checklist (not done yet)
+### Hardware results (Oct 27, 2026, build 390 · 619e3f5)
+
+| Machine | Result |
+|---|---|
+| HP ZBook 15u G3 (about 10 years old), Secure Boot **on** | boots; vault, Transfer Drive, app work |
+| Same, Secure Boot on, **Safe Mode** entry (`nomodeset`) | boots |
+| Same, Secure Boot **off** | boots; everything works |
+| Same, Secure Boot on, **previous unsigned build** (v1.53) | refused, as expected |
+| MacBook Pro 2012 (no Secure Boot) | boots (Option → SafeKeep) |
+
+Not tested yet: legacy BIOS / CSM on real hardware (QEMU passes; the BIOS path
+is unchanged), a Windows PC with BitLocker, an Intel Mac with T2, and a PC
+that trusts only Microsoft's 2023 CAs (QEMU shows the expected refusal).
+
+### Hardware checklist
 
 1. A recent PC with Secure Boot **on**: stick boots, vault unlocks, Transfer
    Drive mounts, a QR scan, a print, Coldcard/Trezor if at hand, sound.
