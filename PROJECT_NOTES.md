@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Oct 21, 2026).**
+> **Start with the "Current state" section below (updated Oct 27, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,24 +9,34 @@
 
 ---
 
-## Current state (Oct 23, 2026) — v1.52
+## Current state (Oct 27, 2026) — v1.53
 
-**v1.52** (Oct 23) is the share tools release (`SHARE_TOOLS_DESIGN.md`,
-Parts 1–4, tested on Dave's stick, including QR scan-back and printing):
-- **Seed XOR and Shamir Backup** use one guided flow: choose the scheme in
-  plain words, write down one share per screen, check each share right
-  away (typed with autocomplete, or scanned), then a final check that the
-  shares rebuild the vault seed. Copy, XOR's Merge tab and the old share
-  pages are gone.
-- **Check Shares I Already Have** in both tools tests old shares against
-  the vault seed without showing it.
-- **Restore panels** (welcome screen) use the same word boxes; Recover
-  Shamir Backup checks each share when added and accepts more shares than
-  the threshold.
-- Fixes: printed Shamir shares no longer show the seed's last word; the
-  BIP-39 passphrase is no longer used as the Shamir share passphrase;
-  Chromium's "Download started" message is hidden (`quiet-downloads`
-  extension); the Mount Transfer Drive box no longer flashes at unlock.
+**v1.53** (Oct 27) makes keys easier to get into wallets, and smooths the
+screens. Tested on a freshly flashed spare stick before release:
+- **Adding SafeKeep to a wallet by scanning.** Seed Management's
+  Hardware Wallet JSON and Minimal JSON play as animated BC-UR (`ur:bytes`);
+  Nunchuk adds the key as a Passport from that scan, with no file or
+  Courier. The BC-UR Account key format (`ur:crypto-account`) is fixed and
+  back in the menu; Sparrow adds it as an air-gapped keystore.
+- **Dense QR codes play animated** (`shared/animated-qr.js`,
+  `skqr_render`): any code of version 15+ (77+ squares per side) offers
+  "Play as animated QR"; JSON key formats always do.
+- **Seed Management**: a typed passphrase is typed twice; "Output
+  Descriptor (BIP-380)" is the real descriptor, from Output Descriptor's
+  own builder (`_descSingleSig`); one-line cross-links between the tools.
+- **BIP-85** fills in the Dashboard passphrase and confirms a typed one.
+- **Scroll into view**: QR codes, camera views and the welcome screen's
+  restore panels (`skui_reveal`, `skui_onQrDrawn`, `skui_revealPanel`).
+- **Check Shares I Already Have** can show the rebuilt seed's words, and
+  takes either share length (12/24 words, or 20/33 for Shamir).
+- **Mac boot menu** shows "SafeKeep" instead of "EFI Boot" on sticks
+  flashed from this release (`usbbootdrive/.disk_label*`).
+- **Chromium pinned** to 155.0.8059.84-1 (see "Updating Chromium").
+- Messages no longer use the old internal names (codex, cipher, Forging).
+
+v1.52 (Oct 23, `v1.52 · build 358 · af4f5c6`) was the share tools release
+(`SHARE_TOOLS_DESIGN.md`): Seed XOR and Shamir Backup on one guided flow,
+Check Shares I Already Have, the shared word boxes on the restore panels.
 
 v1.51 (Oct 22, `v1.51 · build 339 · ff93141`) was the Master Passphrase
 release (`PASSPHRASE_STRENGTH_DESIGN.md`): weak passphrases refused,
@@ -35,9 +45,28 @@ Generate One for Me, Change Master Passphrase.
 v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
 (see "Seed entropy" below). v1.47 and later sticks install each release in
 place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
-1.52: features merge to `main` without a bump, and builds from `main` are
+1.53: features merge to `main` without a bump, and builds from `main` are
 for the owner's own use until the owner says it's release time (see
 `CLAUDE.md`).
+
+Release notes for v1.53:
+- **Nunchuk reads a scanned signer only as `ur:bytes` holding JSON**
+  (libnunchuk `ParsePassportSigners` → `ParsePassportSignerConfig`):
+  Coldcard-style (`xfp` + `bipNN`/`bip48_N` blocks with `xpub`/`deriv`),
+  minimal (`xfp` + `xpub`/`path`), or an Electrum-Coldcard `keystore`. It
+  rejects `ur:crypto-account`, which Sparrow takes.
+- **A BC-UR sequence header (`/1-1/`) promises a fountain-coded part.**
+  The old crypto-account export put one on a plain part, and no standard
+  decoder could read it (`test-bcur-account.mjs`).
+- **SafeKeep can't run from an internal disk**: `safekeep-harden.sh`
+  deletes the NVMe/AHCI/eMMC drivers on purpose, so the live system can't
+  find an OS partition on one ("unable to find a medium containing a live
+  file system"). Tried on Dave's 2016 MacBook Pro and undone.
+- **The Mac boot name lives on the boot partition**, which updates never
+  write: sticks updated in place keep "EFI Boot". The label files were made
+  once with `bless --label SafeKeep`, macOS only.
+- **macOS mounts an EFI-type partition only with `sudo`**
+  (`sudo diskutil mount diskNs2`); without it, "failed to mount".
 
 Release notes for v1.52:
 - **shamir-mnemonic-ts combines exactly M shares**; more is an error.
@@ -198,8 +227,8 @@ How every change to the boot scripts or the OS was tested on Oct 20
   sandbox after `npm ci` (the old "rolldown binding missing" problem is
   gone). Playwright with the preinstalled Chromium can drive the dev server
   for screenshots at laptop size (1366×900).
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **49 files**,
-  all passing on Linux (Oct 22; `test-entropy-built.mjs` needs
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **51 files**,
+  all passing on Linux (Oct 27; `test-entropy-built.mjs` needs
   `CHROMIUM_BINARY=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`). `test-change-passphrase.mjs`
   needs `cryptsetup` for its LUKS checks and says SKIP without it. On macOS three always fail
   because they need Linux tools: `test-auto-off.mjs`, `test-os-lockdown.mjs`
@@ -464,10 +493,16 @@ deliberately:
 `UC_ALLOW_UNPINNED=1` builds with the latest release to try one out;
 `make-update.sh` names such a build `-build<N>` and says NOT FOR A RELEASE.
 
+Oct 27: 156.0.8078.47-1 was out, and Dave chose to stay on 155 for v1.53.
+SafeKeep's browser is offline and only shows SafeKeep's own page, so a
+newer one gains little and risks breaking something. Revisit once or
+twice a year, or sooner for a specific reason (a known hole in how
+Chromium reads images or files, or a bug that affects SafeKeep).
+
 ### Open items / next steps
 
-1. **After v1.52:** merge the v1.52 website PR, and install
-   `SafeKeep-Update-v1.52.tar` on a stick from the release itself (the same
+1. **After v1.53:** merge the v1.53 website PR, and install
+   `SafeKeep-Update-v1.53.tar` on a stick from the release itself (the same
    code was tested on Dave's stick as quick-updated builds from `main`).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
