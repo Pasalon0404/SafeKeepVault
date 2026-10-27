@@ -6,7 +6,9 @@
  *  2. Frames: upper-case UR:BYTES parts, each small enough to scan easily,
  *     that a BC-UR decoder puts back together into exactly the same text.
  *  3. Wiring: Seed Management and Output Descriptor draw through
- *     skqr_render and stop the animation when the QR is hidden.
+ *     skqr_render and stop the animation when the QR is hidden; Seed
+ *     Management's JSON key formats always offer the animated version
+ *     (Nunchuk only reads scanned keys as BC-UR) with a Nunchuk hint.
  *
  * Run: node test-animated-qr.mjs
  */
@@ -70,6 +72,12 @@ ck('Output Descriptor shows the QR box before drawing (a hidden canvas stops the
     fn('desc_toggleQR').indexOf("wrap.style.display = 'block'") < fn('desc_toggleQR').indexOf('skqr_render('));
 ck('animation stops by itself once the QR is off screen', /if \(!canvas\.getClientRects\(\)\.length\) \{ skqr_stop\(canvas\); return; \}/.test(fn('skqr_play')));
 ck('frames are drawn at error correction L', /errorCorrectionLevel: 'L'/.test(fn('skqr_play')));
+ck('Seed Management always offers animation for the JSON key formats (Nunchuk reads keys only as BC-UR)',
+    /offer: isJson/.test(fn('arm_toggleXpubQR')) && /isJson = \/_json\$\/\.test\(kf\)/.test(fn('arm_toggleXpubQR')));
+ck('the Nunchuk hint is on Hardware Wallet JSON and Minimal JSON only',
+    /forNunchuk = kf === 'coldcard_json' \|\| kf === 'nunchuk_json'/.test(fn('arm_toggleXpubQR')) && /Passport/.test(fn('arm_toggleXpubQR')));
+ck('the bar shows for a dense code or an offered one', /\(dense \|\| st\.extra\.offer\) \? 'static' : 'none'/.test(fn('skqr_render')));
+ck('"Show as one QR" keeps the offer and the note', /skqr_render\(canvas, st\.text, st\.opts, st\.extra\)/.test(fn('skqr_still')));
 ck('boot-entry exposes window.AnimatedQR', /window\.AnimatedQR = \{/.test(readFileSync(join(HERE, 'boot-entry.js'), 'utf8')));
 
 console.log(`\nANIMATED QR: ${pass} passed, ${fail} failed`);
