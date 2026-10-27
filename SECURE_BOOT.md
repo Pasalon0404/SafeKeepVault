@@ -1,7 +1,7 @@
 # Secure Boot: Ubuntu's signed boot chain on the stick
 
-Status: **on branch `claude/secure-boot`, tested in QEMU and on real
-hardware (Oct 27, 2026), not merged.** See "Hardware results" below.
+Status: **shipped in v1.54** (Oct 27, 2026). Tested in QEMU and on real
+hardware; see "Hardware results" below.
 
 ## Why
 
@@ -191,7 +191,7 @@ Booting section:
 > PC offers that option. Turning Secure Boot off can make Windows ask for your
 > BitLocker recovery key the next time it starts, so have it to hand. Intel Macs
 > with the T2 chip (2018–2020) need Startup Security Utility set to "No
-> Security". Sticks made before vX.YY still need Secure Boot off until they are
+> Security". Sticks made before v1.54 still need Secure Boot off until they are
 > reflashed.
 
 README / FAQ:

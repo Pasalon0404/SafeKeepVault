@@ -9,30 +9,24 @@
 
 ---
 
-## Current state (Oct 27, 2026) — v1.53
+## Current state (Oct 27, 2026) — v1.54
 
-**v1.53** (Oct 27) makes keys easier to get into wallets, and smooths the
-screens. Tested on a freshly flashed spare stick before release:
-- **Adding SafeKeep to a wallet by scanning.** Seed Management's
-  Hardware Wallet JSON and Minimal JSON play as animated BC-UR (`ur:bytes`);
-  Nunchuk adds the key as a Passport from that scan, with no file or
-  Courier. The BC-UR Account key format (`ur:crypto-account`) is fixed and
-  back in the menu; Sparrow adds it as an air-gapped keystore.
-- **Dense QR codes play animated** (`shared/animated-qr.js`,
-  `skqr_render`): any code of version 15+ (77+ squares per side) offers
-  "Play as animated QR"; JSON key formats always do.
-- **Seed Management**: a typed passphrase is typed twice; "Output
-  Descriptor (BIP-380)" is the real descriptor, from Output Descriptor's
-  own builder (`_descSingleSig`); one-line cross-links between the tools.
-- **BIP-85** fills in the Dashboard passphrase and confirms a typed one.
-- **Scroll into view**: QR codes, camera views and the welcome screen's
-  restore panels (`skui_reveal`, `skui_onQrDrawn`, `skui_revealPanel`).
-- **Check Shares I Already Have** can show the rebuilt seed's words, and
-  takes either share length (12/24 words, or 20/33 for Shamir).
-- **Mac boot menu** shows "SafeKeep" instead of "EFI Boot" on sticks
-  flashed from this release (`usbbootdrive/.disk_label*`).
-- **Chromium pinned** to 155.0.8059.84-1 (see "Updating Chromium").
-- Messages no longer use the old internal names (codex, cipher, Forging).
+**v1.54** (Oct 27) boots with Secure Boot on (`SECURE_BOOT.md`): the stick's
+UEFI boot loader is Ubuntu's signed shim (Microsoft UEFI CA 2011) and GRUB
+(Canonical), pinned by version and SHA-256 in `build.sh`; the BIOS GRUB is
+unchanged. Tested on the HP ZBook with Secure Boot on (normal and Safe Mode)
+and off, and on a 2012 MacBook Pro; the previous unsigned build is refused with
+Secure Boot on. **Only newly flashed sticks get it**: updates never write the
+boot partition, so updated sticks keep the old loader (Secure Boot off, as
+before). Legacy BIOS boot on that HP fails with old and new sticks alike
+(a separate item).
+
+v1.53 (Oct 27, `v1.53 · build 389 · afa0a32`) made keys easier to get into
+wallets: Nunchuk and Sparrow add the key by scanning (animated BC-UR JSON,
+the fixed BC-UR Account format), dense QR codes play animated, Seed
+Management confirms a typed passphrase and gives a real BIP-380 descriptor,
+BIP-85 uses the Dashboard passphrase, things scroll into view, and the Mac
+boot menu shows "SafeKeep".
 
 v1.52 (Oct 23, `v1.52 · build 358 · af4f5c6`) was the share tools release
 (`SHARE_TOOLS_DESIGN.md`): Seed XOR and Shamir Backup on one guided flow,
@@ -45,7 +39,7 @@ Generate One for Me, Change Master Passphrase.
 v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
 (see "Seed entropy" below). v1.47 and later sticks install each release in
 place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
-1.53: features merge to `main` without a bump, and builds from `main` are
+1.54: features merge to `main` without a bump, and builds from `main` are
 for the owner's own use until the owner says it's release time (see
 `CLAUDE.md`).
 
@@ -501,8 +495,8 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.53:** merge the v1.53 website PR, and install
-   `SafeKeep-Update-v1.53.tar` on a stick from the release itself (the same
+1. **After v1.54:** merge the v1.54 website PR, and install
+   `SafeKeep-Update-v1.54.tar` on a stick from the release itself (the same
    code was tested on Dave's stick as quick-updated builds from `main`).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
