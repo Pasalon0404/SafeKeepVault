@@ -14674,21 +14674,24 @@ function skui_revealPanel(el) {
    Small codes draw as usual. A dense one (shared/animated-qr.js) gets a bar
    underneath offering to play it as an animated BC-UR QR code, which holds
    the same text in smaller frames; a code too big for any single QR plays
-   animated straight away. opts are QRCode.toCanvas options. */
+   animated straight away. opts are QRCode.toCanvas options. extra:
+   { offer: true } offers the animated version even when the code isn't
+   dense (some wallets, Nunchuk among them, only read key exports as BC-UR);
+   { note: '…' } replaces the line about which wallets read BC-UR. */
 var _skqrState = new WeakMap();
-async function skqr_render(canvas, text, opts) {
+async function skqr_render(canvas, text, opts, extra) {
     if (!canvas || !window.QRCode) return;
     skqr_stop(canvas);
     var ecc = (opts && opts.errorCorrectionLevel) || 'M';
     var dense = !!(window.AnimatedQR && window.AnimatedQR.isDense(text, ecc));
-    var st = { text: text, opts: opts || {}, timer: null, frames: null };
+    var st = { text: text, opts: opts || {}, extra: extra || {}, dense: dense, timer: null, frames: null };
     _skqrState.set(canvas, st);
     var fitsOne = true;
     try { window.QRCode.create(text, { errorCorrectionLevel: ecc }); } catch (_) { fitsOne = false; }
     if (dense && !fitsOne) return skqr_play(canvas);
     await window.QRCode.toCanvas(canvas, text, st.opts);
     _skqrStripSize(canvas);
-    _skqrBar(canvas, dense ? 'static' : 'none');
+    _skqrBar(canvas, (dense || st.extra.offer) ? 'static' : 'none');
 }
 
 /* Play the canvas's current text as animated BC-UR frames. */
@@ -14712,7 +14715,7 @@ function skqr_play(canvas) {
 /* Back to the single static QR code. */
 function skqr_still(canvas) {
     var st = _skqrState.get(canvas);
-    if (st) skqr_render(canvas, st.text, st.opts);
+    if (st) skqr_render(canvas, st.text, st.opts, st.extra);
 }
 
 function skqr_stop(canvas) {
@@ -14738,9 +14741,13 @@ function _skqrBar(canvas, mode, part, total) {
     }
     bar.style.display = 'block';
     if (mode === 'static') {
-        bar.innerHTML = '<span>This QR code is dense, and some cameras struggle to read it.</span> ' +
-            '<button type="button" class="skb-btn skqr-btn">Play as animated QR</button>' +
-            '<div class="skqr-note">Animated QR codes use BC-UR, which Sparrow, Nunchuk, Keystone, BlueWallet and other wallets can scan.</div>';
+        var st = _skqrState.get(canvas) || { extra: {} };
+        bar.innerHTML = '<span></span> <button type="button" class="skb-btn skqr-btn">Play as animated QR</button><div class="skqr-note"></div>';
+        bar.querySelector('span').textContent = st.dense
+            ? 'This QR code is dense, and some cameras struggle to read it.'
+            : 'This can also play as an animated QR code (BC-UR).';
+        bar.querySelector('.skqr-note').textContent = st.extra.note ||
+            'Animated QR codes use BC-UR, which Sparrow, Nunchuk, Keystone, BlueWallet and other wallets can scan.';
         bar.querySelector('button').onclick = function () { skqr_play(canvas); };
     } else {
         if (!bar.querySelector('.skqr-part')) {
@@ -39151,9 +39158,18 @@ async function arm_toggleXpubQR() {
                 // Same 580px bitmap as before. A dense payload (the JSON
                 // formats) gets the option to play as an animated BC-UR QR
                 // code; one too big for any single QR plays animated.
+                // The JSON key formats always offer the animated version:
+                // Nunchuk only reads a scanned key as BC-UR, however small.
+                var kf = document.getElementById('arm-key-format').value;
+                var isJson = /_json$/.test(kf);
+                var forNunchuk = kf === 'coldcard_json' || kf === 'nunchuk_json';
                 await skqr_render(canvas, payload, {
                     width: 580, margin: 2,
                     color: { dark: '#000000', light: '#ffffff' }
+                }, {
+                    offer: isJson,
+                    note: forNunchuk ? 'Nunchuk: add the key as a Passport and scan the animated QR code. ' +
+                        'Sparrow and other wallets that scan BC-UR read it too.' : ''
                 });
             } catch (e) {
                 // Most common failure: payload exceeds v40-H capacity.
