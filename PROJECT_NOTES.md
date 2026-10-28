@@ -9,9 +9,18 @@
 
 ---
 
-## Current state (Oct 28, 2026) — v1.55
+## Current state (Oct 28, 2026) — v1.56
 
-**v1.55** (Oct 28) is the backup release. Tested on Dave's sticks before
+**v1.56** (Oct 28) fixes opening a saved wallet in Output Descriptor (#83):
+the form is set to the wallet. A multisig gets its M-of-N and address type,
+and Keys 2..N are filled from its other keys when this seed's key (at
+m/48'/0'/0'/<type>', with the Key 1 passphrase) is one of them, so Generate
+Descriptor rebuilds the same wallet; otherwise they are left empty with the
+reason. A single-sig wallet switches to Single-Sig and its address type.
+Keys from a wallet opened before are always cleared. Tested on Dave's stick
+with his 2-of-3 and a single-sig wallet.
+
+v1.55 (Oct 28, `v1.55 · build 406 · d2e4c40`) is the backup release. Tested on Dave's sticks before
 release (a freshly flashed spare stick for the first item):
 - **Courier restore on the Welcome screen**: Unlock .7z Backup → "Receive a
   Backup with the Courier" scans a Courier loop (online Courier Tool on a
@@ -61,7 +70,7 @@ Generate One for Me, Change Master Passphrase.
 v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
 (see "Seed entropy" below). v1.47 and later sticks install each release in
 place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
-1.55: features merge to `main` without a bump, and builds from `main` are
+1.56: features merge to `main` without a bump, and builds from `main` are
 for the owner's own use until the owner says it's release time (see
 `CLAUDE.md`).
 
@@ -534,9 +543,9 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.55:** merge the v1.55 website PR, and install
-   `SafeKeep-Update-v1.55.tar` on a stick from the release itself (the same
-   code was tested on Dave's sticks as builds from `main`).
+1. **After v1.56:** merge the v1.56 website PR, and install
+   `SafeKeep-Update-v1.56.tar` on a stick from the release itself (the same
+   code was tested on Dave's stick as a build from `main`).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
