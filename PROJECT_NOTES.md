@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Oct 27, 2026).**
+> **Start with the "Current state" section below (updated Oct 28, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,9 +9,31 @@
 
 ---
 
-## Current state (Oct 27, 2026) — v1.54
+## Current state (Oct 28, 2026) — v1.55
 
-**v1.54** (Oct 27) boots with Secure Boot on (`SECURE_BOOT.md`): the stick's
+**v1.55** (Oct 28) is the backup release. Tested on Dave's sticks before
+release (a freshly flashed spare stick for the first item):
+- **Courier restore on the Welcome screen**: Unlock .7z Backup → "Receive a
+  Backup with the Courier" scans a Courier loop (online Courier Tool on a
+  phone or computer), checks the 7-Zip signature, saves the file to the
+  Transfer Drive and selects it, so a new stick never touches another
+  computer. The "Vault Created" dialog (`setup-vault.sh`) points to it. The
+  restore list also reads the Transfer Drive's current listing
+  (`rlq_mergeDriveListing`): `.backups-index.json` is only rebuilt at boot
+  and after making a backup.
+- **"Send with the Courier"** on the "Backup saved" card plays the new
+  backup's Courier loop for a phone (`_xfrOpenWithFile`, shared with the
+  Transfer Hub's TRANSMIT), scrolled into view.
+- **"Check a Backup"**: opens a backup with its password (typed or scanned)
+  and shows what it holds and whether its seed is the loaded one, restoring
+  nothing. The Restore Watcher's `RESTORE_CHECK` unpacks into a private
+  folder in `/tmp`, compares the seed against a SHA-256 the app sends,
+  deletes the folder and answers yes/no and counts only.
+- An inspected backup whose Restore is never clicked is now deleted from
+  `/tmp/reliquary` (seed and password file included) after the watcher's
+  120 s wait; Restore re-extracts from the archive.
+
+v1.54 (Oct 27, `v1.54 · build 396 · 26c9069`) boots with Secure Boot on (`SECURE_BOOT.md`): the stick's
 UEFI boot loader is Ubuntu's signed shim (Microsoft UEFI CA 2011) and GRUB
 (Canonical), pinned by version and SHA-256 in `build.sh`; the BIOS GRUB is
 unchanged. Tested on the HP ZBook with Secure Boot on (normal and Safe Mode)
@@ -39,9 +61,25 @@ Generate One for Me, Change Master Passphrase.
 v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
 (see "Seed entropy" below). v1.47 and later sticks install each release in
 place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
-1.54: features merge to `main` without a bump, and builds from `main` are
+1.55: features merge to `main` without a bump, and builds from `main` are
 for the owner's own use until the owner says it's release time (see
 `CLAUDE.md`).
+
+Release notes for v1.55:
+- **The backup list and the Transfer Drive can disagree.**
+  `SafeKeepOS.listBackups()` reads `.backups-index.json`, which
+  `safekeep-boot.sh` writes at boot and the backup watcher rewrites after a
+  backup; the Transfer Watcher (Courier, Transfer Hub) never does. Merge
+  the drive's own listing in (`rlq_mergeDriveListing`) rather than trusting
+  the index alone.
+- **The Restore Watcher's commit doesn't need the inspect leftovers**: it
+  re-extracts when `/tmp/reliquary` is gone and re-detects the probe root.
+  Tested on a stick by waiting more than 2 minutes between Unlock & Inspect
+  and Restore.
+- **Compare secrets by hash across the app/OS boundary.** Check a Backup
+  sends a SHA-256 of the loaded seed's words (NFKD, lowercase, single
+  spaces), so the backup's words never travel back to the app;
+  `test-restore-check.mjs` checks both sides normalize the same way.
 
 Release notes for v1.53:
 - **Nunchuk reads a scanned signer only as `ur:bytes` holding JSON**
@@ -221,8 +259,9 @@ How every change to the boot scripts or the OS was tested on Oct 20
   sandbox after `npm ci` (the old "rolldown binding missing" problem is
   gone). Playwright with the preinstalled Chromium can drive the dev server
   for screenshots at laptop size (1366×900).
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **51 files**,
-  all passing on Linux (Oct 27; `test-entropy-built.mjs` needs
+- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **53 files**,
+  all passing on Linux (Oct 28; `test-restore-check.mjs` needs `7z`
+  (p7zip-full) for its archive cases and says SKIP without it; `test-entropy-built.mjs` needs
   `CHROMIUM_BINARY=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`). `test-change-passphrase.mjs`
   needs `cryptsetup` for its LUKS checks and says SKIP without it. On macOS three always fail
   because they need Linux tools: `test-auto-off.mjs`, `test-os-lockdown.mjs`
@@ -495,9 +534,9 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.54:** merge the v1.54 website PR, and install
-   `SafeKeep-Update-v1.54.tar` on a stick from the release itself (the same
-   code was tested on Dave's stick as quick-updated builds from `main`).
+1. **After v1.55:** merge the v1.55 website PR, and install
+   `SafeKeep-Update-v1.55.tar` on a stick from the release itself (the same
+   code was tested on Dave's sticks as builds from `main`).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
