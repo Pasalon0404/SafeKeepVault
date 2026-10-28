@@ -2270,9 +2270,100 @@ SWPYEOF
     RESTORE_COMMIT_RESULT="$SEED_DIR/RESTORE_COMMIT_RESULT.json"
     RESTORE_COMMIT_ACK="$SEED_DIR/RESTORE_COMMIT_ACK.json"
     RELIQUARY_TMP="/tmp/reliquary"
+    # Check a Backup: open a .7z with its password, report what it holds
+    # and whether its seed is the loaded one, restore nothing, keep nothing.
+    RESTORE_CHECK_TRIGGER="$SEED_DIR/RESTORE_CHECK.json"
+    RESTORE_CHECK_RESULT="$SEED_DIR/RESTORE_CHECK_RESULT.json"
 
     (
         while true; do
+            # ── Check a Backup ──
+            # The app sends the archive name, its password and a SHA-256 of
+            # the loaded seed's words (NFKD, lowercase, single spaces). The
+            # archive is unpacked into a private folder in RAM (/tmp is
+            # tmpfs), probed, and deleted before the result is written. Only
+            # yes/no and counts go back: never the backup's words.
+            if [ -f "$RESTORE_CHECK_TRIGGER" ]; then
+                echo "Restore Watcher: check trigger detected"
+                CHECK_USB=$(find_transfer_drive)
+                python3 - "$RESTORE_CHECK_TRIGGER" "$RESTORE_CHECK_RESULT" "$CHECK_USB" "$VAULT_MOUNT" <<'CHECK_PY'
+import hashlib, json, os, shutil, subprocess, sys, tempfile, unicodedata
+trigger, result_path, usb, vault_mount = sys.argv[1:5]
+out = {"ok": False}
+work = None
+try:
+    with open(trigger) as f:
+        req = json.load(f)
+    os.remove(trigger)
+    out["id"] = str(req.get("id", ""))[:40]
+    name = req.get("filename") or ""
+    pw = req.get("password") or ""
+    want = (req.get("seedHash") or "").lower()
+    if not usb or not os.path.isdir(usb):
+        raise RuntimeError("No USB transfer drive detected.")
+    if not name or "/" in name or name.startswith(".") or not name.lower().endswith(".7z"):
+        raise RuntimeError("Not a .7z backup name.")
+    archive = os.path.join(usb, name)
+    if not os.path.isfile(archive):
+        raise RuntimeError("Archive not found: " + name)
+    if not pw:
+        raise RuntimeError("Password is required.")
+    work = tempfile.mkdtemp(prefix="reliquary-check-", dir="/tmp")
+    p = subprocess.run(["7z", "x", "-o" + work, "-p" + pw, archive, "-y"],
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
+    if p.returncode != 0:
+        msg = p.stdout.decode("utf-8", "replace")
+        raise RuntimeError("7z extraction failed (code %d): %s" % (p.returncode, " ".join(msg.split())[-300:]))
+    root = None
+    for c in (work + vault_mount, work, os.path.join(work, ".safekeep-vault")):
+        if any(os.path.isdir(os.path.join(c, d)) for d in ("codex", "passphrases", "settings", "seeds")):
+            root = c
+            break
+    if root is None:
+        for dp, dns, _ in os.walk(work):
+            if "codex" in dns or "passphrases" in dns:
+                root = dp
+                break
+    if root is None:
+        raise RuntimeError("This backup holds no vault data: no notes, saved passphrases, settings or seed.")
+    isdir = lambda d: os.path.isdir(os.path.join(root, d))
+    out.update(ok=True, codex=isdir("codex"), settings=isdir("settings"),
+               cipher=isdir("passphrases"), seed=False, seedMatch=None,
+               codexCount=len([f for f in os.listdir(os.path.join(root, "codex")) if f.endswith(".html")]) if isdir("codex") else 0,
+               cipherCount=len(os.listdir(os.path.join(root, "passphrases"))) if isdir("passphrases") else 0)
+    seed_file = os.path.join(root, "seeds", "master-seed.json")
+    if os.path.isfile(seed_file):
+        try:
+            with open(seed_file) as f:
+                words = json.load(f).get("mnemonic") or ""
+        except Exception:
+            words = ""
+        if words:
+            out["seed"] = True
+            norm = " ".join(unicodedata.normalize("NFKD", words).lower().split())
+            if want:
+                out["seedMatch"] = hashlib.sha256(norm.encode("utf-8")).hexdigest() == want
+except subprocess.TimeoutExpired:
+    out = {"ok": False, "id": out.get("id", ""), "error": "Checking the backup took too long."}
+except Exception as e:
+    out = {"ok": False, "id": out.get("id", ""), "error": str(e)}
+finally:
+    if work:
+        shutil.rmtree(work, ignore_errors=True)
+    if os.path.exists(trigger):
+        os.remove(trigger)
+tmp = result_path + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(out, f)
+os.replace(tmp, result_path)
+print("Restore Watcher: check done ok=%s seed=%s match=%s" % (out.get("ok"), out.get("seed"), out.get("seedMatch")))
+CHECK_PY
+                # The app reads the result within a few seconds; don't leave it
+                # (but leave a newer check's result alone).
+                CHECK_SNAP=$(cksum < "$RESTORE_CHECK_RESULT" 2>/dev/null)
+                ( sleep 30; [ "$(cksum < "$RESTORE_CHECK_RESULT" 2>/dev/null)" = "$CHECK_SNAP" ] && rm -f "$RESTORE_CHECK_RESULT" ) &
+            fi
+
             # ── Phase 1: INSPECT ──
             if [ -f "$RESTORE_INSPECT_TRIGGER" ]; then
                 echo "Restore Watcher: inspect trigger detected — extracting archive..."
@@ -2425,17 +2516,26 @@ except Exception as e:
 
                 # Wait for ACK, then clean up result file
                 ACK_WAIT=0
+                ACK_SEEN=false
                 while [ $ACK_WAIT -lt 120 ]; do
                     if [ -f "$RESTORE_INSPECT_ACK" ]; then
                         rm -f "$RESTORE_INSPECT_ACK" "$RESTORE_INSPECT_RESULT"
                         echo "Restore Watcher: inspect cleanup complete (ACK received)"
+                        ACK_SEEN=true
                         break
                     fi
                     sleep 1
                     ACK_WAIT=$((ACK_WAIT + 1))
                 done
                 rm -f "$RESTORE_INSPECT_ACK" "$RESTORE_INSPECT_RESULT" 2>/dev/null
-                echo "Restore Watcher: inspect phase done — /tmp/reliquary preserved for commit"
+                # No Restore click within the wait: don't keep the unpacked
+                # backup (seed included) and its password in RAM until reboot.
+                # A later Restore re-extracts from the archive (below).
+                if [ "$ACK_SEEN" != true ]; then
+                    rm -rf "$RELIQUARY_TMP"
+                    echo "Restore Watcher: no Restore within 120 s — unpacked backup deleted"
+                fi
+                echo "Restore Watcher: inspect phase done"
                 echo "Restore Watcher: PROBE_ROOT still exists = $([ -d "$PROBE_ROOT" ] && echo YES || echo NO)"
             fi
 

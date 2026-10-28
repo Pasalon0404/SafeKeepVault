@@ -9541,6 +9541,31 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
 
                 <!-- Export result -->
                 <div id="rlq-export-result" style="display: none; margin-top: 1rem;"></div>
+
+                <!-- Check a Backup: open a backup with its password and see what it
+                     holds, restoring nothing (Restore Watcher "check"). -->
+                <div id="rlq-check-card" class="skb-card" style="margin-top: 1rem;">
+                    <h3 style="margin: 0 0 0.5rem; font-size: 0.9rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Check a Backup</h3>
+                    <p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.75rem;">Make sure a backup opens with its password and holds what you expect, including whether its seed is the one loaded now. Nothing is restored or changed.</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <label for="rlq-check-file" style="font-size: 0.8rem; color: var(--skb-text-muted);">Backup on the Transfer Drive</label>
+                        <button type="button" class="skb-btn" onclick="rlq_checkRefreshList()"
+                                style="padding: 0.2rem 0.6rem; font-size: 0.72rem; border: 1px dashed var(--skb-primary); color: var(--skb-primary); background: transparent; border-radius: 3px;">&#8635; Refresh</button>
+                    </div>
+                    <select id="rlq-check-file" style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); margin-bottom: 0.75rem;">
+                        <option value="">Looking for backups...</option>
+                    </select>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <label for="rlq-check-password" style="font-size: 0.8rem; color: var(--skb-text-muted);">Backup Password</label>
+                        <button type="button" class="skb-btn" id="rlq-check-pp-vis-btn" onclick="skui_toggleVis('rlq-check-password', 'rlq-check-pp-vis-btn')"
+                                style="padding: 0.2rem 0.6rem; font-size: 0.72rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; border-radius: 3px;">Show</button>
+                    </div>
+                    <input type="password" id="rlq-check-password" placeholder="Type the backup's password" autocomplete="off"
+                           onkeydown="if (event.key === 'Enter') rlq_checkBackup()"
+                           style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); margin-bottom: 0.75rem;">
+                    <button type="button" id="rlq-check-btn" class="skb-btn" style="width: 100%;" onclick="rlq_checkBackup()">Check Backup</button>
+                    <div id="rlq-check-result" style="display: none; margin-top: 0.75rem;"></div>
+                </div>
             </div>
 
             <!-- ======== RESTORE FLOW (Resurrection from Welcome) ======== -->
@@ -11623,6 +11648,13 @@ window.addEventListener('DOMContentLoaded', () => {
         inspectReliquary: async function () {
             console.log('[DEV MOCK] inspectReliquary() → empty archive');
             return { found: false, entries: [] };
+        },
+        checkReliquary: async function (filename, password, seedHash) {
+            console.log('[DEV MOCK] checkReliquary() → "wrong" opens nothing, anything else opens');
+            await new Promise(function (r) { setTimeout(r, 400); });
+            if (password === 'wrong') return { ok: false, error: 'Incorrect password or corrupted archive.' };
+            return { ok: true, demo: true, seed: true, seedMatch: seedHash ? true : null,
+                     codex: true, codexCount: 3, cipher: true, cipherCount: 1, settings: true };
         },
         listBackups: async function () {
             console.log('[DEV MOCK] listBackups() → empty list');
@@ -35128,7 +35160,10 @@ function _rlqShowSendWithCourier(filename) {
         '<div style="font-weight: 700; color: var(--skb-success, #00c896); margin-bottom: 0.35rem;">Backup saved to the Transfer Drive</div>' +
         '<div style="font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text); word-break: break-all; margin-bottom: 0.6rem;">' + _psbtEscape(filename) + '</div>' +
         '<p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.6rem;">To keep a copy on your phone without plugging this stick into another computer, send it with the Courier and receive it with the Courier Tool at safekeepbitcoin.com.</p>' +
-        '<button type="button" id="rlq-send-courier-btn" class="skb-btn" style="width: 100%;" onclick="rlq_sendWithCourier()">Send with the Courier</button>' +
+        '<div class="tool-grid-2">' +
+        '<button type="button" id="rlq-send-courier-btn" class="skb-btn" onclick="rlq_sendWithCourier()">Send with the Courier</button>' +
+        '<button type="button" id="rlq-check-this-btn" class="skb-btn" onclick="rlq_checkThisBackup()">Check this backup</button>' +
+        '</div>' +
         '</div>';
     resultDiv.style.display = 'block';
     // The card sits below the form, often out of view: bring it up so the
@@ -35158,6 +35193,115 @@ async function rlq_sendWithCourier() {
         return;
     }
     _xfrOpenWithFile(file, true);
+}
+
+// ---- Check a Backup (open it, see what it holds, restore nothing) ----
+
+/** SHA-256 (hex) of the loaded seed's words, as the Restore Watcher hashes them; '' if none. */
+async function _rlqLoadedSeedHash() {
+    var s = window.SeedSession && window.SeedSession.get ? window.SeedSession.get() : null;
+    var words = s && s.mnemonic ? String(s.mnemonic) : '';
+    if (!words) return '';
+    var norm = words.normalize('NFKD').toLowerCase().trim().split(/\s+/).join(' ');
+    var digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(norm));
+    return Array.from(new Uint8Array(digest)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+}
+
+async function rlq_checkRefreshList(selectName) {
+    var sel = document.getElementById('rlq-check-file');
+    if (!sel) return;
+    var keep = selectName || sel.value;
+    var names = [];
+    try {
+        var os = window.SafeKeepOS;
+        var listed = os && typeof os.listBackups === 'function' ? await os.listBackups() : [];
+        names = (await rlq_mergeDriveListing(listed)).filter(function(n) { return rlq_classifyEntry(n) === 'backup'; });
+    } catch (_) { names = []; }
+    sel.innerHTML = '';
+    var first = document.createElement('option');
+    first.value = '';
+    first.textContent = names.length ? 'Choose a backup...' : 'No .7z backups on the Transfer Drive';
+    sel.appendChild(first);
+    names.forEach(function(n) {
+        var o = document.createElement('option');
+        o.value = n;
+        o.textContent = n;
+        sel.appendChild(o);
+    });
+    sel.value = names.indexOf(keep) !== -1 ? keep : '';
+}
+
+/** From the "Backup saved" card: check the backup just made. */
+async function rlq_checkThisBackup() {
+    await rlq_checkRefreshList(_rlqLastBackupName);
+    var res = document.getElementById('rlq-check-result');
+    if (res) { res.style.display = 'none'; res.innerHTML = ''; }
+    var card = document.getElementById('rlq-check-card');
+    if (card && typeof skui_revealPanel === 'function') skui_revealPanel(card);
+    var pw = document.getElementById('rlq-check-password');
+    if (pw) pw.focus();
+}
+
+async function rlq_checkBackup() {
+    var sel = document.getElementById('rlq-check-file');
+    var pwEl = document.getElementById('rlq-check-password');
+    var btn = document.getElementById('rlq-check-btn');
+    var res = document.getElementById('rlq-check-result');
+    var filename = sel ? sel.value : '';
+    var password = pwEl ? pwEl.value : '';
+    if (!filename) { showStatus('Choose a backup to check.', 'error'); return; }
+    if (!password) { showStatus('Type the backup\'s password.', 'error'); if (pwEl) pwEl.focus(); return; }
+    var os = window.SafeKeepOS;
+    if (!os || typeof os.checkReliquary !== 'function') { showStatus('OS bridge not available.', 'error'); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+    res.style.display = 'none';
+    var r;
+    try {
+        r = await os.checkReliquary(filename, password, await _rlqLoadedSeedHash());
+    } catch (err) {
+        r = { ok: false, error: err && err.message ? err.message : String(err) };
+    }
+    btn.disabled = false;
+    btn.textContent = 'Check Backup';
+    pwEl.value = '';
+    res.innerHTML = rlq_renderCheckResult(filename, r);
+    res.style.display = 'block';
+    if (typeof skui_reveal === 'function') skui_reveal(res);
+}
+
+/** HTML for a check result. Every value from the backup or the OS is escaped. */
+function rlq_renderCheckResult(filename, r) {
+    var esc = _psbtEscape;
+    var GOOD = 'var(--skb-success, #00c896)', WARN = 'var(--skb-warning, #ffb020)', BAD = 'var(--skb-danger, #ff3c3c)';
+    var name = '<div style="font-family: var(--skb-mono); font-size: 0.82rem; color: var(--skb-text); word-break: break-all; margin-bottom: 0.5rem;">' + esc(filename) + '</div>';
+    if (!r || !r.ok) {
+        return '<div style="padding: 0.75rem; background: rgba(255, 60, 60, 0.08); border: 1px solid ' + BAD + '; border-radius: var(--skb-radius-sm);">' +
+            '<div style="font-weight: 700; color: ' + BAD + '; margin-bottom: 0.35rem;">This backup did not open</div>' + name +
+            '<div style="font-size: 0.82rem; color: var(--skb-text);">' + esc(r && r.error ? r.error : 'Unknown error.') + '</div>' +
+            '</div>';
+    }
+    var rows = [];
+    var row = function(color, text) {
+        rows.push('<li style="margin: 0.2rem 0; color: ' + color + ';">' + text + '</li>');
+    };
+    if (r.seed) {
+        if (r.seedMatch === true) row(GOOD, '&#10003; Master Seed: the same seed as the one loaded now');
+        else if (r.seedMatch === false) row(WARN, '&#9888; Master Seed: a <strong>different</strong> seed from the one loaded now');
+        else row('var(--skb-text)', 'Master Seed (no seed is loaded to compare it with)');
+    } else {
+        row('var(--skb-text-muted)', 'No Master Seed in this backup');
+    }
+    if (r.codex) row('var(--skb-text)', 'Encrypted Notes: ' + esc(r.codexCount));
+    if (r.cipher) row('var(--skb-text)', 'Saved Passphrases: ' + esc(r.cipherCount));
+    if (r.settings) row('var(--skb-text)', 'Application Settings');
+    var border = r.seedMatch === false ? WARN : GOOD;
+    return '<div style="padding: 0.75rem; background: rgba(0, 200, 150, 0.06); border: 1px solid ' + border + '; border-radius: var(--skb-radius-sm);">' +
+        '<div style="font-weight: 700; color: ' + GOOD + '; margin-bottom: 0.35rem;">&#10003; This backup opens with that password</div>' + name +
+        '<ul style="margin: 0 0 0.5rem; padding-left: 1.1rem; font-size: 0.85rem;">' + rows.join('') + '</ul>' +
+        '<div style="font-size: 0.78rem; color: var(--skb-text-muted);">Nothing was restored or changed' + (r.demo ? ' (demo mode)' : '') + '.</div>' +
+        '</div>';
 }
 
 /**
@@ -35198,6 +35342,11 @@ function rlq_init() {
     _rlqSetBackupFromQr(false);
     rlq_renderStrength();
     document.getElementById('rlq-export-result').style.display = 'none';
+    var chkPw = document.getElementById('rlq-check-password');
+    if (chkPw) chkPw.value = '';
+    var chkRes = document.getElementById('rlq-check-result');
+    if (chkRes) { chkRes.style.display = 'none'; chkRes.innerHTML = ''; }
+    rlq_checkRefreshList();
 }
 
 /**
