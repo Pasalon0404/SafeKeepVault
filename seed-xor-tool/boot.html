@@ -31872,7 +31872,7 @@ function desc_useVerified() {
 }
 
 /* Show a parsed descriptor in the output card as a watch-only wallet. */
-function _descLoadWatchOnly(descriptor, p, message) {
+function _descLoadWatchOnly(descriptor, p, message, note) {
     desc_state.currentDescriptor = descriptor;
     desc_state.imported = { isMulti: !!p.isMulti };
     document.getElementById('desc-descriptor-text').textContent = descriptor;
@@ -31889,7 +31889,7 @@ function _descLoadWatchOnly(descriptor, p, message) {
     document.getElementById('desc-qr-wrap').style.display = 'none';
     document.getElementById('desc-qr-toggle-btn').textContent = 'Show QR';
     showStatus(message + p.script + (p.isMulti ? ', ' + p.msM + '-of-' + p.msN : '') +
-               '. Use Receive below to show or check its addresses.', 'success');
+               '. Use Receive below to show or check its addresses.' + (note || ''), 'success');
     try { out.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
 }
 
@@ -32017,12 +32017,82 @@ async function desc_saveWallet() {
     }
 }
 
-function desc_openSavedWallet(i) {
+async function desc_openSavedWallet(i) {
     var w = _savedWallets[i];
     if (!w) return;
     var r = _savedWalletParse(w.descriptor);
     if (r.error) { showStatus('“' + w.name + '” can’t be opened: ' + r.error, 'error'); return; }
-    _descLoadWatchOnly(w.descriptor, r.parsed, 'Opened saved wallet “' + w.name + '”: ');
+    var note = '';
+    if (r.parsed.isMulti) {
+        var fill;
+        try { fill = await _descFillMultisigForm(r.parsed); }
+        catch (e) { fill = { filled: false, reason: e && e.message ? e.message : String(e) }; }
+        note = fill.filled
+            ? ' Keys 2–' + r.parsed.msN + ' are filled in above from it, so Generate Descriptor rebuilds this wallet.'
+            : ' The form above wasn’t filled in: ' + fill.reason;
+    }
+    _descLoadWatchOnly(w.descriptor, r.parsed, 'Opened saved wallet “' + w.name + '”: ', note);
+}
+
+/*
+ * Fill the Multisig form from a saved multisig wallet, so Generate Descriptor
+ * rebuilds the same wallet: M, N, address type, and Keys 2..N from the
+ * wallet's other keys. Only when that is possible: Key 1 is always the loaded
+ * seed (with the Key 1 passphrase) at m/48'/0'/0'/<type>', and the form builds
+ * sortedmulti. Returns { filled: true } or { filled: false, reason }.
+ */
+async function _descFillMultisigForm(p) {
+    var typeOf = { 'wsh/multi': '84', 'sh-wsh/multi': '49', 'sh/multi': '44' };
+    var addrType = typeOf[p.kind];
+    if (!addrType) return { filled: false, reason: 'the form only builds P2WSH, P2SH-P2WSH and P2SH multisig wallets.' };
+    if (!p.sorted) return { filled: false, reason: 'this wallet uses multi() with a fixed key order, and the form builds sortedmulti().' };
+    if (p.msN < 2 || p.msN > 7 || p.msM > 5) return { filled: false, reason: 'the form takes 2 to 7 keys and a threshold of up to 5.' };
+
+    var mnemonic = window.SeedSession && window.SeedSession.get ? (window.SeedSession.get() || {}).mnemonic : '';
+    if (!mnemonic) return { filled: false, reason: 'no seed is loaded for Key 1.' };
+    var M = window.BtcMath;
+    var passphrase = (document.getElementById('desc-ms-passphrase') || {}).value || '';
+    var suffix = { '44': "0'", '49': "1'", '84': "2'" }[addrType];
+    var root = M.HDKey.fromMasterSeed(await M.bip39.mnemonicToSeed(mnemonic, passphrase), { public: 0x0488b21e, private: 0x0488ade4 });
+    var mine = root.derive("m/48'/0'/0'/" + suffix);
+    var myFp = root.fingerprint.toString(16).padStart(8, '0');
+
+    var ownIdx = -1;
+    p.keys.forEach(function(k, idx) {
+        if (ownIdx !== -1) return;
+        try {
+            var node = M.HDKey.fromExtendedKey(_descNormalizeXpub(k.xpub));
+            if (desc_arraysEqual(node.publicKey, mine.publicKey)) ownIdx = idx;
+        } catch (_) {}
+    });
+    if (ownIdx === -1) {
+        return { filled: false, reason: 'none of its keys is this seed\u2019s key at m/48\u2019/0\u2019/0\u2019/' + suffix +
+            ' (fingerprint ' + myFp + (passphrase ? ', with the Key 1 passphrase' : '') + '). If the wallet uses a passphrase for this seed, enter it under Key 1 and open the wallet again.' };
+    }
+
+    if (desc_state.mode !== 'multi') desc_setMode('multi');
+    document.getElementById('desc-ms-n').value = String(p.msN);
+    document.getElementById('desc-ms-m').value = String(p.msM);
+    document.getElementById('desc-ms-addr-type').value = addrType;
+    desc_updateMsAddrType();
+    // Drop keys typed for another wallet, then draw Keys 2..N and fill them.
+    Object.keys(_descCosignerXpubs).forEach(function(k) { delete _descCosignerXpubs[k]; });
+    for (var c = 2; c <= 7; c++) {
+        ['desc-ms-xpub-', 'desc-ms-fp-'].forEach(function(id) { var el = document.getElementById(id + c); if (el) el.value = ''; });
+    }
+    desc_updateMultisigUI();
+    var slot = 2;
+    p.keys.forEach(function(k, idx) {
+        if (idx === ownIdx) return;
+        var origin = k.fingerprint ? '[' + k.fingerprint + (k.path ? '/' + k.path.replace(/h/g, "'") : '') + ']' : '';
+        var fp = k.fingerprint || '';
+        var xpub = origin + _descNormalizeXpub(k.xpub);
+        document.getElementById('desc-ms-fp-' + slot).value = fp;
+        document.getElementById('desc-ms-xpub-' + slot).value = xpub;
+        _descCosignerXpubs[slot] = { xpub: xpub, fp: fp };
+        slot++;
+    });
+    return { filled: true };
 }
 
 async function desc_removeSavedWallet(i) {

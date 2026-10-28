@@ -9,6 +9,10 @@
  *  2. The review banner (spends from / partly from / not from a saved wallet), names escaped.
  *  3. Output Descriptor: what can be saved (no private keys, no Silent Payments, needs …/<0;1>/*),
  *     duplicate descriptor / duplicate name, checksum added, open and remove.
+ *  3b. Opening a saved multisig wallet fills the Multisig form (M, N, address type, Keys 2..N
+ *     from the wallet's other keys) when this seed's key is one of its keys, so Generate rebuilds
+ *     the same wallet; otherwise (another seed or account, a passphrase it didn't use, multi(),
+ *     no seed) the form is left alone and the reason shown.
  *  4. Storage end to end: SafeKeepOS.saveSavedWallets' download → the File Router's patterns never
  *     claim it (even for a wallet named "passphrase") → the Wallets Watcher's Python in
  *     safekeep-boot.sh → loadSavedWallets reads it back. The watcher refuses private keys, oversize
@@ -89,7 +93,7 @@ const ctx = vm.createContext({
   showStatus: (m, t) => statuses.push(t + ':' + m), confirm: () => true,
   PSBT_NETWORK: btc.NETWORK, PSBT_WILDCARD_FP: '00000000', _psbtLoadedBytes: null, _psbtHwMode: false,
   _psbtSnapshotSpOutputs: () => [], _psbtVerifySilentPayments: () => null,
-  _descLoadWatchOnly: (d, p, msg) => statuses.push('open:' + msg + d),
+  _descLoadWatchOnly: (d, p, msg, note) => statuses.push('open:' + msg + d + (note || '')),
 });
 vm.runInContext([
   ...['DESC_BIP32_PUBLIC_MAINNET', 'DESC_BIP32_PUBLIC_TESTNET', '_DESC_MAINNET_VERS', '_DESC_TESTNET_VERS', '_WREC_SCRIPTS', '_sha256K', '_B58_ALPHABET'].map(extractVar),
@@ -101,7 +105,8 @@ vm.runInContext([
       '_descNormalizeXpub', '_wrecEscape', '_wrecSplitArgs', '_wrecCall', '_wrecParseDescriptor', '_wrecIndexZeroPubkey', '_wrecCompareBytes',
       '_wrecFirstAddress', '_wrecAddressFromPubkeys', '_descChainNodes', '_descImportPrivateCheck',
       '_savedWalletBody', '_savedWalletParse', '_savedWalletSummary', 'savedWallets_load', '_savedWalletsStore', '_descRenderSavedWallets', '_descSaveResult',
-      'desc_saveWallet', 'desc_openSavedWallet', 'desc_removeSavedWallet'].map((n) => extract(n)),
+      'desc_saveWallet', 'desc_openSavedWallet', 'desc_removeSavedWallet', '_descFillMultisigForm', 'desc_arraysEqual'].map((n) => extract(n)),
+  'var _descCosignerXpubs = {};',
 ].join('\n'), ctx);
 const cs = (body) => body + '#' + ctx.desc_checksum(body);
 
@@ -291,6 +296,63 @@ const save = async (name, desc) => { el('desc-save-name').value = name; vm.runIn
   ck('Open loads the saved descriptor as watch-only', statuses.some((s) => s.startsWith('open:Opened saved wallet “Daily”') && s.endsWith(cs(noCs))));
   await ctx.desc_removeSavedWallet(0);
   ck('Remove deletes only that wallet', memStore.list.length === 1 && memStore.list[0].name === 'Daily');
+}
+
+// ======== 3b. Open fills the Multisig form (so Generate rebuilds the wallet) ========
+console.log('Open a saved multisig wallet: the form:');
+{
+  const ME = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  const calls = [];
+  ctx.window.SeedSession = { get: () => ({ mnemonic: ME }) };
+  ctx.desc_setMode = (m) => { calls.push('mode:' + m); vm.runInContext('desc_state.mode = ' + JSON.stringify(m), ctx); };
+  ctx.desc_updateMsAddrType = () => calls.push('type:' + el('desc-ms-addr-type').value);
+  ctx.desc_updateMultisigUI = () => calls.push('ui:' + el('desc-ms-m').value + '-of-' + el('desc-ms-n').value);
+  const reset = () => { calls.length = 0; statuses.length = 0; for (let i = 2; i <= 7; i++) { el('desc-ms-xpub-' + i).value = ''; el('desc-ms-fp-' + i).value = ''; } el('desc-ms-passphrase').value = ''; vm.runInContext('desc_state.mode = "single"; _descCosignerXpubs = {7: {xpub: "old", fp: ""}};', ctx); };
+  const open = async (desc) => { vm.runInContext('_savedWallets = ' + JSON.stringify([{ name: 'W', descriptor: desc, added: '' }]), ctx); await ctx.desc_openSavedWallet(0); return statuses.join(' | '); };
+  const k = (key, path) => acct(key, path) + '/<0;1>/*';
+  const P2 = "48'/0'/0'/2'", P1 = "48'/0'/0'/1'";
+  const formKey = (key, path) => '[' + fpHex(key) + '/' + path + ']' + key.derive('m/' + path).publicExtendedKey;
+
+  // This seed listed second, as another wallet app may export it
+  reset();
+  let st = await open(cs(`wsh(sortedmulti(2,${k(co1, P2)},${k(me, P2)},${k(co2, P2)}))`));
+  ck('switches the form to Multisig, 2-of-3, Native SegWit', calls.join(',') === 'mode:multi,type:84,ui:2-of-3', calls.join(','));
+  ck('Keys 2 and 3 are the other two keys, in the wallet\'s order', el('desc-ms-xpub-2').value === formKey(co1, P2) && el('desc-ms-xpub-3').value === formKey(co2, P2), el('desc-ms-xpub-2').value);
+  ck('their fingerprints are filled in', el('desc-ms-fp-2').value === fpHex(co1) && el('desc-ms-fp-3').value === fpHex(co2), el('desc-ms-fp-2').value);
+  ck('keys left from another wallet are dropped', ctx._descCosignerXpubs[7] === undefined && ctx._descCosignerXpubs[2].fp === fpHex(co1), JSON.stringify(ctx._descCosignerXpubs));
+  ck('the message says the form is filled', /Keys 2–3 are filled in above/.test(st), st);
+
+  // Nested SegWit 2-of-2
+  reset();
+  st = await open(cs(`sh(wsh(sortedmulti(2,${k(me, P1)},${k(co2, P1)})))`));
+  ck('Nested SegWit 2-of-2: type 49, Key 2 filled', calls.join(',') === 'mode:multi,type:49,ui:2-of-2' && el('desc-ms-xpub-2').value === formKey(co2, P1), calls.join(','));
+
+  // Not this seed's wallet
+  reset();
+  st = await open(cs(`wsh(sortedmulti(2,${k(co1, P2)},${k(co2, P2)},${k(att, P2)}))`));
+  ck('a wallet without this seed\'s key: form untouched, reason given', calls.length === 0 && el('desc-ms-xpub-2').value === '' && /wasn’t filled in: none of its keys is this seed’s key/.test(st) && /73c5da0a/.test(st), st);
+  // This seed at another account: Generate would build a different wallet
+  reset();
+  st = await open(cs(`wsh(sortedmulti(2,${k(me, "48'/0'/1'/2'")},${k(co2, P2)}))`));
+  ck('this seed at another account path: not filled', calls.length === 0 && /none of its keys/.test(st), st);
+  // A passphrase entered under Key 1 changes this seed's key
+  reset();
+  el('desc-ms-passphrase').value = 'TREZOR';
+  st = await open(cs(`wsh(sortedmulti(2,${k(me, P2)},${k(co2, P2)}))`));
+  ck('with a Key 1 passphrase that the wallet didn\'t use: not filled, passphrase mentioned', calls.length === 0 && /with the Key 1 passphrase/.test(st), st);
+  // multi(): the form only builds sortedmulti
+  reset();
+  st = await open(cs(`wsh(multi(2,${k(me, P2)},${k(co2, P2)}))`));
+  ck('multi() (fixed key order): not filled, reason given', calls.length === 0 && /multi\(\) with a fixed key order/.test(st), st);
+  // Single-sig: nothing to fill, message unchanged
+  reset();
+  st = await open(SS);
+  ck('single-sig: the form is left alone', calls.length === 0 && !/filled in/.test(st), st);
+  // No seed loaded
+  reset();
+  ctx.window.SeedSession = { get: () => null };
+  st = await open(cs(`wsh(sortedmulti(2,${k(me, P2)},${k(co2, P2)}))`));
+  ck('no seed loaded: not filled, reason given', calls.length === 0 && /no seed is loaded for Key 1/.test(st), st);
 }
 
 // ======== 4. Storage: boot.js → File Router → Wallets Watcher → boot.js ========
