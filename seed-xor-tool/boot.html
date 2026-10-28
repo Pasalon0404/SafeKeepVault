@@ -34710,6 +34710,7 @@ async function rlq_export() {
         if (result.created) {
             resultDiv.innerHTML = '';
             resultDiv.style.display = 'none';
+            if (!result.demo) _rlqShowSendWithCourier(result.filename);
             // Name the parts as the checkboxes do, not by their vault
             // folder names (codex, cipher, …), which mean nothing to people.
             var partNames = { codex: 'Encrypted Notes', settings: 'Application Settings',
@@ -35113,6 +35114,50 @@ async function rlq_courierSave(bytes, name) {
     } catch (err) {
         showStatus('Saving the backup to the Transfer Drive failed: ' + _psbtEscape(err && err.message ? err.message : String(err)), 'error');
     }
+}
+
+// ---- Send a new backup with the Courier (export → phone) ----
+var _rlqLastBackupName = '';
+
+function _rlqShowSendWithCourier(filename) {
+    var resultDiv = document.getElementById('rlq-export-result');
+    if (!resultDiv || !filename) return;
+    _rlqLastBackupName = String(filename);
+    resultDiv.innerHTML =
+        '<div class="skb-card" style="border-color: var(--skb-success, #00c896);">' +
+        '<div style="font-weight: 700; color: var(--skb-success, #00c896); margin-bottom: 0.35rem;">Backup saved to the Transfer Drive</div>' +
+        '<div style="font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text); word-break: break-all; margin-bottom: 0.6rem;">' + _psbtEscape(filename) + '</div>' +
+        '<p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.6rem;">To keep a copy on your phone without plugging this stick into another computer, send it with the Courier and receive it with the Courier Tool at safekeepbitcoin.com.</p>' +
+        '<button type="button" id="rlq-send-courier-btn" class="skb-btn" style="width: 100%;" onclick="rlq_sendWithCourier()">Send with the Courier</button>' +
+        '</div>';
+    resultDiv.style.display = 'block';
+    // The card sits below the form, often out of view: bring it up so the
+    // Courier option is seen.
+    if (typeof skui_revealPanel === 'function') skui_revealPanel(resultDiv);
+}
+
+async function rlq_sendWithCourier() {
+    var name = _rlqLastBackupName;
+    if (!name) return;
+    if (!window.vaultTransferDriveHandle && typeof _transferAutoMount === 'function') {
+        try { await _transferAutoMount(); } catch (_) {}
+    }
+    var dir = window.vaultTransferDriveHandle;
+    if (!dir) {
+        showStatus('The Transfer Drive is not available. Open the Transfer Hub and mount it, then use TRANSMIT on the backup.', 'error');
+        return;
+    }
+    // The drive's listing can trail a just-made backup by a moment.
+    var file = null, lastErr = null;
+    for (var i = 0; i < 10 && !file; i++) {
+        try { file = await (await dir.getFileHandle(name)).getFile(); }
+        catch (err) { lastErr = err; await new Promise(function(r) { setTimeout(r, 400); }); }
+    }
+    if (!file) {
+        showStatus('Could not read the backup from the Transfer Drive: ' + _psbtEscape(lastErr && lastErr.message ? lastErr.message : 'not found'), 'error');
+        return;
+    }
+    _xfrOpenWithFile(file, true);
 }
 
 /**
@@ -35880,23 +35925,31 @@ async function archive_transmit(idx) {
         // Read the File object up front — if this fails (permission
         // revoked, file removed), fail loudly BEFORE navigating away.
         var file = await f.handle.getFile();
-
-        // Navigate to the Courier Tool. showState() fires xfr_cleanup()
-        // which only stops any in-flight transmit/receive; it does NOT
-        // wipe xfr_state.originalFile, so our injection below sticks.
-        showState('state-transfer');
-
-        // Force the correct tab + mode. These are idempotent and safe
-        // to call even if the Courier is already on transmit+file.
-        if (typeof xfr_switchTab === 'function') xfr_switchTab('transmit');
-        if (typeof xfr_setMode === 'function') xfr_setMode('file');
-
-        // Inject the payload — mirrors xfr_populateDriveFiles click
-        // handler so the Courier Tool is ready to press "START".
-        _xfrShowLoadedFile(file);
+        _xfrOpenWithFile(file, false);
     } catch (err) {
         showStatus('Transmit failed: ' + err.message, 'error');
     }
+}
+
+/**
+ * Open the Courier Tool on Transmit → File with `file` loaded, and start
+ * the loop when `autoStart` is true.
+ */
+function _xfrOpenWithFile(file, autoStart) {
+    // Navigate to the Courier Tool. showState() fires xfr_cleanup()
+    // which only stops any in-flight transmit/receive; it does NOT
+    // wipe xfr_state.originalFile, so our injection below sticks.
+    showState('state-transfer');
+
+    // Force the correct tab + mode. These are idempotent and safe
+    // to call even if the Courier is already on transmit+file.
+    if (typeof xfr_switchTab === 'function') xfr_switchTab('transmit');
+    if (typeof xfr_setMode === 'function') xfr_setMode('file');
+
+    // Inject the payload — mirrors xfr_populateDriveFiles click
+    // handler so the Courier Tool is ready to press "START".
+    _xfrShowLoadedFile(file);
+    if (autoStart) xfr_startTransmit();
 }
 
 /**

@@ -14,6 +14,10 @@ import vm from 'node:vm';
  *  - an existing file with the same name is kept ("name (2).7z");
  *  - a file that isn't a 7-Zip archive is refused and not saved;
  *  - unsafe file names are cleaned; a non-Courier QR only shows a hint.
+ * And the other way (rlq_sendWithCourier): after making a backup, "Send with
+ * the Courier" reads it from the Transfer Drive (waiting for a listing that
+ * trails the new file) and starts the Courier loop; frames from the stick's
+ * own sender (xfr_sendChunk) put the backup back together on another stick.
  * Run: node test-courier-restore.mjs
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -173,9 +177,60 @@ const SEVENZ = new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, ...body]);
   ck('falls back to the boot-time index', out.length === 1 && out[0] === 'a.7z', JSON.stringify(out));
 }
 
+// ---- 9. Send a new backup with the Courier ----
+{
+  const t = setup();
+  const opened = [];
+  vm.runInContext([extract('_rlqShowSendWithCourier'), extract('rlq_sendWithCourier')].join('\n') +
+    '\nvar _rlqLastBackupName = "";\nthis.S = { show: _rlqShowSendWithCourier, send: rlq_sendWithCourier };', t.ctx);
+  t.ctx._xfrOpenWithFile = (file, autoStart) => opened.push({ file, autoStart });
+  t.ctx.setTimeout = setTimeout;
+  t.ctx.S.show('SafeKeep_Backup_<b>x</b>.7z');
+  const html = t.els['rlq-export-result'].innerHTML;
+  ck('success card shown with the button', t.els['rlq-export-result'].style.display === 'block' && /onclick="rlq_sendWithCourier\(\)"/.test(html), html.slice(0, 120));
+  ck('file name escaped in the card', /SafeKeep_Backup_&lt;b&gt;x&lt;\/b&gt;\.7z/.test(html) && !/<b>x<\/b>/.test(html), '');
+  ck('file name not placed in inline JavaScript', !/onclick="[^"]*SafeKeep/.test(html), '');
+
+  // The backup appears on the drive a moment after the button is pressed
+  t.ctx.S.show('SafeKeep_Backup_2026-10-28.7z');
+  setTimeout(() => t.backend.write('SafeKeep_Backup_2026-10-28.7z', new Blob([SEVENZ])), 500);
+  await t.ctx.S.send();
+  ck('Courier opened with the backup, loop started', opened.length === 1 && opened[0].autoStart === true && opened[0].file.name === 'SafeKeep_Backup_2026-10-28.7z', JSON.stringify(opened.map((o) => [o.file && o.file.name, o.autoStart])));
+  ck('the file handed over is the backup', eq(new Uint8Array(await opened[0].file.arrayBuffer()), SEVENZ), '');
+
+  // Missing file: a clear error, the Courier is not opened
+  t.ctx.S.show('gone.7z');
+  await t.ctx.S.send();
+  ck('missing backup: error, Courier not opened', opened.length === 1 && t.statuses.some((x) => x.t === 'error' && /Could not read the backup/.test(x.m)), JSON.stringify(t.statuses.slice(-1)));
+}
+
+// ---- 10. Stick to stick: the stick's own sender → the Welcome receiver ----
+{
+  const frames = [];
+  const sctx = vm.createContext({
+    window: { btoa: (b) => Buffer.from(b, 'binary').toString('base64'), QRCode: { toCanvas: (c, text) => frames.push(text) } },
+    document: { getElementById: () => ({ style: {} }) }, console, Uint8Array, String,
+  });
+  vm.runInContext(['xfr_checksum', 'xfr_checksumPad', 'xfr_arrayToBase64', 'xfr_sendChunk'].map(extract).join('\n') +
+    '\nvar xfr_state = { currentLoop: 2 };\nthis.X = { st: xfr_state, b64: xfr_arrayToBase64, ck: xfr_checksumPad, send: xfr_sendChunk };', sctx);
+  const X = sctx.X;
+  X.st.originalFile = { name: 'SafeKeep_Backup_2026-10-28.7z', type: '' };
+  const size = 450, chunks = [];
+  for (let i = 0; i < SEVENZ.length; i += size) { const c = SEVENZ.slice(i, i + size); chunks.push({ data: X.b64(c), checksum: X.ck(c) }); }
+  chunks.forEach((c, i) => X.send(c, i, chunks.length));
+  const t = setup();
+  await t.T.rlq_courierStart();
+  for (const f of frames.slice(3).concat(frames.slice(0, 3))) t.scanners[0].cb(f);   // joined mid-loop
+  await settle();
+  ck('stick-to-stick: frames from the stick\'s sender restore the same bytes', eq(await read(t.backend, 'SafeKeep_Backup_2026-10-28.7z').catch(() => null), SEVENZ), frames.length);
+}
+
 // ---- 8. Wiring in boot.html and setup-vault.sh ----
 ck('button on the restore panel', /id="rlq-courier-start-btn"[^>]*onclick="rlq_courierStart\(\)"/.test(SRC), '');
 ck('leaving the screen stops the camera', /function showState[\s\S]{0,4000}rlq_courierStop\(\)/.test(SRC), '');
+ck('the Send with the Courier card is scrolled into view', /function _rlqShowSendWithCourier[\s\S]{0,2000}skui_revealPanel\(resultDiv\)/.test(SRC), '');
+ck('backup success shows Send with the Courier', /if \(!result\.demo\) _rlqShowSendWithCourier\(result\.filename\)/.test(SRC), '');
+ck('Transfer Hub TRANSMIT still opens the Courier without starting it', /_xfrOpenWithFile\(file, false\)/.test(SRC), '');
 ck('restore list uses the merged listing', /await rlq_mergeDriveListing\(await os\.listBackups\(\)\)/.test(SRC), '');
 const SETUP = readFileSync(join(__dirname, '../usbbootdrive/setup-vault.sh'), 'utf8');
 ck('Vault Created dialog mentions the Courier', /Receive a Backup with the Courier/.test(SETUP), '');
