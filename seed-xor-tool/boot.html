@@ -35131,6 +35131,9 @@ function _rlqShowSendWithCourier(filename) {
         '<button type="button" id="rlq-send-courier-btn" class="skb-btn" style="width: 100%;" onclick="rlq_sendWithCourier()">Send with the Courier</button>' +
         '</div>';
     resultDiv.style.display = 'block';
+    // The card sits below the form, often out of view: bring it up so the
+    // Courier option is seen.
+    if (typeof skui_revealPanel === 'function') skui_revealPanel(resultDiv);
 }
 
 async function rlq_sendWithCourier() {

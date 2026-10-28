@@ -228,6 +228,7 @@ const SEVENZ = new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, ...body]);
 // ---- 8. Wiring in boot.html and setup-vault.sh ----
 ck('button on the restore panel', /id="rlq-courier-start-btn"[^>]*onclick="rlq_courierStart\(\)"/.test(SRC), '');
 ck('leaving the screen stops the camera', /function showState[\s\S]{0,4000}rlq_courierStop\(\)/.test(SRC), '');
+ck('the Send with the Courier card is scrolled into view', /function _rlqShowSendWithCourier[\s\S]{0,2000}skui_revealPanel\(resultDiv\)/.test(SRC), '');
 ck('backup success shows Send with the Courier', /if \(!result\.demo\) _rlqShowSendWithCourier\(result\.filename\)/.test(SRC), '');
 ck('Transfer Hub TRANSMIT still opens the Courier without starting it', /_xfrOpenWithFile\(file, false\)/.test(SRC), '');
 ck('restore list uses the merged listing', /await rlq_mergeDriveListing\(await os\.listBackups\(\)\)/.test(SRC), '');
