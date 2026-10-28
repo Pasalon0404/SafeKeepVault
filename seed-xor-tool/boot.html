@@ -11465,8 +11465,12 @@ window.addEventListener('DOMContentLoaded', () => {
                 // Simulate a populated vault. In ?devMode=seeded the
                 // boot-entry fast-path handler hands us straight to the
                 // dashboard; unlock-overlay users can also pass any
-                // password and we accept it.
-                return { state: 'loaded', seed: _currentSeed };
+                // password and we accept it. 'dashboard' is what
+                // shared/boot.js returns for a loaded seed and what
+                // onBootComplete checks for; anything else shows the
+                // welcome screen, which on a slow phone landed after the
+                // seeded dashboard and replaced it.
+                return { state: 'dashboard', seed: _currentSeed };
             }
             // Empty-vault welcome flow.
             return { state: 'welcome', seed: null };
