@@ -32023,15 +32023,57 @@ async function desc_openSavedWallet(i) {
     var r = _savedWalletParse(w.descriptor);
     if (r.error) { showStatus('“' + w.name + '” can’t be opened: ' + r.error, 'error'); return; }
     var note = '';
+    var fill;
+    try { fill = r.parsed.isMulti ? await _descFillMultisigForm(r.parsed) : await _descSetSingleForm(r.parsed); }
+    catch (e) { fill = { filled: false, reason: e && e.message ? e.message : String(e) }; }
     if (r.parsed.isMulti) {
-        var fill;
-        try { fill = await _descFillMultisigForm(r.parsed); }
-        catch (e) { fill = { filled: false, reason: e && e.message ? e.message : String(e) }; }
+        var others = r.parsed.msN === 2 ? 'Key 2' : 'Keys 2–' + r.parsed.msN;
         note = fill.filled
-            ? ' Keys 2–' + r.parsed.msN + ' are filled in above from it, so Generate Descriptor rebuilds this wallet.'
-            : ' The form above wasn’t filled in: ' + fill.reason;
+            ? ' ' + others + (r.parsed.msN === 2 ? ' is' : ' are') + ' filled in above from it, so Generate Descriptor rebuilds this wallet.'
+            : ' ' + others + (r.parsed.msN === 2 ? ' wasn’t' : ' weren’t') + ' filled in: ' + fill.reason;
+    } else {
+        note = fill.filled
+            ? ' The form above is set to it, so Generate Descriptor rebuilds this wallet.'
+            : ' ' + fill.reason;
     }
     _descLoadWatchOnly(w.descriptor, r.parsed, 'Opened saved wallet “' + w.name + '”: ', note);
+}
+
+/* Empty Keys 2..7 and forget their kept values (keys typed for another wallet). */
+function _descClearCosigners() {
+    Object.keys(_descCosignerXpubs).forEach(function(k) { delete _descCosignerXpubs[k]; });
+    for (var c = 2; c <= 7; c++) {
+        ['desc-ms-xpub-', 'desc-ms-fp-'].forEach(function(id) { var el = document.getElementById(id + c); if (el) el.value = ''; });
+    }
+}
+
+/*
+ * Set the Single-Sig form to a saved single-sig wallet: Single-Sig mode, its
+ * address type, and no cosigner keys left from a multisig opened before.
+ * Generate builds from the loaded seed (with the Single-Sig passphrase) at
+ * m/<type>'/0'/0', so say whether that is this wallet's key.
+ * Returns { filled: true } or { filled: false, reason }.
+ */
+async function _descSetSingleForm(p) {
+    var typeOf = { 'wpkh': '84', 'sh/wpkh': '49', 'pkh': '44', 'tr': '86' };
+    var bip = typeOf[p.kind];
+    _descClearCosigners();
+    if (!bip) return { filled: false, reason: 'The form above can’t build this kind of wallet.' };
+    if (desc_state.mode !== 'single') desc_setMode('single');
+    desc_setScript(bip);
+
+    var mnemonic = desc_state.loadedSeed || (window.SeedSession && window.SeedSession.get ? (window.SeedSession.get() || {}).mnemonic : '');
+    if (!mnemonic) return { filled: false, reason: 'The form above is set to its address type; no seed is loaded to build it from.' };
+    var M = window.BtcMath;
+    var passphrase = (document.getElementById('desc-passphrase') || {}).value || '';
+    var root = M.HDKey.fromMasterSeed(await M.bip39.mnemonicToSeed(mnemonic, passphrase), { public: 0x0488b21e, private: 0x0488ade4 });
+    var mine = root.derive("m/" + bip + "'/0'/0'");
+    var same = false;
+    try { same = desc_arraysEqual(M.HDKey.fromExtendedKey(_descNormalizeXpub(p.keys[0].xpub)).publicKey, mine.publicKey); } catch (_) {}
+    if (same) return { filled: true };
+    return { filled: false, reason: 'The form above is set to its address type, but its key isn’t this seed’s key at m/' + bip + '’/0’/0’ (fingerprint ' +
+        root.fingerprint.toString(16).padStart(8, '0') + (passphrase ? ', with the passphrase entered' : '') + '), so Generate Descriptor would build a different wallet.' +
+        (passphrase ? '' : ' If the wallet uses a passphrase for this seed, enter it and open the wallet again.') };
 }
 
 /*
@@ -32044,9 +32086,19 @@ async function desc_openSavedWallet(i) {
 async function _descFillMultisigForm(p) {
     var typeOf = { 'wsh/multi': '84', 'sh-wsh/multi': '49', 'sh/multi': '44' };
     var addrType = typeOf[p.kind];
+    _descClearCosigners();
     if (!addrType) return { filled: false, reason: 'the form only builds P2WSH, P2SH-P2WSH and P2SH multisig wallets.' };
-    if (!p.sorted) return { filled: false, reason: 'this wallet uses multi() with a fixed key order, and the form builds sortedmulti().' };
     if (p.msN < 2 || p.msN > 7 || p.msM > 5) return { filled: false, reason: 'the form takes 2 to 7 keys and a threshold of up to 5.' };
+
+    // Show this wallet's shape (M-of-N, address type, empty Keys 2..N) even
+    // when its keys can't be filled in, so nothing from another wallet stays.
+    if (desc_state.mode !== 'multi') desc_setMode('multi');
+    document.getElementById('desc-ms-n').value = String(p.msN);
+    document.getElementById('desc-ms-m').value = String(p.msM);
+    document.getElementById('desc-ms-addr-type').value = addrType;
+    desc_updateMsAddrType();
+    desc_updateMultisigUI();
+    if (!p.sorted) return { filled: false, reason: 'this wallet uses multi() with a fixed key order, and the form builds sortedmulti().' };
 
     var mnemonic = window.SeedSession && window.SeedSession.get ? (window.SeedSession.get() || {}).mnemonic : '';
     if (!mnemonic) return { filled: false, reason: 'no seed is loaded for Key 1.' };
@@ -32070,17 +32122,6 @@ async function _descFillMultisigForm(p) {
             ' (fingerprint ' + myFp + (passphrase ? ', with the Key 1 passphrase' : '') + '). If the wallet uses a passphrase for this seed, enter it under Key 1 and open the wallet again.' };
     }
 
-    if (desc_state.mode !== 'multi') desc_setMode('multi');
-    document.getElementById('desc-ms-n').value = String(p.msN);
-    document.getElementById('desc-ms-m').value = String(p.msM);
-    document.getElementById('desc-ms-addr-type').value = addrType;
-    desc_updateMsAddrType();
-    // Drop keys typed for another wallet, then draw Keys 2..N and fill them.
-    Object.keys(_descCosignerXpubs).forEach(function(k) { delete _descCosignerXpubs[k]; });
-    for (var c = 2; c <= 7; c++) {
-        ['desc-ms-xpub-', 'desc-ms-fp-'].forEach(function(id) { var el = document.getElementById(id + c); if (el) el.value = ''; });
-    }
-    desc_updateMultisigUI();
     var slot = 2;
     p.keys.forEach(function(k, idx) {
         if (idx === ownIdx) return;
