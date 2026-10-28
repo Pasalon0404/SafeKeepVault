@@ -640,6 +640,7 @@ const SafeKeepOS = (() => {
     'RELIQUARY_TRIGGER', 'RELIQUARY_ACK',
     'RESTORE_INSPECT', 'RESTORE_INSPECT_ACK',
     'RESTORE_COMMIT', 'RESTORE_COMMIT_ACK',
+    'RESTORE_CHECK',    // Check a Backup → Restore Watcher (restores nothing)
     'POWER_ACTION',     // dashboard Power Options → safekeep-boot.sh dispatcher
     'DISPLAY_SLEEP',    // Settings idle timer → safekeep-boot.sh display watcher
     'COLDCARD_REQUEST', 'COLDCARD_ACK',   // PSBT Signer ↔ Coldcard Watcher
@@ -1656,6 +1657,75 @@ const SafeKeepOS = (() => {
     }
 
     return { unlocked: false, manifest: null, command: extractCmd, error: 'Inspect timed out — the Restore Watcher daemon may not be running.' };
+  }
+
+  /**
+   * Check a backup: open it with its password and report what it holds,
+   * restoring nothing. The Restore Watcher unpacks it into a private folder
+   * in RAM, compares its seed with `seedHash` (SHA-256 of the loaded seed's
+   * words, NFKD, lowercase, single spaces; '' when no seed is loaded),
+   * deletes the unpacked copy and answers with yes/no and counts only.
+   *
+   * @returns {Promise<{ ok: boolean, codex?: boolean, settings?: boolean,
+   *   cipher?: boolean, seed?: boolean, seedMatch?: boolean|null,
+   *   codexCount?: number, cipherCount?: number, demo?: boolean, error?: string }>}
+   */
+  async function checkReliquary(filename, password, seedHash) {
+    if (!filename || !password) {
+      return { ok: false, error: 'Choose a backup and enter its password.' };
+    }
+
+    if (!isBootDrive()) {
+      // Demo mode: simulate from the last backup made in this session
+      const sel = (_reliquaryManifest && _reliquaryManifest.selections) || ['seed', 'codex', 'settings'];
+      const has = (k) => sel.indexOf(k) !== -1;
+      return {
+        ok: true, demo: true,
+        codex: has('codex'), settings: has('settings'), cipher: has('cipher'), seed: has('seed'),
+        seedMatch: has('seed') && seedHash ? true : null,
+        codexCount: has('codex') ? 3 : 0, cipherCount: has('cipher') ? 1 : 0
+      };
+    }
+
+    // One trigger per click (a second download in the same gesture would
+    // bring up Chromium's "multiple downloads" prompt). The id ties the
+    // answer to this request: a result left from an earlier check is ignored.
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    _silentDownload('RESTORE_CHECK.json', JSON.stringify({
+      id, filename, password, seedHash: seedHash || '', timestamp: Date.now()
+    }));
+
+    const RESULT_URL = `file://${MASTER_SEED_DIR}/RESTORE_CHECK_RESULT.json`;
+    const POLL_INTERVAL = 800;
+    const MAX_WAIT = 120000;
+    let elapsed = 0;
+    await _sleep(1200);
+    while (elapsed < MAX_WAIT) {
+      try {
+        const resp = await fetch(RESULT_URL, { cache: 'no-store' });
+        if (resp.ok) {
+          const result = await resp.json();
+          if (result && result.id === id) {
+            if (!result.ok) {
+              return { ok: false, error: result.error ? _sanitize7zError(result.error) : 'Could not open the backup.' };
+            }
+            return {
+              ok: true,
+              codex: !!result.codex, settings: !!result.settings,
+              cipher: !!result.cipher, seed: !!result.seed,
+              seedMatch: result.seedMatch === true ? true : (result.seedMatch === false ? false : null),
+              codexCount: result.codexCount || 0, cipherCount: result.cipherCount || 0
+            };
+          }
+          // result.id !== id: an earlier check's answer — keep waiting
+        }
+      } catch (e) {
+        // Result file not ready yet — continue polling
+      }
+      await _sleep(POLL_INTERVAL);
+      elapsed += POLL_INTERVAL;
+    }
+    return { ok: false, error: 'Checking timed out — the Restore Watcher may not be running. Restart SafeKeep and try again.' };
   }
 
   /**
@@ -2930,6 +3000,7 @@ const SafeKeepOS = (() => {
     // Reliquary — Encrypted Backup / Restore
     createReliquary,
     inspectReliquary,
+    checkReliquary,
     commitReliquary,
     listBackups,
 
