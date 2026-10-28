@@ -9557,12 +9557,21 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     </select>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
                         <label for="rlq-check-password" style="font-size: 0.8rem; color: var(--skb-text-muted);">Backup Password</label>
-                        <button type="button" class="skb-btn" id="rlq-check-pp-vis-btn" onclick="skui_toggleVis('rlq-check-password', 'rlq-check-pp-vis-btn')"
-                                style="padding: 0.2rem 0.6rem; font-size: 0.72rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; border-radius: 3px;">Show</button>
+                        <div style="display: flex; gap: 0.35rem;">
+                            <button type="button" class="skb-btn" id="rlq-check-pp-vis-btn" onclick="skui_toggleVis('rlq-check-password', 'rlq-check-pp-vis-btn')"
+                                    style="padding: 0.2rem 0.6rem; font-size: 0.72rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; border-radius: 3px;">Show</button>
+                            <button type="button" class="skb-btn" id="rlq-check-scan-btn" onclick="rlq_scanPassword('check')" title="Scan password via QR"
+                                    style="padding: 0.2rem 0.6rem; font-size: 0.72rem; border: 1px solid var(--skb-border); color: var(--skb-text-muted); background: transparent; border-radius: 3px;">Scan QR</button>
+                        </div>
                     </div>
                     <input type="password" id="rlq-check-password" placeholder="Type the backup's password" autocomplete="off"
                            onkeydown="if (event.key === 'Enter') rlq_checkBackup()"
                            style="width: 100%; box-sizing: border-box; padding: 0.5rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); margin-bottom: 0.75rem;">
+                    <!-- QR scanner for the backup password -->
+                    <div id="rlq-pw-qr-check" style="display: none; margin-bottom: 0.75rem;">
+                        <div id="rlq-pw-qr-reader-check" style="border-radius: 8px; overflow: hidden;"></div>
+                        <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="rlq_stopPasswordScan('check')">Stop Scanner</button>
+                    </div>
                     <button type="button" id="rlq-check-btn" class="skb-btn" style="width: 100%;" onclick="rlq_checkBackup()">Check Backup</button>
                     <div id="rlq-check-result" style="display: none; margin-top: 0.75rem;"></div>
                 </div>
@@ -34408,7 +34417,7 @@ var _rlqPwScanTarget = null;
 
 async function rlq_scanPassword(target) {
     // Map target name → input field ID
-    var fieldMap = { backup: 'rlq-backup-password', confirm: 'rlq-confirm-password', restore: 'rlq-restore-password' };
+    var fieldMap = { backup: 'rlq-backup-password', confirm: 'rlq-confirm-password', restore: 'rlq-restore-password', check: 'rlq-check-password' };
     var fieldId = fieldMap[target] || 'rlq-backup-password';
     var wrapperId = 'rlq-pw-qr-' + target;
     var readerId = 'rlq-pw-qr-reader-' + target;
@@ -34420,7 +34429,7 @@ async function rlq_scanPassword(target) {
     if (typeof rlq_courierStop === 'function') rlq_courierStop();
 
     // Hide all other scanners
-    ['backup', 'confirm', 'restore'].forEach(function(t) {
+    ['backup', 'confirm', 'restore', 'check'].forEach(function(t) {
         if (t !== target) {
             var el = document.getElementById('rlq-pw-qr-' + t);
             if (el) el.style.display = 'none';
@@ -35043,7 +35052,7 @@ async function rlq_courierStart() {
         showStatus('QR scanner library not available.', 'error');
         return;
     }
-    if (typeof rlq_stopPasswordScan === 'function') rlq_stopPasswordScan('restore');
+    if (typeof rlq_stopPasswordScan === 'function' && _rlqPwScanTarget) rlq_stopPasswordScan();
     rlq_courierStop();
     _rlqCourier = window.QRParser.createCourierCollector();
     _rlqCourierBusy = false;

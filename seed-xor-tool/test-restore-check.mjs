@@ -172,6 +172,7 @@ ck('RESTORE_CHECK is an allowed trigger file', /'RESTORE_CHECK'/.test(BOOTJS), '
 ck('checkReliquary is exported', /\n\s+checkReliquary,/.test(BOOTJS), '');
 ck("checkReliquary ignores a result with another id", /if \(result && result\.id === id\)/.test(BOOTJS), '');
 ck('Check a Backup on the backup screen', /id="rlq-check-btn"[^>]*onclick="rlq_checkBackup\(\)"/.test(HTML), '');
+ck('Scan QR for the check password', /id="rlq-check-scan-btn"[^>]*onclick="rlq_scanPassword\('check'\)"/.test(HTML) && /id="rlq-pw-qr-check"/.test(HTML) && /id="rlq-pw-qr-reader-check"/.test(HTML) && /check: 'rlq-check-password'/.test(HTML), '');
 ck('"Check this backup" on the Send with the Courier card', /onclick="rlq_checkThisBackup\(\)"/.test(HTML), '');
 
 rmSync(W, { recursive: true, force: true });
