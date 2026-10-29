@@ -16,7 +16,8 @@
  *   - A freshly generated seed is never shown: replaceGenerated() swaps it
  *     for the public demo seed of the same length.
  *   - A banner that can't be closed, explaining that this is a preview of
- *     the offline vault with public demo seeds, and a watermark on every
+ *     the offline vault with public demo seeds (and, on phones and tablets,
+ *     that the vault runs on a laptop or desktop), and a watermark on every
  *     printout.
  *
  * The demo seeds are the all-zero-entropy BIP-39 mnemonics, the most
@@ -130,7 +131,17 @@ export function installDemoUi() {
         '#skv-demo-banner details{display:inline}#skv-demo-banner summary{display:inline;cursor:pointer;text-decoration:underline;color:#f7931a;font-weight:600;white-space:nowrap}' +
         '#skv-demo-banner .skv-seeds{display:block;margin-top:6px;font:12px/1.5 ui-monospace,Menlo,monospace;text-align:left;' +
         'max-width:900px;margin-left:auto;margin-right:auto;user-select:all}' +
-        'body{padding-bottom:64px !important}' +
+        // Shown only on phones and tablets: the vault itself boots on a
+        // laptop or desktop, so say so to visitors who open the demo there.
+        '#skv-demo-banner .skv-demo-mobile{display:none}' +
+        '@media (max-width:860px),(pointer:coarse){#skv-demo-banner .skv-demo-mobile{display:block;font-size:12px;' +
+        'font-weight:700;color:#f7931a;margin-top:2px}}' +
+        // Both links on one line of their own, under the longer message.
+        '#skv-demo-banner .skv-demo-links{display:block;margin-top:2px}' +
+        // Room below the page for the banner, so it doesn't cover the last
+        // rows (it's taller on a phone, with the extra line).
+        'body{padding-bottom:110px !important}' +
+        '@media (max-width:860px),(pointer:coarse){body{padding-bottom:200px !important}}' +
         '@media print{#skv-demo-banner,#skv-demo-toast{display:none !important}' +
         'body::after{content:"SAFEKEEP DEMO \\2014  NOT A REAL BACKUP \\2014  PUBLIC DEMO SEED";position:fixed;' +
         'top:45%;left:-10%;right:-10%;text-align:center;transform:rotate(-30deg);font:900 40pt/1 sans-serif;' +
@@ -143,11 +154,15 @@ export function installDemoUi() {
     banner.setAttribute('role', 'note');
     banner.innerHTML =
         '<span class="skv-demo-tag">DEMO</span>' +
-        'The real SafeKeepVault tools, running on public demo seeds. ' +
-        'The full vault runs them offline from a USB stick, with your own keys. ' +
-        '<details><summary>Show the demo seeds</summary><span class="skv-seeds"></span></details> &middot; ' +
-        '<a href="' + REAL_VAULT_URL + '" target="_blank" rel="noopener">Get the offline vault</a>' +
-        '<span class="skv-demo-note">Demo wallets are public: never send real bitcoin to them.</span>';
+        'A preview of the SafeKeepVault tools, not a working vault: only the public demo seeds work here. ' +
+        'To use the tools with your own keys, run the vault offline from a USB stick on a laptop or desktop computer. ' +
+        // The vault link comes first: Chrome lays out <details> as a block,
+        // so anything after it wrapped onto a line of its own.
+        '<span class="skv-demo-links"><a href="' + REAL_VAULT_URL + '" target="_blank" rel="noopener">Get the offline vault</a> &middot; ' +
+        '<details><summary>Show the demo seeds</summary><span class="skv-seeds"></span></details></span>' +
+        '<span class="skv-demo-note">Demo wallets are public: never send real bitcoin to them.</span>' +
+        '<span class="skv-demo-mobile">On a phone? SafeKeepVault doesn\u2019t run on phones or tablets. ' +
+        'This preview is easier to explore on a computer.</span>';
     const seeds = banner.querySelector('.skv-seeds');
     for (const n of Object.keys(DEMO_SEEDS)) {
         const line = document.createElement('div');
