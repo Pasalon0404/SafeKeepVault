@@ -7000,6 +7000,15 @@
                         </span>
                         <span class="dash-tool-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
                     </button>
+                    <!-- Show an address (redesign 2026-11) -->
+                    <button type="button" class="dash-tool-card" onclick="rcv_open('state-receive')" style="text-align: left; cursor: pointer;">
+                        <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></span>
+                        <span class="dash-tool-label">
+                            <span class="dash-tool-name">Show an Address</span>
+                            <span class="dash-tool-subtitle">Receive: the next address as a QR code</span>
+                        </span>
+                        <span class="dash-tool-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
+                    </button>
                     <!-- 2. Seed Management (formerly "The Armory" / "Seed Phrase Viewer") — promoted to slot 2 -->
                     <button type="button" class="dash-tool-card" onclick="showState('state-armory')" style="text-align: left; cursor: pointer;">
                         <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span>
@@ -7035,6 +7044,7 @@
                     <div class="dashv2-title">What would you like to do?</div>
                     <div class="dashv2-actions">
                         <button type="button" class="dashv2-action dashv2-action--primary" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan or load a PSBT, check it, sign it</span></button>
+                        <button type="button" class="dashv2-action" onclick="rcv_open('state-receive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></span><b>Show an address</b><span>The next receive address as a QR code</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-reliquary')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span><b>Back up</b><span>Encrypted backup, send it to your phone, check it</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-armory')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Sparrow, Nunchuk, Blue Wallet: export your key, see addresses</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-archive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M5 13 7.5 4h9L19 13M6 17h.01M10 17h.01"/></svg></span><b>Transfer files</b><span>Files on the Transfer Drive, the Courier</span></button>
@@ -9141,6 +9151,40 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
         <!-- ============================================
              STATE: OPTICAL TRANSFER (Tool 7)
              ============================================ -->
+        <!-- ======== SHOW AN ADDRESS (redesign 2026-11) ======== -->
+        <div id="state-receive">
+            <div class="tool-hero">
+                <h2 class="tool-hero-title">Show an<span>Address</span></h2>
+                <p class="tool-hero-subtitle">Receive bitcoin</p>
+                <p class="tool-hero-desc">A receive address of your wallet as a large QR code. SafeKeep is offline and can't see which addresses already received money, so it shows the next one after the last address it showed you, and remembers that on this stick.</p>
+            </div>
+            <div class="skb-card rcv-card">
+                <label for="rcv-wallet" class="rcv-label">Wallet</label>
+                <select id="rcv-wallet" onchange="rcv_selectWallet(this.value)"></select>
+                <div class="rcv-main" id="rcv-main">
+                    <div class="rcv-qr-wrap"><canvas id="rcv-qr" width="300" height="300"></canvas></div>
+                    <div class="rcv-info">
+                        <div class="rcv-num" id="rcv-num"></div>
+                        <div class="rcv-addr" id="rcv-addr"></div>
+                        <div class="rcv-path" id="rcv-path"></div>
+                        <div class="rcv-btns">
+                            <button type="button" class="skb-btn" onclick="rcv_copy()">Copy address</button>
+                            <button type="button" class="skb-btn skb-btn--primary" onclick="rcv_new()">New address</button>
+                        </div>
+                        <p class="rcv-note" id="rcv-note"></p>
+                        <details class="rcv-more">
+                            <summary>Show a different address number</summary>
+                            <div class="rcv-goto">
+                                <input type="number" id="rcv-goto" min="0" max="2147483647" step="1" inputmode="numeric" class="skb-input" onkeydown="if (event.key === 'Enter') rcv_goto()">
+                                <button type="button" class="skb-btn" onclick="rcv_goto()">Show</button>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+                <div class="rcv-empty" id="rcv-empty" hidden></div>
+            </div>
+        </div>
+
         <div id="state-transfer">
             <div class="tool-hero">
                 <h2 class="tool-hero-title">Courier<span>Tool</span></h2>
@@ -11521,6 +11565,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     var _devSavedWallets = [];  // dev-mock saved wallets (in memory)
     var _devLastBackup = null;  // dev-mock "last backup" record (in memory)
+    var _devReceiveIndex = {};  // dev-mock receive positions (in memory)
     var _devTzPairing = null;   // dev-mock Trezor pairing (in memory)
     var _devTzUnlocked = false; // dev-mock Trezor: PIN already entered?
     var _devTzPinShown = false; // dev-mock Trezor: grid showing (reset by detect, like the real one)
@@ -11726,6 +11771,8 @@ window.addEventListener('DOMContentLoaded', () => {
             return { success: true, path: '/tmp/dev-mock-reliquary.7z' };
         },
         loadLastBackup: async function () { return _devLastBackup; },
+        loadReceiveIndex: async function () { return Object.assign({}, _devReceiveIndex); },
+        saveReceiveIndex: async function (m) { _devReceiveIndex = Object.assign({}, m || {}); return { saved: true }; },
         commitReliquary: async function () {
             console.log('[DEV MOCK] commitReliquary() → simulated success');
             return { success: true, committed: true };
@@ -12595,6 +12642,135 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     try { dashv2_renderWallet(); } catch (_) {}
 });
+
+/* ---- Show an address (redesign 2026-11) ----
+   The next receive address of a wallet as a large QR code. SafeKeep is
+   offline, so "next" means the one after the last address shown here for
+   that wallet, kept in the vault by the Receive Watcher
+   (SafeKeepOS.load/saveReceiveIndex; settings/receive-index.json).
+   Within one session, reopening shows the same address again: only "New
+   address" moves on, so opening the screen many times can't push
+   addresses past a wallet app's look-ahead (gap limit, usually 20).
+   Wallet ids hold no keys: "seed:<fingerprint>:<type>" or
+   "saved:<descriptor checksum>". */
+var _rcv = { wallets: [], cur: null, index: 0, map: {}, session: {} };
+var _RCV_TYPES = [
+    ['84', 'Native SegWit (bc1q…)'], ['86', 'Taproot (bc1p…)'],
+    ['49', 'Nested SegWit (3…)'], ['44', 'Legacy (1…)']
+];
+async function rcv_open() {
+    showState('state-receive');
+    try { await rcv_init(); } catch (e) { rcv_showEmpty('Couldn’t prepare addresses: ' + (e && e.message ? e.message : e)); }
+}
+function rcv_showEmpty(msg) {
+    var main = document.getElementById('rcv-main'), empty = document.getElementById('rcv-empty');
+    if (main) main.hidden = true;
+    if (empty) { empty.hidden = false; empty.textContent = msg; }
+}
+async function rcv_init() {
+    var wallets = [];
+    var mnemonic = window.SeedSession && window.SeedSession.get ? (window.SeedSession.get() || {}).mnemonic : '';
+    if (mnemonic) {
+        var pp = window.SafeKeepOS && window.SafeKeepOS.getPassphrase ? (window.SafeKeepOS.getPassphrase() || '') : '';
+        var seedBytes = await window.BtcMath.bip39.mnemonicToSeed(mnemonic, pp);
+        _RCV_TYPES.forEach(function (t) {
+            var d = _descSingleSig(seedBytes, t[0]);
+            var r = _wrecParseDescriptor(d.descriptor);
+            if (!r.ok || r.addressNote) return;
+            wallets.push({ id: 'seed:' + d.fingerprint + ':' + t[0], label: 'This seed' + (pp ? ' (passphrase)' : '') + ' · ' + t[1], parsed: r });
+        });
+    }
+    if (typeof _savedWalletsLoading !== 'undefined' && _savedWalletsLoading) { try { await _savedWalletsLoading; } catch (_) {} }
+    (typeof _savedWallets !== 'undefined' ? _savedWallets : []).forEach(function (w) {
+        var r = _savedWalletParse(w.descriptor);
+        if (!r.parsed || r.parsed.kind === 'sp') return;
+        var cs = (String(w.descriptor).match(/#([0-9a-z]{8})\s*$/i) || [])[1] || desc_checksum(_savedWalletBody(w.descriptor));
+        wallets.push({ id: 'saved:' + cs, label: w.name + ' · ' + _savedWalletSummary(r.parsed), parsed: r.parsed });
+    });
+    _rcv.wallets = wallets;
+    var sel = document.getElementById('rcv-wallet');
+    sel.innerHTML = '';
+    wallets.forEach(function (w) { var o = document.createElement('option'); o.value = w.id; o.textContent = w.label; sel.appendChild(o); });
+    if (!wallets.length) { rcv_showEmpty('Load a seed, or save a wallet in Output Descriptor, to show its addresses.'); return; }
+    document.getElementById('rcv-main').hidden = false;
+    document.getElementById('rcv-empty').hidden = true;
+    try { _rcv.map = await window.SafeKeepOS.loadReceiveIndex(); } catch (_) { _rcv.map = {}; }
+    var keep = _rcv.cur && wallets.some(function (w) { return w.id === _rcv.cur.id; }) ? _rcv.cur.id : wallets[0].id;
+    sel.value = keep;
+    rcv_selectWallet(keep);
+}
+function rcv_selectWallet(id) {
+    var w = _rcv.wallets.filter(function (x) { return x.id === id; })[0];
+    if (!w) return;
+    _rcv.cur = w;
+    var idx;
+    if (_rcv.session[id] !== undefined) idx = _rcv.session[id];
+    else { idx = _rcv.map[id] !== undefined ? _rcv.map[id] + 1 : 0; _rcv.session[id] = idx; rcv_record(id, idx); }
+    rcv_show(idx);
+}
+function rcv_record(id, idx) {
+    if (_rcv.map[id] !== undefined && _rcv.map[id] >= idx) return;
+    _rcv.map[id] = idx;
+    var save = window.SafeKeepOS && window.SafeKeepOS.saveReceiveIndex;
+    if (save) save(Object.assign({}, _rcv.map)).then(function (r) {
+        if (r && !r.saved) console.warn('[receive] position not stored:', r.error);
+    });
+}
+/* Receive address #idx of wallet w. Its own key cache per wallet: never
+   Output Descriptor's (_descRecv.nodes), which belongs to the descriptor
+   shown there. */
+function rcv_addressAt(w, idx) {
+    if (!w.nodes) w.nodes = _descChainNodes(w.parsed.keys, 0);
+    var pubs = w.nodes.map(function (n) { return n.deriveChild(idx).publicKey; });
+    return _wrecAddressFromPubkeys(w.parsed.kind, w.parsed.sorted, w.parsed.msM, pubs);
+}
+function rcv_show(idx) {
+    try { _rcvShow(idx); }
+    catch (e) {
+        _rcv.address = '';
+        var a = document.getElementById('rcv-addr');
+        if (a) { a.textContent = e && e.message ? e.message : String(e); a.style.color = 'var(--skb-danger)'; }
+        var c = document.getElementById('rcv-qr');
+        if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+    }
+}
+function _rcvShow(idx) {
+    var w = _rcv.cur;
+    _rcv.index = idx;
+    var addrEl0 = document.getElementById('rcv-addr'); if (addrEl0) addrEl0.style.color = '';
+    var addr = rcv_addressAt(w, idx);
+    // Safety net: address #0 must equal the one the descriptor parser works out.
+    if (idx === 0 && w.parsed.firstAddress && addr !== w.parsed.firstAddress) throw new Error('Address check failed: this wallet\u2019s first address doesn\u2019t match. Nothing is shown.');
+    _rcv.address = addr;
+    var last = _rcv.map[w.id];
+    document.getElementById('rcv-num').textContent = 'Address #' + idx;
+    document.getElementById('rcv-addr').innerHTML = _descRecvGroups(addr);
+    var fps = w.parsed.keys.map(function (k) { return (k.fingerprint || '????????').toUpperCase(); }).join(', ');
+    document.getElementById('rcv-path').textContent = 'Receive path 0/' + idx + ' · ' + (w.parsed.isMulti ? w.parsed.msM + '-of-' + w.parsed.msN + ' multisig' : 'single-sig') + ' · ' + fps;
+    document.getElementById('rcv-note').textContent = idx === 0 && last === 0
+        ? 'The first address of this wallet. Next time SafeKeep starts, it offers #1.'
+        : 'SafeKeep last showed #' + (last !== undefined ? last : idx) + ' for this wallet. Your wallet app may already have used some addresses; it shows the same ones under Receive.';
+    var canvas = document.getElementById('rcv-qr');
+    if (canvas && window.QRCode) QRCode.toCanvas(canvas, addr, { width: 300, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
+}
+function rcv_new() {
+    if (!_rcv.cur) return;
+    var id = _rcv.cur.id;
+    var next = Math.max(_rcv.map[id] !== undefined ? _rcv.map[id] : -1, _rcv.index) + 1;
+    _rcv.session[id] = next;
+    rcv_record(id, next);
+    rcv_show(next);
+}
+function rcv_goto() {
+    var v = String((document.getElementById('rcv-goto') || {}).value || '').trim();
+    if (!/^\d+$/.test(v) || +v > 2147483647) { showStatus('Enter an address number from 0 up.', 'error'); return; }
+    rcv_show(parseInt(v, 10));
+}
+function rcv_copy() {
+    if (!_rcv.address || !navigator.clipboard) return;
+    navigator.clipboard.writeText(_rcv.address).then(function () { showStatus('Address copied.', 'success'); },
+        function () { showStatus('Copy failed.', 'error'); });
+}
 
 /* A tool's header description: show two lines and a "More about this
    tool" link when it is longer (extra paragraphs are folded in too).
@@ -18019,7 +18195,7 @@ var _toolScreens = [
     'state-psbt-signer', 'state-passphrase', 'state-seedxor', 'state-bip85',
     'state-descriptor', 'state-seedqr', 'state-entropy', 'state-transfer',
     'state-securenote', 'state-designer', 'state-armory', 'state-authenticator',
-    'state-slip39', 'state-reliquary', 'state-archive', 'state-2fa'
+    'state-slip39', 'state-reliquary', 'state-archive', 'state-2fa', 'state-receive'
 ];
 
 function showState(stateId) {
@@ -44335,6 +44511,24 @@ function tfa_renderTable() {
     #state-welcome .welcome-option { border-radius: 12px !important; }
     #state-dashboard .dashv2-lh canvas { border-radius: 12px !important; }
     .boot-header:not(#_), .dash-status-bar:not(#_) { border-radius: 0 !important; }  /* full-width bars stay square */
+
+    /* ---- Show an address ---- */
+    .rcv-card { padding: 1.25rem; }
+    .rcv-label { display: block; font-size: 0.8125rem; color: var(--skb-text-muted); margin-bottom: 0.35rem; }
+    #rcv-wallet { width: 100%; max-width: 560px; margin-bottom: 1.25rem; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); color: var(--skb-text); border: 2px solid var(--skb-border); font-family: var(--skb-sans); font-size: 0.9375rem; }
+    .rcv-main { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.75rem; align-items: start; }
+    .rcv-main[hidden] { display: none; }
+    .rcv-qr-wrap { background: #fff; padding: 0.5rem; border-radius: 12px; line-height: 0; }
+    .rcv-num { font-size: 0.8125rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--skb-primary); }
+    .rcv-addr { font-family: var(--skb-mono); font-size: 1.35rem; line-height: 1.6; color: var(--skb-text); margin: 0.35rem 0 0.4rem; word-break: break-all; }
+    .rcv-path { font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text-muted); }
+    .rcv-btns { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0 0.75rem; }
+    .rcv-note { font-size: 0.8125rem; color: var(--skb-text-muted); max-width: 60ch; margin: 0 0 0.75rem; }
+    .rcv-more summary { cursor: pointer; font-size: 0.8125rem; color: var(--skb-primary); }
+    .rcv-goto { display: flex; gap: 0.5rem; margin-top: 0.5rem; max-width: 280px; }
+    .rcv-empty { color: var(--skb-text-muted); }
+    @media (max-width: 1100px) { .rcv-main { grid-template-columns: minmax(0, 1fr); } }
+    @media (min-width: 1101px) { .dashv2-actions { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
     /* ---- Device Options: sans text, one sub-heading style ---- */
     #state-dashboard .dash-settings summary { font-family: var(--skb-sans); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.14em; }

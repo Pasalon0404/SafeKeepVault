@@ -2375,6 +2375,52 @@ const SafeKeepOS = (() => {
     return { saved: false, error: 'The vault didn’t confirm the save. Try again.' };
   }
 
+  // ---- Receive positions: the last address "Show an address" showed, per
+  // wallet. Stored by the Receive Watcher in settings/receive-index.json.
+  const RECEIVE_INDEX_URL = `file://${VAULT_ROOT}/settings/receive-index.json`;
+  const RECEIVE_ID_RE = /^[A-Za-z0-9:_-]{4,80}$/;
+  let _receiveIndexMem = {};
+  function _cleanReceiveMap(m) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+    const out = {};
+    const keys = Object.keys(m);
+    if (keys.length > 200) return null;
+    for (const k of keys) {
+      const v = m[k];
+      if (!RECEIVE_ID_RE.test(k) || !Number.isInteger(v) || v < 0 || v > 2147483647) return null;
+      out[k] = v;
+    }
+    return out;
+  }
+  /** { walletId: lastShownIndex } ({} if none yet, or in a Temporary Session). */
+  async function loadReceiveIndex() {
+    if (!isBootDrive()) return Object.assign({}, _receiveIndexMem);
+    if (_ccTemporarySession()) return Object.assign({}, _receiveIndexMem);
+    try {
+      const resp = await fetch(RECEIVE_INDEX_URL, { cache: 'no-store' });
+      if (!resp.ok) return {};
+      const data = await resp.json();
+      return _cleanReceiveMap(data && data.wallets) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+  /** Store the whole map. A Temporary Session keeps it in memory only. */
+  async function saveReceiveIndex(map) {
+    const clean = _cleanReceiveMap(map);
+    if (!clean) return { saved: false, error: 'Invalid address positions.' };
+    if (!isBootDrive() || _ccTemporarySession()) { _receiveIndexMem = clean; return { saved: true, memoryOnly: true }; }
+    if (!(await _isVaultMounted())) { _receiveIndexMem = clean; return { saved: false, error: 'The encrypted vault is not mounted.' }; }
+    if (!_silentDownload('RECEIVE_INDEX.json', JSON.stringify({ version: 1, wallets: clean }))) return { saved: false, error: 'The save was blocked.' };
+    const want = JSON.stringify(clean);
+    for (let i = 0; i < 10; i++) {
+      await _sleep(500);
+      const got = await loadReceiveIndex();
+      if (JSON.stringify(got) === want) return { saved: true };
+    }
+    return { saved: false, error: 'The vault didn’t confirm the address position.' };
+  }
+
   const DISPLAY_SLEEP_TRIGGER_FILE = 'DISPLAY_SLEEP_TRIGGER.json';
 
   /**
@@ -3040,6 +3086,8 @@ const SafeKeepOS = (() => {
     // Saved wallets (Output Descriptor tool → PSBT Signer)
     loadSavedWallets,
     loadLastBackup,
+    loadReceiveIndex,
+    saveReceiveIndex,
     saveSavedWallets,
 
     coldcardGetPairing,

@@ -1609,6 +1609,67 @@ SWPYEOF
     echo "Wallets watcher daemon started (PID $WALLETS_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # RECEIVE WATCHER — REMEMBER THE LAST ADDRESS SHOWN, PER WALLET
+    # -------------------------------------------------------------------
+    # "Show an address" offers the next receive address after the last one
+    # it showed for that wallet (SafeKeep is offline and can't see which
+    # addresses received money). The app downloads the whole map as
+    # RECEIVE_INDEX.json into seeds/. Untrusted data, nothing in it is run:
+    # accepted only as { "wallets": { id: n } } with at most 200 ids of
+    # 4-80 characters [A-Za-z0-9:_-] and n an integer 0..2147483647, then
+    # written atomically to
+    #   $VAULT_MOUNT/settings/receive-index.json
+    # (in settings/, so Encrypted Backup and restore carry it). Ids hold no
+    # keys: a fingerprint plus script type, or a descriptor checksum.
+    # Normal boots only.
+    RECEIVE_INDEX_STORED="$VAULT_MOUNT/settings/receive-index.json"
+    rm -f "$CHROMIUM_DOWNLOAD_DIR"/RECEIVE_INDEX*.json 2>/dev/null
+    (
+        while true; do
+            if compgen -G "$CHROMIUM_DOWNLOAD_DIR/RECEIVE_INDEX*.json" > /dev/null; then
+                sleep 1
+                mapfile -t RI_FILES < <(ls -t "$CHROMIUM_DOWNLOAD_DIR"/RECEIVE_INDEX*.json 2>/dev/null)
+                if [ "${#RI_FILES[@]}" -gt 0 ] && [ "$EPHEMERAL_MODE" != "1" ]; then
+                    mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
+                    if python3 -I - "${RI_FILES[0]}" "$RECEIVE_INDEX_STORED.tmp" <<'RIPYEOF'
+import json, re, sys
+src, dst = sys.argv[1], sys.argv[2]
+with open(src, 'rb') as f:
+    raw = f.read(32769)
+if len(raw) > 32768:
+    sys.exit('file too large')
+data = json.loads(raw.decode('utf-8'))
+w = data.get('wallets') if isinstance(data, dict) else None
+if not isinstance(w, dict) or len(w) > 200:
+    sys.exit('no valid map')
+out = {}
+for k, v in w.items():
+    if not isinstance(k, str) or not re.fullmatch(r'[A-Za-z0-9:_-]{4,80}', k):
+        sys.exit('bad id')
+    if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 2147483647:
+        sys.exit('bad index')
+    out[k] = v
+with open(dst, 'w', encoding='utf-8') as f:
+    json.dump({'version': 1, 'wallets': out}, f)
+RIPYEOF
+                    then
+                        chmod 600 "$RECEIVE_INDEX_STORED.tmp" 2>/dev/null
+                        mv -f "$RECEIVE_INDEX_STORED.tmp" "$RECEIVE_INDEX_STORED" && sync
+                        echo "Receive Watcher: address positions stored in vault"
+                    else
+                        rm -f "$RECEIVE_INDEX_STORED.tmp" 2>/dev/null
+                        echo "Receive Watcher: rejected an invalid file"
+                    fi
+                fi
+                rm -f "${RI_FILES[@]}" 2>/dev/null
+            fi
+            sleep 1
+        done
+    ) &
+    RECEIVE_WATCHER_PID=$!
+    echo "Receive watcher daemon started (PID $RECEIVE_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # TREZOR WATCHER DAEMON — USB SIGNING WITH A PAIRED TREZOR ONE
     # -------------------------------------------------------------------
     # Same pattern as the Coldcard watcher above. The web app downloads
