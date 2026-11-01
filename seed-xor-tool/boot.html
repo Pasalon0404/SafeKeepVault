@@ -5211,8 +5211,9 @@
                <span class="skb-seed-accordion__fp"
                      data-role="fingerprint">--------</span>
              </span>
-             <span class="skb-seed-accordion__chevron"
-                   aria-hidden="true">▾</span>
+             <span class="skb-seed-accordion__chevron"><span
+                   class="skb-seed-accordion__show">Show words</span><span
+                   class="skb-seed-accordion__hide">Hide words</span></span>
            </button>
            <div class="skb-seed-accordion__panel">
              <div class="skb-seed-accordion__panel-inner">
@@ -5292,20 +5293,32 @@
       letter-spacing: 0.1em;
       font-family: var(--skb-mono);
     }
+    /* "Show words" / "Hide words": a labelled button instead of a bare
+       caret, so it's clear the row reveals the seed. The label follows
+       data-collapsed, so code that collapses an accordion needs no change. */
     .skb-seed-accordion__chevron {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 1.2rem;
-      height: 1.2rem;
-      font-size: 0.875rem;
-      color: var(--skb-text-muted);
+      padding: 0.3rem 0.8rem;
+      border: 1px solid var(--skb-border);
+      border-radius: var(--skb-radius-sm);
+      background: var(--skb-bg-card, transparent);
+      font-family: var(--skb-sans, inherit);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--skb-text);
+      white-space: nowrap;
       flex-shrink: 0;
-      transition: transform 0.18s ease;
+      transition: border-color 120ms ease, color 120ms ease;
     }
-    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__chevron {
-      transform: rotate(180deg);
+    .skb-seed-accordion__toggle:hover .skb-seed-accordion__chevron {
+      border-color: var(--skb-primary);
+      color: var(--skb-primary);
     }
+    .skb-seed-accordion__hide { display: none; }
+    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__show { display: none; }
+    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__hide { display: inline; }
 
     /* Panel — height transition.
        Uses the `grid-template-rows: 0fr → 1fr` pattern instead of
@@ -8069,7 +8082,7 @@
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -8131,7 +8144,7 @@
                                 <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                 <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                             </span>
-                            <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                         </button>
                         <div class="skb-seed-accordion__panel">
                             <div class="skb-seed-accordion__panel-inner">
@@ -8223,7 +8236,7 @@
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -8345,7 +8358,7 @@
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -8815,7 +8828,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -10056,7 +10069,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                 <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                 <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                             </span>
-                            <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                         </button>
                         <div class="skb-seed-accordion__panel">
                             <div class="skb-seed-accordion__panel-inner">
@@ -10450,7 +10463,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
