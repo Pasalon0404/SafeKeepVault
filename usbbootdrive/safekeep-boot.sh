@@ -888,6 +888,19 @@ POLICYEOF
     SEED_FILE="$VAULT_MOUNT/seeds/master-seed.json"
     LAUNCH_URL="$CHROMIUM_BASE_URL"
 
+    # A flash drive set not to keep the seed (Device Options → Seed storage,
+    # see the Seed Storage Watcher) must never boot into a stored seed, even
+    # one a restored backup brought back: delete it before the probe.
+    if [ "$EPHEMERAL_MODE" != "1" ] && [ -f "$VAULT_MOUNT/settings/seed-storage.json" ] \
+        && grep -q '"keepSeed": *false' "$VAULT_MOUNT/settings/seed-storage.json" 2>/dev/null; then
+        for _sf in "$VAULT_MOUNT"/seeds/master-seed*.json; do
+            [ -f "$_sf" ] || continue
+            shred -u -n 1 -z "$_sf" 2>/dev/null || rm -f "$_sf"
+            echo "Seed storage: this flash drive doesn't keep the seed; removed a stored one."
+        done
+        sync
+    fi
+
     if [ "$EPHEMERAL_MODE" = "1" ]; then
         LAUNCH_URL="${CHROMIUM_BASE_URL}#ephemeral=true"
         echo "TEMPORARY SESSION: launching with #ephemeral=true (RAM-only, vault bypassed)."
@@ -1670,6 +1683,79 @@ RIPYEOF
     echo "Receive watcher daemon started (PID $RECEIVE_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # SEED STORAGE WATCHER — A VAULT THAT DOESN'T KEEP THE SEED
+    # -------------------------------------------------------------------
+    # Device Options → Seed storage can turn off keeping the master seed on
+    # this flash drive. The vault still holds the passphrases, saved wallets,
+    # notes and settings; the seed is scanned (SeedQR) or typed at each start
+    # and stays in RAM. The app downloads SEED_STORAGE.json into seeds/:
+    #   { "keepSeed": false }  → write the flag, then delete master-seed*.json
+    #   { "keepSeed": true }   → remove the flag (the app then saves the seed)
+    # Untrusted data, nothing in it is run: anything but exactly one boolean
+    # "keepSeed" is refused. The flag lives at
+    #   $VAULT_MOUNT/settings/seed-storage.json   { "version": 1, "keepSeed": false }
+    # (in settings/, so Encrypted Backup and restore carry it). While it is
+    # set, this loop also deletes any master-seed*.json that appears in
+    # seeds/ (a restored backup, an app bug), so the seed can't be stored by
+    # mistake. Deleting a file can't erase it from flash memory for certain,
+    # but it was only ever inside the encrypted vault. Normal boots only.
+    SEED_STORAGE_FLAG="$VAULT_MOUNT/settings/seed-storage.json"
+    rm -f "$CHROMIUM_DOWNLOAD_DIR"/SEED_STORAGE*.json 2>/dev/null
+    (
+        _seed_free() { [ -f "$SEED_STORAGE_FLAG" ] && grep -q '"keepSeed": *false' "$SEED_STORAGE_FLAG" 2>/dev/null; }
+        _remove_seed_files() {
+            local f removed=0
+            for f in "$SEED_DIR"/master-seed*.json; do
+                [ -f "$f" ] || continue
+                shred -u -n 1 -z "$f" 2>/dev/null || rm -f "$f"
+                removed=1
+            done
+            [ "$removed" = 1 ] && sync && echo "Seed Storage Watcher: removed the master seed from the vault"
+            return 0
+        }
+        while true; do
+            if [ "$EPHEMERAL_MODE" != "1" ] && compgen -G "$CHROMIUM_DOWNLOAD_DIR/SEED_STORAGE*.json" > /dev/null; then
+                sleep 1
+                mapfile -t SS_FILES < <(ls -t "$CHROMIUM_DOWNLOAD_DIR"/SEED_STORAGE*.json 2>/dev/null)
+                if [ "${#SS_FILES[@]}" -gt 0 ]; then
+                    mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
+                    SS_KEEP=$(python3 -I - "${SS_FILES[0]}" <<'SSPYEOF'
+import json, sys
+with open(sys.argv[1], 'rb') as f:
+    raw = f.read(1025)
+if len(raw) > 1024:
+    sys.exit('file too large')
+data = json.loads(raw.decode('utf-8'))
+if not isinstance(data, dict) or set(data) - {'keepSeed', 'version'} or not isinstance(data.get('keepSeed'), bool):
+    sys.exit('bad request')
+print('true' if data['keepSeed'] else 'false')
+SSPYEOF
+                    )
+                    rm -f "${SS_FILES[@]}" 2>/dev/null
+                    if [ "$SS_KEEP" = "false" ]; then
+                        printf '{"version": 1, "keepSeed": false}\n' > "$SEED_STORAGE_FLAG.tmp" \
+                            && chmod 600 "$SEED_STORAGE_FLAG.tmp" \
+                            && mv -f "$SEED_STORAGE_FLAG.tmp" "$SEED_STORAGE_FLAG" && sync \
+                            && echo "Seed Storage Watcher: this flash drive no longer keeps the seed"
+                        _remove_seed_files
+                    elif [ "$SS_KEEP" = "true" ]; then
+                        rm -f "$SEED_STORAGE_FLAG" && sync
+                        echo "Seed Storage Watcher: this flash drive keeps the seed again"
+                    else
+                        echo "Seed Storage Watcher: rejected an invalid request"
+                    fi
+                fi
+            fi
+            if [ "$EPHEMERAL_MODE" != "1" ] && _seed_free; then
+                _remove_seed_files
+            fi
+            sleep 1
+        done
+    ) &
+    SEED_STORAGE_WATCHER_PID=$!
+    echo "Seed storage watcher daemon started (PID $SEED_STORAGE_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # TREZOR WATCHER DAEMON — USB SIGNING WITH A PAIRED TREZOR ONE
     # -------------------------------------------------------------------
     # Same pattern as the Coldcard watcher above. The web app downloads
@@ -1885,7 +1971,7 @@ RIPYEOF
 
                 # Skip known system trigger/result/sentinel files
                 case "$BASENAME" in
-                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|.transfer*|.backups*|.vault-sentinel*) continue ;;
+                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
                 esac
 
                 # Check if this is a passphrase file (contains "passphrase" key)

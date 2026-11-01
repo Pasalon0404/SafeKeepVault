@@ -155,7 +155,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     setup_not_finished() {
         local choice
         choice=$(zenity --list --title="Setup Isn't Finished" --width=450 --height=360 \
-            --text="SafeKeepVault can't start until your encrypted vault is set up.\n\nGo back to finish setup now, or shut down and finish it\nthe next time you start the computer from this stick." \
+            --text="SafeKeepVault can't start until your encrypted vault is set up.\n\nGo back to finish setup now, or shut down and finish it\nthe next time you start the computer from this flash drive." \
             --column="Choice" --hide-header \
             "Go back to setup" "Shut down") || true
         if [ "$choice" = "Shut down" ]; then
@@ -288,18 +288,18 @@ if [ -n "${VAULT_MB:-}" ]; then
 fi
 
 NEXT_STEP=$(zenity --list --title="SafeKeepVault — Vault Created" --width=520 --height=470 \
-    --text="Your ${VAULT_DESC} is created and locked.\n\nNext, unlock it with the Master Passphrase you just set.\n\nRestoring from a .7z backup? Choose \"Continue now\", then\n\"Unlock .7z Backup\" and \"Receive a Backup with the Courier\":\nsend it from the Courier Tool on a phone or another computer.\n\nNo camera on this computer? Choose \"Shut down\", copy the backup\nonto the stick's TRANSFER drive from another computer, then put\nthe stick back and power on." \
+    --text="Your ${VAULT_DESC} is created and locked.\n\nNext, unlock it with the Master Passphrase you just set.\n\nRestoring from a .7z backup? Choose \"Continue now\", then\n\"Unlock .7z Backup\" and \"Receive a Backup with the Courier\":\nsend it from the Courier Tool on a phone or another computer.\n\nNo camera on this computer? Choose \"Shut down\", copy the backup\nonto the flash drive's TRANSFER drive from another computer, then\nput the flash drive back and power on." \
     --column="Next step" --hide-header \
     "Continue now" \
-    "Shut down to copy a backup onto the stick") || true
+    "Shut down to copy a backup onto the flash drive") || true
 
-if [ "$NEXT_STEP" != "Shut down to copy a backup onto the stick" ]; then
+if [ "$NEXT_STEP" != "Shut down to copy a backup onto the flash drive" ]; then
     echo "setup-vault: vault created — continuing to unlock without a restart."
     exit 0
 fi
 
 zenity --info --title="SafeKeepVault — Shutting Down" --width=450 \
-    --text="SafeKeepVault will now shut down.\n\nOnce the machine is fully powered off, remove the USB stick and plug it into another computer. Copy your .7z backup onto the TRANSFER drive.\n\nThen put the stick back in this machine and power on to unlock your vault.\n\nClick OK to shut down now." || true
+    --text="SafeKeepVault will now shut down.\n\nOnce the machine is fully powered off, remove the USB flash drive and plug it into another computer. Copy your .7z backup onto the TRANSFER drive.\n\nThen put the flash drive back in this machine and power on to unlock your vault.\n\nClick OK to shut down now." || true
 
 # -------------------------------------------------------------------
 # SHUTDOWN FENCE — prevents first-boot race condition

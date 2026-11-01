@@ -6412,7 +6412,7 @@
 
             <div class="welcome-message">
                 <h2>Welcome to SafeKeepVault</h2>
-                <p>Your keys stay on this stick and never touch the internet. Create a new wallet, or bring back one you already have.</p>
+                <p>Your keys stay on this flash drive and never touch the internet. Create a new wallet, or bring back one you already have.</p>
                 <!-- Version stamp: filled in by build-offline.mjs (see seed-xor-tool/VERSION). -->
                 <div class="welcome-version" data-skv-version style="margin-top: 0.75rem; font-family: var(--skb-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--skb-text-dim, var(--skb-text-muted));">dev build</div>
             </div>
@@ -6441,11 +6441,21 @@
                 <!-- Redesign (2026-11): one clear first step. "I already have a
                      backup" opens a choice of the four restore methods, each
                      calling the same function its old button did. -->
+                <!-- Seed storage off (Device Options → Seed storage): the vault is
+                     open but doesn't keep the seed, so the first step is to
+                     scan or type it. Shown by transitionToWelcome via the
+                     .welcome-actions--seedfree class. -->
+                <button type="button" class="skb-btn skb-btn--primary welcome-seedfree" onclick="welcome_seedFreeScan()">
+                    Scan my SeedQR
+                </button>
+                <button type="button" class="skb-btn welcome-seedfree" onclick="showRestorePanel()">
+                    Type my recovery words
+                </button>
                 <button type="button" class="skb-btn skb-btn--primary welcome-create" onclick="showGeneratePanel()">
                     Create a new wallet
                 </button>
                 <button type="button" class="skb-btn welcome-have-backup" id="welcome-have-backup-btn" aria-expanded="false" aria-controls="welcome-restore-options" onclick="welcome_toggleRestoreOptions()">
-                    I already have a backup
+                    <span class="welcome-have-backup-label">I already have a backup</span>
                 </button>
                 <div class="welcome-options" id="welcome-restore-options" hidden>
                     <p class="welcome-options-lead">What does your backup look like?</p>
@@ -6823,7 +6833,7 @@
             <div id="dash-weak-passphrase-banner" role="alert" style="display: none; margin: 1.25rem 0 0; padding: 1rem 1.25rem; background: rgba(255, 60, 60, 0.08); border: 2px solid rgba(255, 60, 60, 0.55); border-left: 6px solid var(--skb-danger);">
                 <div style="font-family: var(--skb-mono); font-size: 0.875rem; font-weight: 900; color: var(--skb-danger); letter-spacing: 0.12em; text-transform: uppercase;">Weak Master Passphrase</div>
                 <div style="font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); margin-top: 0.35rem; letter-spacing: 0.03em; line-height: 1.5;">
-                    The passphrase that unlocked this vault is easy to guess (<span id="dash-weak-passphrase-bits">about 0 bits</span>). Anyone who finds this stick could copy the vault and try likely passwords until one works. Change it to a long random password from a password manager, or 6 or more random words.
+                    The passphrase that unlocked this vault is easy to guess (<span id="dash-weak-passphrase-bits">about 0 bits</span>). Anyone who finds this flash drive could copy the vault and try likely passwords until one works. Change it to a long random password from a password manager, or 6 or more random words.
                 </div>
                 <button type="button" class="skb-btn" style="margin-top: 0.65rem; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="ppSettingsOpen()">Change Master Passphrase</button>
             </div>
@@ -7220,7 +7230,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh()">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh(); if (this.open && typeof ssSettingsRefresh === 'function') ssSettingsRefresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -7353,6 +7363,43 @@
                                 <button type="button" class="skb-btn" id="settings-trezor-log-btn" onclick="tzSettingsShowLog()">Show Trezor log</button>
                             </div>
                             <pre id="settings-trezor-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
+                        </div>
+                        <div id="settings-seed-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Seed storage</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                Choose whether this flash drive keeps your master seed. If it doesn&rsquo;t, unlocking opens the vault (your passphrases, saved wallets, notes and settings) but not your wallet: you scan your SeedQR or type your words each time you start, and they stay in memory until you lock or shut down. Someone who has this flash drive and its Master Passphrase still can&rsquo;t spend without your SeedQR or words.
+                            </p>
+                            <div id="settings-seed-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;">Checking…</div>
+                            <div id="settings-seed-stop" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
+                                <p style="margin: 0 0 0.6rem;">SafeKeep will delete the seed from this vault. Everything else in the vault stays. If you lose your SeedQR and your written words, no one can bring this wallet back. Backups you make from now on won&rsquo;t contain the seed; older backups that contain it still do.</p>
+                                <p style="margin: 0 0 0.6rem;"><strong>First, check your backup.</strong> Scan your SeedQR or type your words. They must match the seed loaded now.</p>
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                                    <button type="button" class="skb-btn" id="settings-seed-scan-btn" onclick="ssSettingsScan()">Scan SeedQR</button>
+                                </div>
+                                <div id="settings-seed-qr-area" style="display: none; margin-bottom: 0.5rem;">
+                                    <div id="settings-seed-qr-reader" style="width: 100%; max-width: 420px; min-height: 260px; overflow: hidden;"></div>
+                                    <button type="button" class="skb-btn" style="margin-top: 0.4rem;" onclick="ssSettingsStopScan()">Stop camera</button>
+                                </div>
+                                <label for="settings-seed-words" style="display: block; margin-bottom: 0.3rem;">Or type your 12 or 24 words, separated by spaces:</label>
+                                <textarea id="settings-seed-words" class="skb-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" style="width: 100%; font-family: var(--skb-mono);" oninput="ssSettingsOnWords()"></textarea>
+                                <div id="settings-seed-check" style="margin: 0.5rem 0;" aria-live="polite"></div>
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    <button type="button" class="skb-btn" id="settings-seed-check-btn" onclick="ssSettingsCheck()">Check</button>
+                                    <button type="button" class="btn-danger" id="settings-seed-delete-btn" disabled onclick="ssSettingsDelete()">Delete the seed from this vault</button>
+                                    <button type="button" class="skb-btn" onclick="ssSettingsCancel()">Cancel</button>
+                                </div>
+                            </div>
+                            <div id="settings-seed-keep" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
+                                <p style="margin: 0 0 0.6rem;">SafeKeep will save the seed loaded now (fingerprint <strong id="settings-seed-keep-fp">--------</strong>) in this vault, and open your wallet each time you unlock.</p>
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    <button type="button" class="skb-btn skb-btn--primary" id="settings-seed-keep-go" onclick="ssSettingsKeep()">Keep my seed here</button>
+                                    <button type="button" class="skb-btn" onclick="ssSettingsCancel()">Cancel</button>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="skb-btn" id="settings-seed-stop-btn" style="display: none;" onclick="ssSettingsStartStop()">Stop keeping my seed here</button>
+                                <button type="button" class="skb-btn" id="settings-seed-keep-btn" style="display: none;" onclick="ssSettingsStartKeep()">Keep my seed on this flash drive</button>
+                            </div>
                         </div>
                         <div id="settings-passphrase-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Master Passphrase</h4>
@@ -9165,7 +9212,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <div class="tool-hero">
                 <h2 class="tool-hero-title">Show an<span>Address</span></h2>
                 <p class="tool-hero-subtitle">Receive bitcoin</p>
-                <p class="tool-hero-desc">A receive address of your wallet as a large QR code. SafeKeep is offline and can't see which addresses already received money, so it shows the next one after the last address it showed you, and remembers that on this stick.</p>
+                <p class="tool-hero-desc">A receive address of your wallet as a large QR code. SafeKeep is offline and can't see which addresses already received money, so it shows the next one after the last address it showed you, and remembers that on this flash drive.</p>
             </div>
             <div class="skb-card rcv-card">
                 <label for="rcv-wallet" class="rcv-label">Wallet</label>
@@ -9635,6 +9682,9 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                             <div style="font-size: 0.72rem; color: var(--skb-text-dim);">BIP-39 mnemonic</div>
                         </div>
                     </label>
+                    <div id="rlq-seed-not-kept" style="display: none; padding: 0.6rem 0.75rem; font-size: 0.75rem; color: var(--skb-text-muted); line-height: 1.5;">
+                        Master Seed: this flash drive doesn&rsquo;t keep your seed (Device Options &rarr; Seed storage), so backups don&rsquo;t contain it. Your SeedQR and written words are its backup.
+                    </div>
                 </div>
 
                 <!-- Seed confirmation modal (hidden by default) -->
@@ -9763,7 +9813,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         </div>
 
                         <!-- Bring a backup in with the Courier (animated QR loop from a phone
-                             or computer), so a new stick never has to be plugged into another
+                             or computer), so a new flash drive never has to be plugged into another
                              computer. The file is saved to the Transfer Drive and selected. -->
                         <button type="button" id="rlq-courier-start-btn" class="skb-btn" style="width: 100%; margin-top: 0.5rem;" onclick="rlq_courierStart()">Receive a Backup with the Courier</button>
                         <div id="rlq-courier-area" style="display: none; margin-top: 0.5rem;">
@@ -11394,6 +11444,8 @@ window.addEventListener('DOMContentLoaded', () => {
        seeded              — vault has master seed, boots into dashboard
        ephemeral           — #ephemeral=true synthesized, no-vault boot
        amnesia             — sessionStorage flag set, amnesia badge on
+       seedfree            — vault open, set not to keep the seed (welcome
+                             asks for it; Device Options → Seed storage)
      ================================================================ -->
 <script>
 (function _SKB_DevModeWrapper() {
@@ -11439,7 +11491,7 @@ window.addEventListener('DOMContentLoaded', () => {
     var devMode = isDemo ? 'seeded' : 'normal';
     if (params) {
         var raw = (params.get('devMode') || '').toLowerCase();
-        var ALLOWED = { normal: 1, seeded: 1, ephemeral: 1, amnesia: 1 };
+        var ALLOWED = { normal: 1, seeded: 1, ephemeral: 1, amnesia: 1, seedfree: 1 };
         if (ALLOWED[raw]) devMode = raw;
     }
     window._SKB_DEV_URL_MODE = devMode;
@@ -11619,6 +11671,7 @@ window.addEventListener('DOMContentLoaded', () => {
     var _devSavedWallets = [];  // dev-mock saved wallets (in memory)
     var _devLastBackup = null;  // dev-mock "last backup" record (in memory)
     var _devReceiveIndex = {};  // dev-mock receive positions (in memory)
+    var _devKeepSeed = (devMode !== 'seedfree');  // dev-mock Seed storage setting
     var _devTzPairing = null;   // dev-mock Trezor pairing (in memory)
     var _devTzUnlocked = false; // dev-mock Trezor: PIN already entered?
     var _devTzPinShown = false; // dev-mock Trezor: grid showing (reset by detect, like the real one)
@@ -11664,7 +11717,7 @@ window.addEventListener('DOMContentLoaded', () => {
             _devSeedSessionSet({ mnemonic: mn, fingerprint: fp, wordCount: wc });
             await _sleep(400);
             _devAnnounce('generateMasterSeed → ' + fp + ' (dev mock, real fp)');
-            return { mnemonic: mn, fingerprint: fp, wordCount: wc, diskVerified: true };
+            return { mnemonic: mn, fingerprint: fp, wordCount: wc, diskVerified: true, ramOnly: !_devKeepSeed };
         },
 
         restoreMasterSeed: async function (mnemonic) {
@@ -11681,7 +11734,7 @@ window.addEventListener('DOMContentLoaded', () => {
             _devSeedSessionSet({ mnemonic: mn, fingerprint: fp, wordCount: wc });
             await _sleep(300);
             _devAnnounce('restoreMasterSeed → ' + fp + ' (dev mock, real fp)');
-            return { mnemonic: mn, fingerprint: fp, wordCount: wc, diskVerified: true };
+            return { mnemonic: mn, fingerprint: fp, wordCount: wc, diskVerified: true, ramOnly: !_devKeepSeed };
         },
 
         factoryReset: async function () {
@@ -11824,6 +11877,14 @@ window.addEventListener('DOMContentLoaded', () => {
             return { success: true, path: '/tmp/dev-mock-reliquary.7z' };
         },
         loadLastBackup: async function () { return _devLastBackup; },
+        isSeedKept: function () { return _devKeepSeed; },
+        setKeepSeed: async function (keep, mnemonic) {
+            if (keep === true && !mnemonic) return { ok: false, error: 'Load your seed first.' };
+            await _sleep(600);
+            _devKeepSeed = keep === true;
+            _devAnnounce('setKeepSeed → ' + _devKeepSeed + ' (dev mock)');
+            return { ok: true };
+        },
         loadReceiveIndex: async function () { return Object.assign({}, _devReceiveIndex); },
         saveReceiveIndex: async function (m) { _devReceiveIndex = Object.assign({}, m || {}); return { saved: true }; },
         commitReliquary: async function () {
@@ -12067,6 +12128,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 _link('seeded',    '\u2192 Seeded (vault has seed)') +
                 _link('ephemeral', '\u2192 Temporary Boot (RAM only)') +
                 _link('amnesia',   '\u2192 Temporary Session mode') +
+                _link('seedfree',  '\u2192 Seed not kept (vault open)') +
             '</div>' +
             '<div style="margin-top:8px;display:flex;gap:4px;">' +
                 '<button id="skb-dev-reset" type="button" ' +
@@ -12280,7 +12342,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
         console.log(
             '%c[DEV MODE]%c SafeKeep Live Server wrapper active — mode: ' + devMode +
-            '. URL params: ?devMode=normal|seeded|ephemeral|amnesia',
+            '. URL params: ?devMode=normal|seeded|ephemeral|amnesia|seedfree',
             'background:#f97316;color:#000;padding:2px 6px;font-weight:900;border-radius:3px;',
             'color:#f97316;font-weight:600;'
         );
@@ -12597,7 +12659,7 @@ async function dashv2_renderHealth() {
     var list = document.getElementById('dashv2-health-list');
     if (!list) return;
     var html = '';
-    // 1. Encrypted backup. The stick's own record of its last backup comes
+    // 1. Encrypted backup. The flash drive's own record of its last backup comes
     //    first (it survives moving the .7z off the Transfer Drive); without
     //    one, the newest dated .7z on the Transfer Drive.
     var names = [], rec = null;
@@ -12633,9 +12695,15 @@ async function dashv2_renderHealth() {
     } else if (newest) {
         var d2 = daysSince(newest);
         html += _dashv2HealthItem(d2 > 30 ? 'warn' : 'ok', 'Backup on the Transfer Drive from ' + fmtDate(newest),
-            'Not made on this stick (or before it kept a record). Make one here to keep track.', backupBtn);
+            'Not made on this flash drive (or before it kept a record). Make one here to keep track.', backupBtn);
     } else {
-        html += _dashv2HealthItem('warn', 'No backup made on this stick yet', 'Make one, then send it to your phone with the Courier.', backupBtn);
+        html += _dashv2HealthItem('warn', 'No backup made on this flash drive yet', 'Make one, then send it to your phone with the Courier.', backupBtn);
+    }
+    // Seed not kept on this flash drive (Device Options → Seed storage).
+    var _ssTemp = (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot()) || (typeof _vaultVolatile !== 'undefined' && _vaultVolatile);
+    if (!_ssTemp && !_seedKept()) {
+        html += _dashv2HealthItem('ok', 'Seed not kept on this flash drive',
+            'It\u2019s in memory until you lock or shut down. Keep your SeedQR and words safe: they\u2019re the only copies.', '');
     }
     // 2. Transfer Drive
     var mounted = /\bMOUNTED\b/i.test(_dashv2Text('status-transfer-label')) && !/UNMOUNTED/i.test(_dashv2Text('status-transfer-label'));
@@ -12738,7 +12806,7 @@ var _CN_APPS = {
         steps: function (t, multi) {
             return [
                 'In SafeKeep, press <b>Download JSON</b> (highlighted just above). The file is saved to the Transfer Drive.',
-                'Take the file to your online computer on the stick, or send it with the <b>Courier</b> (Transfer Hub \u2192 Transmit).',
+                'Take the file to your online computer on the flash drive, or send it with the <b>Courier</b> (Transfer Hub \u2192 Transmit).',
                 'In Specter Desktop: <b>Add Device</b>, device type <b>Other</b>, then <b>Upload from SD</b>, pick the file and <b>Continue</b>.',
                 multi ? 'Do the same for each cosigner, then <b>Add Wallet \u2192 Multiple Signature</b>, pick the devices and <b>Create Wallet</b>.'
                       : 'Click <b>Create Single Key Wallet</b>, name it and <b>Continue</b>.'
@@ -13847,7 +13915,7 @@ function _showDiskVerification(verified) {
             'Write down your words immediately and investigate the vault storage.';
     } else if (verified === true) {
         banner.className = 'disk-verify-banner disk-verify-ok';
-        banner.textContent = 'Seed safely written to vault.';
+        banner.textContent = _seedKept() ? 'Seed safely written to vault.' : 'Seed in memory only: this flash drive doesn\u2019t keep it.';
         // Graceful fade-out via the shared helper — adds .skui-fade-out
         // (opacity → 0 over 0.6s), then sets display:none + clears innerHTML.
         skui_fadeMessage('disk-verify-banner', 8000);
@@ -14254,6 +14322,20 @@ function onBackupContinue() {
 }
 
 
+/** Is the master seed kept on this flash drive? (Device Options → Seed storage) */
+function _seedKept() {
+    try {
+        var os = window.SafeKeepOS;
+        return !(os && typeof os.isSeedKept === 'function') || os.isSeedKept() !== false;
+    } catch (_) { return true; }
+}
+
+/* Welcome (seed not kept): open the recovery-word panel with the camera on. */
+function welcome_seedFreeScan() {
+    showRestorePanel();
+    try { rst_scanQR(); } catch (_) {}
+}
+
 /* Welcome: "I already have a backup" shows or hides the four restore methods. */
 function welcome_toggleRestoreOptions() {
     var opts = document.getElementById('welcome-restore-options');
@@ -14646,7 +14728,7 @@ async function rst_doRestore() {
             }
         }
 
-        showStatus('Master seed restored. Fingerprint: <strong>' + (result.fingerprint || '').toUpperCase() + '</strong>', 'success');
+        showStatus((result.ramOnly ? 'Seed loaded into memory only (this flash drive doesn\u2019t keep it). Fingerprint: <strong>' : 'Master seed restored. Fingerprint: <strong>') + (result.fingerprint || '').toUpperCase() + '</strong>', 'success');
         // Clear the grid
         rst_clearAll();
         transitionToDashboard(result);
@@ -16248,8 +16330,21 @@ function transitionToWelcome() {
             if (vln) vln.style.display = 'none';
             const hwb = document.getElementById('welcome-hw-btn');
             if (hwb) hwb.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none';
-            if (heading) heading.textContent = 'Welcome to SafeKeepVault';
-            if (subtitle) subtitle.textContent = 'Your keys stay on this stick and never touch the internet. Create a new wallet, or bring back one you already have.';
+            const seedFree = !_seedKept();
+            if (wb) wb.classList.toggle('welcome-actions--seedfree', seedFree);
+            const hbl = document.querySelector('.welcome-have-backup-label');
+            if (hbl) hbl.textContent = seedFree ? 'Other kinds of backup' : 'I already have a backup';
+            const rph = document.querySelector('#restore-panel h3');
+            if (rph) rph.textContent = seedFree ? 'Enter Your Seed' : 'Restore Master Seed';
+            const rsb = document.getElementById('rst-submit-btn');
+            if (rsb) rsb.textContent = seedFree ? 'Load Seed' : 'Restore Seed';
+            if (seedFree) {
+                if (heading) heading.textContent = 'Enter your seed';
+                if (subtitle) subtitle.textContent = 'This flash drive doesn\u2019t keep your seed. Scan your SeedQR or type your words to start: they stay in memory until you lock or shut down. Your passphrases, saved wallets and notes are in the vault.';
+            } else {
+                if (heading) heading.textContent = 'Welcome to SafeKeepVault';
+                if (subtitle) subtitle.textContent = 'Your keys stay on this flash drive and never touch the internet. Create a new wallet, or bring back one you already have.';
+            }
         }
     } catch (e) {
         console.warn('[BOOT] welcome-message sync failed:', e && e.message);
@@ -16925,6 +17020,8 @@ function vaultLock() {
     if (muPw) muPw.value = '';
     // Reset the temp seed word grid to blank
     if (typeof vtmp_clearAll === 'function') vtmp_clearAll();
+    // Seed storage backup check: clear the typed words, stop the camera.
+    try { if (typeof ssSettingsCancel === 'function') ssSettingsCancel(); } catch (_) {}
 
     // Drop the Message Signer (THE WITNESS) per-session cache so a
     // locked-then-reopened vault never resurfaces the prior seed's
@@ -17907,6 +18004,7 @@ var _sensitiveSelectors = [
     '.bip85-out-grid',         // Entire word grids
     '.rst-grid input',         // Restore/merge input grids
     '#psbt-temp-seed-input',   // PSBT temporary seed textarea
+    '#settings-seed-words',    // Seed storage: backup check words (Device Options)
     '#psbt-passphrase',        // PSBT passphrase input
     '#bip85-passphrase',       // BIP-85 passphrase input
     '#cipher-passphrase',      // Cipher workspace input
@@ -25909,7 +26007,7 @@ function updSettingsRefresh() {
     if (install) install.style.display = 'none';
     if (!check) return;
     if (!os || typeof os.updateCheck !== 'function' || !os.isBootDrive || !os.isBootDrive()) {
-        _updStatus('Updates work when SafeKeep runs from its USB stick.', false);
+        _updStatus('Updates work when SafeKeep runs from its USB flash drive.', false);
         check.disabled = true;
         return;
     }
@@ -26065,7 +26163,7 @@ async function ppSettingsRefresh() {
     if (btn) btn.disabled = !onStick;
     if (!status) return;
     if (!onStick) {
-        status.textContent = 'You can change the Master Passphrase when SafeKeep runs from its USB stick.';
+        status.textContent = 'You can change the Master Passphrase when SafeKeep runs from its USB flash drive.';
         status.style.color = 'var(--skb-text-muted)';
         return;
     }
@@ -26113,6 +26211,185 @@ async function ppSettingsLockAndChange() {
 }
 
 window.addEventListener('load', function () { setTimeout(ppRefreshRating, 800); });
+
+// ===========================================================================
+// SETTINGS → SEED STORAGE — keep the master seed on this flash drive, or not
+// ===========================================================================
+// Off: the OS deletes seeds/master-seed.json and keeps a flag in
+// settings/seed-storage.json (see shared/boot.js setKeepSeed and the Seed
+// Storage Watcher). Before deleting, the user proves they hold the backup:
+// a scanned SeedQR or typed words must match the seed loaded now.
+let _ssScanner = null;
+let _ssMatched = false;
+
+function _ssNormWords(text) {
+    return String(text || '').toLowerCase().trim().split(/\s+/).filter(Boolean).join(' ');
+}
+
+function _ssLoadedMnemonic() {
+    try {
+        var s = window.SeedSession && window.SeedSession.get ? window.SeedSession.get() : null;
+        return s && s.mnemonic ? _ssNormWords(s.mnemonic) : '';
+    } catch (_) { return ''; }
+}
+
+function _ssSetCheck(html, kind) {
+    var el = document.getElementById('settings-seed-check');
+    if (!el) return;
+    el.innerHTML = html;
+    el.style.color = kind === 'ok' ? 'var(--skb-success, #22c55e)' : kind === 'bad' ? 'var(--skb-danger)' : 'var(--skb-text-muted)';
+}
+
+function _ssShow(id, on) { var el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; }
+
+function ssSettingsRefresh() {
+    var status = document.getElementById('settings-seed-status');
+    if (!status) return;
+    var os = window.SafeKeepOS;
+    _ssShow('settings-seed-stop-btn', false);
+    _ssShow('settings-seed-keep-btn', false);
+    status.style.color = 'var(--skb-text)';
+    if (!os || typeof os.isSeedKept !== 'function') { status.textContent = ''; return; }
+    if (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot()) {
+        status.textContent = 'Not available in a Temporary Session: the vault isn’t open.';
+        status.style.color = 'var(--skb-text-muted)';
+        return;
+    }
+    if (typeof _vaultVolatile !== 'undefined' && _vaultVolatile) {
+        status.textContent = 'A temporary seed is loaded. Lock the vault and unlock it again to change this.';
+        status.style.color = 'var(--skb-text-muted)';
+        return;
+    }
+    var loaded = !!_ssLoadedMnemonic();
+    if (os.isSeedKept()) {
+        status.textContent = 'This flash drive keeps your seed in the vault, so unlocking opens your wallet.';
+        _ssShow('settings-seed-stop-btn', loaded);
+    } else {
+        status.textContent = 'This flash drive doesn’t keep your seed. You scan your SeedQR or type your words each time you start.';
+        _ssShow('settings-seed-keep-btn', loaded);
+    }
+}
+
+function ssSettingsStartStop() {
+    ssSettingsCancel();
+    _ssShow('settings-seed-stop', true);
+    _ssShow('settings-seed-stop-btn', false);
+    _ssSetCheck('', '');
+}
+
+function ssSettingsStartKeep() {
+    ssSettingsCancel();
+    var fp = '';
+    try { var s = window.SeedSession.get(); fp = (s && s.fingerprint || '').toUpperCase(); } catch (_) {}
+    var fpEl = document.getElementById('settings-seed-keep-fp');
+    if (fpEl) fpEl.textContent = fp || '--------';
+    _ssShow('settings-seed-keep', true);
+    _ssShow('settings-seed-keep-btn', false);
+}
+
+function ssSettingsCancel() {
+    ssSettingsStopScan();
+    _ssMatched = false;
+    var ta = document.getElementById('settings-seed-words');
+    if (ta) ta.value = '';
+    var del = document.getElementById('settings-seed-delete-btn');
+    if (del) del.disabled = true;
+    _ssSetCheck('', '');
+    _ssShow('settings-seed-stop', false);
+    _ssShow('settings-seed-keep', false);
+    ssSettingsRefresh();
+}
+
+function ssSettingsOnWords() {
+    // Editing after a match must be checked again.
+    _ssMatched = false;
+    var del = document.getElementById('settings-seed-delete-btn');
+    if (del) del.disabled = true;
+    _ssSetCheck('', '');
+}
+
+/** Compare the given words (or the textarea) with the seed loaded now. */
+function ssSettingsCheck(words) {
+    var given = _ssNormWords(words != null ? words : (document.getElementById('settings-seed-words') || {}).value);
+    var loaded = _ssLoadedMnemonic();
+    var del = document.getElementById('settings-seed-delete-btn');
+    _ssMatched = false;
+    if (!loaded) { _ssSetCheck('No seed is loaded.', 'bad'); if (del) del.disabled = true; return false; }
+    var n = given ? given.split(' ').length : 0;
+    if (n !== 12 && n !== 24) {
+        _ssSetCheck(n ? 'That is ' + n + ' words. A seed has 12 or 24.' : 'Scan your SeedQR or type your words first.', 'bad');
+        if (del) del.disabled = true;
+        return false;
+    }
+    _ssMatched = given === loaded;
+    if (_ssMatched) _ssSetCheck('Your backup matches the seed loaded now.', 'ok');
+    else _ssSetCheck('That doesn’t match the seed loaded now. Check your backup before going on: without a working backup, deleting the seed here would lose this wallet.', 'bad');
+    if (del) del.disabled = !_ssMatched;
+    // Never leave typed words on screen once checked.
+    var ta = document.getElementById('settings-seed-words');
+    if (ta && _ssMatched) ta.value = '';
+    return _ssMatched;
+}
+
+async function ssSettingsScan() {
+    if (!window.jsQR || typeof SKScanner === 'undefined') { _ssSetCheck('The QR scanner isn’t available.', 'bad'); return; }
+    ssSettingsStopScan();
+    _ssShow('settings-seed-qr-area', true);
+    try {
+        _ssScanner = SKScanner.create('settings-seed-qr-reader');
+        await _ssScanner.start({ fps: 10 }, function (text, binaryData) {
+            ssSettingsStopScan();
+            var words = (typeof sqr_wordsFromScan === 'function') ? sqr_wordsFromScan(text, binaryData) : null;
+            if (words && (words.length === 12 || words.length === 24)) ssSettingsCheck(words.join(' '));
+            else _ssSetCheck('That QR code isn’t a SeedQR.', 'bad');
+        });
+    } catch (err) {
+        _ssShow('settings-seed-qr-area', false);
+        _ssSetCheck('Camera failed: ' + (err && err.message ? err.message : err), 'bad');
+    }
+}
+
+function ssSettingsStopScan() {
+    if (_ssScanner) { try { _ssScanner.stop(); } catch (_) {} _ssScanner = null; }
+    _ssShow('settings-seed-qr-area', false);
+}
+
+async function ssSettingsDelete() {
+    if (!_ssMatched) return;
+    var os = window.SafeKeepOS;
+    var btn = document.getElementById('settings-seed-delete-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+    var r = { ok: false, error: 'Not available.' };
+    try { r = await os.setKeepSeed(false); } catch (e) { r = { ok: false, error: e && e.message ? e.message : String(e) }; }
+    if (btn) btn.textContent = 'Delete the seed from this vault';
+    if (r.ok) {
+        ssSettingsCancel();
+        showStatus('The seed is no longer kept on this flash drive. It stays in memory until you lock or shut down.', 'success');
+    } else {
+        if (btn) btn.disabled = false;
+        _ssSetCheck('Not changed: ' + (r.error || 'unknown error'), 'bad');
+    }
+    ssSettingsRefresh();
+    try { if (typeof dashv2_renderHealth === 'function') dashv2_renderHealth(); } catch (_) {}
+}
+
+async function ssSettingsKeep() {
+    var os = window.SafeKeepOS;
+    var mn = _ssLoadedMnemonic();
+    var btn = document.getElementById('settings-seed-keep-go');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    var r = { ok: false, error: 'Not available.' };
+    try { r = await os.setKeepSeed(true, mn); } catch (e) { r = { ok: false, error: e && e.message ? e.message : String(e) }; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Keep my seed here'; }
+    if (r.ok) {
+        ssSettingsCancel();
+        showStatus('Your seed is kept in this vault again.', 'success');
+    } else {
+        showStatus('Not changed: ' + (r.error || 'unknown error'), 'error');
+    }
+    ssSettingsRefresh();
+    try { if (typeof dashv2_renderHealth === 'function') dashv2_renderHealth(); } catch (_) {}
+}
 
 // ===========================================================================
 // SETTINGS → COLDCARD — pair / forget
@@ -30248,7 +30525,7 @@ async function desc_importCosignerFromDevice(idx, kind) {
     var fn = kind === 'trezor' ? 'trezorXpub' : 'coldcardXpub';
     if (_descHwBusy) return;
     if (!os || typeof os[fn] !== 'function') {
-        _descHwStatus(idx, name + ' import only works when SafeKeep is running from its USB stick.', 'error');
+        _descHwStatus(idx, name + ' import only works when SafeKeep is running from its USB flash drive.', 'error');
         return;
     }
     var addrType = desc_state.msAddrType || (document.getElementById('desc-ms-addr-type') || {}).value || '84';
@@ -35971,7 +36248,7 @@ function _rlqShowSendWithCourier(filename) {
         '<div class="skb-card" style="border-color: var(--skb-success, #00c896);">' +
         '<div style="font-weight: 700; color: var(--skb-success, #00c896); margin-bottom: 0.35rem;">Backup saved to the Transfer Drive</div>' +
         '<div style="font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text); word-break: break-all; margin-bottom: 0.6rem;">' + _psbtEscape(filename) + '</div>' +
-        '<p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.6rem;">To keep a copy on your phone without plugging this stick into another computer, send it with the Courier and receive it with the Courier Tool at safekeepbitcoin.com.</p>' +
+        '<p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.6rem;">To keep a copy on your phone without plugging this flash drive into another computer, send it with the Courier and receive it with the Courier Tool at safekeepbitcoin.com.</p>' +
         '<div class="tool-grid-2">' +
         '<button type="button" id="rlq-send-courier-btn" class="skb-btn" onclick="rlq_sendWithCourier()">Send with the Courier</button>' +
         '<button type="button" id="rlq-check-this-btn" class="skb-btn" onclick="rlq_checkThisBackup()">Check this backup</button>' +
@@ -36144,6 +36421,12 @@ function rlq_init() {
         seedChk.removeAttribute('disabled');
     }
     _rlqSeedConfirmed = false;
+    // Seed not kept on this flash drive: there is no seed file to back up.
+    var _rlqSeedKept = _seedKept() || (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot());
+    var _rlqSeedItem = document.getElementById('rlq-item-seed');
+    if (_rlqSeedItem) _rlqSeedItem.style.display = _rlqSeedKept ? 'flex' : 'none';
+    var _rlqSeedNote = document.getElementById('rlq-seed-not-kept');
+    if (_rlqSeedNote) _rlqSeedNote.style.display = _rlqSeedKept ? 'none' : 'block';
     // Reset visual styling
     ['rlq-item-cipher', 'rlq-item-seed'].forEach(function(id) {
         var el = document.getElementById(id);
@@ -44630,6 +44913,11 @@ function tfa_renderTable() {
     .welcome-actions .welcome-create { padding: 1.05rem 1.5rem; font-size: 1.05rem; border-radius: var(--dv2-radius) !important; }
     .welcome-actions .welcome-have-backup { padding: 0.95rem 1.5rem; font-size: 1rem; border-radius: var(--dv2-radius) !important; background: transparent; }
     .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
+    .welcome-actions .welcome-seedfree { display: none; }
+    .welcome-actions.welcome-actions--seedfree .welcome-seedfree { display: block; padding: 1rem 1.5rem; font-size: 1.02rem; border-radius: var(--dv2-radius) !important; }
+    .welcome-actions.welcome-actions--seedfree .skb-btn.welcome-seedfree:not(.skb-btn--primary) { background: transparent; }
+    .welcome-actions.welcome-actions--seedfree .welcome-create { display: none; }
+    .welcome-actions.welcome-actions--seedfree .welcome-have-backup { padding: 0.7rem 1.25rem; font-size: 0.9rem; border-color: transparent; color: var(--skb-text-muted); }
     .welcome-options[hidden] { display: none; }
     .welcome-options-lead { margin: 0.4rem 0 0.1rem; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
     .welcome-option { display: flex; gap: 0.85rem; align-items: flex-start; padding: 0.85rem 1rem; text-align: left; cursor: pointer;

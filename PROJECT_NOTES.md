@@ -11,6 +11,23 @@
 
 ## Current state (Nov 1, 2026) — v1.57
 
+**On `main` since v1.57 (not released): Seed storage.** Device Options →
+Seed storage can stop keeping the master seed on the flash drive. The vault
+still opens and keeps passphrases, saved wallets, notes and settings; the
+welcome screen then asks for the seed (Scan my SeedQR / Type my recovery
+words) and it stays in RAM until lock or shutdown. Before the seed is
+deleted, the user's SeedQR or typed words must match the loaded seed.
+- App: `SafeKeepOS.isSeedKept()` / `setKeepSeed(keep, mnemonic)` in
+  `shared/boot.js`; `boot()` skips `master-seed.json` and
+  generate/restore don't write it when not kept (`ramOnly: true`).
+- OS: the Seed Storage Watcher in `safekeep-boot.sh` takes
+  `SEED_STORAGE.json { keepSeed }`, keeps the flag in
+  `settings/seed-storage.json`, deletes `master-seed*.json` and keeps
+  deleting any that appears; the boot probe deletes a stored seed first.
+- Backups leave out the seed (the Master Seed item is hidden); Health says
+  "Seed not kept on this flash drive". Dev: `?devMode=seedfree`.
+- Test: `test-seed-storage.mjs`. Needs a full `build.sh` (OS change).
+
 **v1.57** (Nov 1) is the redesign release (#87, #88):
 - **Welcome**: "Create a new wallet" and "I already have a backup" (four
   option cards for the restore paths).
