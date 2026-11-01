@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Oct 28, 2026).**
+> **Start with the "Current state" section below (updated Nov 1, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,9 +9,30 @@
 
 ---
 
-## Current state (Oct 28, 2026) — v1.56
+## Current state (Nov 1, 2026) — v1.57
 
-**v1.56** (Oct 28) fixes opening a saved wallet in Output Descriptor (#83):
+**v1.57** (Nov 1) is the redesign release (#87, #88):
+- **Welcome**: "Create a new wallet" and "I already have a backup" (four
+  option cards for the restore paths).
+- **Status bar**: one "Offline · Protected" badge; the separate lights open
+  from it as details.
+- **Dashboard**: a wallet card (LifeHash, fingerprint, nickname), a Health
+  list, five task tiles (Sign, Show an address, Back up, Connect a wallet app,
+  Transfer), Saved wallets, then All tools. The full sidebar stays.
+- **Health remembers the last backup**: the OS backup watcher writes
+  `vault/.last-backup.json` ({date, filename, items}) when it makes a backup.
+- **Tool screens**: compact left-aligned headers ("More about this tool"),
+  numbered PSBT steps, rounded corners, a Device Options visual pass.
+- **Show an address** (`state-receive`): the next receive address of this
+  seed's wallets or a saved wallet as a large QR. The next index per wallet is
+  kept on the stick in `settings/receive-index.json` (Receive Watcher).
+- **Connect a wallet app** (`state-connect`): guided steps for Blue Wallet,
+  Electrum, Nunchuk, Sparrow, Specter and Another wallet, which open Seed
+  Management with the right export format.
+Tested in dev; the two OS parts (backup record, receive index) need a full
+`build.sh`.
+
+v1.56 (Oct 28, `v1.56 · build 411 · 91ccb58`) fixes opening a saved wallet in Output Descriptor (#83):
 the form is set to the wallet. A multisig gets its M-of-N and address type,
 and Keys 2..N are filled from its other keys when this seed's key (at
 m/48'/0'/0'/<type>', with the Key 1 passphrase) is one of them, so Generate
@@ -70,7 +91,7 @@ Generate One for Me, Change Master Passphrase.
 v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
 (see "Seed entropy" below). v1.47 and later sticks install each release in
 place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
-1.56: features merge to `main` without a bump, and builds from `main` are
+1.57: features merge to `main` without a bump, and builds from `main` are
 for the owner's own use until the owner says it's release time (see
 `CLAUDE.md`).
 
@@ -543,9 +564,10 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.56:** merge the v1.56 website PR, and install
-   `SafeKeep-Update-v1.56.tar` on a stick from the release itself (the same
-   code was tested on Dave's stick as a build from `main`).
+1. **After v1.57:** merge the v1.57 website PR, and install
+   `SafeKeep-Update-v1.57.tar` on a stick from the release itself. Check on
+   the stick that Health shows the last backup date after the `.7z` is gone,
+   and that Show an address offers the next index after a reboot.
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
