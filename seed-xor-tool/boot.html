@@ -7082,10 +7082,6 @@
                         <button type="button" class="dashv2-action" onclick="showState('state-archive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M5 13 7.5 4h9L19 13M6 17h.01M10 17h.01"/></svg></span><b>Transfer files</b><span>Files on the Transfer Drive, the Courier</span></button>
                     </div>
 
-                    <div class="dashv2-saved" id="dashv2-saved" hidden>
-                        <div class="dashv2-title">Saved wallets</div>
-                        <div class="dashv2-saved-list" id="dashv2-saved-list"></div>
-                    </div>
                 </section>
                 <div class="dashv2-title dashv2-alltools-title">All tools</div>
                 <div class="dash-advanced" id="dash-advanced">
@@ -12649,13 +12645,23 @@ function dashv2_renderWallet() {
     var ghost = document.getElementById('amnesia-ghost-badge');
     var temp = ghost && ghost.style.display !== 'none';
     var set = function (id, t) { var el = document.getElementById(id); if (el && el.textContent !== t) el.textContent = t; };
-    set('dashv2-name', nick);
+    // Title = the wallet in use. The three words come from the seed words
+    // alone (the same with any passphrase), while the picture and fingerprint
+    // come from seed + passphrase; with a passphrase on, the title names the
+    // passphrase wallet and the three words are labelled as the seed's.
+    var ppName = (ppOn && typeof _activePpName === 'string' && _activePpName) ? _activePpName : '';
+    set('dashv2-name', ppOn ? (ppName || 'Passphrase wallet') : nick);
     set('dashv2-fp', fp ? fp.toUpperCase() : '--------');
     set('dashv2-lh-src', fp);
     set('dashv2-words', words ? words + ' words' : '');
     var w = document.getElementById('dashv2-words'); if (w) w.hidden = !words;
-    set('dashv2-pp', ppOn ? 'Passphrase wallet' : 'No passphrase');
-    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' : (ppOn ? 'Your passphrase wallet' : 'Your wallet'));
+    var hasNick = nick && !/^Wallet [0-9A-F]{8}$|^No seed loaded$/i.test(nick);
+    set('dashv2-pp', ppOn ? (hasNick ? 'Seed: ' + nick : 'Passphrase on') : 'No passphrase');
+    var ppChip = document.getElementById('dashv2-pp');
+    if (ppChip) ppChip.title = ppOn ? 'The seed\u2019s three-word nickname. It comes from the seed words alone, so it stays the same with any passphrase.' : '';
+    var fpChip = document.getElementById('dashv2-fp');
+    if (fpChip) fpChip.title = ppOn ? 'Fingerprint of this passphrase wallet (seed + passphrase), as your wallet app shows it' : 'Master fingerprint, as your wallet app shows it';
+    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' : (ppName ? 'Passphrase wallet' : 'Your wallet'));
     var dash = document.getElementById('state-dashboard');
     if (dash && ppOn) dash.classList.add('dashv2-pp-open');
     var btn = document.getElementById('dashv2-pp-btn');
@@ -12740,33 +12746,12 @@ async function dashv2_renderHealth() {
     html += _dashv2HealthItem('ok', /^v\d/.test(ver) ? 'SafeKeep ' + ver.split(' \u00b7 ').slice(0, 2).join(' \u00b7 ') : 'SafeKeep (' + ver + ')', 'Updates: Device Options \u2192 Update SafeKeep', '');
     list.innerHTML = html;
 }
-async function dashv2_renderSaved() {
-    var box = document.getElementById('dashv2-saved');
-    var list = document.getElementById('dashv2-saved-list');
-    if (!box || !list) return;
-    if (typeof _savedWalletsLoading !== 'undefined' && _savedWalletsLoading) { try { await _savedWalletsLoading; } catch (_) {} }
-    var wallets = typeof _savedWallets !== 'undefined' ? _savedWallets : [];
-    box.hidden = !wallets.length;
-    list.innerHTML = wallets.map(function (w, i) {
-        var r = typeof _savedWalletParse === 'function' ? _savedWalletParse(w.descriptor) : {};
-        var meta = r.parsed ? _savedWalletSummary(r.parsed) : 'Can\u2019t be read';
-        var addr = r.parsed && r.parsed.firstAddress ? r.parsed.firstAddress : '';
-        if (addr.length > 16) addr = addr.slice(0, 8) + '\u2026' + addr.slice(-6);
-        return '<div class="dashv2-saved-row"><div><b>' + _psbtEscape(w.name) + '</b><span>' + _psbtEscape(meta + (addr ? ' \u00b7 ' + addr : '')) + '</span></div>' +
-            (r.parsed ? '<button type="button" class="skb-btn" onclick="dashv2_openSaved(' + i + ')">Open</button>' : '') + '</div>';
-    }).join('');
-}
-function dashv2_openSaved(i) {
-    showState('state-descriptor');
-    if (typeof desc_openSavedWallet === 'function') desc_openSavedWallet(i);
-}
 function dashv2_render() {
     // On the full Dashboard all tools show (no drawer), so screen readers must see them too.
     var ac = document.getElementById('dash-advanced-content');
     if (ac && !document.body.classList.contains('tool-active')) ac.setAttribute('aria-hidden', 'false');
     try { dashv2_renderWallet(); } catch (e) { console.warn('[dashv2] wallet:', e && e.message); }
     dashv2_renderHealth().catch(function (e) { console.warn('[dashv2] health:', e && e.message); });
-    dashv2_renderSaved().catch(function (e) { console.warn('[dashv2] saved:', e && e.message); });
 }
 document.addEventListener('DOMContentLoaded', function () {
     // The icon rail hides tool names: give each tool card its name as a
@@ -15214,7 +15199,7 @@ function _dash_updatePassphraseButtons() {
  * the dashboard. Shared by the Dashboard's Apply and the Passphrase Library's
  * "Use this wallet now". Returns the new fingerprint; throws on failure.
  */
-async function _applySessionPassphrase(passphrase) {
+async function _applySessionPassphrase(passphrase, name) {
     var session = window.SeedSession ? window.SeedSession.get() : null;
     if (!session || !session.mnemonic) throw new Error('No seed loaded.');
     if (!window.BtcMath || !window.BtcMath.bip39 || !window.BtcMath.HDKey) throw new Error('Core crypto libraries not loaded.');
@@ -15244,6 +15229,8 @@ async function _applySessionPassphrase(passphrase) {
     var dashFP = document.getElementById('dash-fingerprint');
     if (dashFP) dashFP.textContent = newFP;
 
+    _activePpName = (typeof name === 'string' && name.trim()) ? name.trim() : null;
+
     // Update identity label → "Passphrase Wallet Active"
     var dashLabel = document.getElementById('dash-identity-label');
     if (dashLabel) dashLabel.textContent = 'Passphrase Wallet Active';
@@ -15259,6 +15246,10 @@ async function _applySessionPassphrase(passphrase) {
 // when they were saved, so they apply without being typed again. Anything
 // typed (or a loaded one that was then edited) must be confirmed.
 var _dashPpFromLibrary = null;
+var _dashPpLibraryName = null;   // its name in the Library
+// Name of the passphrase wallet in use (its Passphrase Library name), shown
+// as the wallet card's title; null for a typed passphrase or none.
+var _activePpName = null;
 
 async function dash_applyPassphrase() {
     var input = document.getElementById('dash-pp-input');
@@ -15334,7 +15325,7 @@ function _dash_setConfirmError(text) {
 
 async function _dash_applyConfirmedPassphrase(passphrase) {
     try {
-        var newFP = await _applySessionPassphrase(passphrase);
+        var newFP = await _applySessionPassphrase(passphrase, passphrase === _dashPpFromLibrary ? _dashPpLibraryName : null);
         showStatus('Passphrase applied. New fingerprint: <strong>' + (newFP || '').toUpperCase() + '</strong>. All tools now derive from the passphrase wallet. Check that this fingerprint matches the one you recorded for it.', 'success');
     } catch (err) {
         showStatus('Failed to apply passphrase: ' + err.message, 'error');
@@ -15350,6 +15341,8 @@ function dash_clearPassphrase() {
     var input = document.getElementById('dash-pp-input');
     if (input) input.value = '';
     _dashPpFromLibrary = null;
+    _dashPpLibraryName = null;
+    _activePpName = null;
     _dash_hidePassphraseConfirm();
 
     // Clear from both session stores
@@ -15461,6 +15454,7 @@ async function dash_loadFromCipher(slug) {
         input.type = 'password'; // ensure hidden
     }
     _dashPpFromLibrary = result.passphrase;   // already checked when it was saved
+    _dashPpLibraryName = result.nickname || null;
     _dash_hidePassphraseConfirm();
 
     // Close dropdown
@@ -16519,6 +16513,7 @@ function _wipeAllVolatileSeedState() {
         if (window.SafeKeepOS && window.SafeKeepOS.clearPassphrase) window.SafeKeepOS.clearPassphrase();
     } catch (_) {}
     try { _vaultVolatile = false; } catch (_) {}
+    try { _activePpName = null; _dashPpLibraryName = null; } catch (_) {}
 
     // --- Kill active camera scanners + any running PSBT QR animation ---
     try {
@@ -17026,6 +17021,7 @@ function vaultLock() {
     if (window.SeedSession && window.SeedSession.clear) window.SeedSession.clear();
     if (window.SafeKeepOS && window.SafeKeepOS.clearPassphrase) window.SafeKeepOS.clearPassphrase();
     _vaultVolatile = false;
+    try { _activePpName = null; _dashPpLibraryName = null; } catch (_) {}
 
     // Wipe dashboard identity, including the seed-derived Seed Nickname.
     try { var _nnEl = document.getElementById('dash-vault-fingerprint'); if (_nnEl) _nnEl.textContent = '--------'; var _nnChip = document.getElementById('dash-vfp-cc'); if (_nnChip) _nnChip.setAttribute('data-empty', 'true'); } catch (_) {}
@@ -28472,7 +28468,8 @@ async function cipher_useNow() {
         return;
     }
     try {
-        var newFP = await _applySessionPassphrase(document.getElementById('cipher-passphrase').value);
+        var newFP = await _applySessionPassphrase(document.getElementById('cipher-passphrase').value,
+            (document.getElementById('cipher-nickname') || {}).value || '');
         _cipherUpdateUseBtn();
         showStatus('Now using this passphrase wallet. Fingerprint: <strong>' + newFP.toUpperCase() + '</strong>. All tools derive from it until you switch back on the Dashboard.', 'success');
     } catch (err) {
@@ -45027,7 +45024,7 @@ function tfa_renderTable() {
     :root { --skb-ui-radius: 8px; }
     #state-dashboard .dashv2-chip, #global-status-bar .dash-status-summary { border-radius: 999px !important; }
     #state-dashboard .dashv2-dot, #global-status-bar .dash-status-summary__dot, #global-status-bar .dot { border-radius: 50% !important; }
-    #state-dashboard :is(.dashv2-wallet, .dashv2-health, .dashv2-saved, .dashv2-action, .dash-settings, .dash-tool-card),
+    #state-dashboard :is(.dashv2-wallet, .dashv2-health, .dashv2-action, .dash-settings, .dash-tool-card),
     #state-welcome .welcome-option { border-radius: 12px !important; }
     #state-dashboard .dashv2-lh canvas { border-radius: 12px !important; }
     .boot-header:not(#_), .dash-status-bar:not(#_) { border-radius: 0 !important; }  /* full-width bars stay square */
