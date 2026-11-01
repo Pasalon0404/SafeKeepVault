@@ -6371,6 +6371,100 @@
     }
     .tool-hero-more:hover { text-decoration: underline; }
     .tool-hero-recovery-badge { margin-top: 0.5rem; }
+
+    /* ================================================================
+       Redesign (2026-11): welcome screen, status badge, Dashboard.
+       ================================================================ */
+    :root { --dv2-ok: var(--skb-success, #34d399); --dv2-warn: #f5b84a; --dv2-radius: 10px; }
+
+    /* Compact header: the brand no longer takes a third of the screen. */
+    .boot-header { padding-top: 0.9rem; padding-bottom: 0.9rem; }
+    .boot-header h1 { font-size: 1.5rem; letter-spacing: 0.06em; }
+    .boot-header .boot-tagline { font-size: 0.8125rem; margin-top: 0.15rem; }
+
+    /* ---- Welcome ---- */
+    .welcome-actions .welcome-create { padding: 1.05rem 1.5rem; font-size: 1.05rem; border-radius: var(--dv2-radius) !important; }
+    .welcome-actions .welcome-have-backup { padding: 0.95rem 1.5rem; font-size: 1rem; border-radius: var(--dv2-radius) !important; background: transparent; }
+    .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
+    .welcome-options[hidden] { display: none; }
+    .welcome-options-lead { margin: 0.4rem 0 0.1rem; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
+    .welcome-option { display: flex; gap: 0.85rem; align-items: flex-start; padding: 0.85rem 1rem; text-align: left; cursor: pointer;
+      background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); color: var(--skb-text); font: inherit; }
+    .welcome-option:hover { border-color: var(--skb-primary); }
+    .welcome-option b { display: block; font-size: 0.95rem; }
+    .welcome-option span span, .welcome-option > span:last-child > span { display: block; color: var(--skb-text-muted); font-size: 0.8125rem; }
+    .welcome-option-ico { flex: none; width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; background: var(--skb-primary-muted); color: var(--skb-primary); }
+    .welcome-option-ico svg { width: 20px; height: 20px; }
+
+    /* ---- Status badge ---- */
+    .dash-status-summary-wrap { position: relative; }
+    .dash-status-summary { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.8rem; border-radius: 999px; cursor: pointer;
+      border: 1px solid color-mix(in srgb, var(--dv2-ok) 40%, transparent); background: color-mix(in srgb, var(--dv2-ok) 10%, transparent);
+      color: var(--dv2-ok); font-family: var(--skb-sans); font-size: 0.8125rem; font-weight: 600; }
+    .dash-status-summary__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent); }
+    .dash-status-summary.is-warn { color: var(--dv2-warn); border-color: color-mix(in srgb, var(--dv2-warn) 45%, transparent); background: color-mix(in srgb, var(--dv2-warn) 10%, transparent); }
+    .dash-status-details { position: absolute; left: 0; top: calc(100% + 8px); z-index: 50; display: grid; gap: 0.4rem; min-width: 280px; padding: 0.75rem;
+      background: var(--skb-bg-secondary); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+    .dash-status-details[hidden] { display: none; }
+    .dash-status-details .dash-status-dot { justify-content: flex-start; }
+
+    /* ---- Dashboard ---- */
+    body.tool-active .dashv2, body.tool-active .dashv2-alltools-title { display: none !important; }
+    body:not(.tool-active) #state-dashboard:not(.dashv2-pp-open) .dash-command-row { display: none !important; }
+    body:not(.tool-active) #state-dashboard .dash-inner > .dash-tool-grid.cols-3 { display: none; }
+    body:not(.tool-active) #state-dashboard .dash-command-row .dash-command-identity { display: none; }
+    body:not(.tool-active) #state-dashboard .dash-command-row { margin: -0.6rem 0 1.6rem; }
+    body:not(.tool-active) .dash-advanced-toggle { display: none; }
+    body:not(.tool-active) .dash-advanced-content { max-height: none; overflow: visible; }
+    body:not(.tool-active) .dash-advanced { border: 0; background: transparent; }
+    body:not(.tool-active) .dash-advanced-content .dash-tool-grid { padding: 0; }
+
+    .dashv2 { margin-bottom: 1.25rem; }
+    .dashv2-title { font-family: var(--skb-sans); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--skb-primary); margin: 0 0 0.75rem; }
+    .dashv2-alltools-title { margin-top: 0.5rem; }
+    .dashv2-top { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 1.6rem; }
+    .dashv2-wallet, .dashv2-health, .dashv2-saved { background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); }
+    .dashv2-wallet { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.25rem; align-items: center; padding: 1.35rem;
+      background: linear-gradient(140deg, var(--skb-primary-muted) 0%, var(--skb-bg-card, var(--skb-bg-secondary)) 60%);
+      border-color: color-mix(in srgb, var(--skb-primary) 30%, var(--skb-border)); }
+    .dashv2-lh { width: 104px; min-height: 104px; display: grid; place-items: center; }
+    .dashv2-lh canvas { border-radius: 12px; }
+    .dashv2-lh-src { display: none; }
+    .dashv2-eyebrow { font-size: 0.75rem; color: var(--skb-text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+    .dashv2-name { font-family: var(--skb-sans); font-size: 1.6rem; font-weight: 800; margin: 0.1rem 0 0.55rem; color: var(--skb-text); text-transform: none; letter-spacing: 0; }
+    .dashv2-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .dashv2-chip { display: inline-flex; align-items: center; padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--skb-bg-input); border: 1px solid var(--skb-border); font-size: 0.8rem; color: var(--skb-text-muted); }
+    .dashv2-chip[hidden] { display: none; }
+    .dashv2-chip--mono { font-family: var(--skb-mono); color: var(--skb-text); letter-spacing: 0.05em; }
+    .dashv2-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.9rem; }
+    .dashv2-row .skb-btn, .dashv2-saved .skb-btn, .dashv2-health-btn { border-radius: 8px !important; border-width: 1px; font-size: 0.8125rem; padding: 0.45rem 0.85rem; }
+    .dashv2-health { padding: 1.1rem 1.1rem 0.4rem; }
+    .dashv2-health-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.65rem 0; border-top: 1px solid var(--skb-border); }
+    .dashv2-health-item:first-child { border-top: 0; }
+    .dashv2-health-item b { display: block; font-size: 0.875rem; color: var(--skb-text); }
+    .dashv2-health-item span { display: block; color: var(--skb-text-muted); font-size: 0.8rem; }
+    .dashv2-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dashv2-dot--ok { background: var(--dv2-ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dv2-ok) 15%, transparent); }
+    .dashv2-dot--warn { background: var(--dv2-warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dv2-warn) 15%, transparent); }
+    .dashv2-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem; margin-bottom: 1.6rem; }
+    .dashv2-action { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; min-height: 130px; padding: 1.1rem; text-align: left; cursor: pointer;
+      background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); color: var(--skb-text); font: inherit; }
+    .dashv2-action:hover { border-color: var(--skb-primary); }
+    .dashv2-action b { font-size: 1rem; }
+    .dashv2-action span:not(.dashv2-ico) { color: var(--skb-text-muted); font-size: 0.8125rem; }
+    .dashv2-action--primary { border-color: color-mix(in srgb, var(--skb-primary) 50%, var(--skb-border)); background: linear-gradient(160deg, var(--skb-primary-muted), var(--skb-bg-card, var(--skb-bg-secondary)) 70%); }
+    .dashv2-ico { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--skb-primary-muted); color: var(--skb-primary); }
+    .dashv2-ico svg { width: 21px; height: 21px; }
+    .dashv2-saved { padding: 1.1rem 1.1rem 0.5rem; margin-bottom: 1.6rem; }
+    .dashv2-saved[hidden] { display: none; }
+    .dashv2-saved-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
+    .dashv2-saved-row:first-child { border-top: 0; }
+    .dashv2-saved-row b { display: block; font-size: 0.875rem; color: var(--skb-text); }
+    .dashv2-saved-row span { color: var(--skb-text-muted); font-size: 0.8rem; }
+    @media (max-width: 1100px) {
+      .dashv2-top { grid-template-columns: minmax(0, 1fr); }
+      .dashv2-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     </style>
 </head>
 <body>
@@ -6384,6 +6478,15 @@
 <div class="dash-status-bar" id="global-status-bar">
     <div class="dash-status-bar-inner">
         <div class="dash-status-indicators">
+            <!-- Redesign (2026-11): one calm summary badge; the individual
+                 lights (updated by their own code, unchanged) sit in its
+                 pop-up. -->
+            <div class="dash-status-summary-wrap">
+            <button type="button" class="dash-status-summary" id="dash-status-summary" aria-expanded="false" aria-controls="dash-status-details" onclick="dash_toggleStatusDetails()">
+                <span class="dash-status-summary__dot" aria-hidden="true"></span>
+                <span id="dash-status-summary-label">Offline · Protected</span>
+            </button>
+            <div class="dash-status-details" id="dash-status-details" hidden>
             <div class="dash-status-dot" id="status-network-indicator">
                 <span class="dot pulse" id="status-network-dot"></span>
                 <span id="status-network-label">AIR-GAPPED</span>
@@ -6400,6 +6503,15 @@
                  title="Kernel-level drive isolation is enforced via system hardening. This indicator verifies no frontend code has attempted unauthorized file exports outside the secure browser sandbox.">
                 <span class="dot pulse" id="status-storage-dot"></span>
                 <span id="status-storage-label">SANDBOX SEALED</span>
+            </div>
+            <!-- Transfer Drive status light — mirrors .dash-status-dot
+                 visual language. Red when unmounted, green when mounted. -->
+            <div class="dash-status-dot" id="status-transfer-indicator"
+                 title="exFAT transfer partition mount state">
+                <span class="dot" id="status-transfer-dot" style="background: #ef4444;"></span>
+                <span id="status-transfer-label">TRANSFER: UNMOUNTED</span>
+            </div>
+            </div>
             </div>
 
             <!-- Software attestations — same visual row as the hardware lights.
@@ -6421,13 +6533,6 @@
                 <span class="dash-status-vfp__value" id="dash-vault-fingerprint">--------</span>
             </div>
 
-            <!-- Transfer Drive status light — mirrors .dash-status-dot
-                 visual language. Red when unmounted, green when mounted. -->
-            <div class="dash-status-dot" id="status-transfer-indicator"
-                 title="exFAT transfer partition mount state">
-                <span class="dot" id="status-transfer-dot" style="background: #ef4444;"></span>
-                <span id="status-transfer-label">TRANSFER: UNMOUNTED</span>
-            </div>
         </div>
         <div style="display: flex; align-items: center; gap: 1rem;">
             <!-- Session elapsed-time clock lives outside this slot.
@@ -6472,8 +6577,8 @@
             </div>
 
             <div class="welcome-message">
-                <h2>No Master Seed Found</h2>
-                <p>This device does not have a master seed configured. Generate a fresh seed or restore one from your backup words to get started.</p>
+                <h2>Welcome to SafeKeepVault</h2>
+                <p>Your keys stay on this stick and never touch the internet. Create a new wallet, or bring back one you already have.</p>
                 <!-- Version stamp: filled in by build-offline.mjs (see seed-xor-tool/VERSION). -->
                 <div class="welcome-version" data-skv-version style="margin-top: 0.75rem; font-family: var(--skb-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--skb-text-dim, var(--skb-text-muted));">dev build</div>
             </div>
@@ -6499,28 +6604,34 @@
                   continues to keep the seed in RAM only when Amnesia
                   Mode is enabled.
                 -->
-                <button type="button" class="skb-btn skb-btn--primary" onclick="showGeneratePanel()">
-                    Generate New Seed
+                <!-- Redesign (2026-11): one clear first step. "I already have a
+                     backup" opens a choice of the four restore methods, each
+                     calling the same function its old button did. -->
+                <button type="button" class="skb-btn skb-btn--primary welcome-create" onclick="showGeneratePanel()">
+                    Create a new wallet
                 </button>
-                <button type="button" class="skb-btn skb-btn--primary" onclick="showRestorePanel()">
-                    Restore from Words
+                <button type="button" class="skb-btn welcome-have-backup" id="welcome-have-backup-btn" aria-expanded="false" aria-controls="welcome-restore-options" onclick="welcome_toggleRestoreOptions()">
+                    I already have a backup
                 </button>
-                <button type="button" class="skb-btn skb-btn--primary" onclick="showXorRecoveryPanel()">
-                    Restore via Seed XOR
-                </button>
-                <button type="button" class="skb-btn skb-btn--primary" onclick="showShamirRecoveryPanel()">
-                    Recover Shamir Backup (SLIP-39)
-                </button>
-                <button type="button" class="skb-btn skb-btn--primary" onclick="rlq_showRestore()">
-                    <!-- Task #95: stripped leading &#9904; (⚴ Ceres) emoji from the
-                         welcome-screen backup-restore button to match the
-                         professional-typography direction. The button's visual
-                         weight now comes entirely from the shared `.skb-btn--primary`
-                         treatment, which keeps the welcome menu's five entry
-                         points visually cohesive. onclick handler + button class
-                         untouched. -->
-                    Unlock .7z Backup
-                </button>
+                <div class="welcome-options" id="welcome-restore-options" hidden>
+                    <p class="welcome-options-lead">What does your backup look like?</p>
+                    <button type="button" class="welcome-option" onclick="showRestorePanel()">
+                        <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg></span>
+                        <span><b>Recovery words</b><span>12 or 24 words on paper or steel</span></span>
+                    </button>
+                    <button type="button" class="welcome-option" onclick="rlq_showRestore()">
+                        <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg></span>
+                        <span><b>Encrypted backup (.7z)</b><span>A SafeKeep backup file: from the Transfer Drive, or received with the Courier</span></span>
+                    </button>
+                    <button type="button" class="welcome-option" onclick="showXorRecoveryPanel()">
+                        <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg></span>
+                        <span><b>Seed XOR shares</b><span>2 to 4 shares that each look like a normal seed</span></span>
+                    </button>
+                    <button type="button" class="welcome-option" onclick="showShamirRecoveryPanel()">
+                        <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><circle cx="12" cy="6" r="3"/><path d="M8 15l3-6M16 15l-3-6M9 17h6"/></svg></span>
+                        <span><b>Shamir shares (SLIP-39)</b><span>20- or 33-word shares, such as 2 of 3</span></span>
+                    </button>
+                </div>
                 <!-- Temporary sessions only (shown by transitionToWelcome):
                      sign a multisig PSBT with paired hardware wallets
                      (Trezor / Coldcard) without ever loading a seed. -->
@@ -6925,6 +7036,39 @@
                      are retained on the new row as a compound class list so that
                      existing selectors (notably the sidebar-mode hide rule under
                      body.tool-active) continue to match without any CSS edits. -->
+                <!-- ================================================================
+                     Dashboard redesign (2026-11): the wallet first, its health,
+                     what you can do, saved wallets; then all tools. Shown only on
+                     the full Dashboard (never in a tool's sidebar). Reads the
+                     existing elements below (fingerprint, nickname, word count),
+                     which keep their own wiring. See dashv2_render().
+                     ================================================================ -->
+                <section class="dashv2" id="dashv2" aria-label="Your wallet">
+                    <div class="dashv2-top">
+                        <div class="dashv2-wallet">
+                            <div class="dashv2-lh"><span class="dashv2-lh-src" id="dashv2-lh-src" data-lifehash="104"></span></div>
+                            <div class="dashv2-wallet-body">
+                                <div class="dashv2-eyebrow" id="dashv2-eyebrow">Your wallet</div>
+                                <h2 class="dashv2-name" id="dashv2-name">Wallet</h2>
+                                <div class="dashv2-chips">
+                                    <span class="dashv2-chip dashv2-chip--mono" id="dashv2-fp" title="Master fingerprint">--------</span>
+                                    <span class="dashv2-chip" id="dashv2-words"></span>
+                                    <span class="dashv2-chip" id="dashv2-pp">No passphrase</span>
+                                </div>
+                                <div class="dashv2-row">
+                                    <button type="button" class="skb-btn" id="dashv2-pp-btn" aria-expanded="false" onclick="dashv2_togglePassphrase()">Use a passphrase wallet</button>
+                                    <button type="button" class="skb-btn" onclick="vaultLock()" title="Lock the vault and switch seed">Lock or switch seed</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="dashv2-health">
+                            <div class="dashv2-title">Health</div>
+                            <div id="dashv2-health-list"></div>
+                        </div>
+                    </div>
+
+                </section>
+
                 <div class="dash-identity dash-passphrase dash-command-row">
 
                     <!-- LEFT: Wallet Active / Fingerprint -->
@@ -7053,6 +7197,21 @@
                      the toggle button. Animation is a pure-CSS max-height
                      transition on `.dash-advanced-content` — no layout thrash.
                      ================================================================ -->
+                <section class="dashv2 dashv2-lower" aria-label="What would you like to do?">
+                    <div class="dashv2-title">What would you like to do?</div>
+                    <div class="dashv2-actions">
+                        <button type="button" class="dashv2-action dashv2-action--primary" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan or load a PSBT, check it, sign it</span></button>
+                        <button type="button" class="dashv2-action" onclick="showState('state-reliquary')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span><b>Back up</b><span>Encrypted backup, send it to your phone, check it</span></button>
+                        <button type="button" class="dashv2-action" onclick="showState('state-armory')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Sparrow, Nunchuk, Blue Wallet: export your key, see addresses</span></button>
+                        <button type="button" class="dashv2-action" onclick="showState('state-archive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M5 13 7.5 4h9L19 13M6 17h.01M10 17h.01"/></svg></span><b>Transfer files</b><span>Files on the Transfer Drive, the Courier</span></button>
+                    </div>
+
+                    <div class="dashv2-saved" id="dashv2-saved" hidden>
+                        <div class="dashv2-title">Saved wallets</div>
+                        <div class="dashv2-saved-list" id="dashv2-saved-list"></div>
+                    </div>
+                </section>
+                <div class="dashv2-title dashv2-alltools-title">All tools</div>
                 <div class="dash-advanced" id="dash-advanced">
                     <button type="button" class="dash-advanced-toggle"
                             aria-expanded="false"
@@ -12411,6 +12570,169 @@ function skui_syncThemeGlyph() {
 // Sync glyph on first load (theme may already be set by flash-prevention script)
 document.addEventListener('DOMContentLoaded', skui_syncThemeGlyph);
 
+/* Status badge (redesign 2026-11): one summary of the four security lights.
+   Green "Offline · Protected" when all are good; amber "Check security
+   status" when any reports ONLINE / COMPROMISED / BREACH. Clicking it shows
+   the lights themselves. They keep being updated by their own code. */
+var _DASH_STATUS_LABELS = ['status-network-label', 'status-integrity-label', 'status-peripheral-label', 'status-storage-label'];
+function dash_updateStatusSummary() {
+    var btn = document.getElementById('dash-status-summary');
+    var label = document.getElementById('dash-status-summary-label');
+    if (!btn || !label) return;
+    var bad = _DASH_STATUS_LABELS.some(function (id) {
+        var el = document.getElementById(id);
+        return el && /ONLINE|COMPROMISED|BREACH/i.test(el.textContent || '');
+    });
+    btn.classList.toggle('is-warn', bad);
+    label.textContent = bad ? 'Check security status' : 'Offline \u00b7 Protected';
+}
+function dash_toggleStatusDetails(force) {
+    var d = document.getElementById('dash-status-details');
+    var btn = document.getElementById('dash-status-summary');
+    if (!d) return;
+    var open = typeof force === 'boolean' ? force : d.hidden;
+    d.hidden = !open;
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+document.addEventListener('DOMContentLoaded', function () {
+    var mo = new MutationObserver(dash_updateStatusSummary);
+    _DASH_STATUS_LABELS.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) mo.observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    dash_updateStatusSummary();
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest || e.target.closest('.dash-status-summary-wrap')) return;
+        dash_toggleStatusDetails(false);
+    });
+});
+
+/* ---- Dashboard redesign (2026-11): wallet card, Health, Saved wallets ----
+   Everything here reads state the app already keeps (the fingerprint,
+   nickname, word count and passphrase labels on the Dashboard, the backup
+   list, the saved wallets); nothing new is stored. */
+function _dashv2Text(id) {
+    var el = document.getElementById(id);
+    return el ? String(el.textContent || '').trim() : '';
+}
+function dashv2_renderWallet() {
+    var fp = _dashv2Text('dash-fingerprint');
+    if (!/^[0-9a-fA-F]{8}$/.test(fp)) fp = '';
+    var nick = _dashv2Text('dash-vault-fingerprint').replace(/^["\u201c]|["\u201d]$/g, '');
+    if (!nick || /^-+$/.test(nick)) nick = fp ? 'Wallet ' + fp.toUpperCase() : 'No seed loaded';
+    var words = (_dashv2Text('dash-word-count').match(/\d+/) || [''])[0];
+    var ppOn = /passphrase/i.test(_dashv2Text('dash-identity-label'));
+    var ghost = document.getElementById('amnesia-ghost-badge');
+    var temp = ghost && ghost.style.display !== 'none';
+    var set = function (id, t) { var el = document.getElementById(id); if (el && el.textContent !== t) el.textContent = t; };
+    set('dashv2-name', nick);
+    set('dashv2-fp', fp ? fp.toUpperCase() : '--------');
+    set('dashv2-lh-src', fp);
+    set('dashv2-words', words ? words + ' words' : '');
+    var w = document.getElementById('dashv2-words'); if (w) w.hidden = !words;
+    set('dashv2-pp', ppOn ? 'Passphrase wallet' : 'No passphrase');
+    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' : (ppOn ? 'Your passphrase wallet' : 'Your wallet'));
+    var dash = document.getElementById('state-dashboard');
+    if (dash && ppOn) dash.classList.add('dashv2-pp-open');
+    var btn = document.getElementById('dashv2-pp-btn');
+    if (btn) {
+        var open = dash && dash.classList.contains('dashv2-pp-open');
+        btn.textContent = ppOn ? 'Change passphrase' : (open ? 'Hide passphrase' : 'Use a passphrase wallet');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+}
+function dashv2_togglePassphrase() {
+    var dash = document.getElementById('state-dashboard');
+    if (!dash) return;
+    var open = !dash.classList.contains('dashv2-pp-open');
+    if (/passphrase/i.test(_dashv2Text('dash-identity-label'))) open = true;
+    dash.classList.toggle('dashv2-pp-open', open);
+    dashv2_renderWallet();
+    if (open) { var inp = document.getElementById('dash-pp-input'); if (inp) inp.focus(); }
+}
+function _dashv2HealthItem(kind, title, detail, action) {
+    return '<div class="dashv2-health-item">' +
+        '<span class="dashv2-dot dashv2-dot--' + kind + '" aria-hidden="true"></span>' +
+        '<div><b>' + _psbtEscape(title) + '</b>' + (detail ? '<span>' + _psbtEscape(detail) + '</span>' : '') + '</div>' +
+        (action || '<span></span>') + '</div>';
+}
+async function dashv2_renderHealth() {
+    var list = document.getElementById('dashv2-health-list');
+    if (!list) return;
+    var html = '';
+    // 1. Encrypted backup: newest dated .7z on the Transfer Drive
+    var names = [];
+    try {
+        var os = window.SafeKeepOS;
+        var listed = os && typeof os.listBackups === 'function' ? await os.listBackups() : [];
+        names = typeof rlq_mergeDriveListing === 'function' ? await rlq_mergeDriveListing(listed) : listed;
+    } catch (_) { names = []; }
+    var newest = null;
+    (names || []).forEach(function (n) {
+        if (!/\.7z$/i.test(n)) return;
+        var m = /(\d{4})-(\d{2})-(\d{2})/.exec(n);
+        if (!m) return;
+        var d = new Date(+m[1], +m[2] - 1, +m[3]);
+        if (!newest || d > newest) newest = d;
+    });
+    var backupBtn = '<button type="button" class="skb-btn dashv2-health-btn" onclick="showState(\'state-reliquary\')">Back up now</button>';
+    if (!newest) {
+        html += _dashv2HealthItem('warn', 'No encrypted backup on the Transfer Drive', 'Make one, then send it to your phone with the Courier.', backupBtn);
+    } else {
+        var days = Math.max(0, Math.floor((Date.now() - newest.getTime()) / 86400000));
+        var when = newest.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        var ago = days === 0 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago';
+        html += days > 30
+            ? _dashv2HealthItem('warn', 'Latest backup is ' + days + ' days old', 'Made ' + when + '. Back up again if you changed notes, wallets or passphrases.', backupBtn)
+            : _dashv2HealthItem('ok', 'Encrypted backup made ' + ago, when + ' \u00b7 on the Transfer Drive', '');
+    }
+    // 2. Transfer Drive
+    var mounted = /\bMOUNTED\b/i.test(_dashv2Text('status-transfer-label')) && !/UNMOUNTED/i.test(_dashv2Text('status-transfer-label'));
+    html += mounted
+        ? _dashv2HealthItem('ok', 'Transfer Drive ready', 'For backups, PSBTs and the Courier', '')
+        : _dashv2HealthItem('warn', 'Transfer Drive not mounted', 'Open the Transfer Hub to mount it', '<button type="button" class="skb-btn dashv2-health-btn" onclick="showState(\'state-archive\')">Open</button>');
+    // 3. Version
+    var ver = _dashv2Text('dash-version');
+    html += _dashv2HealthItem('ok', /^v\d/.test(ver) ? 'SafeKeep ' + ver.split(' \u00b7 ').slice(0, 2).join(' \u00b7 ') : 'SafeKeep (' + ver + ')', 'Updates: Device Options \u2192 Update SafeKeep', '');
+    list.innerHTML = html;
+}
+async function dashv2_renderSaved() {
+    var box = document.getElementById('dashv2-saved');
+    var list = document.getElementById('dashv2-saved-list');
+    if (!box || !list) return;
+    if (typeof _savedWalletsLoading !== 'undefined' && _savedWalletsLoading) { try { await _savedWalletsLoading; } catch (_) {} }
+    var wallets = typeof _savedWallets !== 'undefined' ? _savedWallets : [];
+    box.hidden = !wallets.length;
+    list.innerHTML = wallets.map(function (w, i) {
+        var r = typeof _savedWalletParse === 'function' ? _savedWalletParse(w.descriptor) : {};
+        var meta = r.parsed ? _savedWalletSummary(r.parsed) : 'Can\u2019t be read';
+        var addr = r.parsed && r.parsed.firstAddress ? r.parsed.firstAddress : '';
+        if (addr.length > 16) addr = addr.slice(0, 8) + '\u2026' + addr.slice(-6);
+        return '<div class="dashv2-saved-row"><div><b>' + _psbtEscape(w.name) + '</b><span>' + _psbtEscape(meta + (addr ? ' \u00b7 ' + addr : '')) + '</span></div>' +
+            (r.parsed ? '<button type="button" class="skb-btn" onclick="dashv2_openSaved(' + i + ')">Open</button>' : '') + '</div>';
+    }).join('');
+}
+function dashv2_openSaved(i) {
+    showState('state-descriptor');
+    if (typeof desc_openSavedWallet === 'function') desc_openSavedWallet(i);
+}
+function dashv2_render() {
+    // On the full Dashboard all tools show (no drawer), so screen readers must see them too.
+    var ac = document.getElementById('dash-advanced-content');
+    if (ac && !document.body.classList.contains('tool-active')) ac.setAttribute('aria-hidden', 'false');
+    try { dashv2_renderWallet(); } catch (e) { console.warn('[dashv2] wallet:', e && e.message); }
+    dashv2_renderHealth().catch(function (e) { console.warn('[dashv2] health:', e && e.message); });
+    dashv2_renderSaved().catch(function (e) { console.warn('[dashv2] saved:', e && e.message); });
+}
+document.addEventListener('DOMContentLoaded', function () {
+    var mo = new MutationObserver(function () { try { dashv2_renderWallet(); } catch (_) {} });
+    ['dash-fingerprint', 'dash-vault-fingerprint', 'dash-word-count', 'dash-identity-label'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) mo.observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    try { dashv2_renderWallet(); } catch (_) {}
+});
+
 /* A tool's header description: show two lines and a "More about this
    tool" link when it is longer (extra paragraphs are folded in too).
    Runs when the tool is shown, since hidden text can't be measured; once
@@ -13691,6 +14013,17 @@ function onBackupContinue() {
     _pendingBackupSeed = null;
 }
 
+
+/* Welcome: "I already have a backup" shows or hides the four restore methods. */
+function welcome_toggleRestoreOptions() {
+    var opts = document.getElementById('welcome-restore-options');
+    var btn = document.getElementById('welcome-have-backup-btn');
+    if (!opts) return;
+    var open = opts.hidden;
+    opts.hidden = !open;
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && typeof skui_revealPanel === 'function') skui_revealPanel(opts);
+}
 
 function showRestorePanel() {
     document.getElementById('welcome-buttons').style.display = 'none';
@@ -15675,8 +16008,8 @@ function transitionToWelcome() {
             if (vln) vln.style.display = 'none';
             const hwb = document.getElementById('welcome-hw-btn');
             if (hwb) hwb.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none';
-            if (heading) heading.textContent = 'No Master Seed Found';
-            if (subtitle) subtitle.textContent = 'This device does not have a master seed configured. Generate a fresh seed or restore one from your backup words to get started.';
+            if (heading) heading.textContent = 'Welcome to SafeKeepVault';
+            if (subtitle) subtitle.textContent = 'Your keys stay on this stick and never touch the internet. Create a new wallet, or bring back one you already have.';
         }
     } catch (e) {
         console.warn('[BOOT] welcome-message sync failed:', e && e.message);
@@ -17921,6 +18254,7 @@ function showState(stateId) {
     // Special handling for specific states
     if (isDashboard) {
         clearStatus();
+        if (typeof dashv2_render === 'function') dashv2_render();
         // Keep the Transfer Drive mount banner in sync whenever the
         // dashboard is shown — the user may have mounted from inside
         // The Archive and navigated back.
