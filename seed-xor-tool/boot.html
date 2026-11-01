@@ -7014,7 +7014,7 @@
                         <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span>
                         <span class="dash-tool-label">
                             <span class="dash-tool-name">Connect a Wallet App</span>
-                            <span class="dash-tool-subtitle">Sparrow, Nunchuk, Blue Wallet, Specter, Electrum</span>
+                            <span class="dash-tool-subtitle">Blue Wallet, Electrum, Nunchuk, Sparrow, Specter</span>
                         </span>
                         <span class="dash-tool-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
                     </button>
@@ -7055,7 +7055,7 @@
                         <button type="button" class="dashv2-action dashv2-action--primary" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan or load a PSBT, check it, sign it</span></button>
                         <button type="button" class="dashv2-action" onclick="rcv_open('state-receive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></span><b>Show an address</b><span>The next receive address as a QR code</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-reliquary')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span><b>Back up</b><span>Encrypted backup, send it to your phone, check it</span></button>
-                        <button type="button" class="dashv2-action" onclick="connect_open('state-connect')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Sparrow, Nunchuk, Blue Wallet, Specter, Electrum</span></button>
+                        <button type="button" class="dashv2-action" onclick="connect_open('state-connect')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Blue Wallet, Electrum, Nunchuk, Sparrow, Specter</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-archive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M5 13 7.5 4h9L19 13M6 17h.01M10 17h.01"/></svg></span><b>Transfer files</b><span>Files on the Transfer Drive, the Courier</span></button>
                     </div>
 
@@ -9202,11 +9202,11 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <p class="tool-hero-desc">Pick the app on your phone or computer. SafeKeep shows exactly the QR code that app reads, and the app becomes a watch-only wallet: it sees your balance and makes transactions for SafeKeep to sign, but never holds your keys.</p>
             </div>
             <div class="cn-apps" role="radiogroup" aria-label="Wallet app">
-                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="sparrow" onclick="connect_pick('sparrow')"><b>Sparrow</b><span>Desktop</span></button>
-                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="nunchuk" onclick="connect_pick('nunchuk')"><b>Nunchuk</b><span>Phone or desktop</span></button>
                 <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="bluewallet" onclick="connect_pick('bluewallet')"><b>Blue Wallet</b><span>Phone</span></button>
-                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="specter" onclick="connect_pick('specter')"><b>Specter</b><span>Desktop, with a file</span></button>
                 <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="electrum" onclick="connect_pick('electrum')"><b>Electrum</b><span>Desktop</span></button>
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="nunchuk" onclick="connect_pick('nunchuk')"><b>Nunchuk</b><span>Phone or desktop</span></button>
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="sparrow" onclick="connect_pick('sparrow')"><b>Sparrow</b><span>Desktop</span></button>
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="specter" onclick="connect_pick('specter')"><b>Specter</b><span>Desktop, with a file</span></button>
                 <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="other" onclick="connect_pick('other')"><b>Another wallet</b><span>Choose the format yourself</span></button>
             </div>
             <div class="skb-card cn-detail" id="cn-detail" hidden>
