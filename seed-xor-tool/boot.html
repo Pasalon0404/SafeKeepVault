@@ -7014,7 +7014,7 @@
                         <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span>
                         <span class="dash-tool-label">
                             <span class="dash-tool-name">Connect a Wallet App</span>
-                            <span class="dash-tool-subtitle">Sparrow, Nunchuk, Blue Wallet</span>
+                            <span class="dash-tool-subtitle">Sparrow, Nunchuk, Blue Wallet, Specter, Electrum</span>
                         </span>
                         <span class="dash-tool-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
                     </button>
@@ -7055,7 +7055,7 @@
                         <button type="button" class="dashv2-action dashv2-action--primary" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan or load a PSBT, check it, sign it</span></button>
                         <button type="button" class="dashv2-action" onclick="rcv_open('state-receive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></span><b>Show an address</b><span>The next receive address as a QR code</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-reliquary')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span><b>Back up</b><span>Encrypted backup, send it to your phone, check it</span></button>
-                        <button type="button" class="dashv2-action" onclick="connect_open('state-connect')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Sparrow, Nunchuk, Blue Wallet: export your key, see addresses</span></button>
+                        <button type="button" class="dashv2-action" onclick="connect_open('state-connect')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Sparrow, Nunchuk, Blue Wallet, Specter, Electrum</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-archive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M5 13 7.5 4h9L19 13M6 17h.01M10 17h.01"/></svg></span><b>Transfer files</b><span>Files on the Transfer Drive, the Courier</span></button>
                     </div>
 
@@ -9205,6 +9205,8 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="sparrow" onclick="connect_pick('sparrow')"><b>Sparrow</b><span>Desktop</span></button>
                 <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="nunchuk" onclick="connect_pick('nunchuk')"><b>Nunchuk</b><span>Phone or desktop</span></button>
                 <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="bluewallet" onclick="connect_pick('bluewallet')"><b>Blue Wallet</b><span>Phone</span></button>
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="specter" onclick="connect_pick('specter')"><b>Specter</b><span>Desktop, with a file</span></button>
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="electrum" onclick="connect_pick('electrum')"><b>Electrum</b><span>Desktop</span></button>
                 <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="other" onclick="connect_pick('other')"><b>Another wallet</b><span>Choose the format yourself</span></button>
             </div>
             <div class="skb-card cn-detail" id="cn-detail" hidden>
@@ -12732,6 +12734,27 @@ var _CN_APPS = {
                 'Blue Wallet adds a watch-only wallet. Its first receive address should be the same as address #0 in <b>Show an address</b>.'
             ];
         } },
+    specter: { name: 'Specter', format: 'electrum_json', animate: false, file: true, multi: true, types: ['84', '86', '49', '44'],
+        steps: function (t, multi) {
+            return [
+                'In SafeKeep, press <b>Download JSON</b> (highlighted just above). The file is saved to the Transfer Drive.',
+                'Take the file to your online computer on the stick, or send it with the <b>Courier</b> (Transfer Hub \u2192 Transmit).',
+                'In Specter Desktop: <b>Add Device</b>, device type <b>Other</b>, then <b>Upload from SD</b>, pick the file and <b>Continue</b>.',
+                multi ? 'Do the same for each cosigner, then <b>Add Wallet \u2192 Multiple Signature</b>, pick the devices and <b>Create Wallet</b>.'
+                      : 'Click <b>Create Single Key Wallet</b>, name it and <b>Continue</b>.'
+            ];
+        } },
+    electrum: { name: 'Electrum', format: 'slip132', animate: false, multi: true, types: ['84', '49', '44'],
+        steps: function (t, multi) {
+            return [
+                'On your online computer, open the Courier (courier.safekeepbitcoin.com), choose <b>Receive</b> and <b>Open camera and scan</b>, scan this QR code, then <b>Copy to clipboard</b>.',
+                multi ? 'In Electrum: <b>File \u2192 New/Restore</b>, name it, <b>Multi-signature wallet</b>, set the cosigners and signatures needed.'
+                      : 'In Electrum: <b>File \u2192 New/Restore</b>, name it, <b>Standard wallet</b>.',
+                multi ? 'For SafeKeep\u2019s key choose <b>Use a master key</b> and paste it; add each other cosigner with <b>Enter cosigner key</b>.'
+                      : 'Choose <b>Use a master key</b>, paste the key and <b>Next</b>. Electrum creates a watch-only wallet.',
+                'Electrum doesn\u2019t support Taproot: use Native SegWit, Nested SegWit or Legacy.'
+            ];
+        } },
     other: { name: 'another wallet', format: null, animate: false, multi: true, types: ['84', '86', '49', '44'],
         steps: function () {
             return [
@@ -12790,10 +12813,12 @@ async function connect_go() {
     document.getElementById('arm-derivation').value = t;
     document.getElementById('arm-wallet-type').value = multi ? 'multi' : 'single';
     document.getElementById('arm-key-format').value = a.format;
+    var keyBox = document.getElementById('arm-xpub');
+    if (keyBox) keyBox.textContent = '';   // so the wait below sees the freshly worked-out key
     arm_onConfigChange();
     // Seed Management works the key out after a short delay (and hides its QR
     // while it does): wait until the key box holds this app's format.
-    var want = { bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/ }[a.format];
+    var want = { bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/, slip132: /^[xyzXYZ]pub/ }[a.format];
     for (var i = 0; i < 60; i++) {
         await new Promise(function (r) { setTimeout(r, 150); });
         var txt = (document.getElementById('arm-xpub') || {}).textContent || '';
@@ -12802,6 +12827,13 @@ async function connect_go() {
     await new Promise(function (r) { setTimeout(r, 250); });
     var qr = document.getElementById('arm-xpub-qr');
     if (qr && qr.style.display !== 'none' && qr.style.display !== '') await arm_toggleXpubQR();
+    if (a.file) {
+        // A file-based app: point at Download JSON instead of a QR code.
+        var dl = document.getElementById('arm-download-export-btn');
+        if (dl) { dl.classList.add('cn-highlight'); setTimeout(function () { dl.classList.remove('cn-highlight'); }, 6000); }
+        try { g.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (_) {}
+        return;
+    }
     await arm_toggleXpubQR();
     if (a.animate && typeof skqr_play === 'function') {
         await new Promise(function (r) { setTimeout(r, 300); });
@@ -44702,7 +44734,8 @@ function tfa_renderTable() {
     @media (min-width: 1101px) { .dashv2-actions { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
     /* ---- Connect a wallet app ---- */
-    .cn-apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; margin-bottom: 1rem; }
+    .cn-apps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; margin-bottom: 1rem; }
+    .cn-highlight { border-color: var(--skb-primary) !important; color: var(--skb-primary) !important; box-shadow: 0 0 0 3px var(--skb-primary-muted) !important; }
     .cn-app { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 1rem 1.1rem; text-align: left; cursor: pointer;
       background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 2px solid var(--skb-border); color: var(--skb-text); font: inherit; }
     .cn-app b { font-size: 1.05rem; }

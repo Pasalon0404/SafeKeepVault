@@ -10,6 +10,9 @@ import vm from 'node:vm';
  *  - Nunchuk: Hardware Wallet JSON played animated (ur:bytes), added as a
  *    Passport; Native SegWit; single-sig or multisig;
  *  - Blue Wallet: the BIP-380 output descriptor; single-sig;
+ *  - Specter: BIP-32 Watch-Only JSON as a file (Download JSON);
+ *  - Electrum: the SLIP-132 key (zpub/ypub/xpub) as a QR, read with the
+ *    Courier and pasted; no Taproot;
  *  - each format exists in Seed Management's Key Format menu;
  *  - the steps name the right script type; the guide in Seed Management
  *    shows only when this flow opened it; Taproot multisig is refused.
@@ -28,7 +31,11 @@ ck('Sparrow: BC-UR Account, not animated, all types, multisig allowed', A.sparro
 ck('Nunchuk: Hardware Wallet JSON, animated, Native SegWit', A.nunchuk.format === 'coldcard_json' && A.nunchuk.animate && JSON.stringify(A.nunchuk.types) === '["84"]' && A.nunchuk.multi);
 ck('Blue Wallet: output descriptor, single-sig', A.bluewallet.format === 'descriptor_text' && !A.bluewallet.animate && !A.bluewallet.multi);
 ck('Another wallet: no preset format', A.other.format === null);
-for (const f of ['bcur', 'coldcard_json', 'descriptor_text']) ck('Seed Management offers ' + f, new RegExp('<option value="' + f + '"').test(HTML));
+ck('Specter: BIP-32 watch-only JSON as a file (Download JSON, no QR)', A.specter.format === 'electrum_json' && A.specter.file === true && !A.specter.animate && A.specter.multi);
+ck('Specter steps: Add Device, Other, Upload from SD', /Add Device/.test(A.specter.steps('84', false).join(' ')) && /Upload from SD/.test(A.specter.steps('84', false).join(' ')));
+ck('Electrum: SLIP-132 key as a QR, no Taproot', A.electrum.format === 'slip132' && !A.electrum.file && A.electrum.types.indexOf('86') === -1 && A.electrum.multi);
+ck('Electrum steps: Courier, Use a master key', /Courier/.test(A.electrum.steps('84', false).join(' ')) && /Use a master key/.test(A.electrum.steps('84', false).join(' ')));
+for (const f of ['bcur', 'coldcard_json', 'descriptor_text', 'electrum_json', 'slip132']) ck('Seed Management offers ' + f, new RegExp('<option value="' + f + '"').test(HTML));
 ck('Sparrow steps name the chosen script type', /Script Type: Taproot/.test(A.sparrow.steps('86', false).join(' ')) && /Multi Signature/.test(A.sparrow.steps('84', true).join(' ')));
 ck('Nunchuk steps: add as Passport, scan the animated code', /Passport/.test(A.nunchuk.steps('84', false).join(' ')) && /animated/.test(A.nunchuk.steps('84', false).join(' ')));
 ck('Blue Wallet steps: Import Wallet, scan', /Import Wallet/.test(A.bluewallet.steps().join(' ')) && /Scan/.test(A.bluewallet.steps().join(' ')));
