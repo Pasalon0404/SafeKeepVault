@@ -349,10 +349,20 @@ cat "$QRIN"; echo
         });
         return { status: r.status, out: r.stdout.toString(), ran7z: existsSync(join(tmp, '7z.log')) };
     };
+    const recPath = join(tmp, 'vault', '.last-backup.json');
     const bWeak = runBackup(words(4, ' '));
     ck('backup watcher refuses a Weak password without running 7z', bWeak.status === 3 && bWeak.out.includes('too easy to guess') && !bWeak.ran7z, bWeak);
+    ck('a refused backup records no last-backup date', !existsSync(recPath));
     const bStrong = runBackup('x7#Qp9!vLm2@Zr8$Tq4w');
     ck('backup watcher accepts a Strong password', bStrong.status === 0 && bStrong.out.includes('RELIQUARY_FILE=Safekeep_backup_2026-10-22.7z') && bStrong.ran7z, bStrong);
+    const rec = existsSync(recPath) ? JSON.parse(readFileSync(recPath, 'utf8')) : null;
+    ck('a backup records its date, file and items in the vault\'s top folder (.last-backup.json)',
+        rec && rec.filename === 'Safekeep_backup_2026-10-22.7z' && JSON.stringify(rec.items) === '["codex"]' &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(rec.date) && Math.abs(Date.parse(rec.date) - Date.now()) < 120000, rec);
+    // A hardware-wallet export through the same watcher is not a backup.
+    writeFileSync(join(tmp, 'trigger.json'), JSON.stringify({ action: 'export-file', filename: 'nunchuk.json', content_b64: Buffer.from('{}').toString('base64') }));
+    spawnSync('python3', [join(tmp, 'reliquary.py'), join(tmp, 'trigger.json'), join(tmp, 'usb'), join(tmp, 'vault')], { env: { PATH: bin + ':' + process.env.PATH, SAFEKEEP_PWCHECK: PY, SAFEKEEP_PWCHECK_LISTS: LISTS_PATH.pathname } });
+    ck('an export through the backup watcher leaves the last-backup record alone', JSON.parse(readFileSync(recPath, 'utf8')).filename === 'Safekeep_backup_2026-10-22.7z');
 } finally {
     rmSync(tmp, { recursive: true, force: true });
 }

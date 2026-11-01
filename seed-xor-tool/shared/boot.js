@@ -1336,6 +1336,7 @@ const SafeKeepOS = (() => {
       // Demo mode: return the command without executing
       // Also store a manifest in memory for simulation
       _reliquaryManifest = { selections: [...selections], filename, dateStr };
+      _lastBackupDemo = { date: new Date().toISOString(), filename, items: [...selections] };
       return { created: true, filename, command: cmd, demo: true };
     }
 
@@ -2309,6 +2310,32 @@ const SafeKeepOS = (() => {
    * @returns {Promise<Array<{name: string, descriptor: string, added: string}>>}
    *          the saved wallets ([] in a temporary session or if none are saved)
    */
+  /**
+   * When this stick last made an encrypted backup: { date (ISO, UTC),
+   * filename, items: ['seed', 'codex', …] }, or null if it never has.
+   * The backup watcher writes VAULT_ROOT/.last-backup.json after each
+   * successful backup (safekeep-boot.sh); it stays when the .7z is moved
+   * off the Transfer Drive. Temporary sessions have no vault: null.
+   */
+  let _lastBackupDemo = null;
+  async function loadLastBackup() {
+    if (!isBootDrive()) return _lastBackupDemo;
+    if (_ccTemporarySession()) return null;
+    try {
+      const resp = await fetch(`file://${VAULT_ROOT}/.last-backup.json`, { cache: 'no-store' });
+      if (!resp.ok) return null;
+      const d = await resp.json();
+      if (!d || typeof d.date !== 'string' || isNaN(Date.parse(d.date))) return null;
+      return {
+        date: d.date,
+        filename: typeof d.filename === 'string' ? d.filename.slice(0, 200) : '',
+        items: Array.isArray(d.items) ? d.items.filter((x) => typeof x === 'string').slice(0, 10) : []
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function loadSavedWallets() {
     if (!isBootDrive()) return _savedWalletsMem.slice();
     if (_ccTemporarySession()) return [];
@@ -3012,6 +3039,7 @@ const SafeKeepOS = (() => {
 
     // Saved wallets (Output Descriptor tool → PSBT Signer)
     loadSavedWallets,
+    loadLastBackup,
     saveSavedWallets,
 
     coldcardGetPairing,

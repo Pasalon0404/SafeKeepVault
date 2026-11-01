@@ -1267,6 +1267,21 @@ if action == 'create':
     if result.returncode != 0:
         print(result.stdout)
         sys.exit(result.returncode)
+    # Remember when this stick last made a backup, for the Dashboard's
+    # Health card, even after the .7z is moved off the Transfer Drive.
+    # In the vault's top folder, outside every backed-up folder, so
+    # restoring an old backup can't bring back an older date.
+    try:
+        import datetime
+        included = [k for k in selections if os.path.isdir(os.path.join(vault, BACKUP_DIRS[k]))]
+        rec = {'date': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+               'filename': name, 'items': included}
+        rec_path = os.path.join(vault, '.last-backup.json')
+        with open(rec_path + '.tmp', 'w') as f:
+            json.dump(rec, f)
+        os.replace(rec_path + '.tmp', rec_path)
+    except Exception as e:
+        print('last-backup record not written: ' + str(e), file=sys.stderr)
     print('RELIQUARY_FILE=' + name)
 
 elif action == 'export-file':
