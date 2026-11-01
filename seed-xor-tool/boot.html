@@ -7009,6 +7009,15 @@
                         </span>
                         <span class="dash-tool-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
                     </button>
+                    <!-- Connect a wallet app (redesign 2026-11) -->
+                    <button type="button" class="dash-tool-card" onclick="connect_open('state-connect')" style="text-align: left; cursor: pointer;">
+                        <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span>
+                        <span class="dash-tool-label">
+                            <span class="dash-tool-name">Connect a Wallet App</span>
+                            <span class="dash-tool-subtitle">Sparrow, Nunchuk, Blue Wallet</span>
+                        </span>
+                        <span class="dash-tool-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
+                    </button>
                     <!-- 2. Seed Management (formerly "The Armory" / "Seed Phrase Viewer") — promoted to slot 2 -->
                     <button type="button" class="dash-tool-card" onclick="showState('state-armory')" style="text-align: left; cursor: pointer;">
                         <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span>
@@ -7046,7 +7055,7 @@
                         <button type="button" class="dashv2-action dashv2-action--primary" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan or load a PSBT, check it, sign it</span></button>
                         <button type="button" class="dashv2-action" onclick="rcv_open('state-receive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></span><b>Show an address</b><span>The next receive address as a QR code</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-reliquary')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span><b>Back up</b><span>Encrypted backup, send it to your phone, check it</span></button>
-                        <button type="button" class="dashv2-action" onclick="showState('state-armory')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Sparrow, Nunchuk, Blue Wallet: export your key, see addresses</span></button>
+                        <button type="button" class="dashv2-action" onclick="connect_open('state-connect')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Sparrow, Nunchuk, Blue Wallet: export your key, see addresses</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-archive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M5 13 7.5 4h9L19 13M6 17h.01M10 17h.01"/></svg></span><b>Transfer files</b><span>Files on the Transfer Drive, the Courier</span></button>
                     </div>
 
@@ -9185,6 +9194,43 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             </div>
         </div>
 
+        <!-- ======== CONNECT A WALLET APP (redesign 2026-11) ======== -->
+        <div id="state-connect">
+            <div class="tool-hero">
+                <h2 class="tool-hero-title">Connect a<span>Wallet App</span></h2>
+                <p class="tool-hero-subtitle">Watch-only setup</p>
+                <p class="tool-hero-desc">Pick the app on your phone or computer. SafeKeep shows exactly the QR code that app reads, and the app becomes a watch-only wallet: it sees your balance and makes transactions for SafeKeep to sign, but never holds your keys.</p>
+            </div>
+            <div class="cn-apps" role="radiogroup" aria-label="Wallet app">
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="sparrow" onclick="connect_pick('sparrow')"><b>Sparrow</b><span>Desktop</span></button>
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="nunchuk" onclick="connect_pick('nunchuk')"><b>Nunchuk</b><span>Phone or desktop</span></button>
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="bluewallet" onclick="connect_pick('bluewallet')"><b>Blue Wallet</b><span>Phone</span></button>
+                <button type="button" class="cn-app" role="radio" aria-checked="false" data-app="other" onclick="connect_pick('other')"><b>Another wallet</b><span>Choose the format yourself</span></button>
+            </div>
+            <div class="skb-card cn-detail" id="cn-detail" hidden>
+                <div class="cn-opts" id="cn-opts">
+                    <div>
+                        <label for="cn-type">Address type</label>
+                        <select id="cn-type" onchange="connect_renderSteps()">
+                            <option value="84" selected>Native SegWit (bc1q…), the usual choice</option>
+                            <option value="86">Taproot (bc1p…)</option>
+                            <option value="49">Nested SegWit (3…)</option>
+                            <option value="44">Legacy (1…)</option>
+                        </select>
+                    </div>
+                    <div id="cn-kind-wrap">
+                        <label for="cn-kind">Wallet</label>
+                        <select id="cn-kind" onchange="connect_renderSteps()">
+                            <option value="single" selected>Single-sig: this seed alone</option>
+                            <option value="multi">Multisig: SafeKeep as one cosigner</option>
+                        </select>
+                    </div>
+                </div>
+                <ol class="cn-steps" id="cn-steps"></ol>
+                <button type="button" class="skb-btn skb-btn--primary cn-go" onclick="connect_go()">Show the QR code</button>
+            </div>
+        </div>
+
         <div id="state-transfer">
             <div class="tool-hero">
                 <h2 class="tool-hero-title">Courier<span>Tool</span></h2>
@@ -10135,6 +10181,11 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                             <button type="button" class="skb-btn arm-no-print" style="flex: 1; font-size: 0.8rem;" onclick="arm_copyXpub()">Copy</button>
                             <button type="button" class="skb-btn arm-no-print" id="arm-xpub-qr-btn" style="flex: 1; font-size: 0.8rem;" onclick="arm_toggleXpubQR()">Show QR</button>
                             <button type="button" class="skb-btn arm-no-print" id="arm-download-export-btn" style="flex: 1; font-size: 0.8rem;" onclick="arm_downloadActiveExport()">Download JSON</button>
+                        </div>
+                        <div class="cn-guide" id="arm-connect-guide" hidden>
+                            <div class="cn-guide-head"><b id="arm-connect-title"></b><button type="button" class="skb-btn" onclick="connect_closeGuide()">Close</button></div>
+                            <ol class="cn-steps" id="arm-connect-steps"></ol>
+                            <p class="cn-guide-expect" id="arm-connect-expect"></p>
                         </div>
                         <div id="arm-xpub-qr" style="display: none; text-align: center; margin-top: 0.75rem;">
                             <div class="arm-xpub-qr-resizer" id="arm-xpub-qr-resizer"
@@ -12642,6 +12693,124 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     try { dashv2_renderWallet(); } catch (_) {}
 });
+
+/* ---- Connect a wallet app (redesign 2026-11) ----
+   Pick an app; SafeKeep opens Seed Management with the format that app is
+   known to read (each one tested with the app), shows the QR code (playing
+   it animated where the app needs ur:bytes), and the app's steps with the
+   fingerprint and path the app should show. The export itself is Seed
+   Management's own code. */
+var _CN_TYPE_NAMES = { '84': 'Native SegWit', '86': 'Taproot', '49': 'Nested SegWit', '44': 'Legacy' };
+var _CN_APPS = {
+    sparrow: { name: 'Sparrow', format: 'bcur', animate: false, multi: true, types: ['84', '86', '49', '44'],
+        steps: function (t, multi) {
+            return multi ? [
+                'In Sparrow: <b>File → New Wallet</b>, give it a name.',
+                '<b>Policy Type: Multi Signature</b>, set the number of cosigners, <b>Script Type: ' + _CN_TYPE_NAMES[t] + '</b>.',
+                'On SafeKeep’s keystore tab choose <b>Airgapped Hardware Wallet</b>, pick a device with a <b>Scan…</b> button (Passport or Keystone), click <b>Scan…</b> and scan the QR code.',
+                'Add the other cosigners the same way, then <b>Apply</b>.'
+            ] : [
+                'In Sparrow: <b>File → New Wallet</b>, give it a name.',
+                '<b>Policy Type: Single Signature</b>, <b>Script Type: ' + _CN_TYPE_NAMES[t] + '</b>.',
+                'Under Keystores choose <b>Airgapped Hardware Wallet</b>, pick a device with a <b>Scan…</b> button (Passport or Keystone) and click <b>Scan…</b>.',
+                'Point the camera at the QR code, then <b>Apply</b>.'
+            ];
+        } },
+    nunchuk: { name: 'Nunchuk', format: 'coldcard_json', animate: true, multi: true, types: ['84'],
+        steps: function (t, multi) {
+            return [
+                'In Nunchuk, add a key and choose <b>Passport</b> (a QR-based air-gapped device).',
+                'Scan the <b>animated</b> QR code until Nunchuk has all of it.',
+                multi ? 'Use the key as one cosigner when you create the multisig wallet.' : 'Create a single-sig wallet with that key.'
+            ];
+        } },
+    bluewallet: { name: 'Blue Wallet', format: 'descriptor_text', animate: false, multi: false, types: ['84', '86', '49', '44'],
+        steps: function () {
+            return [
+                'In Blue Wallet: <b>Add Wallet → Import Wallet</b>.',
+                'Tap <b>Scan</b> and scan the QR code.',
+                'Blue Wallet adds a watch-only wallet. Its first receive address should be the same as address #0 in <b>Show an address</b>.'
+            ];
+        } },
+    other: { name: 'another wallet', format: null, animate: false, multi: true, types: ['84', '86', '49', '44'],
+        steps: function () {
+            return [
+                'In Seed Management, choose the <b>Key Format</b> your wallet app reads (its help pages say which: often an xpub, an output descriptor, or a JSON file).',
+                'Press <b>Show QR</b>, and <b>Play as animated QR</b> if the app scans animated codes.'
+            ];
+        } }
+};
+var _cn = { app: null, pending: false };
+function connect_open() {
+    showState('state-connect');
+}
+function connect_pick(app) {
+    var a = _CN_APPS[app];
+    if (!a) return;
+    _cn.app = app;
+    document.querySelectorAll('.cn-app').forEach(function (b) { b.setAttribute('aria-checked', b.dataset.app === app ? 'true' : 'false'); });
+    var type = document.getElementById('cn-type');
+    Array.prototype.forEach.call(type.options, function (o) { o.disabled = a.types.indexOf(o.value) === -1; });
+    if (type.selectedOptions[0] && type.selectedOptions[0].disabled) type.value = a.types[0];
+    var kind = document.getElementById('cn-kind');
+    document.getElementById('cn-kind-wrap').hidden = !a.multi;
+    if (!a.multi) kind.value = 'single';
+    document.getElementById('cn-opts').hidden = app === 'other';
+    connect_renderSteps();
+    var d = document.getElementById('cn-detail');
+    d.hidden = false;
+    if (typeof skui_revealPanel === 'function') skui_revealPanel(d);
+}
+function _cnSteps(listEl) {
+    var a = _CN_APPS[_cn.app];
+    var t = document.getElementById('cn-type').value, multi = document.getElementById('cn-kind').value === 'multi';
+    listEl.innerHTML = a.steps(t, multi).map(function (x) { return '<li>' + x + '</li>'; }).join('');
+}
+function connect_renderSteps() { if (_cn.app) _cnSteps(document.getElementById('cn-steps')); }
+function connect_closeGuide() { var g = document.getElementById('arm-connect-guide'); if (g) g.hidden = true; }
+async function connect_go() {
+    var a = _CN_APPS[_cn.app];
+    if (!a) return;
+    var t = document.getElementById('cn-type').value;
+    var multi = a.multi && document.getElementById('cn-kind').value === 'multi';
+    if (multi && t === '86') { showStatus('Multisig with SafeKeep uses Native SegWit, Nested SegWit or Legacy.', 'error'); return; }
+    _cn.pending = true;
+    showState('state-armory');
+    _cn.pending = false;
+    var g = document.getElementById('arm-connect-guide');
+    document.getElementById('arm-connect-title').textContent = 'Connecting ' + a.name;
+    _cnSteps(document.getElementById('arm-connect-steps'));
+    var fp = _dashv2Text('dash-fingerprint');
+    var path = multi ? "m/48'/0'/0'/" + ({ '84': "2'", '49': "1'", '44': "0'" })[t] : "m/" + t + "'/0'/0'";
+    document.getElementById('arm-connect-expect').textContent = /^[0-9a-f]{8}$/i.test(fp)
+        ? a.name.charAt(0).toUpperCase() + a.name.slice(1) + ' should show fingerprint ' + fp.toLowerCase() + ' and path ' + path + '. If it shows something else, stop and check the address type and the passphrase.'
+        : '';
+    g.hidden = false;
+    if (!a.format) { if (typeof skui_revealPanel === 'function') skui_revealPanel(g); return; }
+    document.getElementById('arm-derivation').value = t;
+    document.getElementById('arm-wallet-type').value = multi ? 'multi' : 'single';
+    document.getElementById('arm-key-format').value = a.format;
+    arm_onConfigChange();
+    // Seed Management works the key out after a short delay (and hides its QR
+    // while it does): wait until the key box holds this app's format.
+    var want = { bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/ }[a.format];
+    for (var i = 0; i < 60; i++) {
+        await new Promise(function (r) { setTimeout(r, 150); });
+        var txt = (document.getElementById('arm-xpub') || {}).textContent || '';
+        if (want.test(txt)) break;
+    }
+    await new Promise(function (r) { setTimeout(r, 250); });
+    var qr = document.getElementById('arm-xpub-qr');
+    if (qr && qr.style.display !== 'none' && qr.style.display !== '') await arm_toggleXpubQR();
+    await arm_toggleXpubQR();
+    if (a.animate && typeof skqr_play === 'function') {
+        await new Promise(function (r) { setTimeout(r, 300); });
+        skqr_play(document.getElementById('arm-xpub-qr-canvas'));
+    }
+    // Steps first, the QR code right below them.
+    await new Promise(function (r) { setTimeout(r, 400); });
+    try { g.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (_) {}
+}
 
 /* ---- Show an address (redesign 2026-11) ----
    The next receive address of a wallet as a large QR code. SafeKeep is
@@ -18195,7 +18364,7 @@ var _toolScreens = [
     'state-psbt-signer', 'state-passphrase', 'state-seedxor', 'state-bip85',
     'state-descriptor', 'state-seedqr', 'state-entropy', 'state-transfer',
     'state-securenote', 'state-designer', 'state-armory', 'state-authenticator',
-    'state-slip39', 'state-reliquary', 'state-archive', 'state-2fa', 'state-receive'
+    'state-slip39', 'state-reliquary', 'state-archive', 'state-2fa', 'state-receive', 'state-connect'
 ];
 
 function showState(stateId) {
@@ -18308,6 +18477,8 @@ function showState(stateId) {
     } else if (stateId === 'state-seedqr') {
         sqr_autoFillMasterSeed();
     } else if (stateId === 'state-armory') {
+        // The "Connecting <app>" guide shows only when Connect a wallet app opened this screen.
+        if (!(typeof _cn !== 'undefined' && _cn.pending)) { var cg = document.getElementById('arm-connect-guide'); if (cg) cg.hidden = true; }
         arm_init();
     } else if (stateId === 'state-designer') {
         wrec_init();
@@ -44529,6 +44700,29 @@ function tfa_renderTable() {
     .rcv-empty { color: var(--skb-text-muted); }
     @media (max-width: 1100px) { .rcv-main { grid-template-columns: minmax(0, 1fr); } }
     @media (min-width: 1101px) { .dashv2-actions { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+    /* ---- Connect a wallet app ---- */
+    .cn-apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; margin-bottom: 1rem; }
+    .cn-app { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 1rem 1.1rem; text-align: left; cursor: pointer;
+      background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 2px solid var(--skb-border); color: var(--skb-text); font: inherit; }
+    .cn-app b { font-size: 1.05rem; }
+    .cn-app span { font-size: 0.8125rem; color: var(--skb-text-muted); }
+    .cn-app:hover { border-color: color-mix(in srgb, var(--skb-primary) 60%, var(--skb-border)); }
+    .cn-app[aria-checked="true"] { border-color: var(--skb-primary); background: var(--skb-primary-muted); }
+    .cn-detail { padding: 1.25rem; }
+    .cn-detail[hidden], .cn-opts[hidden], #cn-kind-wrap[hidden], .cn-guide[hidden] { display: none; }
+    .cn-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: 1rem; margin-bottom: 1rem; }
+    .cn-opts label { display: block; font-size: 0.8125rem; color: var(--skb-text-muted); margin-bottom: 0.35rem; }
+    .cn-opts select { width: 100%; padding: 0.55rem 0.7rem; background: var(--skb-bg-input); color: var(--skb-text); border: 2px solid var(--skb-border); font-family: var(--skb-sans); }
+    .cn-steps { margin: 0 0 1rem; padding-left: 1.2rem; display: grid; gap: 0.4rem; color: var(--skb-text); font-size: 0.9rem; line-height: 1.5; }
+    .cn-go { min-width: 240px; }
+    .cn-guide { margin: 0.75rem 0 0; text-align: left; padding: 1rem 1.15rem; border: 2px solid color-mix(in srgb, var(--skb-primary) 55%, var(--skb-border)); background: var(--skb-primary-muted); }
+    .cn-guide-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.6rem; }
+    .cn-guide-head b { font-size: 1rem; color: var(--skb-text); }
+    .cn-guide-head .skb-btn { font-size: 0.8rem; padding: 0.3rem 0.75rem; }
+    .cn-guide .cn-steps { margin-bottom: 0.5rem; }
+    .cn-guide-expect { margin: 0; font-size: 0.85rem; color: var(--skb-text-muted); }
+    @media (max-width: 1100px) { .cn-apps { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cn-opts { grid-template-columns: minmax(0, 1fr); } }
 
     /* ---- Device Options: sans text, one sub-heading style ---- */
     #state-dashboard .dash-settings summary { font-family: var(--skb-sans); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.14em; }
