@@ -2991,15 +2991,18 @@
        (which is a circle status light in the entropy tool).
        Covers inline styles via !important and catches every card,
        panel, dropdown, banner, QR canvas, badge, and input. */
-    .boot-screen *:not(.eob-hash-dot):not(.dot):not(input[type="checkbox"]):not(input[type="radio"]):not(.amnesia-switch-track):not(.amnesia-switch-thumb) {
-      border-radius: 0 !important;
+    /* Redesign (2026-11): one corner radius everywhere (was 0, square).
+       QR codes and canvases stay square. Set --skb-ui-radius to 0 to go
+       back to square corners. */
+    .boot-screen *:not(.eob-hash-dot):not(.dot):not(input[type="checkbox"]):not(input[type="radio"]):not(.amnesia-switch-track):not(.amnesia-switch-thumb):not(canvas) {
+      border-radius: var(--skb-ui-radius, 8px) !important;
     }
 
     /* Also catch elements OUTSIDE .boot-screen (status bar, modals) */
     .dash-status-bar *,
     .reset-modal-overlay *,
     .reset-modal {
-      border-radius: 0 !important;
+      border-radius: var(--skb-ui-radius, 8px) !important;
     }
 
     /* Ensure border widths are 2px on common inline-styled elements */
@@ -7213,7 +7216,7 @@
                         <div id="settings-lock-section" style="display: none;"></div>
                         <!-- // DISPLAY SCALING -->
                         <div id="settings-uiscale-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
-                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">// DISPLAY SCALING</h4>
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Display Scaling</h4>
                             <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 1rem; line-height: 1.6;">Resize the entire interface for high-DPI Macs versus standard Linux laptops. Applied instantly; persists across soft reloads.</p>
                             <div class="skb-scale-group" role="radiogroup" aria-label="UI scale preset">
                                 <button type="button" class="skb-scale-btn" data-scale="0.5"  role="radio" aria-checked="false" onclick="skui_setUiScale(0.5)">
@@ -44323,6 +44326,23 @@ function tfa_renderTable() {
     .dashv2-saved-row:first-child { border-top: 0; }
     .dashv2-saved-row b { display: block; font-size: 0.875rem; color: var(--skb-text); }
     .dashv2-saved-row span { color: var(--skb-text-muted); font-size: 0.8rem; }
+    /* ---- Rounded corners: pills and dots fully round (id-scoped so they
+       beat the global corner rule above). ---- */
+    :root { --skb-ui-radius: 8px; }
+    #state-dashboard .dashv2-chip, #global-status-bar .dash-status-summary { border-radius: 999px !important; }
+    #state-dashboard .dashv2-dot, #global-status-bar .dash-status-summary__dot, #global-status-bar .dot { border-radius: 50% !important; }
+    #state-dashboard :is(.dashv2-wallet, .dashv2-health, .dashv2-saved, .dashv2-action, .dash-settings, .dash-tool-card),
+    #state-welcome .welcome-option { border-radius: 12px !important; }
+    #state-dashboard .dashv2-lh canvas { border-radius: 12px !important; }
+    .boot-header:not(#_), .dash-status-bar:not(#_) { border-radius: 0 !important; }  /* full-width bars stay square */
+
+    /* ---- Device Options: sans text, one sub-heading style ---- */
+    #state-dashboard .dash-settings summary { font-family: var(--skb-sans); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.14em; }
+    #state-dashboard .settings-panel h4 { font-family: var(--skb-sans) !important; font-size: 0.95rem !important; font-weight: 700 !important;
+      letter-spacing: 0 !important; text-transform: none !important; color: var(--skb-text) !important; }
+    #state-dashboard .settings-panel :is(p, label, li, small, .settings-desc) { font-family: var(--skb-sans) !important; letter-spacing: 0 !important; }
+    #state-dashboard .settings-panel :is(p, li, small) { font-size: 0.875rem; color: var(--skb-text-muted); line-height: 1.55; }
+
     /* ---- Tool screens (redesign 2026-11) ---- */
     /* Tool header: left-aligned, title in normal case, subtitle beside it. */
     .tool-hero { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.9rem; row-gap: 0.15rem; text-align: left; }
