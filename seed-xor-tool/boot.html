@@ -6296,175 +6296,6 @@
     }
 
 
-    /* ================================================================
-       Consistency pass (Oct 2026): one look for buttons, headings,
-       native controls and tool headers. Written so it never fights a
-       style a screen already sets: base rules use :where() (zero
-       specificity), so any class or inline style still wins.
-       ================================================================ */
-
-    /* Native controls (checkboxes, radios, selects, scrollbars) follow
-       the theme. Screen only: printed pages keep their own colours. */
-    @media screen {
-      :root { color-scheme: dark; }
-      :root[data-theme="light"] { color-scheme: light; }
-    }
-    :where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--skb-primary); }
-
-    /* Buttons. Plain .skb-btn had no style of its own and showed the
-       browser's light-grey default. Give it the secondary look: dark
-       fill, thin border, orange on hover. Primary buttons keep theirs. */
-    :where(.skb-btn:not(.skb-btn--primary):not(.skb-btn-primary)) {
-      background: var(--skb-bg-input);
-      color: var(--skb-text);
-      border: 2px solid var(--skb-border);
-      padding: 0.55rem 1rem;
-      font-size: 0.875rem;
-      line-height: 1.3;
-      cursor: pointer;
-    }
-    :where(.skb-btn:not(.skb-btn--primary):not(.skb-btn-primary)):hover:not(:disabled) {
-      border-color: var(--skb-primary);
-      color: var(--skb-primary);
-    }
-    :where(.skb-btn):disabled { opacity: 0.45; cursor: not-allowed; }
-    :where(.skb-btn):focus-visible { outline: 2px solid var(--skb-primary); outline-offset: 2px; }
-    /* Dashed borders on buttons (CLEAR, RESTORE, Scan QR …) become solid,
-       like every other button. Inline styles set them, hence !important. */
-    button.skb-btn[style*="dashed"] { border-style: solid !important; }
-
-    /* Section headings: one style. Sans, small, bold, spaced capitals in
-       orange (mono stays for data: fingerprints, paths, hashes). */
-    .psbt-card-title,
-    .dash-advanced-label,
-    .dash-settings > summary,
-    .skb-card > h3 {
-      font-family: var(--skb-sans) !important;
-      font-size: 0.75rem !important;
-      font-weight: 800 !important;
-      letter-spacing: 0.14em !important;
-      text-transform: uppercase !important;
-      color: var(--skb-primary) !important;
-    }
-
-    /* Tool headers: smaller, so the tool starts higher on the screen. The
-       description shows two lines; "More about this tool" opens the rest. */
-    .tool-hero { padding-bottom: 1rem; margin-bottom: 1.25rem; }
-    .tool-hero-title { font-size: 1.75rem; letter-spacing: 1px; margin-bottom: 0.25rem; }
-    .tool-hero-subtitle { margin-bottom: 0.5rem; }
-    .tool-hero-desc.skb-clamped {
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      overflow: hidden;
-    }
-    .tool-hero-more {
-      display: block;
-      margin: 0.35rem auto 0;
-      padding: 0;
-      background: none;
-      border: 0;
-      font-family: var(--skb-sans);
-      font-size: 0.8125rem;
-      color: var(--skb-primary);
-      cursor: pointer;
-    }
-    .tool-hero-more:hover { text-decoration: underline; }
-    .tool-hero-recovery-badge { margin-top: 0.5rem; }
-
-    /* ================================================================
-       Redesign (2026-11): welcome screen, status badge, Dashboard.
-       ================================================================ */
-    :root { --dv2-ok: var(--skb-success, #34d399); --dv2-warn: #f5b84a; --dv2-radius: 10px; }
-
-    /* Compact header: the brand no longer takes a third of the screen. */
-    .boot-header { padding-top: 0.9rem; padding-bottom: 0.9rem; }
-    .boot-header h1 { font-size: 1.5rem; letter-spacing: 0.06em; }
-    .boot-header .boot-tagline { font-size: 0.8125rem; margin-top: 0.15rem; }
-
-    /* ---- Welcome ---- */
-    .welcome-actions .welcome-create { padding: 1.05rem 1.5rem; font-size: 1.05rem; border-radius: var(--dv2-radius) !important; }
-    .welcome-actions .welcome-have-backup { padding: 0.95rem 1.5rem; font-size: 1rem; border-radius: var(--dv2-radius) !important; background: transparent; }
-    .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
-    .welcome-options[hidden] { display: none; }
-    .welcome-options-lead { margin: 0.4rem 0 0.1rem; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
-    .welcome-option { display: flex; gap: 0.85rem; align-items: flex-start; padding: 0.85rem 1rem; text-align: left; cursor: pointer;
-      background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); color: var(--skb-text); font: inherit; }
-    .welcome-option:hover { border-color: var(--skb-primary); }
-    .welcome-option b { display: block; font-size: 0.95rem; }
-    .welcome-option span span, .welcome-option > span:last-child > span { display: block; color: var(--skb-text-muted); font-size: 0.8125rem; }
-    .welcome-option-ico { flex: none; width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; background: var(--skb-primary-muted); color: var(--skb-primary); }
-    .welcome-option-ico svg { width: 20px; height: 20px; }
-
-    /* ---- Status badge ---- */
-    .dash-status-summary-wrap { position: relative; }
-    .dash-status-summary { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.8rem; border-radius: 999px; cursor: pointer;
-      border: 1px solid color-mix(in srgb, var(--dv2-ok) 40%, transparent); background: color-mix(in srgb, var(--dv2-ok) 10%, transparent);
-      color: var(--dv2-ok); font-family: var(--skb-sans); font-size: 0.8125rem; font-weight: 600; }
-    .dash-status-summary__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent); }
-    .dash-status-summary.is-warn { color: var(--dv2-warn); border-color: color-mix(in srgb, var(--dv2-warn) 45%, transparent); background: color-mix(in srgb, var(--dv2-warn) 10%, transparent); }
-    .dash-status-details { position: absolute; left: 0; top: calc(100% + 8px); z-index: 50; display: grid; gap: 0.4rem; min-width: 280px; padding: 0.75rem;
-      background: var(--skb-bg-secondary); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
-    .dash-status-details[hidden] { display: none; }
-    .dash-status-details .dash-status-dot { justify-content: flex-start; }
-
-    /* ---- Dashboard ---- */
-    body.tool-active .dashv2, body.tool-active .dashv2-alltools-title { display: none !important; }
-    body:not(.tool-active) #state-dashboard:not(.dashv2-pp-open) .dash-command-row { display: none !important; }
-    body:not(.tool-active) #state-dashboard .dash-inner > .dash-tool-grid.cols-3 { display: none; }
-    body:not(.tool-active) #state-dashboard .dash-command-row .dash-command-identity { display: none; }
-    body:not(.tool-active) #state-dashboard .dash-command-row { margin: -0.6rem 0 1.6rem; }
-    body:not(.tool-active) .dash-advanced-toggle { display: none; }
-    body:not(.tool-active) .dash-advanced-content { max-height: none; overflow: visible; }
-    body:not(.tool-active) .dash-advanced { border: 0; background: transparent; }
-    body:not(.tool-active) .dash-advanced-content .dash-tool-grid { padding: 0; }
-
-    .dashv2 { margin-bottom: 1.25rem; }
-    .dashv2-title { font-family: var(--skb-sans); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--skb-primary); margin: 0 0 0.75rem; }
-    .dashv2-alltools-title { margin-top: 0.5rem; }
-    .dashv2-top { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 1.6rem; }
-    .dashv2-wallet, .dashv2-health, .dashv2-saved { background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); }
-    .dashv2-wallet { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.25rem; align-items: center; padding: 1.35rem;
-      background: linear-gradient(140deg, var(--skb-primary-muted) 0%, var(--skb-bg-card, var(--skb-bg-secondary)) 60%);
-      border-color: color-mix(in srgb, var(--skb-primary) 30%, var(--skb-border)); }
-    .dashv2-lh { width: 104px; min-height: 104px; display: grid; place-items: center; }
-    .dashv2-lh canvas { border-radius: 12px; }
-    .dashv2-lh-src { display: none; }
-    .dashv2-eyebrow { font-size: 0.75rem; color: var(--skb-text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
-    .dashv2-name { font-family: var(--skb-sans); font-size: 1.6rem; font-weight: 800; margin: 0.1rem 0 0.55rem; color: var(--skb-text); text-transform: none; letter-spacing: 0; }
-    .dashv2-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
-    .dashv2-chip { display: inline-flex; align-items: center; padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--skb-bg-input); border: 1px solid var(--skb-border); font-size: 0.8rem; color: var(--skb-text-muted); }
-    .dashv2-chip[hidden] { display: none; }
-    .dashv2-chip--mono { font-family: var(--skb-mono); color: var(--skb-text); letter-spacing: 0.05em; }
-    .dashv2-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.9rem; }
-    .dashv2-row .skb-btn, .dashv2-saved .skb-btn, .dashv2-health-btn { border-radius: 8px !important; border-width: 1px; font-size: 0.8125rem; padding: 0.45rem 0.85rem; }
-    .dashv2-health { padding: 1.1rem 1.1rem 0.4rem; }
-    .dashv2-health-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.65rem 0; border-top: 1px solid var(--skb-border); }
-    .dashv2-health-item:first-child { border-top: 0; }
-    .dashv2-health-item b { display: block; font-size: 0.875rem; color: var(--skb-text); }
-    .dashv2-health-item span { display: block; color: var(--skb-text-muted); font-size: 0.8rem; }
-    .dashv2-dot { width: 10px; height: 10px; border-radius: 50%; }
-    .dashv2-dot--ok { background: var(--dv2-ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dv2-ok) 15%, transparent); }
-    .dashv2-dot--warn { background: var(--dv2-warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dv2-warn) 15%, transparent); }
-    .dashv2-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem; margin-bottom: 1.6rem; }
-    .dashv2-action { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; min-height: 130px; padding: 1.1rem; text-align: left; cursor: pointer;
-      background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); color: var(--skb-text); font: inherit; }
-    .dashv2-action:hover { border-color: var(--skb-primary); }
-    .dashv2-action b { font-size: 1rem; }
-    .dashv2-action span:not(.dashv2-ico) { color: var(--skb-text-muted); font-size: 0.8125rem; }
-    .dashv2-action--primary { border-color: color-mix(in srgb, var(--skb-primary) 50%, var(--skb-border)); background: linear-gradient(160deg, var(--skb-primary-muted), var(--skb-bg-card, var(--skb-bg-secondary)) 70%); }
-    .dashv2-ico { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--skb-primary-muted); color: var(--skb-primary); }
-    .dashv2-ico svg { width: 21px; height: 21px; }
-    .dashv2-saved { padding: 1.1rem 1.1rem 0.5rem; margin-bottom: 1.6rem; }
-    .dashv2-saved[hidden] { display: none; }
-    .dashv2-saved-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
-    .dashv2-saved-row:first-child { border-top: 0; }
-    .dashv2-saved-row b { display: block; font-size: 0.875rem; color: var(--skb-text); }
-    .dashv2-saved-row span { color: var(--skb-text-muted); font-size: 0.8rem; }
-    @media (max-width: 1100px) {
-      .dashv2-top { grid-template-columns: minmax(0, 1fr); }
-      .dashv2-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
     </style>
 </head>
 <body>
@@ -7018,6 +6849,7 @@
                     <div id="sidebar-seed-label" style="font-size: 0.75rem; font-weight: 700; color: var(--skb-danger); letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Vault Locked</div>
                     <div id="sidebar-seed-fp" data-lifehash="36" data-lifehash-place="parent-right" style="font-family: var(--skb-mono); font-size: 1rem; font-weight: 900; letter-spacing: 0.12em; color: var(--skb-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No seed loaded</div>
                     <div style="margin-top: 0.4rem; font-family: var(--skb-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--skb-text-muted); text-align: right;">&#8592; Dashboard</div>
+                    <span class="rail-home" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg></span>
                 </div>
 
                 <!-- ---- Unified Command Row ----
@@ -7582,7 +7414,7 @@
                 <div class="psbt-step active" id="psbt-step-ingest">Load</div>
                 <div class="psbt-step" id="psbt-step-review">Review</div>
                 <div class="psbt-step" id="psbt-step-sign">Sign</div>
-                <div class="psbt-step" id="psbt-step-export">Export</div>
+                <div class="psbt-step" id="psbt-step-export">Send back</div>
             </div>
 
             <!-- Status banner -->
@@ -8145,7 +7977,7 @@
              ============================================ -->
         <div id="state-seedxor">
             <div class="tool-hero">
-                <h2 class="tool-hero-title">SeedXOR<span>Splitter</span></h2>
+                <h2 class="tool-hero-title">Seed XOR<span>Splitter</span></h2>
                 <p class="tool-hero-subtitle">Split Your Seed Into XOR Shares</p>
                 <p class="tool-hero-desc">Split your seed into 2, 3 or 4 shares. Each share looks like an ordinary 12- or 24-word seed and on its own reveals nothing. Every share is needed to recover your seed: on the welcome screen, choose Restore via Seed XOR.</p>
             </div>
@@ -8211,7 +8043,7 @@
              ============================================ -->
         <div id="state-bip85">
             <div class="tool-hero">
-                <h2 class="tool-hero-title">BIP-85Child<span>Seeds</span></h2>
+                <h2 class="tool-hero-title">BIP-85 Child<span>Seeds</span></h2>
                 <p class="tool-hero-subtitle">Child Seed Derivation</p>
                 <p class="tool-hero-desc">Derive deterministic child seed phrases using the BIP-85 standard. Generate isolated wallets for different purposes while backing up only a single master.</p>
             </div>
@@ -8878,7 +8710,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
              ============================================ -->
         <div id="state-seedqr">
             <div class="tool-hero">
-                <h2 class="tool-hero-title">SeedQR<span>Code</span></h2>
+                <h2 class="tool-hero-title">Seed QR<span>Code</span></h2>
                 <p class="tool-hero-subtitle">Seed QR Backup</p>
                 <p class="tool-hero-desc">Encode your seed phrase as a SeedQR code for printing on paper. Verify hand-drawn or engraved copies by scanning them for accuracy.</p>
             </div>
@@ -12725,6 +12557,18 @@ function dashv2_render() {
     dashv2_renderSaved().catch(function (e) { console.warn('[dashv2] saved:', e && e.message); });
 }
 document.addEventListener('DOMContentLoaded', function () {
+    // The icon rail hides tool names: give each tool card its name as a
+    // tooltip and an accessible name.
+    document.querySelectorAll('.dash-tool-card').forEach(function (c) {
+        var n = c.querySelector('.dash-tool-name');
+        var sub = c.querySelector('.dash-tool-subtitle');
+        if (!n) return;
+        var name = n.textContent.trim();
+        if (!c.title) c.title = name + (sub ? ' \u2014 ' + sub.textContent.trim() : '');
+        if (!c.getAttribute('aria-label')) c.setAttribute('aria-label', name);
+    });
+    var ss = document.getElementById('sidebar-seed-status');
+    if (ss && !ss.title) ss.title = 'Back to the Dashboard';
     var mo = new MutationObserver(function () { try { dashv2_renderWallet(); } catch (_) {} });
     ['dash-fingerprint', 'dash-vault-fingerprint', 'dash-word-count', 'dash-identity-label'].forEach(function (id) {
         var el = document.getElementById(id);
@@ -44295,6 +44139,225 @@ function tfa_renderTable() {
     *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
   }
 }
+</style>
+<style id="skb-redesign">
+/* Redesign (2026-11): kept last so it applies over skb-polish. */
+    /* ================================================================
+       Consistency pass (Oct 2026): one look for buttons, headings,
+       native controls and tool headers. Written so it never fights a
+       style a screen already sets: base rules use :where() (zero
+       specificity), so any class or inline style still wins.
+       ================================================================ */
+
+    /* Native controls (checkboxes, radios, selects, scrollbars) follow
+       the theme. Screen only: printed pages keep their own colours. */
+    @media screen {
+      :root { color-scheme: dark; }
+      :root[data-theme="light"] { color-scheme: light; }
+    }
+    :where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--skb-primary); }
+
+    /* Buttons. Plain .skb-btn had no style of its own and showed the
+       browser's light-grey default. Give it the secondary look: dark
+       fill, thin border, orange on hover. Primary buttons keep theirs. */
+    :where(.skb-btn:not(.skb-btn--primary):not(.skb-btn-primary)) {
+      background: var(--skb-bg-input);
+      color: var(--skb-text);
+      border: 2px solid var(--skb-border);
+      padding: 0.55rem 1rem;
+      font-size: 0.875rem;
+      line-height: 1.3;
+      cursor: pointer;
+    }
+    :where(.skb-btn:not(.skb-btn--primary):not(.skb-btn-primary)):hover:not(:disabled) {
+      border-color: var(--skb-primary);
+      color: var(--skb-primary);
+    }
+    :where(.skb-btn):disabled { opacity: 0.45; cursor: not-allowed; }
+    :where(.skb-btn):focus-visible { outline: 2px solid var(--skb-primary); outline-offset: 2px; }
+    /* Dashed borders on buttons (CLEAR, RESTORE, Scan QR …) become solid,
+       like every other button. Inline styles set them, hence !important. */
+    button.skb-btn[style*="dashed"] { border-style: solid !important; }
+
+    /* Section headings: one style. Sans, small, bold, spaced capitals in
+       orange (mono stays for data: fingerprints, paths, hashes). */
+    .psbt-card-title,
+    .dash-advanced-label,
+    .dash-settings > summary,
+    .skb-card > h3 {
+      font-family: var(--skb-sans) !important;
+      font-size: 0.75rem !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.14em !important;
+      text-transform: uppercase !important;
+      color: var(--skb-primary) !important;
+    }
+
+    /* Tool headers: smaller, so the tool starts higher on the screen. The
+       description shows two lines; "More about this tool" opens the rest. */
+    .tool-hero { padding-bottom: 1rem; margin-bottom: 1.25rem; }
+    .tool-hero-title { font-size: 1.75rem; letter-spacing: 1px; margin-bottom: 0.25rem; }
+    .tool-hero-subtitle { margin-bottom: 0.5rem; }
+    .tool-hero-desc.skb-clamped {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+    }
+    .tool-hero-more {
+      display: block;
+      margin: 0.35rem auto 0;
+      padding: 0;
+      background: none;
+      border: 0;
+      font-family: var(--skb-sans);
+      font-size: 0.8125rem;
+      color: var(--skb-primary);
+      cursor: pointer;
+    }
+    .tool-hero-more:hover { text-decoration: underline; }
+    .tool-hero-recovery-badge { margin-top: 0.5rem; }
+
+    /* ================================================================
+       Redesign (2026-11): welcome screen, status badge, Dashboard.
+       ================================================================ */
+    :root { --dv2-ok: var(--skb-success, #34d399); --dv2-warn: #f5b84a; --dv2-radius: 10px; }
+
+    /* Compact header: the brand no longer takes a third of the screen. */
+    .boot-header { padding-top: 0.9rem; padding-bottom: 0.9rem; }
+    .boot-header h1 { font-size: 1.5rem; letter-spacing: 0.06em; }
+    .boot-header .boot-tagline { font-size: 0.8125rem; margin-top: 0.15rem; }
+
+    /* ---- Welcome ---- */
+    .welcome-actions .welcome-create { padding: 1.05rem 1.5rem; font-size: 1.05rem; border-radius: var(--dv2-radius) !important; }
+    .welcome-actions .welcome-have-backup { padding: 0.95rem 1.5rem; font-size: 1rem; border-radius: var(--dv2-radius) !important; background: transparent; }
+    .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
+    .welcome-options[hidden] { display: none; }
+    .welcome-options-lead { margin: 0.4rem 0 0.1rem; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
+    .welcome-option { display: flex; gap: 0.85rem; align-items: flex-start; padding: 0.85rem 1rem; text-align: left; cursor: pointer;
+      background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); color: var(--skb-text); font: inherit; }
+    .welcome-option:hover { border-color: var(--skb-primary); }
+    .welcome-option b { display: block; font-size: 0.95rem; }
+    .welcome-option span span, .welcome-option > span:last-child > span { display: block; color: var(--skb-text-muted); font-size: 0.8125rem; }
+    .welcome-option-ico { flex: none; width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; background: var(--skb-primary-muted); color: var(--skb-primary); }
+    .welcome-option-ico svg { width: 20px; height: 20px; }
+
+    /* ---- Status badge ---- */
+    .dash-status-summary-wrap { position: relative; }
+    .dash-status-summary { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.8rem; border-radius: 999px; cursor: pointer;
+      border: 1px solid color-mix(in srgb, var(--dv2-ok) 40%, transparent); background: color-mix(in srgb, var(--dv2-ok) 10%, transparent);
+      color: var(--dv2-ok); font-family: var(--skb-sans); font-size: 0.8125rem; font-weight: 600; }
+    .dash-status-summary__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent); }
+    .dash-status-summary.is-warn { color: var(--dv2-warn); border-color: color-mix(in srgb, var(--dv2-warn) 45%, transparent); background: color-mix(in srgb, var(--dv2-warn) 10%, transparent); }
+    .dash-status-details { position: absolute; left: 0; top: calc(100% + 8px); z-index: 50; display: grid; gap: 0.4rem; min-width: 280px; padding: 0.75rem;
+      background: var(--skb-bg-secondary); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+    .dash-status-details[hidden] { display: none; }
+    .dash-status-details .dash-status-dot { justify-content: flex-start; }
+
+    /* ---- Dashboard ---- */
+    body.tool-active .dashv2, body.tool-active .dashv2-alltools-title { display: none !important; }
+    body:not(.tool-active) #state-dashboard:not(.dashv2-pp-open) .dash-command-row { display: none !important; }
+    body:not(.tool-active) #state-dashboard .dash-inner > .dash-tool-grid.cols-3 { display: none; }
+    body:not(.tool-active) #state-dashboard .dash-command-row .dash-command-identity { display: none; }
+    body:not(.tool-active) #state-dashboard .dash-command-row { margin: -0.6rem 0 1.6rem; }
+    body:not(.tool-active) .dash-advanced-toggle { display: none; }
+    body:not(.tool-active) .dash-advanced-content { max-height: none; overflow: visible; }
+    body:not(.tool-active) .dash-advanced { border: 0; background: transparent; }
+    body:not(.tool-active) .dash-advanced-content .dash-tool-grid { padding: 0; }
+
+    .dashv2 { margin-bottom: 1.25rem; }
+    .dashv2-title { font-family: var(--skb-sans); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--skb-primary); margin: 0 0 0.75rem; }
+    .dashv2-alltools-title { margin-top: 0.5rem; }
+    .dashv2-top { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 1.6rem; }
+    .dashv2-wallet, .dashv2-health, .dashv2-saved { background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); }
+    .dashv2-wallet { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.25rem; align-items: center; padding: 1.35rem;
+      background: linear-gradient(140deg, var(--skb-primary-muted) 0%, var(--skb-bg-card, var(--skb-bg-secondary)) 60%);
+      border-color: color-mix(in srgb, var(--skb-primary) 30%, var(--skb-border)); }
+    .dashv2-lh { width: 104px; min-height: 104px; display: grid; place-items: center; }
+    .dashv2-lh canvas { border-radius: 12px; }
+    .dashv2-lh-src { display: none; }
+    .dashv2-eyebrow { font-size: 0.75rem; color: var(--skb-text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+    .dashv2-name { font-family: var(--skb-sans); font-size: 1.6rem; font-weight: 800; margin: 0.1rem 0 0.55rem; color: var(--skb-text); text-transform: none; letter-spacing: 0; }
+    .dashv2-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .dashv2-chip { display: inline-flex; align-items: center; padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--skb-bg-input); border: 1px solid var(--skb-border); font-size: 0.8rem; color: var(--skb-text-muted); }
+    .dashv2-chip[hidden] { display: none; }
+    .dashv2-chip--mono { font-family: var(--skb-mono); color: var(--skb-text); letter-spacing: 0.05em; }
+    .dashv2-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.9rem; }
+    .dashv2-row .skb-btn, .dashv2-saved .skb-btn, .dashv2-health-btn { border-radius: 8px !important; border-width: 1px; font-size: 0.8125rem; padding: 0.45rem 0.85rem; }
+    .dashv2-health { padding: 1.1rem 1.1rem 0.4rem; }
+    .dashv2-health-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.65rem 0; border-top: 1px solid var(--skb-border); }
+    .dashv2-health-item:first-child { border-top: 0; }
+    .dashv2-health-item b { display: block; font-size: 0.875rem; color: var(--skb-text); }
+    .dashv2-health-item span { display: block; color: var(--skb-text-muted); font-size: 0.8rem; }
+    .dashv2-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dashv2-dot--ok { background: var(--dv2-ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dv2-ok) 15%, transparent); }
+    .dashv2-dot--warn { background: var(--dv2-warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dv2-warn) 15%, transparent); }
+    .dashv2-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem; margin-bottom: 1.6rem; }
+    .dashv2-action { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; min-height: 130px; padding: 1.1rem; text-align: left; cursor: pointer;
+      background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); color: var(--skb-text); font: inherit; }
+    .dashv2-action:hover { border-color: var(--skb-primary); }
+    .dashv2-action b { font-size: 1rem; }
+    .dashv2-action span:not(.dashv2-ico) { color: var(--skb-text-muted); font-size: 0.8125rem; }
+    .dashv2-action--primary { border-color: color-mix(in srgb, var(--skb-primary) 50%, var(--skb-border)); background: linear-gradient(160deg, var(--skb-primary-muted), var(--skb-bg-card, var(--skb-bg-secondary)) 70%); }
+    .dashv2-ico { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--skb-primary-muted); color: var(--skb-primary); }
+    .dashv2-ico svg { width: 21px; height: 21px; }
+    .dashv2-saved { padding: 1.1rem 1.1rem 0.5rem; margin-bottom: 1.6rem; }
+    .dashv2-saved[hidden] { display: none; }
+    .dashv2-saved-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
+    .dashv2-saved-row:first-child { border-top: 0; }
+    .dashv2-saved-row b { display: block; font-size: 0.875rem; color: var(--skb-text); }
+    .dashv2-saved-row span { color: var(--skb-text-muted); font-size: 0.8rem; }
+    /* ---- Tool screens (redesign 2026-11) ----
+       Icon rail: inside a tool, the Dashboard sidebar becomes a narrow
+       rail: the wallet's LifeHash (back to the Dashboard), then every tool
+       as an icon; hover shows its name. Same elements, same wiring. */
+    .rail-home { display: none; }
+    html.skb-sidebar-fits body.tool-active #state-dashboard.state-visible { flex: 0 0 84px; min-width: 84px; max-width: 84px; }
+    html.skb-sidebar-fits body.tool-active .dash-inner { padding: 0.85rem 0.5rem; }
+    html.skb-sidebar-fits body.tool-active #sidebar-seed-status { display: grid !important; place-items: center; padding: 6px !important; margin-bottom: 0.6rem !important; border-width: 2px !important; background: transparent !important; }
+    html.skb-sidebar-fits body.tool-active #sidebar-seed-status > :not(canvas):not(.rail-home) { display: none; }
+    html.skb-sidebar-fits body.tool-active #sidebar-seed-status canvas { float: none !important; margin: 0 !important; width: 48px !important; height: 48px !important; }
+    html.skb-sidebar-fits body.tool-active #sidebar-seed-status:not(:has(canvas:not([hidden]))) .rail-home { display: grid; place-items: center; width: 48px; height: 48px; color: var(--skb-text-muted); }
+    html.skb-sidebar-fits body.tool-active .rail-home svg { width: 24px; height: 24px; }
+    html.skb-sidebar-fits body.tool-active .dash-tool-grid { align-items: center; gap: 0.4rem; }
+    html.skb-sidebar-fits body.tool-active .dash-tool-card { width: 56px; height: 52px; padding: 0 !important; justify-content: center; border-color: transparent; background: transparent; }
+    html.skb-sidebar-fits body.tool-active .dash-tool-card:hover { border-color: var(--skb-border); background: var(--skb-bg-input); }
+    html.skb-sidebar-fits body.tool-active .dash-tool-card .dash-tool-icon { border-color: transparent; background: transparent; }
+    html.skb-sidebar-fits body.tool-active .dash-tool-card .dash-tool-label,
+    html.skb-sidebar-fits body.tool-active .dash-tool-card .dash-tool-chevron { display: none; }
+    html.skb-sidebar-fits body.tool-active .dash-tool-card .dash-tool-icon { margin: 0; }
+    html.skb-sidebar-fits body.tool-active .dash-tool-group-label { display: block; height: 0; overflow: hidden; margin: 0.5rem 10px; border-top: 1px solid var(--skb-border); padding: 0; }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-toggle { display: none; }
+    html.skb-sidebar-fits body.tool-active .dash-advanced { border: 0; background: transparent; margin-top: 0.4rem; }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-content { max-height: none; overflow: visible; }
+    html.skb-sidebar-fits body.tool-active .dash-advanced-content .dash-tool-grid { padding: 0; }
+
+    /* Tool header: left-aligned, title in normal case, subtitle beside it. */
+    .tool-hero { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.9rem; row-gap: 0.15rem; text-align: left; }
+    .tool-hero > * { flex-basis: 100%; }
+    .tool-hero > .tool-hero-title, .tool-hero > .tool-hero-subtitle { flex-basis: auto; }
+    .tool-hero-title { text-transform: none; letter-spacing: 0; font-size: 1.65rem; margin: 0; }
+    .tool-hero-title span::before { content: "\00a0"; }
+    .tool-hero-subtitle { font-family: var(--skb-sans); font-size: 0.95rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--skb-text-muted); margin: 0; }
+    .tool-hero-subtitle::first-letter { text-transform: uppercase; }
+    .tool-hero-desc { flex: 0 0 100%; max-width: none; margin: 0.35rem 0 0; padding-right: max(0px, calc(100% - 72ch)); box-sizing: border-box; text-align: left; }
+    .tool-hero-more { margin: 0.3rem 0 0; text-align: left; }
+    .tool-hero-recovery-badge { justify-self: start; flex-basis: auto; }
+
+    /* PSBT Signer steps: numbered. */
+    .psbt-steps { counter-reset: pstep; border: 0; gap: 0.5rem; overflow: visible; }
+    .psbt-step { counter-increment: pstep; display: flex; align-items: center; justify-content: center; gap: 0.55rem; padding: 0.7rem 0.5rem;
+      font-family: var(--skb-sans); font-size: 0.875rem; font-weight: 600; letter-spacing: 0; text-transform: none; border: 2px solid var(--skb-border); }
+    .psbt-step:last-child { border-right: 2px solid var(--skb-border); }
+    .psbt-step::before { content: counter(pstep); width: 22px; height: 22px; display: grid; place-items: center; font-size: 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted); }
+    .psbt-step.active { color: var(--skb-text); border-color: color-mix(in srgb, var(--skb-primary) 55%, var(--skb-border)); }
+    .psbt-step.active::before { background: var(--skb-primary); border-color: var(--skb-primary); color: #111; }
+    .psbt-step.completed::before { content: "\2713"; background: var(--skb-secondary-muted); color: var(--skb-secondary); border-color: var(--skb-secondary); }
+
+    @media (max-width: 1100px) {
+      .dashv2-top { grid-template-columns: minmax(0, 1fr); }
+      .dashv2-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
 </style>
 
 </body>
