@@ -6849,7 +6849,6 @@
                     <div id="sidebar-seed-label" style="font-size: 0.75rem; font-weight: 700; color: var(--skb-danger); letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Vault Locked</div>
                     <div id="sidebar-seed-fp" data-lifehash="36" data-lifehash-place="parent-right" style="font-family: var(--skb-mono); font-size: 1rem; font-weight: 900; letter-spacing: 0.12em; color: var(--skb-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No seed loaded</div>
                     <div style="margin-top: 0.4rem; font-family: var(--skb-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--skb-text-muted); text-align: right;">&#8592; Dashboard</div>
-                    <span class="rail-home" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg></span>
                 </div>
 
                 <!-- ---- Unified Command Row ----
@@ -44307,31 +44306,7 @@ function tfa_renderTable() {
     .dashv2-saved-row:first-child { border-top: 0; }
     .dashv2-saved-row b { display: block; font-size: 0.875rem; color: var(--skb-text); }
     .dashv2-saved-row span { color: var(--skb-text-muted); font-size: 0.8rem; }
-    /* ---- Tool screens (redesign 2026-11) ----
-       Icon rail: inside a tool, the Dashboard sidebar becomes a narrow
-       rail: the wallet's LifeHash (back to the Dashboard), then every tool
-       as an icon; hover shows its name. Same elements, same wiring. */
-    .rail-home { display: none; }
-    html.skb-sidebar-fits body.tool-active #state-dashboard.state-visible { flex: 0 0 84px; min-width: 84px; max-width: 84px; }
-    html.skb-sidebar-fits body.tool-active .dash-inner { padding: 0.85rem 0.5rem; }
-    html.skb-sidebar-fits body.tool-active #sidebar-seed-status { display: grid !important; place-items: center; padding: 6px !important; margin-bottom: 0.6rem !important; border-width: 2px !important; background: transparent !important; }
-    html.skb-sidebar-fits body.tool-active #sidebar-seed-status > :not(canvas):not(.rail-home) { display: none; }
-    html.skb-sidebar-fits body.tool-active #sidebar-seed-status canvas { float: none !important; margin: 0 !important; width: 48px !important; height: 48px !important; }
-    html.skb-sidebar-fits body.tool-active #sidebar-seed-status:not(:has(canvas:not([hidden]))) .rail-home { display: grid; place-items: center; width: 48px; height: 48px; color: var(--skb-text-muted); }
-    html.skb-sidebar-fits body.tool-active .rail-home svg { width: 24px; height: 24px; }
-    html.skb-sidebar-fits body.tool-active .dash-tool-grid { align-items: center; gap: 0.4rem; }
-    html.skb-sidebar-fits body.tool-active .dash-tool-card { width: 56px; height: 52px; padding: 0 !important; justify-content: center; border-color: transparent; background: transparent; }
-    html.skb-sidebar-fits body.tool-active .dash-tool-card:hover { border-color: var(--skb-border); background: var(--skb-bg-input); }
-    html.skb-sidebar-fits body.tool-active .dash-tool-card .dash-tool-icon { border-color: transparent; background: transparent; }
-    html.skb-sidebar-fits body.tool-active .dash-tool-card .dash-tool-label,
-    html.skb-sidebar-fits body.tool-active .dash-tool-card .dash-tool-chevron { display: none; }
-    html.skb-sidebar-fits body.tool-active .dash-tool-card .dash-tool-icon { margin: 0; }
-    html.skb-sidebar-fits body.tool-active .dash-tool-group-label { display: block; height: 0; overflow: hidden; margin: 0.5rem 10px; border-top: 1px solid var(--skb-border); padding: 0; }
-    html.skb-sidebar-fits body.tool-active .dash-advanced-toggle { display: none; }
-    html.skb-sidebar-fits body.tool-active .dash-advanced { border: 0; background: transparent; margin-top: 0.4rem; }
-    html.skb-sidebar-fits body.tool-active .dash-advanced-content { max-height: none; overflow: visible; }
-    html.skb-sidebar-fits body.tool-active .dash-advanced-content .dash-tool-grid { padding: 0; }
-
+    /* ---- Tool screens (redesign 2026-11) ---- */
     /* Tool header: left-aligned, title in normal case, subtitle beside it. */
     .tool-hero { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.9rem; row-gap: 0.15rem; text-align: left; }
     .tool-hero > * { flex-basis: 100%; }
