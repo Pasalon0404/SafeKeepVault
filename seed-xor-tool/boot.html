@@ -11517,6 +11517,7 @@ window.addEventListener('DOMContentLoaded', () => {
                  xpub: root.derive(deriv).publicExtendedKey };
     }
     var _devSavedWallets = [];  // dev-mock saved wallets (in memory)
+    var _devLastBackup = null;  // dev-mock "last backup" record (in memory)
     var _devTzPairing = null;   // dev-mock Trezor pairing (in memory)
     var _devTzUnlocked = false; // dev-mock Trezor: PIN already entered?
     var _devTzPinShown = false; // dev-mock Trezor: grid showing (reset by detect, like the real one)
@@ -11716,10 +11717,12 @@ window.addEventListener('DOMContentLoaded', () => {
         },
 
         // --- The Reliquary / The Archive / The Courier ---
-        createReliquary: async function () {
+        createReliquary: async function (selections) {
             console.log('[DEV MOCK] createReliquary() → simulated success');
+            _devLastBackup = { date: new Date().toISOString(), filename: 'Safekeep_backup_' + new Date().toISOString().slice(0, 10) + '.7z', items: Array.isArray(selections) ? selections.slice() : [] };
             return { success: true, path: '/tmp/dev-mock-reliquary.7z' };
         },
+        loadLastBackup: async function () { return _devLastBackup; },
         commitReliquary: async function () {
             console.log('[DEV MOCK] commitReliquary() → simulated success');
             return { success: true, committed: true };
@@ -12491,13 +12494,16 @@ async function dashv2_renderHealth() {
     var list = document.getElementById('dashv2-health-list');
     if (!list) return;
     var html = '';
-    // 1. Encrypted backup: newest dated .7z on the Transfer Drive
-    var names = [];
+    // 1. Encrypted backup. The stick's own record of its last backup comes
+    //    first (it survives moving the .7z off the Transfer Drive); without
+    //    one, the newest dated .7z on the Transfer Drive.
+    var names = [], rec = null;
     try {
         var os = window.SafeKeepOS;
         var listed = os && typeof os.listBackups === 'function' ? await os.listBackups() : [];
         names = typeof rlq_mergeDriveListing === 'function' ? await rlq_mergeDriveListing(listed) : listed;
-    } catch (_) { names = []; }
+        if (os && typeof os.loadLastBackup === 'function') rec = await os.loadLastBackup();
+    } catch (_) { names = names || []; }
     var newest = null;
     (names || []).forEach(function (n) {
         if (!/\.7z$/i.test(n)) return;
@@ -12507,15 +12513,26 @@ async function dashv2_renderHealth() {
         if (!newest || d > newest) newest = d;
     });
     var backupBtn = '<button type="button" class="skb-btn dashv2-health-btn" onclick="showState(\'state-reliquary\')">Back up now</button>';
-    if (!newest) {
-        html += _dashv2HealthItem('warn', 'No encrypted backup on the Transfer Drive', 'Make one, then send it to your phone with the Courier.', backupBtn);
-    } else {
-        var days = Math.max(0, Math.floor((Date.now() - newest.getTime()) / 86400000));
-        var when = newest.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-        var ago = days === 0 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago';
+    var fmtDate = function (d) { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); };
+    var daysSince = function (d) { return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000)); };
+    var ago = function (days) { return days === 0 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago'; };
+    var recDate = rec && rec.date ? new Date(rec.date) : null;
+    if (recDate && !isNaN(recDate)) {
+        var days = daysSince(recDate);
+        var ITEM = { seed: 'seed', codex: 'notes', settings: 'settings & saved wallets', cipher: 'passphrases', twofa: '2FA' };
+        var what = (rec.items || []).map(function (k) { return ITEM[k] || k; }).join(', ');
+        var onDrive = rec.filename && (names || []).indexOf(rec.filename) !== -1;
+        var detail = fmtDate(recDate) + (what ? ' · ' + what : '') +
+            (onDrive ? ' · on the Transfer Drive' : ' · no longer on the Transfer Drive: make sure you kept a copy');
         html += days > 30
-            ? _dashv2HealthItem('warn', 'Latest backup is ' + days + ' days old', 'Made ' + when + '. Back up again if you changed notes, wallets or passphrases.', backupBtn)
-            : _dashv2HealthItem('ok', 'Encrypted backup made ' + ago, when + ' \u00b7 on the Transfer Drive', '');
+            ? _dashv2HealthItem('warn', 'Last backup is ' + days + ' days old', detail, backupBtn)
+            : _dashv2HealthItem('ok', 'Last backup ' + ago(days), detail, '');
+    } else if (newest) {
+        var d2 = daysSince(newest);
+        html += _dashv2HealthItem(d2 > 30 ? 'warn' : 'ok', 'Backup on the Transfer Drive from ' + fmtDate(newest),
+            'Not made on this stick (or before it kept a record). Make one here to keep track.', backupBtn);
+    } else {
+        html += _dashv2HealthItem('warn', 'No backup made on this stick yet', 'Make one, then send it to your phone with the Courier.', backupBtn);
     }
     // 2. Transfer Drive
     var mounted = /\bMOUNTED\b/i.test(_dashv2Text('status-transfer-label')) && !/UNMOUNTED/i.test(_dashv2Text('status-transfer-label'));
