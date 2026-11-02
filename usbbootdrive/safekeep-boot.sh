@@ -2952,6 +2952,34 @@ except Exception as e:
     # Without this, EVERY Chromium exit cascaded into sudo poweroff
     # below, which on a launch failure would casper-shutdown the box
     # before any error message was readable.
+    # Wait for the browser of a previous session to finish exiting. After a
+    # Lock, the old Chromium can take several seconds to shut down. A new one
+    # started meanwhile hands its page to the old process and quits at once
+    # (status 0, ~3 s): the fast-fail check below then halts this script for
+    # good, and the session the user sees (run by the old process) has
+    # nothing behind it, so closing it left a blank screen. Seen when
+    # "Boot Temporary Session" was chosen right after a Lock.
+    _skb_old_chromium() {
+        pgrep -f '/opt/ungoogled-chromium' >/dev/null 2>&1 || pgrep -x chrome >/dev/null 2>&1
+    }
+    if _skb_old_chromium; then
+        echo "[BOOT] A previous Chromium is still running — waiting for it to exit..."
+        for _skb_w in $(seq 1 40); do
+            _skb_old_chromium || break
+            sleep 0.25
+        done
+        if _skb_old_chromium; then
+            echo "[BOOT] Previous Chromium still running after 10 s — stopping it."
+            pkill -TERM -f '/opt/ungoogled-chromium' 2>/dev/null || true
+            pkill -TERM -x chrome 2>/dev/null || true
+            sleep 1
+            pkill -KILL -f '/opt/ungoogled-chromium' 2>/dev/null || true
+            pkill -KILL -x chrome 2>/dev/null || true
+            sleep 0.5
+        fi
+        echo "[BOOT] Previous Chromium gone."
+    fi
+
     CHROMIUM_START_EPOCH=$(date +%s)
     # Binary is `ungoogled-chromium` from the xtradeb/apps PPA. The
     # package name is unique to that PPA — Canonical's official repos
