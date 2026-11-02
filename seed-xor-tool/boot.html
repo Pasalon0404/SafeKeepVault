@@ -15434,8 +15434,11 @@ async function dash_showCipherDropdown() {
 }
 
 /**
- * Load a passphrase from the Cipher Library into the Dashboard passphrase field.
- * Populate-only: the user must click "Apply" to commit the change.
+ * Pick a passphrase from the Passphrase Library on the Dashboard: it fills
+ * the field and is applied right away. Library passphrases were checked
+ * against the written copy when they were saved, so there is nothing to
+ * confirm; picking one is the choice. (Typed passphrases still need Apply
+ * and typing twice.)
  */
 async function dash_loadFromCipher(slug) {
     var os = window.SafeKeepOS;
@@ -15447,7 +15450,7 @@ async function dash_loadFromCipher(slug) {
         return;
     }
 
-    // Inject into dashboard passphrase input (populate only — no apply)
+    // Fill the dashboard passphrase field (kept hidden), then apply it
     var input = document.getElementById('dash-pp-input');
     if (input) {
         input.value = result.passphrase;
@@ -15461,10 +15464,8 @@ async function dash_loadFromCipher(slug) {
     var dropdown = document.getElementById('dash-cipher-dropdown');
     if (dropdown) dropdown.style.display = 'none';
 
-    // Update buttons — Apply will now be visible for the user to click
     _dash_updatePassphraseButtons();
-
-    showStatus('Passphrase loaded from Passphrase Library: <strong>' + (typeof _cipherEscape === 'function' ? _cipherEscape(result.nickname) : result.nickname) + '</strong>. Click <strong>Apply</strong> to derive the wallet.', 'info');
+    await _dash_applyConfirmedPassphrase(result.passphrase);
 }
 
 

@@ -273,14 +273,15 @@ const fpOf = async (pass) => HDKey.fromMasterSeed(await bip39.mnemonicToSeed(MNE
   ck('Cancel closes it, wipes it and applies nothing', !shown(el('dash-pp-confirm')) && el('dash-pp-confirm-input').value === '' && active() === ''); }
 { const { ctx, el, active } = makeEnv();
   await ctx.dash_loadFromCipher('a');
-  ck('(setup) Library load fills the field without applying', el('dash-pp-input').value === 'from library a' && active() === '');
+  ck('from the Library: picking it fills the field and applies it right away', el('dash-pp-input').value === 'from library a' && active() === 'from library a');
+  ck('from the Library: no retyping (it was checked when saved)', !shown(el('dash-pp-confirm')));
   await ctx.dash_applyPassphrase();
-  ck('from the Library: applies without retyping (it was checked when saved)', active() === 'from library a' && !shown(el('dash-pp-confirm')));
+  ck('from the Library: Apply again changes nothing', active() === 'from library a' && !shown(el('dash-pp-confirm')));
   ctx.dash_clearPassphrase();
   await ctx.dash_loadFromCipher('b');
   el('dash-pp-input').value = 'from library b2'; ctx._dash_onPassphraseInput();
   await ctx.dash_applyPassphrase();
-  ck('a Library passphrase that was edited must be confirmed', active() === '' && shown(el('dash-pp-confirm')));
+  ck('a Library passphrase that was edited must be confirmed (the picked one stays until then)', active() === 'from library b' && shown(el('dash-pp-confirm')));
   ctx.dash_clearPassphrase();
   ck('Clear closes the confirm row and forgets the Library marker', !shown(el('dash-pp-confirm')));
   el('dash-pp-input').value = 'from library b'; await ctx.dash_applyPassphrase();
