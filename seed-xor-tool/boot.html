@@ -6915,6 +6915,7 @@
                             <div class="dashv2-wallet-body">
                                 <div class="dashv2-eyebrow" id="dashv2-eyebrow">Your wallet</div>
                                 <h2 class="dashv2-name" id="dashv2-name">Wallet</h2>
+                                <p class="dashv2-nick-note" id="dashv2-nick-note" hidden>A nickname to help you recognize this seed. It is not part of your recovery words.</p>
                                 <div class="dashv2-chips">
                                     <span class="dashv2-chip dashv2-chip--mono" id="dashv2-fp" title="Master fingerprint">--------</span>
                                     <span class="dashv2-chip" id="dashv2-words"></span>
@@ -12686,18 +12687,23 @@ function dashv2_renderWallet() {
     // come from seed + passphrase; with a passphrase on, the title names the
     // passphrase wallet and the three words are labelled as the seed's.
     var ppName = (ppOn && typeof _activePpName === 'string' && _activePpName) ? _activePpName : '';
-    set('dashv2-name', ppOn ? (ppName || 'Passphrase wallet') : nick);
+    var hasNick = nick && !/^Wallet [0-9A-F]{8}$|^No seed loaded$/i.test(nick);
+    // The nickname is three made-up words: in quotes and labelled, so it is
+    // never mistaken for recovery words.
+    var showNick = !ppOn && hasNick;
+    set('dashv2-name', ppOn ? (ppName || 'Passphrase wallet') : (hasNick ? '\u201c' + nick + '\u201d' : nick));
+    var nickNote = document.getElementById('dashv2-nick-note');
+    if (nickNote) nickNote.hidden = !showNick;
     set('dashv2-fp', fp ? fp.toUpperCase() : '--------');
     set('dashv2-lh-src', fp);
     set('dashv2-words', words ? words + ' words' : '');
     var w = document.getElementById('dashv2-words'); if (w) w.hidden = !words;
-    var hasNick = nick && !/^Wallet [0-9A-F]{8}$|^No seed loaded$/i.test(nick);
-    set('dashv2-pp', ppOn ? (hasNick ? 'Seed: ' + nick : 'Passphrase on') : 'No passphrase');
+    set('dashv2-pp', ppOn ? (hasNick ? 'Seed nickname: \u201c' + nick + '\u201d' : 'Passphrase on') : 'No passphrase');
     var ppChip = document.getElementById('dashv2-pp');
-    if (ppChip) ppChip.title = ppOn ? 'The seed\u2019s three-word nickname. It comes from the seed words alone, so it stays the same with any passphrase.' : '';
+    if (ppChip) ppChip.title = ppOn ? 'A nickname to help you recognize this seed, not part of your recovery words. It comes from the seed words alone, so it stays the same with any passphrase.' : '';
     var fpChip = document.getElementById('dashv2-fp');
     if (fpChip) fpChip.title = ppOn ? 'Fingerprint of this passphrase wallet (seed + passphrase), as your wallet app shows it' : 'Master fingerprint, as your wallet app shows it';
-    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' : (ppName ? 'Passphrase wallet' : 'Your wallet'));
+    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' + (showNick ? ' \u00b7 seed nickname' : '') : (ppName ? 'Passphrase wallet' : (showNick ? 'Your wallet \u00b7 seed nickname' : 'Your wallet')));
     var dash = document.getElementById('state-dashboard');
     if (dash && ppOn) dash.classList.add('dashv2-pp-open');
     var btn = document.getElementById('dashv2-pp-btn');
@@ -45299,6 +45305,8 @@ function tfa_renderTable() {
     .dashv2-lh-src { display: none; }
     .dashv2-eyebrow { font-size: 0.75rem; color: var(--skb-text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
     .dashv2-name { font-family: var(--skb-sans); font-size: 1.6rem; font-weight: 800; margin: 0.1rem 0 0.55rem; color: var(--skb-text); text-transform: none; letter-spacing: 0; }
+    .dashv2-nick-note { margin: -0.35rem 0 0.6rem; font-size: 0.8125rem; color: var(--skb-text-muted); line-height: 1.45; }
+    .dashv2-nick-note[hidden] { display: none; }
     .dashv2-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
     .dashv2-chip { display: inline-flex; align-items: center; padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--skb-bg-input); border: 1px solid var(--skb-border); font-size: 0.8rem; color: var(--skb-text-muted); }
     .dashv2-chip[hidden] { display: none; }
