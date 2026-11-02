@@ -2952,17 +2952,21 @@ except Exception as e:
     # Without this, EVERY Chromium exit cascaded into sudo poweroff
     # below, which on a launch failure would casper-shutdown the box
     # before any error message was readable.
-    # Wait for the browser of a previous session to finish exiting. After a
-    # Lock, the old Chromium can take several seconds to shut down. A new one
-    # started meanwhile hands its page to the old process and quits at once
-    # (status 0, ~3 s): the fast-fail check below then halts this script for
-    # good, and the session the user sees (run by the old process) has
-    # nothing behind it, so closing it left a blank screen. Seen when
-    # "Boot Temporary Session" was chosen right after a Lock.
+    # Chromium processes still running (not zombies). The browser and its
+    # helpers are named "chrome" (/opt/ungoogled-chromium/chrome); the crash
+    # reporter (chrome_crashpad) can outlive the browser, so it is not counted.
     _skb_old_chromium() {
-        pgrep -f '/opt/ungoogled-chromium' >/dev/null 2>&1 || pgrep -x chrome >/dev/null 2>&1
+        ps -eo stat=,comm= 2>/dev/null | awk '$1 !~ /^Z/ && $2 == "chrome" { f = 1 } END { exit !f }'
     }
+    _skb_log_chromium() {
+        echo "[BOOT] Chromium processes ($1):"
+        ps -eo pid=,ppid=,stat=,etimes=,comm= 2>/dev/null | awk '$5 == "chrome" { print "         " $0 }' | head -n 12
+    }
+
+    # Wait for the browser of a previous session to finish exiting (after a
+    # Lock it can take a few seconds), and stop it if it hangs on.
     if _skb_old_chromium; then
+        _skb_log_chromium "before launch"
         echo "[BOOT] A previous Chromium is still running — waiting for it to exit..."
         for _skb_w in $(seq 1 40); do
             _skb_old_chromium || break
@@ -2970,10 +2974,8 @@ except Exception as e:
         done
         if _skb_old_chromium; then
             echo "[BOOT] Previous Chromium still running after 10 s — stopping it."
-            pkill -TERM -f '/opt/ungoogled-chromium' 2>/dev/null || true
             pkill -TERM -x chrome 2>/dev/null || true
             sleep 1
-            pkill -KILL -f '/opt/ungoogled-chromium' 2>/dev/null || true
             pkill -KILL -x chrome 2>/dev/null || true
             sleep 0.5
         fi
@@ -3013,6 +3015,23 @@ except Exception as e:
     CHROMIUM_EXIT=$?
     CHROMIUM_ELAPSED=$(( $(date +%s) - CHROMIUM_START_EPOCH ))
     echo "[BOOT] Chromium exited after ${CHROMIUM_ELAPSED}s with status ${CHROMIUM_EXIT}"
+
+    # The process we started can return within seconds while a Chromium it
+    # handed off to (or relaunched) keeps showing the session: seen when a
+    # Temporary Session was started right after a Lock. That is not a launch
+    # failure. Wait for the browser that is really running to close, then
+    # carry on as for any session (power sequence → Lock → unlock prompt).
+    # Without this the fast-fail check below halted the script for good, and
+    # closing that session left a blank screen.
+    if [ "$CHROMIUM_ELAPSED" -lt 5 ] && _skb_old_chromium; then
+        _skb_log_chromium "after a ${CHROMIUM_ELAPSED}s return"
+        echo "[BOOT] Chromium is still running: waiting for the session to close."
+        while _skb_old_chromium; do
+            sleep 0.5
+        done
+        CHROMIUM_ELAPSED=$(( $(date +%s) - CHROMIUM_START_EPOCH ))
+        echo "[BOOT] Chromium closed after ${CHROMIUM_ELAPSED}s"
+    fi
 
     # ====================================================================
     # FAST-FAIL DIAGNOSTIC HALT
