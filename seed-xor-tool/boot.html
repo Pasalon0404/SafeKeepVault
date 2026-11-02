@@ -9280,10 +9280,10 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <div class="rcv-path" id="rcv-path"></div>
                         <div class="rcv-btns">
                             <button type="button" class="skb-btn" onclick="rcv_copy()">Copy address</button>
-                            <button type="button" class="skb-btn skb-btn--primary" onclick="rcv_new()">New address</button>
+                            <button type="button" class="skb-btn skb-btn--primary" id="rcv-new-btn" onclick="rcv_new()">New address</button>
                         </div>
                         <p class="rcv-note" id="rcv-note"></p>
-                        <details class="rcv-more">
+                        <details class="rcv-more" id="rcv-more">
                             <summary>Show a different address number</summary>
                             <div class="rcv-goto">
                                 <label for="rcv-goto" class="rcv-goto-label">Address number</label>
@@ -13018,12 +13018,27 @@ async function rcv_init() {
             if (!r.ok || r.addressNote) return;
             wallets.push({ id: 'seed:' + d.fingerprint + ':' + t[0], label: 'This seed' + (pp ? ' (passphrase)' : '') + ' · ' + t[1], parsed: r });
         });
+        // Silent Payment (BIP-352): one reusable sp1q address, worked out as
+        // Output Descriptor does (m/352'/0'/0'/1'/0 scan, /0'/0 spend). Only
+        // public keys are needed for the address.
+        try {
+            var spw = _rcvSilentPayment(seedBytes);
+            if (spw) wallets.push({ id: 'sp:' + spw.fingerprint, sp: true, address: spw.address, fingerprint: spw.fingerprint,
+                label: 'This seed' + (pp ? ' (passphrase)' : '') + ' · Silent Payment (sp1q\u2026)' });
+        } catch (e) { console.warn('[receive] Silent Payment address:', e && e.message); }
     }
     if (typeof _savedWalletsLoading !== 'undefined' && _savedWalletsLoading) { try { await _savedWalletsLoading; } catch (_) {} }
     (typeof _savedWallets !== 'undefined' ? _savedWallets : []).forEach(function (w) {
         var r = _savedWalletParse(w.descriptor);
-        if (!r.parsed || r.parsed.kind === 'sp') return;
+        if (!r.parsed) return;
         var cs = (String(w.descriptor).match(/#([0-9a-z]{8})\s*$/i) || [])[1] || desc_checksum(_savedWalletBody(w.descriptor));
+        if (r.parsed.kind === 'sp') {
+            // A saved Silent Payment wallet: its one static address.
+            if (r.parsed.firstAddress) wallets.push({ id: 'saved:' + cs, sp: true, address: r.parsed.firstAddress,
+                fingerprint: ((r.parsed.keys && r.parsed.keys[0] && r.parsed.keys[0].fingerprint) || ''),
+                label: w.name + ' \u00b7 Silent Payment' });
+            return;
+        }
         wallets.push({ id: 'saved:' + cs, label: w.name + ' · ' + _savedWalletSummary(r.parsed), parsed: r.parsed });
     });
     _rcv.wallets = wallets;
@@ -13038,10 +13053,37 @@ async function rcv_init() {
     sel.value = keep;
     rcv_selectWallet(keep);
 }
+/* This seed's Silent Payment address (mainnet), or null without the module. */
+function _rcvSilentPayment(seedBytes) {
+    var SP = window.SilentPayments, HDKey = window.BtcMath && window.BtcMath.HDKey;
+    if (!SP || !HDKey) return null;
+    var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+    var scan = root.derive("m/352'/0'/0'/1'/0"), spend = root.derive("m/352'/0'/0'/0'/0");
+    return { address: SP.encodeSilentPaymentAddress(scan.publicKey, spend.publicKey),
+             fingerprint: root.fingerprint.toString(16).padStart(8, '0') };
+}
+
+/* A Silent Payment wallet has one reusable address: no numbers, no New address. */
+function _rcvShowStatic(w) {
+    _rcv.index = 0;
+    _rcv.address = w.address;
+    var addrEl = document.getElementById('rcv-addr');
+    if (addrEl) { addrEl.style.color = ''; addrEl.innerHTML = _descRecvGroups(w.address); }
+    document.getElementById('rcv-num').textContent = 'Silent Payment address';
+    document.getElementById('rcv-path').textContent = 'BIP-352 \u00b7 reusable' + (w.fingerprint ? ' \u00b7 ' + w.fingerprint.toUpperCase() : '');
+    document.getElementById('rcv-note').textContent = 'Use this same address for every payment. Each payment still lands at its own, unlinkable address on the blockchain, so there is no need for a new one. The sender\u2019s wallet must support Silent Payments (sp1q addresses).';
+    var canvas = document.getElementById('rcv-qr');
+    if (canvas && window.QRCode) QRCode.toCanvas(canvas, w.address, { width: 300, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
+}
+
 function rcv_selectWallet(id) {
     var w = _rcv.wallets.filter(function (x) { return x.id === id; })[0];
     if (!w) return;
     _rcv.cur = w;
+    var newBtn = document.getElementById('rcv-new-btn'), more = document.getElementById('rcv-more');
+    if (newBtn) newBtn.hidden = !!w.sp;
+    if (more) more.hidden = !!w.sp;
+    if (w.sp) { try { _rcvShowStatic(w); } catch (e) { rcv_show(0); } return; }
     var idx;
     if (_rcv.session[id] !== undefined) idx = _rcv.session[id];
     else { idx = _rcv.map[id] !== undefined ? _rcv.map[id] + 1 : 0; _rcv.session[id] = idx; rcv_record(id, idx); }
@@ -13097,7 +13139,7 @@ function _rcvShow(idx) {
     if (canvas && window.QRCode) QRCode.toCanvas(canvas, addr, { width: 300, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
 }
 function rcv_new() {
-    if (!_rcv.cur) return;
+    if (!_rcv.cur || _rcv.cur.sp) return;
     var id = _rcv.cur.id;
     var next = Math.max(_rcv.map[id] !== undefined ? _rcv.map[id] : -1, _rcv.index) + 1;
     _rcv.session[id] = next;
@@ -13106,6 +13148,7 @@ function rcv_new() {
 }
 function rcv_goto() {
     clearTimeout(_rcvGotoTimer);
+    if (_rcv.cur && _rcv.cur.sp) return;
     var v = String((document.getElementById('rcv-goto') || {}).value || '').trim();
     if (!/^\d+$/.test(v) || +v > 2147483647) { showStatus('Enter an address number from 0 up.', 'error'); return; }
     if (_rcv.cur && parseInt(v, 10) === _rcv.index && _rcv.address) return;
@@ -13117,6 +13160,7 @@ function rcv_goto() {
 var _rcvGotoTimer = null;
 function rcv_gotoLive() {
     clearTimeout(_rcvGotoTimer);
+    if (_rcv.cur && _rcv.cur.sp) return;
     _rcvGotoTimer = setTimeout(function () {
         var v = String((document.getElementById('rcv-goto') || {}).value || '').trim();
         if (!/^\d+$/.test(v) || +v > 2147483647) return;
