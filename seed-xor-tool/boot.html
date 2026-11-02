@@ -7015,7 +7015,7 @@
                      ================================================================ -->
                 <div class="dash-tool-grid cols-3">
                     <!-- 1. PSBT Signer (formerly "The Scribe") -->
-                    <button type="button" class="dash-tool-card" onclick="openPsbtSigner()" style="text-align: left; cursor: pointer;">
+                    <button type="button" class="dash-tool-card" data-state="state-psbt-signer" onclick="openPsbtSigner()" style="text-align: left; cursor: pointer;">
                         <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg></span>
                         <span class="dash-tool-label">
                             <span class="dash-tool-name">PSBT Signer</span>
@@ -7075,7 +7075,7 @@
                 <section class="dashv2 dashv2-lower" aria-label="What would you like to do?">
                     <div class="dashv2-title">What would you like to do?</div>
                     <div class="dashv2-actions">
-                        <button type="button" class="dashv2-action dashv2-action--primary" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan or load a PSBT, check it, sign it</span></button>
+                        <button type="button" class="dashv2-action" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan/load a PSBT, check it, sign it</span></button>
                         <button type="button" class="dashv2-action" onclick="rcv_open('state-receive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></span><b>Show an address</b><span>The next receive address as a QR code</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-reliquary')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span><b>Back up</b><span>Encrypted backup, send it to your phone, check it</span></button>
                         <button type="button" class="dashv2-action" onclick="connect_open('state-connect')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Blue Wallet, Electrum, Nunchuk, Sparrow, Specter</span></button>
@@ -18656,7 +18656,9 @@ function showState(stateId) {
         // Match the onclick attribute to find the right card
         var matchStr = "showState('" + stateId + "')";
         for (var ci = 0; ci < allCards.length; ci++) {
-            var oc = allCards[ci].getAttribute('onclick') || '';
+            // data-state names the screen for cards whose onclick doesn't
+            // (the PSBT Signer opens through openPsbtSigner()).
+            var oc = allCards[ci].getAttribute('data-state') || allCards[ci].getAttribute('onclick') || '';
             if (oc.indexOf(stateId) !== -1) {
                 allCards[ci].classList.add('sidebar-active');
                 break;
@@ -45009,8 +45011,7 @@ function tfa_renderTable() {
       background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); color: var(--skb-text); font: inherit; }
     .dashv2-action:hover { border-color: var(--skb-primary); }
     .dashv2-action b { font-size: 1rem; }
-    .dashv2-action span:not(.dashv2-ico) { color: var(--skb-text-muted); font-size: 0.8125rem; }
-    .dashv2-action--primary { border-color: color-mix(in srgb, var(--skb-primary) 50%, var(--skb-border)); background: linear-gradient(160deg, var(--skb-primary-muted), var(--skb-bg-card, var(--skb-bg-secondary)) 70%); }
+    .dashv2-action span:not(.dashv2-ico) { color: var(--skb-text-muted); font-size: 0.8125rem; text-wrap: balance; }
     .dashv2-ico { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--skb-primary-muted); color: var(--skb-primary); }
     .dashv2-ico svg { width: 21px; height: 21px; }
     .dashv2-saved { padding: 1.1rem 1.1rem 0.5rem; margin-bottom: 1.6rem; }
