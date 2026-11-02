@@ -10290,6 +10290,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                             <button type="button" class="skb-btn arm-no-print" id="arm-xpub-qr-btn" style="flex: 1; font-size: 0.8rem;" onclick="arm_toggleXpubQR()">Show QR</button>
                             <button type="button" class="skb-btn arm-no-print" id="arm-download-export-btn" style="flex: 1; font-size: 0.8rem;" onclick="arm_downloadActiveExport()">Download JSON</button>
                         </div>
+                        <div class="arm-courier-offer arm-no-print" id="arm-courier-offer" hidden aria-live="polite"></div>
                         <div class="cn-guide" id="arm-connect-guide" hidden>
                             <div class="cn-guide-head"><b id="arm-connect-title"></b><button type="button" class="skb-btn" onclick="connect_closeGuide()">Close</button></div>
                             <ol class="cn-steps" id="arm-connect-steps"></ol>
@@ -38466,6 +38467,8 @@ function arm_init() {
 }
 
 function arm_onConfigChange() {
+    // A new format or wallet: the last "Send with the Courier" offer was for the old file.
+    try { arm_dismissCourierOffer(); } catch (_) {}
     // Cross-field gate runs synchronously — has to fire BEFORE the
     // debounced derive so the user never sees a flash of the invalid
     // combo (Multi-Sig + Electrum Watch-Only JSON, which our Electrum
@@ -40093,6 +40096,41 @@ async function _armResolveUniqueFilename(dirHandle, desiredName) {
     return stem + '-' + Date.now() + ext;
 }
 
+// ---- After a download: offer to send it with the Courier ----
+// The exported file usually goes on to an online computer or phone. Offer
+// the Courier right there (as the Backup screen does after Export Backup),
+// sending the text just written, so nothing is read back from the drive.
+var _armLastExport = null;
+
+function _armOfferCourier(name, text) {
+    var box = document.getElementById('arm-courier-offer');
+    if (!box || !name || typeof text !== 'string') return;
+    _armLastExport = { name: String(name), text: text };
+    box.innerHTML =
+        '<div class="arm-courier-offer-title">Saved to the Transfer Drive</div>' +
+        '<div class="arm-courier-offer-file">' + _psbtEscape(String(name)) + '</div>' +
+        '<p>Ready to send it to your online computer or phone? The Courier plays it as an animated QR code; receive it with the Courier Tool at safekeepbitcoin.com. No cables, and nothing touches the internet from here.</p>' +
+        '<div class="arm-courier-offer-btns">' +
+        '<button type="button" class="skb-btn skb-btn--primary" onclick="arm_sendExportWithCourier()">Send with the Courier</button>' +
+        '<button type="button" class="skb-btn" onclick="arm_dismissCourierOffer()">Not now</button>' +
+        '</div>';
+    box.hidden = false;
+    if (typeof skui_revealPanel === 'function') skui_revealPanel(box);
+}
+
+function arm_sendExportWithCourier() {
+    var x = _armLastExport;
+    if (!x) return;
+    arm_dismissCourierOffer();
+    var file = new File([x.text], x.name, { type: 'application/json' });
+    _xfrOpenWithFile(file, true);
+}
+
+function arm_dismissCourierOffer() {
+    var box = document.getElementById('arm-courier-offer');
+    if (box) { box.hidden = true; box.innerHTML = ''; }
+}
+
 async function _armSaveExportToTransfer(filename, text) {
     // (1) Boot-drive daemon path
     const os = window.SafeKeepOS;
@@ -40104,6 +40142,7 @@ async function _armSaveExportToTransfer(filename, text) {
             if (res && res.exported) {
                 const sizeNote = res.size ? ' (' + res.size + ' bytes)' : '';
                 showStatus('Exported ' + filename + ' to Transfer Drive' + sizeNote + '.', 'success');
+                _armOfferCourier(filename, text);
                 return true;
             }
             showStatus('Export failed: ' + ((res && res.error) || 'unknown error'), 'error');
@@ -40137,6 +40176,7 @@ async function _armSaveExportToTransfer(filename, text) {
                 ? ' (renamed from ' + filename + ' — earlier export preserved)'
                 : '';
             showStatus('Saved ' + writeName + ' to Transfer Drive' + renotice + '.', 'success');
+            _armOfferCourier(writeName, text);
             // The Archive UI mirrors the transfer drive — kick it to
             // pick up the new file without the user having to refresh.
             if (typeof archive_refresh === 'function') {
@@ -40173,6 +40213,7 @@ async function _armSaveExportToTransfer(filename, text) {
                 'mount it from the dashboard for one-click protected exports.',
                 'success'
             );
+            _armOfferCourier(filename, text);
             return true;
         } catch (e) {
             // AbortError = the user closed the picker. Treat as a
@@ -45120,6 +45161,12 @@ function tfa_renderTable() {
     .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
     .welcome-actions .welcome-vault-btn { margin-top: 0.6rem; background: transparent; }
     .welcome-vault-note { margin: 0.1rem 0 0; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
+    .arm-courier-offer { margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid var(--skb-success, #00c896); border-radius: var(--skb-radius-sm); }
+    .arm-courier-offer[hidden] { display: none; }
+    .arm-courier-offer-title { font-weight: 700; color: var(--skb-success, #00c896); margin-bottom: 0.25rem; }
+    .arm-courier-offer-file { font-family: var(--skb-mono); font-size: 0.8rem; word-break: break-all; margin-bottom: 0.45rem; }
+    .arm-courier-offer p { font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0 0 0.6rem; line-height: 1.5; }
+    .arm-courier-offer-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .desc-import-save { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--skb-border); }
     .desc-import-save label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.4rem; }
     .desc-import-save-row { display: flex; gap: 0.5rem; }
