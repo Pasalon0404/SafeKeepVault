@@ -31,7 +31,7 @@ ck('Sparrow: BC-UR Account, not animated, all types, multisig allowed', A.sparro
 ck('Nunchuk: Hardware Wallet JSON, animated, Native SegWit', A.nunchuk.format === 'coldcard_json' && A.nunchuk.animate && JSON.stringify(A.nunchuk.types) === '["84"]' && A.nunchuk.multi);
 ck('Blue Wallet: output descriptor, single-sig', A.bluewallet.format === 'descriptor_text' && !A.bluewallet.animate && !A.bluewallet.multi);
 ck('Another wallet: no preset format', A.other.format === null);
-ck('Specter: the UR:CRYPTO-ACCOUNT QR (Add device -> Other -> Scan QR code reads it), not a file', A.specter.format === 'bcur' && !A.specter.file && A.specter.multi);
+ck('Specter: [fingerprint/path]xpub text QR (Add device -> Other -> Scan QR code takes it as is), not a file', A.specter.format === 'key_origin' && !A.specter.file && A.specter.multi);
 ck('Specter steps: Add new device, Other, Scan QR code; file only as a fallback', (function (t) { return /Add new device/.test(t) && /Other/.test(t) && /Scan QR code/.test(t) && /No camera/.test(t) && /Upload from SD/.test(t); })(A.specter.steps('84', false).join(' ')));
 ck('Electrum: SLIP-132 key as a QR, no Taproot', A.electrum.format === 'slip132' && !A.electrum.file && A.electrum.types.indexOf('86') === -1 && A.electrum.multi);
 ck('Electrum steps: Courier, Use a master key', /Courier/.test(A.electrum.steps('84', false).join(' ')) && /Use a master key/.test(A.electrum.steps('84', false).join(' ')));

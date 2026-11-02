@@ -10227,6 +10227,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                 <option value="slip132" selected>SLIP-132 (zpub / ypub / xpub)</option>
                                 <option value="bip380">BIP-32 Standard (xpub only)</option>
                                 <option value="descriptor_text">Output Descriptor (BIP-380)</option>
+                                <option value="key_origin">Key with origin ([fingerprint/path]xpub)</option>
                                 <option value="bcur">BC-UR Account (ur:crypto-account)</option>
                                 <option value="coldcard_json">Hardware Wallet JSON</option>
                                 <option value="nunchuk_json">Hardware Wallet JSON (Minimal)</option>
@@ -12833,10 +12834,11 @@ var _CN_APPS = {
                 'Blue Wallet adds a watch-only wallet. Its first receive address should be the same as address #0 in <b>Show an address</b>.'
             ];
         } },
-    // Specter Desktop's Add device → Other → Scan QR code reads
-    // UR:CRYPTO-ACCOUNT (animated or single), as Keystone sends it, and turns
-    // each key into [fingerprint/path]xpub; the same QR as for Sparrow.
-    specter: { name: 'Specter', format: 'bcur', animate: false, multi: true, types: ['84', '86', '49', '44'],
+    // Specter Desktop's Add device → Other → Scan QR code takes
+    // [fingerprint/path]xpub text as it is (Specter-DIY's format): a short QR
+    // code, no BC-UR decoding, and no browser crypto needed on Specter's side
+    // (its UR:CRYPTO-ACCOUNT path rebuilds the xpub with crypto.subtle).
+    specter: { name: 'Specter', format: 'key_origin', animate: false, multi: true, types: ['84', '86', '49', '44'],
         steps: function (t, multi) {
             return [
                 'In Specter Desktop: <b>Devices → Add new device</b>, device type <b>Other</b>.',
@@ -12924,7 +12926,7 @@ async function connect_go() {
     arm_onConfigChange();
     // Seed Management works the key out after a short delay (and hides its QR
     // while it does): wait until the key box holds this app's format.
-    var want = { bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/, slip132: /^[xyzXYZ]pub/ }[a.format];
+    var want = { key_origin: /^\[[0-9a-f]{8}\//i, bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/, slip132: /^[xyzXYZ]pub/ }[a.format];
     for (var i = 0; i < 60; i++) {
         await new Promise(function (r) { setTimeout(r, 150); });
         var txt = (document.getElementById('arm-xpub') || {}).textContent || '';
@@ -39231,6 +39233,15 @@ async function arm_deriveWallet() {
             displayValue = isMulti
                 ? (await _descLocalKeyOrigin(mnemonic, passphrase, pathType)).origin
                 : _descSingleSig(seedBytes, pathType).descriptor;
+        } else if (effectiveKeyFormat === 'key_origin') {
+            // [fingerprint/path]xpub on its own: the key expression of a
+            // descriptor, as Specter-DIY shows it. Specter Desktop's Add
+            // device → Scan QR code reads this text directly; a short,
+            // easy-to-scan QR code. Hardened steps written with h.
+            var _ko = isMulti
+                ? (await _descLocalKeyOrigin(mnemonic, passphrase, pathType)).origin
+                : ((_descSingleSig(seedBytes, pathType).descriptor.match(/\[[0-9a-fA-F]{8}\/[^\]]*\][a-zA-Z]pub[1-9A-HJ-NP-Za-km-z]+/) || [''])[0]);
+            displayValue = _ko.replace(/'/g, 'h');
         } else if (effectiveKeyFormat === 'nunchuk_json') {
             // Nunchuk-specific minimal schema. Strictly:
             //   { xfp, bipNN_or_bip48_N: { deriv, xpub, path, name } }
@@ -39842,6 +39853,7 @@ function _armKeyFormatToSuffix(keyFormat) {
         case 'slip132':              return 'SLIP-132';
         case 'bip380':               return 'BIP-32';
         case 'descriptor_text':      return 'BIP-380';
+        case 'key_origin':           return 'KEY-ORIGIN';
         case 'coldcard_json':        return 'HWW';
         case 'nunchuk_json':         return 'HWW-MINIMAL';
         case 'electrum_json':        return 'BIP-32-WATCH';
