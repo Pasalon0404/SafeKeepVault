@@ -106,7 +106,7 @@ vm.runInContext([
       '_descNormalizeXpub', '_wrecEscape', '_wrecSplitArgs', '_wrecCall', '_wrecParseDescriptor', '_wrecIndexZeroPubkey', '_wrecCompareBytes',
       '_wrecFirstAddress', '_wrecAddressFromPubkeys', '_descChainNodes', '_descImportPrivateCheck',
       '_savedWalletBody', '_savedWalletParse', '_savedWalletSummary', 'savedWallets_load', '_savedWalletsStore', '_descRenderSavedWallets', '_descSaveResult',
-      'desc_saveWallet', 'desc_openSavedWallet', 'desc_removeSavedWallet', '_descFillMultisigForm', '_descSetSingleForm', '_descClearCosigners', 'desc_arraysEqual'].map((n) => extract(n)),
+      'desc_saveWallet', '_descSaveAs', 'desc_saveImported', 'desc_openSavedWallet', 'desc_removeSavedWallet', '_descFillMultisigForm', '_descSetSingleForm', '_descClearCosigners', 'desc_arraysEqual'].map((n) => extract(n)),
   'var _descCosignerXpubs = {};',
 ].join('\n'), ctx);
 const cs = (body) => body + '#' + ctx.desc_checksum(body);
@@ -293,6 +293,25 @@ const save = async (name, desc) => { el('desc-save-name').value = name; vm.runIn
   m = await save('x'.repeat(65), cs(`wpkh(${acct(co1, "84'/0'/0'")}/<0;1>/*)`));
   ck('names longer than 64 characters are refused', /64/.test(m) && memStore.list.length === 2, m);
   ck('saved list shown with type and first address', /Family Vault/.test(el('desc-saved-list').innerHTML) && /2-of-3 multisig/.test(el('desc-saved-list').innerHTML) && /bc1q/.test(el('desc-saved-list').innerHTML));
+  // Import tab: save the checked descriptor straight from the result
+  {
+    const before = memStore.list.length;
+    vm.runInContext('var _descVerified = null;', ctx);
+    el('desc-import-save-name').value = 'Imported 2-of-3';
+    await ctx.desc_saveImported();
+    ck('Import: nothing checked yet -> asks to check first', /Check a wallet descriptor first/.test(el('desc-import-save-result').textContent) && memStore.list.length === before);
+    const MS2 = cs(`wsh(sortedmulti(2,${acct(co1, "48'/0'/0'/2'")}/<0;1>/*,${acct(me, "48'/0'/0'/2'")}/<0;1>/*))`);
+    vm.runInContext('_descVerified = ' + JSON.stringify({ descriptor: MS2, parsed: {} }), ctx);
+    await ctx.desc_saveImported();
+    ck('Import: the checked descriptor is saved under the typed name', /Saved as “Imported 2-of-3”/.test(el('desc-import-save-result').textContent) && memStore.list.length === before + 1 && memStore.list[memStore.list.length - 1].descriptor === MS2, el('desc-import-save-result').textContent);
+    await ctx.desc_saveImported();
+    ck('Import: saving it again says it is already saved', /Already saved/.test(el('desc-import-save-result').textContent) && memStore.list.length === before + 1);
+    vm.runInContext('_descVerified = ' + JSON.stringify({ descriptor: MS2, parsed: { addressNote: 'x' } }), ctx);
+    await ctx.desc_saveImported();
+    ck('Import: a single address is not saved as a wallet', /Check a wallet descriptor first/.test(el('desc-import-save-result').textContent));
+    await ctx.desc_removeSavedWallet(memStore.list.length - 1);
+    ck("Import: test wallet removed again", memStore.list.length === before);
+  }
   ctx.desc_setMode = ctx.desc_setScript = () => {};
   await ctx.desc_openSavedWallet(1);
   ck('Open loads the saved descriptor as watch-only', statuses.some((s) => s.startsWith('open:Opened saved wallet “Daily”') && s.includes(cs(noCs))));

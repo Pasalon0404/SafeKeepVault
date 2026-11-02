@@ -8342,7 +8342,7 @@
             <div id="desc-mode-tabs" style="display: flex; gap: 0; margin-bottom: 1rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;">
                 <button type="button" id="desc-mode-single" class="tool-tab-btn active" style="flex: 1;" onclick="desc_setMode('single')">Build Single</button>
                 <button type="button" id="desc-mode-multi" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('multi')">Build Multi</button>
-                <button type="button" id="desc-mode-verify" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('verify')">Verify</button>
+                <button type="button" id="desc-mode-verify" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('verify')">Import</button>
             </div>
 
             <!-- ======== SAVED WALLETS (shown when the vault holds any) ======== -->
@@ -8561,11 +8561,14 @@
             <!-- ======== VERIFY SECTION (The Validator) ======== -->
             <div id="desc-verify-section" style="display: none;">
                 <div class="skb-card" style="margin-bottom: 1rem;">
-                    <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Paste, Scan or Load a Descriptor or Wallet Export</div>
+                    <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Import a Wallet from Another App</div>
+                    <p style="font-size: 0.8125rem; color: var(--skb-text); margin: 0 0 0.5rem;">
+                        Built a multisig in Sparrow, Specter, Nunchuk or another coordinator? Scan its descriptor or setup QR here instead of entering each key. SafeKeep checks it against your seed, then you can save it in one step.
+                    </p>
                     <p style="font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0 0 0.75rem;">
                         An output descriptor, a multisig setup file (BlueWallet, Coldcard, Sparrow&hellip;), a BSMS record or an extended public key (xpub / ypub / zpub). Exports are converted to a descriptor here, on the vault, and shown before the result. SafeKeep then checks it, shows its addresses and, if a seed is loaded, whether that seed can sign for it. Then use it here as a watch-only wallet.
                     </p>
-                    <textarea id="desc-verify-input" rows="4" placeholder="wsh(sortedmulti(2,[fp/48'/0'/0'/2']xpub.../&lt;0;1&gt;/*,...))#checksum&#10;or a multisig setup file:  Policy: 2 of 3 / Format: P2WSH / 8C466A54: xpub...&#10;or one key:  [fingerprint/84'/0'/0']zpub..."
+                    <textarea id="desc-verify-input" rows="4" onpaste="setTimeout(desc_verify, 0)" placeholder="wsh(sortedmulti(2,[fp/48'/0'/0'/2']xpub.../&lt;0;1&gt;/*,...))#checksum&#10;or a multisig setup file:  Policy: 2 of 3 / Format: P2WSH / 8C466A54: xpub...&#10;or one key:  [fingerprint/84'/0'/0']zpub..."
                               spellcheck="false" autocomplete="off"
                               style="width: 100%; box-sizing: border-box; padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8125rem; resize: vertical; line-height: 1.5;"></textarea>
                     <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
@@ -8633,7 +8636,17 @@
                             <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Change Addresses (first 3)</label>
                             <div id="desc-verify-change-addrs" style="background: var(--skb-bg-input); border-radius: var(--skb-radius-sm); padding: 0.6rem; font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); overflow-x: auto;"></div>
                         </div>
-                        <button type="button" class="skb-btn skb-btn--primary" id="desc-verify-use-btn" style="width: 100%; margin-top: 1rem;" onclick="desc_useVerified()">Use This Descriptor (watch-only)</button>
+                        <div class="desc-import-save" id="desc-import-save">
+                            <label for="desc-import-save-name">Save this wallet</label>
+                            <div class="desc-import-save-row">
+                                <input type="text" id="desc-import-save-name" class="skb-input" maxlength="64" placeholder="Name, e.g. Family 2-of-3" spellcheck="false" autocomplete="off"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault();desc_saveImported();}">
+                                <button type="button" class="skb-btn skb-btn--primary" id="desc-import-save-btn" onclick="desc_saveImported()">Save Wallet</button>
+                            </div>
+                            <div id="desc-import-save-result" class="desc-recv-result" style="display: none;" aria-live="polite"></div>
+                            <div class="desc-import-save-note">Saved wallets live in the vault. The PSBT Signer checks transactions against them, and Show an address can use them.</div>
+                        </div>
+                        <button type="button" class="skb-btn" id="desc-verify-use-btn" style="width: 100%; margin-top: 1rem;" onclick="desc_useVerified()">Use This Descriptor (watch-only)</button>
                         <div style="font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.4rem;">Opens it below with Receive (show and check addresses), address export, Bitcoin Core export, QR and Print PDF.</div>
                     </div>
                 </div>
@@ -32950,6 +32963,11 @@ async function desc_verify() {
 
         _descVerified = { descriptor: parsed.descriptor, parsed: parsed };
         if (useBtn) useBtn.style.display = parsed.addressNote ? 'none' : '';
+        // Import: save it right here (a single address can't be a wallet).
+        var _impSave = document.getElementById('desc-import-save');
+        if (_impSave) _impSave.style.display = parsed.addressNote ? 'none' : '';
+        var _impRes = document.getElementById('desc-import-save-result');
+        if (_impRes) { _impRes.style.display = 'none'; _impRes.textContent = ''; }
         detailsDiv.style.display = 'block';
         resultDiv.style.display = 'block';
 
@@ -33077,13 +33095,38 @@ function _descSaveResult(kind, text) {
 
 async function desc_saveWallet() {
     var nameEl = document.getElementById('desc-save-name');
+    var ok = await _descSaveAs(desc_state.currentDescriptor, nameEl, _descSaveResult, 'desc-save-btn');
+    if (ok && nameEl) nameEl.value = '';
+}
+
+/* Import tab: save the checked descriptor straight from the result. */
+async function desc_saveImported() {
+    var v = _descVerified;
+    var report = function (kind, text) {
+        var el = document.getElementById('desc-import-save-result');
+        if (!el) return;
+        el.className = 'desc-recv-result' + (kind ? ' is-' + kind : '');
+        el.textContent = text;
+        el.style.display = text ? 'block' : 'none';
+    };
+    if (!v || v.parsed.addressNote) { report('bad', 'Check a wallet descriptor first.'); return; }
+    await _descSaveAs(v.descriptor, document.getElementById('desc-import-save-name'), report, 'desc-import-save-btn');
+}
+
+/**
+ * Save `descriptor` under the name in nameEl, reporting through report(kind,
+ * text). Shared by Save Wallet in the output card and on the Import tab.
+ * Returns true once stored.
+ */
+async function _descSaveAs(descriptorIn, nameEl, report, btnId) {
+    var _descSaveResult = report;
     var name = (nameEl ? nameEl.value : '').trim();
-    var descriptor = String(desc_state.currentDescriptor || '').replace(/[\r\n]+/g, '').trim();
-    if (!descriptor) { _descSaveResult('bad', 'No descriptor yet. Generate or load one first.'); return; }
-    if (!name) { _descSaveResult('bad', 'Give the wallet a name first.'); if (nameEl) nameEl.focus(); return; }
-    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) { _descSaveResult('bad', 'Use a name of up to 64 characters.'); return; }
+    var descriptor = String(descriptorIn || '').replace(/[\r\n]+/g, '').trim();
+    if (!descriptor) { _descSaveResult('bad', 'No descriptor yet. Generate or load one first.'); return false; }
+    if (!name) { _descSaveResult('bad', 'Give the wallet a name first.'); if (nameEl) nameEl.focus(); return false; }
+    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) { _descSaveResult('bad', 'Use a name of up to 64 characters.'); return false; }
     var r = _savedWalletParse(descriptor);
-    if (r.error) { _descSaveResult('bad', 'Not saved: ' + r.error); return; }
+    if (r.error) { _descSaveResult('bad', 'Not saved: ' + r.error); return false; }
     if (descriptor.indexOf('#') === -1) descriptor += '#' + desc_checksum(descriptor);
 
     await savedWallets_load();
@@ -33091,26 +33134,26 @@ async function desc_saveWallet() {
     for (var i = 0; i < _savedWallets.length; i++) {
         if (_savedWalletBody(_savedWallets[i].descriptor) === body) {
             _descSaveResult('ok', 'Already saved as “' + _savedWallets[i].name + '”.');
-            return;
+            return false;
         }
         if (_savedWallets[i].name.toLowerCase() === name.toLowerCase()) {
             _descSaveResult('bad', 'A saved wallet is already called “' + _savedWallets[i].name + '”. Choose another name.');
-            return;
+            return false;
         }
     }
-    if (_savedWallets.length >= 50) { _descSaveResult('bad', 'The vault holds up to 50 saved wallets. Remove one first.'); return; }
+    if (_savedWallets.length >= 50) { _descSaveResult('bad', 'The vault holds up to 50 saved wallets. Remove one first.'); return false; }
 
-    var btn = document.getElementById('desc-save-btn');
+    var btn = document.getElementById(btnId);
     if (btn) btn.disabled = true;
     _descSaveResult('busy', 'Saving to the vault…');
     try {
         var res = await _savedWalletsStore(_savedWallets.concat([{ name: name, descriptor: descriptor, added: new Date().toISOString() }]));
         if (res.saved) {
             _descSaveResult('ok', 'Saved as “' + name + '”. The PSBT Signer will now check transactions against it.');
-            if (nameEl) nameEl.value = '';
-        } else {
-            _descSaveResult('bad', 'Not saved: ' + (res.error || 'unknown error.'));
+            return true;
         }
+        _descSaveResult('bad', 'Not saved: ' + (res.error || 'unknown error.'));
+        return false;
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -45055,6 +45098,11 @@ function tfa_renderTable() {
     .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
     .welcome-actions .welcome-vault-btn { margin-top: 0.6rem; background: transparent; }
     .welcome-vault-note { margin: 0.1rem 0 0; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
+    .desc-import-save { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--skb-border); }
+    .desc-import-save label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.4rem; }
+    .desc-import-save-row { display: flex; gap: 0.5rem; }
+    .desc-import-save-row input { flex: 1; min-width: 0; }
+    .desc-import-save-note { font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.4rem; }
     .desc-qr-fmt { display: inline-flex; gap: 0.4rem; margin-bottom: 0.6rem; }
     .desc-qr-fmt .skb-btn { font-size: 0.8rem; padding: 0.35rem 0.8rem; }
     .desc-qr-fmt .skb-btn[aria-checked="true"] { border-color: var(--skb-primary); color: var(--skb-primary); }
