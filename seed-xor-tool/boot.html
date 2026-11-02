@@ -6495,6 +6495,14 @@
                 <button type="button" class="skb-btn skb-btn--primary" id="welcome-hw-btn" style="display: none;" onclick="openHardwareSigner()">
                     Sign with Hardware Wallet
                 </button>
+                <!-- Temporary sessions only: the vault was never opened, and
+                     until now only a restart led back to it. Lock closes this
+                     session (wiping it from memory) and returns to the unlock
+                     screen, where the Master Passphrase opens the vault. -->
+                <button type="button" class="skb-btn welcome-vault-btn" id="welcome-vault-btn" style="display: none;" onclick="vaultLock()">
+                    Unlock my vault instead
+                </button>
+                <p class="welcome-vault-note" id="welcome-vault-note" style="display: none;">Ends this Temporary Session and returns to the unlock screen. Enter your Master Passphrase there.</p>
             </div>
 
             <!-- Shown when vault already has a seed (query param ?state=initialized) -->
@@ -16354,6 +16362,7 @@ function transitionToWelcome() {
             if (vln) vln.style.display = 'none';
             const hwb = document.getElementById('welcome-hw-btn');
             if (hwb) hwb.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none';
+            ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none'; });
             const seedFree = !_seedKept();
             if (wb) wb.classList.toggle('welcome-actions--seedfree', seedFree);
             const hbl = document.querySelector('.welcome-have-backup-label');
@@ -16465,6 +16474,7 @@ function startEphemeralSession() {
         if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
         var hwb = document.getElementById('welcome-hw-btn');
         if (hwb) hwb.style.display = '';
+        ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
     } catch (e) {}
 
     var welcomeEl = document.getElementById('state-welcome');
@@ -16665,6 +16675,7 @@ function ephemeralHotSwapSeed() {
         if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
         var hwb = document.getElementById('welcome-hw-btn');
         if (hwb) hwb.style.display = '';
+        ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
     } catch (_) {}
 
     // 5. Hide any Generate/Restore sub-panels lingering open from the prior session.
@@ -18774,6 +18785,7 @@ function psbtBackToDashboard() {
             }
             const hwb = document.getElementById('welcome-hw-btn');
             if (hwb) hwb.style.display = '';
+            ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
         } catch (_) {}
         return;
     }
@@ -44942,6 +44954,8 @@ function tfa_renderTable() {
     .welcome-actions .welcome-create { padding: 1.05rem 1.5rem; font-size: 1.05rem; border-radius: var(--dv2-radius) !important; }
     .welcome-actions .welcome-have-backup { padding: 0.95rem 1.5rem; font-size: 1rem; border-radius: var(--dv2-radius) !important; background: transparent; }
     .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
+    .welcome-actions .welcome-vault-btn { margin-top: 0.6rem; background: transparent; }
+    .welcome-vault-note { margin: 0.1rem 0 0; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
     .welcome-actions .welcome-seedfree { display: none; }
     .welcome-actions.welcome-actions--seedfree .welcome-seedfree { display: block; padding: 1rem 1.5rem; font-size: 1.02rem; border-radius: var(--dv2-radius) !important; }
     .welcome-actions.welcome-actions--seedfree .skb-btn.welcome-seedfree:not(.skb-btn--primary) { background: transparent; }
