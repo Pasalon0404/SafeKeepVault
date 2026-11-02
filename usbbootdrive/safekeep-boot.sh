@@ -2932,12 +2932,20 @@ except Exception as e:
     #   --test-type             REMOVED. Google documents this as "not for
     #                           production" — relaxed policy enforcement.
     #                           Kiosk works without it.
-    #   --disable-web-security  RETAINED. Required by boot.html's call
-    #                           `fetch('file:///run/safekeep-amnesia.json')`,
-    #                           which is a cross-origin fetch under strict
-    #                           SOP on a file:// origin. Until we refactor
-    #                           to a localhost HTTP server inside the kiosk,
-    #                           dropping this flag breaks amnesia detection.
+    #   --disable-web-security  REMOVED (2026-11). Chromium ignored it on
+    #                           every boot ("Web security may only be disabled
+    #                           if '--user-data-dir' is also specified with a
+    #                           non-default value"), and the app's file://
+    #                           reads work through --allow-file-access-from-
+    #                           files. Now that each session has its own
+    #                           --user-data-dir, keeping the flag would turn
+    #                           web security off for real: it stays out.
+    #   --user-data-dir         A new, empty profile in RAM for every session
+    #                           (the previous one is deleted). A new Chromium
+    #                           can then never hand its window to a leftover
+    #                           browser of the previous session, which showed
+    #                           a Temporary Session that nothing in this script
+    #                           was waiting on.
     #   --no-sandbox            RETAINED. Chromium refuses to start its
     #                           sandbox when invoked as root (which the
     #                           live-boot systemd launcher is). Moving to
@@ -2960,7 +2968,14 @@ except Exception as e:
     }
     _skb_log_chromium() {
         echo "[BOOT] Chromium processes ($1):"
-        ps -eo pid=,ppid=,stat=,etimes=,comm= 2>/dev/null | awk '$5 == "chrome" { print "         " $0 }' | head -n 12
+        ps -eo pid=,ppid=,stat=,etimes=,comm=,args= 2>/dev/null \
+            | awk '$5 == "chrome" { print "         " substr($0, 1, 220) }' | head -n 12
+        # Save the log to the data partition now: if this session then has to
+        # be ended with the power button, the evidence is not lost with /tmp.
+        if mountpoint -q "$DATA_MOUNT" 2>/dev/null; then
+            cp -a /tmp/safekeep-boot.log "$DATA_MOUNT/safekeep-boot.log" 2>/dev/null || true
+            sync
+        fi
     }
 
     # Wait for the browser of a previous session to finish exiting (after a
@@ -2982,6 +2997,14 @@ except Exception as e:
         echo "[BOOT] Previous Chromium gone."
     fi
 
+    # Fresh profile for this session (see --user-data-dir above). Only
+    # deleted once no Chromium is left running.
+    SKB_PROFILE_ROOT="/tmp/safekeep-chromium"
+    _skb_old_chromium || rm -rf "$SKB_PROFILE_ROOT" 2>/dev/null || true
+    CHROMIUM_PROFILE_DIR="$SKB_PROFILE_ROOT/session-$(date +%s)-$$"
+    mkdir -p "$CHROMIUM_PROFILE_DIR" && chmod 700 "$SKB_PROFILE_ROOT" "$CHROMIUM_PROFILE_DIR"
+    echo "[BOOT] Chromium profile: $CHROMIUM_PROFILE_DIR"
+
     CHROMIUM_START_EPOCH=$(date +%s)
     # Binary is `ungoogled-chromium` from the xtradeb/apps PPA. The
     # package name is unique to that PPA — Canonical's official repos
@@ -3001,7 +3024,7 @@ except Exception as e:
         --force-device-scale-factor="$SCALE_FACTOR" \
         --no-first-run \
         --allow-file-access-from-files \
-        --disable-web-security \
+        --user-data-dir="$CHROMIUM_PROFILE_DIR" \
         --disable-gpu \
         --password-store=basic \
         --disable-notifications \

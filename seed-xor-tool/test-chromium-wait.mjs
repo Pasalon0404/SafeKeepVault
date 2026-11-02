@@ -60,6 +60,14 @@ ck('post: fast return with no Chromium left: no wait (a real launch failure stil
 o = run(fns + post, 8, '', 'CHROMIUM_ELAPSED=600; CHROMIUM_START_EPOCH=400;');
 ck('post: a normal long session is untouched', !/waiting/.test(o) && /elapsed=600/.test(o), o);
 
+// Each session gets its own fresh profile, so a new Chromium never hands its
+// window to a leftover one; --disable-web-security (ignored until now) stays out.
+const launch = SH.slice(SH.indexOf('    ungoogled-chromium \\'), SH.indexOf('    CHROMIUM_EXIT=$?'));
+ck('launch uses a per-session --user-data-dir', /--user-data-dir="\$CHROMIUM_PROFILE_DIR"/.test(launch), launch.slice(0, 300));
+ck('--disable-web-security is not passed', !/--disable-web-security/.test(launch));
+ck('profile lives in RAM (/tmp) and is made fresh per launch', /CHROMIUM_PROFILE_DIR="\$SKB_PROFILE_ROOT\/session-\$\(date \+%s\)-\$\$"/.test(SH) && /SKB_PROFILE_ROOT="\/tmp\/safekeep-chromium"/.test(SH));
+ck('old profiles deleted only when no Chromium is left', /_skb_old_chromium \|\| rm -rf "\$SKB_PROFILE_ROOT"/.test(SH));
+ck('the log is saved to the data partition when Chromium returns early', /_skb_log_chromium\(\) \{[\s\S]{0,600}cp -a \/tmp\/safekeep-boot\.log "\$DATA_MOUNT\/safekeep-boot\.log"/.test(SH));
 const sh = spawnSync('bash', ['-n', join(__dirname, '../usbbootdrive/safekeep-boot.sh')]);
 ck('safekeep-boot.sh parses', sh.status === 0, String(sh.stderr));
 console.log(`test-chromium-wait: ${pass} passed, ${fail} failed`);
