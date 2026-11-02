@@ -12857,6 +12857,10 @@ function connect_pick(app) {
     document.getElementById('cn-kind-wrap').hidden = !a.multi;
     if (!a.multi) kind.value = 'single';
     document.getElementById('cn-opts').hidden = app === 'other';
+    // Say what the button does: QR apps open with the QR showing, a file app
+    // at Download JSON, and "another wallet" just opens Seed Management.
+    var go = document.querySelector('.cn-go');
+    if (go) go.textContent = !a.format ? 'Open Seed Management' : (a.file ? 'Go to Download JSON' : 'Show the QR code');
     connect_renderSteps();
     var d = document.getElementById('cn-detail');
     d.hidden = false;
