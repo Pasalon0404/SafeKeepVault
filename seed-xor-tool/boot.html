@@ -12806,6 +12806,22 @@ document.addEventListener('DOMContentLoaded', function () {
         var el = document.getElementById(id);
         if (el) mo.observe(el, { childList: true, characterData: true, subtree: true });
     });
+    // Health follows the Transfer Drive and version lines, which are filled in
+    // a moment after start-up (the drive mounts in the background).
+    var _hTimer = null;
+    var moH = new MutationObserver(function () {
+        clearTimeout(_hTimer);
+        _hTimer = setTimeout(function () {
+            var dash = document.getElementById('state-dashboard');
+            if (dash && dash.style.display !== 'none' && typeof dashv2_renderHealth === 'function') {
+                dashv2_renderHealth().catch(function () {});
+            }
+        }, 300);
+    });
+    ['status-transfer-label', 'dash-version'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) moH.observe(el, { childList: true, characterData: true, subtree: true });
+    });
     try { dashv2_renderWallet(); } catch (_) {}
 });
 
@@ -16340,6 +16356,12 @@ function transitionToDashboard(seedData) {
 
     // Show/hide the ghost badge based on amnesia mode state
     if (typeof _updateAmnesiaBadge === 'function') _updateAmnesiaBadge();
+
+    // Fill the Dashboard (wallet card, Health). Arriving here at start-up
+    // or after an unlock doesn't go through showState(), which used to be
+    // the only caller, so Health stayed blank until another screen was
+    // opened and closed.
+    try { if (typeof dashv2_render === 'function') dashv2_render(); } catch (_) {}
 }
 
 function transitionToWelcome() {
