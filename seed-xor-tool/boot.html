@@ -8655,6 +8655,19 @@
                     <div id="desc-descriptor-text" style="background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-primary); padding: 0.75rem; border-radius: var(--skb-radius-sm); border: 1px solid var(--skb-primary); word-break: break-all; line-height: 1.6; margin-bottom: 1rem; font-weight: 600;"></div>
 
                     <div id="desc-qr-wrap" style="display: none; margin-bottom: 1rem; text-align: center;">
+                        <!-- QR format: the descriptor itself, or Specter Desktop's wallet
+                             import (Add Wallet → Import from wallet software → Scan QR
+                             code reads one QR code of {"label","descriptor"} JSON). -->
+                        <div class="desc-qr-fmt" role="radiogroup" aria-label="QR code format">
+                            <button type="button" class="skb-btn" id="desc-qr-fmt-plain" role="radio" aria-checked="true" onclick="desc_setQRFormat('plain')">Descriptor</button>
+                            <button type="button" class="skb-btn" id="desc-qr-fmt-specter" role="radio" aria-checked="false" onclick="desc_setQRFormat('specter')">For Specter</button>
+                        </div>
+                        <div id="desc-specter-opts" class="desc-specter-opts" hidden>
+                            <label for="desc-specter-name">Wallet name in Specter</label>
+                            <input type="text" id="desc-specter-name" class="skb-input" maxlength="64" spellcheck="false" autocomplete="off" oninput="desc_renderQR()">
+                            <p>In Specter Desktop: <b>Add Wallet &rarr; Import from wallet software &rarr; Scan QR code</b>, then <b>Continue</b>. Specter adds any key it doesn&rsquo;t know yet as a new device.</p>
+                            <p id="desc-specter-msg" class="desc-specter-msg" hidden></p>
+                        </div>
                         <canvas id="desc-qr-canvas" style="max-width: 400px; width: 100%; height: auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);"></canvas>
                     </div>
 
@@ -12820,14 +12833,17 @@ var _CN_APPS = {
                 'Blue Wallet adds a watch-only wallet. Its first receive address should be the same as address #0 in <b>Show an address</b>.'
             ];
         } },
-    specter: { name: 'Specter', format: 'electrum_json', animate: false, file: true, multi: true, types: ['84', '86', '49', '44'],
+    // Specter Desktop's Add device → Other → Scan QR code reads
+    // UR:CRYPTO-ACCOUNT (animated or single), as Keystone sends it, and turns
+    // each key into [fingerprint/path]xpub; the same QR as for Sparrow.
+    specter: { name: 'Specter', format: 'bcur', animate: false, multi: true, types: ['84', '86', '49', '44'],
         steps: function (t, multi) {
             return [
-                'In SafeKeep, press <b>Download JSON</b> (highlighted just above). The file is saved to the Transfer Drive.',
-                'Take the file to your online computer on the flash drive, or send it with the <b>Courier</b> (Transfer Hub \u2192 Transmit).',
-                'In Specter Desktop: <b>Add Device</b>, device type <b>Other</b>, then <b>Upload from SD</b>, pick the file and <b>Continue</b>.',
-                multi ? 'Do the same for each cosigner, then <b>Add Wallet \u2192 Multiple Signature</b>, pick the devices and <b>Create Wallet</b>.'
-                      : 'Click <b>Create Single Key Wallet</b>, name it and <b>Continue</b>.'
+                'In Specter Desktop: <b>Devices → Add new device</b>, device type <b>Other</b>.',
+                'Click <b>Scan QR code</b> and hold SafeKeep’s QR code up to the computer’s camera.',
+                multi ? 'Name the device and <b>Continue</b>. Add each cosigner the same way, then <b>Add Wallet → Multiple Signature</b>, pick the devices and <b>Create Wallet</b>.'
+                      : 'Name the device and <b>Continue</b>, then <b>Create Single Key Wallet</b>.',
+                'No camera on that computer? In Seed Management choose Key Format <b>BIP-32 Watch-Only JSON</b>, press <b>Download JSON</b>, and in Specter use <b>Upload from SD</b> instead.'
             ];
         } },
     electrum: { name: 'Electrum', format: 'slip132', animate: false, multi: true, types: ['84', '49', '44'],
@@ -31501,14 +31517,85 @@ function desc_toggleQR() {
         // playing animated (a hidden canvas stops the animation).
         wrap.style.display = 'block';
         btn.textContent = 'Hide QR';
-        // A dense multisig descriptor gets the option to play animated.
-        if (canvas && window.QRCode) {
-            skqr_render(canvas, desc_state.currentDescriptor, {
-                width: 400,
-                errorCorrectionLevel: 'L',
-                color: { dark: '#000000', light: '#ffffff' }
-            });
+        desc_renderQR();
+    }
+}
+
+var _descQRFormat = 'plain';
+
+/** Descriptor or "For Specter" (Specter Desktop's wallet import format). */
+function desc_setQRFormat(fmt) {
+    _descQRFormat = fmt === 'specter' ? 'specter' : 'plain';
+    ['plain', 'specter'].forEach(function (f) {
+        var b = document.getElementById('desc-qr-fmt-' + f);
+        if (b) b.setAttribute('aria-checked', f === _descQRFormat ? 'true' : 'false');
+    });
+    var opts = document.getElementById('desc-specter-opts');
+    if (opts) opts.hidden = _descQRFormat !== 'specter';
+    var nameEl = document.getElementById('desc-specter-name');
+    if (_descQRFormat === 'specter' && nameEl && !nameEl.value) nameEl.value = _descSpecterDefaultName();
+    desc_renderQR();
+}
+
+/* The saved wallet's name when this descriptor is one, else a plain default. */
+function _descSpecterDefaultName() {
+    try {
+        var body = _savedWalletBody(desc_state.currentDescriptor);
+        for (var i = 0; i < (_savedWallets || []).length; i++) {
+            if (_savedWalletBody(_savedWallets[i].descriptor) === body) return _savedWallets[i].name;
         }
+    } catch (_) {}
+    return 'SafeKeep wallet';
+}
+
+/**
+ * Specter Desktop's wallet import: {"label", "descriptor"}. Specter accepts
+ * only keys ending /0/* (it adds the change branch itself), so SafeKeep's
+ * /<0;1>/* becomes /0/* and the checksum is worked out again. Returns
+ * { json } or { error } (silent payments, keys without the wildcard).
+ */
+function _descSpecterPayload(descriptor, label) {
+    var body = String(descriptor || '').split('#')[0].trim();
+    if (!body) return { error: 'No descriptor yet.' };
+    if (/^sp\(/i.test(body)) return { error: 'Specter can\u2019t import a Silent Payments descriptor.' };
+    body = body.split('/<0;1>/*').join('/0/*');
+    var keys = body.match(/\][xtyzuv]pub[1-9A-HJ-NP-Za-km-z]+[^,)]*/g) || [];
+    for (var i = 0; i < keys.length; i++) {
+        if (!/\/0\/\*$/.test(keys[i])) return { error: 'Specter imports only wallets whose keys end in /0/* (receive addresses).' };
+    }
+    var d = body + '#' + desc_checksum(body);
+    return { json: JSON.stringify({ label: String(label || '').trim() || 'SafeKeep wallet', descriptor: d }) };
+}
+
+async function desc_renderQR() {
+    var canvas = document.getElementById('desc-qr-canvas');
+    if (!canvas || !window.QRCode || !desc_state.currentDescriptor) return;
+    var msg = document.getElementById('desc-specter-msg');
+    if (msg) { msg.hidden = true; msg.textContent = ''; }
+    var qrOpts = { width: 400, errorCorrectionLevel: 'L', color: { dark: '#000000', light: '#ffffff' } };
+    if (_descQRFormat !== 'specter') {
+        // A dense multisig descriptor gets the option to play animated.
+        skqr_render(canvas, desc_state.currentDescriptor, qrOpts);
+        return;
+    }
+    skqr_stop(canvas);
+    var bar = document.getElementById(canvas.id + '-skqr-bar');
+    if (bar) bar.style.display = 'none';
+    var nameEl = document.getElementById('desc-specter-name');
+    var p = _descSpecterPayload(desc_state.currentDescriptor, nameEl ? nameEl.value : '');
+    var ctx = canvas.getContext('2d');
+    if (p.error) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (msg) { msg.textContent = p.error; msg.hidden = false; }
+        return;
+    }
+    // Specter's import scanner reads one QR code only (not animated).
+    try {
+        await window.QRCode.toCanvas(canvas, p.json, qrOpts);
+        _skqrStripSize(canvas);
+    } catch (e) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (msg) { msg.textContent = 'This wallet is too big for one QR code, and Specter\u2019s wallet import doesn\u2019t read animated ones. Use Copy and paste it into Specter instead.'; msg.hidden = false; }
     }
 }
 
@@ -44956,6 +45043,15 @@ function tfa_renderTable() {
     .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
     .welcome-actions .welcome-vault-btn { margin-top: 0.6rem; background: transparent; }
     .welcome-vault-note { margin: 0.1rem 0 0; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
+    .desc-qr-fmt { display: inline-flex; gap: 0.4rem; margin-bottom: 0.6rem; }
+    .desc-qr-fmt .skb-btn { font-size: 0.8rem; padding: 0.35rem 0.8rem; }
+    .desc-qr-fmt .skb-btn[aria-checked="true"] { border-color: var(--skb-primary); color: var(--skb-primary); }
+    .desc-specter-opts { max-width: 400px; margin: 0 auto 0.75rem; text-align: left; font-size: 0.8125rem; color: var(--skb-text-muted); }
+    .desc-specter-opts[hidden] { display: none; }
+    .desc-specter-opts label { display: block; margin-bottom: 0.25rem; color: var(--skb-text); font-weight: 600; }
+    .desc-specter-opts input { width: 100%; margin-bottom: 0.4rem; }
+    .desc-specter-opts p { margin: 0.25rem 0; line-height: 1.5; }
+    .desc-specter-msg { color: var(--skb-danger) !important; }
     .welcome-actions .welcome-seedfree { display: none; }
     .welcome-actions.welcome-actions--seedfree .welcome-seedfree { display: block; padding: 1rem 1.5rem; font-size: 1.02rem; border-radius: var(--dv2-radius) !important; }
     .welcome-actions.welcome-actions--seedfree .skb-btn.welcome-seedfree:not(.skb-btn--primary) { background: transparent; }
