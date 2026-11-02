@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 1, 2026).**
+> **Start with the "Current state" section below (updated Nov 2, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,26 +9,54 @@
 
 ---
 
-## Current state (Nov 1, 2026) — v1.57
+## Current state (Nov 2, 2026) — v1.58
 
-**On `main` since v1.57 (not released): Seed storage.** Device Options →
-Seed storage can stop keeping the master seed on the flash drive. The vault
-still opens and keeps passphrases, saved wallets, notes and settings; the
-welcome screen then asks for the seed (Scan my SeedQR / Type my recovery
-words) and it stays in RAM until lock or shutdown. Before the seed is
-deleted, the user's SeedQR or typed words must match the loaded seed.
-- App: `SafeKeepOS.isSeedKept()` / `setKeepSeed(keep, mnemonic)` in
-  `shared/boot.js`; `boot()` skips `master-seed.json` and
-  generate/restore don't write it when not kept (`ramOnly: true`).
-- OS: the Seed Storage Watcher in `safekeep-boot.sh` takes
-  `SEED_STORAGE.json { keepSeed }`, keeps the flag in
-  `settings/seed-storage.json`, deletes `master-seed*.json` and keeps
-  deleting any that appears; the boot probe deletes a stored seed first.
-- Backups leave out the seed (the Master Seed item is hidden); Health says
-  "Seed not kept on this flash drive". Dev: `?devMode=seedfree`.
-- Test: `test-seed-storage.mjs`. Needs a full `build.sh` (OS change).
+**v1.58** (Nov 2) — tested on Dave's flash drive as builds from the branch:
+- **Seed storage** (Device Options): a flash drive can stop keeping the
+  master seed. The vault still opens (passphrases, saved wallets, notes,
+  settings); the welcome screen asks for the seed (Scan my SeedQR / Type my
+  recovery words) and it stays in RAM until lock or shutdown. Before the
+  seed is deleted, a scanned SeedQR or typed words must match the loaded
+  seed. App: `SafeKeepOS.isSeedKept()` / `setKeepSeed()` in
+  `shared/boot.js`; `boot()` skips `master-seed.json`, generate/restore
+  don't write it (`ramOnly`). OS: the Seed Storage Watcher takes
+  `SEED_STORAGE.json { keepSeed }`, keeps `settings/seed-storage.json`,
+  deletes `master-seed*.json` and any that appears; the boot probe deletes
+  a stored seed first. Backups leave the seed out; Health says so. Dev:
+  `?devMode=seedfree`. Test: `test-seed-storage.mjs`.
+- **Wallet card**: with a passphrase on, the title names the passphrase
+  wallet (its Library name, or "Passphrase wallet") and the seed's three
+  words show as "Seed: …" (they come from the seed words alone). Picking a
+  Library passphrase on the Dashboard applies it (no Apply); typed ones
+  still need Apply and typing twice. Saved wallets left the Dashboard (they
+  stay in Output Descriptor); Seed Management is back under All tools; the
+  small Seed Nickname chip shows only on tool screens.
+- **UI fixes**: Show words / Hide words button on every seed display; the
+  Sign tile no longer stays lit; the sidebar highlights the PSBT Signer
+  (cards can name their screen in `data-state`); balanced tile text.
+- **Temporary Session**: "Unlock my vault instead" (runs Lock). Boot
+  fixes behind it: a Temporary Session chosen right after a Lock was shown
+  by a Chromium the boot script wasn't waiting on (ours returned in 3-4 s;
+  the fast-fail check then halted the script: blank screen, later the
+  downloads page). Now every session gets a fresh `--user-data-dir` in
+  `/tmp/safekeep-chromium/`, the script waits for a previous Chromium before
+  launch and for a still-running one after a fast return, and logs/saves
+  the Chromium process list. `--disable-web-security` is removed (Chromium
+  ignored it without a user-data-dir; keeping it would have turned web
+  security off). Test: `test-chromium-wait.mjs`.
+- **Specter**: Connect a wallet app gives Specter `[fingerprint/path]xpub`
+  (new Seed Management Key Format "Key with origin"), which Specter's Add
+  device → Scan QR code takes as is. Its UR:CRYPTO-ACCOUNT path needs
+  `crypto.subtle`, missing when Specter is opened over plain http on the
+  LAN (Dave's node at 192.168.1.124:25441) — keys silently didn't fill.
+  Output Descriptor's QR has "For Specter" ({"label","descriptor"}, keys
+  /0/*, checked with embit). Test: `test-specter-import.mjs`.
+- **Output Descriptor Import** (was Verify): checks on paste too, and saves
+  the wallet from the result (shared `_descSaveAs`).
+- **Wording**: "flash drive", never "stick", in anything users read
+  (`CLAUDE.md`).
 
-**v1.57** (Nov 1) is the redesign release (#87, #88):
+v1.57 (Nov 1, `v1.57 · build 429 · b8e931d`) is the redesign release (#87, #88):
 - **Welcome**: "Create a new wallet" and "I already have a backup" (four
   option cards for the restore paths).
 - **Status bar**: one "Offline · Protected" badge; the separate lights open
@@ -108,7 +136,7 @@ Generate One for Me, Change Master Passphrase.
 v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
 (see "Seed entropy" below). v1.47 and later sticks install each release in
 place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
-1.57: features merge to `main` without a bump, and builds from `main` are
+1.58: features merge to `main` without a bump, and builds from `main` are
 for the owner's own use until the owner says it's release time (see
 `CLAUDE.md`).
 
@@ -581,10 +609,10 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.57:** merge the v1.57 website PR, and install
-   `SafeKeep-Update-v1.57.tar` on a stick from the release itself. Check on
-   the stick that Health shows the last backup date after the `.7z` is gone,
-   and that Show an address offers the next index after a reboot.
+1. **After v1.58:** merge the v1.58 website PR, and install
+   `SafeKeep-Update-v1.58.tar` on a flash drive from the release itself.
+   Seed storage and the Chromium profile change are OS changes: check Lock →
+   Boot Temporary Session → Unlock my vault instead on the release too.
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
