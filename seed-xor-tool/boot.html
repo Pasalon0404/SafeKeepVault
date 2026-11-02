@@ -5211,8 +5211,9 @@
                <span class="skb-seed-accordion__fp"
                      data-role="fingerprint">--------</span>
              </span>
-             <span class="skb-seed-accordion__chevron"
-                   aria-hidden="true">▾</span>
+             <span class="skb-seed-accordion__chevron"><span
+                   class="skb-seed-accordion__show">Show words</span><span
+                   class="skb-seed-accordion__hide">Hide words</span></span>
            </button>
            <div class="skb-seed-accordion__panel">
              <div class="skb-seed-accordion__panel-inner">
@@ -5292,20 +5293,32 @@
       letter-spacing: 0.1em;
       font-family: var(--skb-mono);
     }
+    /* "Show words" / "Hide words": a labelled button instead of a bare
+       caret, so it's clear the row reveals the seed. The label follows
+       data-collapsed, so code that collapses an accordion needs no change. */
     .skb-seed-accordion__chevron {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 1.2rem;
-      height: 1.2rem;
-      font-size: 0.875rem;
-      color: var(--skb-text-muted);
+      padding: 0.3rem 0.8rem;
+      border: 1px solid var(--skb-border);
+      border-radius: var(--skb-radius-sm);
+      background: var(--skb-bg-card, transparent);
+      font-family: var(--skb-sans, inherit);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--skb-text);
+      white-space: nowrap;
       flex-shrink: 0;
-      transition: transform 0.18s ease;
+      transition: border-color 120ms ease, color 120ms ease;
     }
-    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__chevron {
-      transform: rotate(180deg);
+    .skb-seed-accordion__toggle:hover .skb-seed-accordion__chevron {
+      border-color: var(--skb-primary);
+      color: var(--skb-primary);
     }
+    .skb-seed-accordion__hide { display: none; }
+    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__show { display: none; }
+    .skb-seed-accordion[data-collapsed="0"] .skb-seed-accordion__hide { display: inline; }
 
     /* Panel — height transition.
        Uses the `grid-template-rows: 0fr → 1fr` pattern instead of
@@ -6412,7 +6425,7 @@
 
             <div class="welcome-message">
                 <h2>Welcome to SafeKeepVault</h2>
-                <p>Your keys stay on this stick and never touch the internet. Create a new wallet, or bring back one you already have.</p>
+                <p>Your keys stay on this flash drive and never touch the internet. Create a new wallet, or bring back one you already have.</p>
                 <!-- Version stamp: filled in by build-offline.mjs (see seed-xor-tool/VERSION). -->
                 <div class="welcome-version" data-skv-version style="margin-top: 0.75rem; font-family: var(--skb-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--skb-text-dim, var(--skb-text-muted));">dev build</div>
             </div>
@@ -6441,11 +6454,21 @@
                 <!-- Redesign (2026-11): one clear first step. "I already have a
                      backup" opens a choice of the four restore methods, each
                      calling the same function its old button did. -->
+                <!-- Seed storage off (Device Options → Seed storage): the vault is
+                     open but doesn't keep the seed, so the first step is to
+                     scan or type it. Shown by transitionToWelcome via the
+                     .welcome-actions--seedfree class. -->
+                <button type="button" class="skb-btn skb-btn--primary welcome-seedfree" onclick="welcome_seedFreeScan()">
+                    Scan my SeedQR
+                </button>
+                <button type="button" class="skb-btn welcome-seedfree" onclick="showRestorePanel()">
+                    Type my recovery words
+                </button>
                 <button type="button" class="skb-btn skb-btn--primary welcome-create" onclick="showGeneratePanel()">
                     Create a new wallet
                 </button>
                 <button type="button" class="skb-btn welcome-have-backup" id="welcome-have-backup-btn" aria-expanded="false" aria-controls="welcome-restore-options" onclick="welcome_toggleRestoreOptions()">
-                    I already have a backup
+                    <span class="welcome-have-backup-label">I already have a backup</span>
                 </button>
                 <div class="welcome-options" id="welcome-restore-options" hidden>
                     <p class="welcome-options-lead">What does your backup look like?</p>
@@ -6472,6 +6495,14 @@
                 <button type="button" class="skb-btn skb-btn--primary" id="welcome-hw-btn" style="display: none;" onclick="openHardwareSigner()">
                     Sign with Hardware Wallet
                 </button>
+                <!-- Temporary sessions only: the vault was never opened, and
+                     until now only a restart led back to it. Lock closes this
+                     session (wiping it from memory) and returns to the unlock
+                     screen, where the Master Passphrase opens the vault. -->
+                <button type="button" class="skb-btn welcome-vault-btn" id="welcome-vault-btn" style="display: none;" onclick="vaultLock()">
+                    Unlock my vault instead
+                </button>
+                <p class="welcome-vault-note" id="welcome-vault-note" style="display: none;">Ends this Temporary Session and returns to the unlock screen. Enter your Master Passphrase there.</p>
             </div>
 
             <!-- Shown when vault already has a seed (query param ?state=initialized) -->
@@ -6823,7 +6854,7 @@
             <div id="dash-weak-passphrase-banner" role="alert" style="display: none; margin: 1.25rem 0 0; padding: 1rem 1.25rem; background: rgba(255, 60, 60, 0.08); border: 2px solid rgba(255, 60, 60, 0.55); border-left: 6px solid var(--skb-danger);">
                 <div style="font-family: var(--skb-mono); font-size: 0.875rem; font-weight: 900; color: var(--skb-danger); letter-spacing: 0.12em; text-transform: uppercase;">Weak Master Passphrase</div>
                 <div style="font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); margin-top: 0.35rem; letter-spacing: 0.03em; line-height: 1.5;">
-                    The passphrase that unlocked this vault is easy to guess (<span id="dash-weak-passphrase-bits">about 0 bits</span>). Anyone who finds this stick could copy the vault and try likely passwords until one works. Change it to a long random password from a password manager, or 6 or more random words.
+                    The passphrase that unlocked this vault is easy to guess (<span id="dash-weak-passphrase-bits">about 0 bits</span>). Anyone who finds this flash drive could copy the vault and try likely passwords until one works. Change it to a long random password from a password manager, or 6 or more random words.
                 </div>
                 <button type="button" class="skb-btn" style="margin-top: 0.65rem; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="ppSettingsOpen()">Change Master Passphrase</button>
             </div>
@@ -6992,7 +7023,7 @@
                      ================================================================ -->
                 <div class="dash-tool-grid cols-3">
                     <!-- 1. PSBT Signer (formerly "The Scribe") -->
-                    <button type="button" class="dash-tool-card" onclick="openPsbtSigner()" style="text-align: left; cursor: pointer;">
+                    <button type="button" class="dash-tool-card" data-state="state-psbt-signer" onclick="openPsbtSigner()" style="text-align: left; cursor: pointer;">
                         <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg></span>
                         <span class="dash-tool-label">
                             <span class="dash-tool-name">PSBT Signer</span>
@@ -7052,17 +7083,13 @@
                 <section class="dashv2 dashv2-lower" aria-label="What would you like to do?">
                     <div class="dashv2-title">What would you like to do?</div>
                     <div class="dashv2-actions">
-                        <button type="button" class="dashv2-action dashv2-action--primary" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan or load a PSBT, check it, sign it</span></button>
+                        <button type="button" class="dashv2-action" onclick="openPsbtSigner()"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Sign a transaction</b><span>Scan/load a PSBT, check it, sign it</span></button>
                         <button type="button" class="dashv2-action" onclick="rcv_open('state-receive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></span><b>Show an address</b><span>The next receive address as a QR code</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-reliquary')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span><b>Back up</b><span>Encrypted backup, send it to your phone, check it</span></button>
                         <button type="button" class="dashv2-action" onclick="connect_open('state-connect')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></span><b>Connect a wallet app</b><span>Blue Wallet, Electrum, Nunchuk, Sparrow, Specter</span></button>
                         <button type="button" class="dashv2-action" onclick="showState('state-archive')"><span class="dashv2-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M5 13 7.5 4h9L19 13M6 17h.01M10 17h.01"/></svg></span><b>Transfer files</b><span>Files on the Transfer Drive, the Courier</span></button>
                     </div>
 
-                    <div class="dashv2-saved" id="dashv2-saved" hidden>
-                        <div class="dashv2-title">Saved wallets</div>
-                        <div class="dashv2-saved-list" id="dashv2-saved-list"></div>
-                    </div>
                 </section>
                 <div class="dashv2-title dashv2-alltools-title">All tools</div>
                 <div class="dash-advanced" id="dash-advanced">
@@ -7079,6 +7106,18 @@
                     <div class="dash-advanced-content" id="dash-advanced-content" aria-hidden="true">
                         <div class="dash-tool-grid cols-3">
                             <div class="dash-tool-group-label" role="presentation">Keys &amp; Seeds</div>
+                            <!-- Seed Management on the full Dashboard. The top row of tools
+                                 (where it lives in the sidebar) is hidden there, and the
+                                 task tiles have no Seed Management tile, so it is listed
+                                 here too; hidden in the sidebar to avoid a duplicate. -->
+                            <button type="button" class="dash-tool-card dash-tool-card--dash-only" onclick="showState('state-armory')" style="text-align: left; cursor: pointer;">
+                                <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span>
+                                <span class="dash-tool-label">
+                                    <span class="dash-tool-name">Seed Management</span>
+                                    <span class="dash-tool-subtitle">View seed words, xpubs, addresses</span>
+                                </span>
+                                <span class="dash-tool-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
+                            </button>
                             <!-- 4. Entropy Generator (formerly "Dice/Coin Entropy" / "The Forge") -->
                             <button type="button" class="dash-tool-card" onclick="eob_init('forge'); showState('state-entropy');" style="text-align: left; cursor: pointer;">
                                 <span class="dash-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="12" height="12" x="2" y="10" rx="2" ry="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/></svg></span>
@@ -7220,7 +7259,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh()">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh(); if (this.open && typeof ssSettingsRefresh === 'function') ssSettingsRefresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -7353,6 +7392,43 @@
                                 <button type="button" class="skb-btn" id="settings-trezor-log-btn" onclick="tzSettingsShowLog()">Show Trezor log</button>
                             </div>
                             <pre id="settings-trezor-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
+                        </div>
+                        <div id="settings-seed-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Seed storage</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                Choose whether this flash drive keeps your master seed. If it doesn&rsquo;t, unlocking opens the vault (your passphrases, saved wallets, notes and settings) but not your wallet: you scan your SeedQR or type your words each time you start, and they stay in memory until you lock or shut down. Someone who has this flash drive and its Master Passphrase still can&rsquo;t spend without your SeedQR or words.
+                            </p>
+                            <div id="settings-seed-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;">Checking…</div>
+                            <div id="settings-seed-stop" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
+                                <p style="margin: 0 0 0.6rem;">SafeKeep will delete the seed from this vault. Everything else in the vault stays. If you lose your SeedQR and your written words, no one can bring this wallet back. Backups you make from now on won&rsquo;t contain the seed; older backups that contain it still do.</p>
+                                <p style="margin: 0 0 0.6rem;"><strong>First, check your backup.</strong> Scan your SeedQR or type your words. They must match the seed loaded now.</p>
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                                    <button type="button" class="skb-btn" id="settings-seed-scan-btn" onclick="ssSettingsScan()">Scan SeedQR</button>
+                                </div>
+                                <div id="settings-seed-qr-area" style="display: none; margin-bottom: 0.5rem;">
+                                    <div id="settings-seed-qr-reader" style="width: 100%; max-width: 420px; min-height: 260px; overflow: hidden;"></div>
+                                    <button type="button" class="skb-btn" style="margin-top: 0.4rem;" onclick="ssSettingsStopScan()">Stop camera</button>
+                                </div>
+                                <label for="settings-seed-words" style="display: block; margin-bottom: 0.3rem;">Or type your 12 or 24 words, separated by spaces:</label>
+                                <textarea id="settings-seed-words" class="skb-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" style="width: 100%; font-family: var(--skb-mono);" oninput="ssSettingsOnWords()"></textarea>
+                                <div id="settings-seed-check" style="margin: 0.5rem 0;" aria-live="polite"></div>
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    <button type="button" class="skb-btn" id="settings-seed-check-btn" onclick="ssSettingsCheck()">Check</button>
+                                    <button type="button" class="btn-danger" id="settings-seed-delete-btn" disabled onclick="ssSettingsDelete()">Delete the seed from this vault</button>
+                                    <button type="button" class="skb-btn" onclick="ssSettingsCancel()">Cancel</button>
+                                </div>
+                            </div>
+                            <div id="settings-seed-keep" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
+                                <p style="margin: 0 0 0.6rem;">SafeKeep will save the seed loaded now (fingerprint <strong id="settings-seed-keep-fp">--------</strong>) in this vault, and open your wallet each time you unlock.</p>
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    <button type="button" class="skb-btn skb-btn--primary" id="settings-seed-keep-go" onclick="ssSettingsKeep()">Keep my seed here</button>
+                                    <button type="button" class="skb-btn" onclick="ssSettingsCancel()">Cancel</button>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="skb-btn" id="settings-seed-stop-btn" style="display: none;" onclick="ssSettingsStartStop()">Stop keeping my seed here</button>
+                                <button type="button" class="skb-btn" id="settings-seed-keep-btn" style="display: none;" onclick="ssSettingsStartKeep()">Keep my seed on this flash drive</button>
+                            </div>
                         </div>
                         <div id="settings-passphrase-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Master Passphrase</h4>
@@ -8022,7 +8098,7 @@
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -8084,7 +8160,7 @@
                                 <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                 <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                             </span>
-                            <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                         </button>
                         <div class="skb-seed-accordion__panel">
                             <div class="skb-seed-accordion__panel-inner">
@@ -8176,7 +8252,7 @@
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -8266,7 +8342,7 @@
             <div id="desc-mode-tabs" style="display: flex; gap: 0; margin-bottom: 1rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;">
                 <button type="button" id="desc-mode-single" class="tool-tab-btn active" style="flex: 1;" onclick="desc_setMode('single')">Build Single</button>
                 <button type="button" id="desc-mode-multi" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('multi')">Build Multi</button>
-                <button type="button" id="desc-mode-verify" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('verify')">Verify</button>
+                <button type="button" id="desc-mode-verify" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('verify')">Import</button>
             </div>
 
             <!-- ======== SAVED WALLETS (shown when the vault holds any) ======== -->
@@ -8298,7 +8374,7 @@
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -8485,11 +8561,14 @@
             <!-- ======== VERIFY SECTION (The Validator) ======== -->
             <div id="desc-verify-section" style="display: none;">
                 <div class="skb-card" style="margin-bottom: 1rem;">
-                    <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Paste, Scan or Load a Descriptor or Wallet Export</div>
+                    <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.75rem;">Import a Wallet from Another App</div>
+                    <p style="font-size: 0.8125rem; color: var(--skb-text); margin: 0 0 0.5rem;">
+                        Built a multisig in Sparrow, Specter, Nunchuk or another coordinator? Scan its descriptor or setup QR here instead of entering each key. SafeKeep checks it against your seed, then you can save it in one step.
+                    </p>
                     <p style="font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0 0 0.75rem;">
                         An output descriptor, a multisig setup file (BlueWallet, Coldcard, Sparrow&hellip;), a BSMS record or an extended public key (xpub / ypub / zpub). Exports are converted to a descriptor here, on the vault, and shown before the result. SafeKeep then checks it, shows its addresses and, if a seed is loaded, whether that seed can sign for it. Then use it here as a watch-only wallet.
                     </p>
-                    <textarea id="desc-verify-input" rows="4" placeholder="wsh(sortedmulti(2,[fp/48'/0'/0'/2']xpub.../&lt;0;1&gt;/*,...))#checksum&#10;or a multisig setup file:  Policy: 2 of 3 / Format: P2WSH / 8C466A54: xpub...&#10;or one key:  [fingerprint/84'/0'/0']zpub..."
+                    <textarea id="desc-verify-input" rows="4" onpaste="setTimeout(desc_verify, 0)" placeholder="wsh(sortedmulti(2,[fp/48'/0'/0'/2']xpub.../&lt;0;1&gt;/*,...))#checksum&#10;or a multisig setup file:  Policy: 2 of 3 / Format: P2WSH / 8C466A54: xpub...&#10;or one key:  [fingerprint/84'/0'/0']zpub..."
                               spellcheck="false" autocomplete="off"
                               style="width: 100%; box-sizing: border-box; padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8125rem; resize: vertical; line-height: 1.5;"></textarea>
                     <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
@@ -8557,7 +8636,17 @@
                             <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.35rem;">Change Addresses (first 3)</label>
                             <div id="desc-verify-change-addrs" style="background: var(--skb-bg-input); border-radius: var(--skb-radius-sm); padding: 0.6rem; font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text); overflow-x: auto;"></div>
                         </div>
-                        <button type="button" class="skb-btn skb-btn--primary" id="desc-verify-use-btn" style="width: 100%; margin-top: 1rem;" onclick="desc_useVerified()">Use This Descriptor (watch-only)</button>
+                        <div class="desc-import-save" id="desc-import-save">
+                            <label for="desc-import-save-name">Save this wallet</label>
+                            <div class="desc-import-save-row">
+                                <input type="text" id="desc-import-save-name" class="skb-input" maxlength="64" placeholder="Name, e.g. Family 2-of-3" spellcheck="false" autocomplete="off"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault();desc_saveImported();}">
+                                <button type="button" class="skb-btn skb-btn--primary" id="desc-import-save-btn" onclick="desc_saveImported()">Save Wallet</button>
+                            </div>
+                            <div id="desc-import-save-result" class="desc-recv-result" style="display: none;" aria-live="polite"></div>
+                            <div class="desc-import-save-note">Saved wallets live in the vault. The PSBT Signer checks transactions against them, and Show an address can use them.</div>
+                        </div>
+                        <button type="button" class="skb-btn" id="desc-verify-use-btn" style="width: 100%; margin-top: 1rem;" onclick="desc_useVerified()">Use This Descriptor (watch-only)</button>
                         <div style="font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.4rem;">Opens it below with Receive (show and check addresses), address export, Bitcoin Core export, QR and Print PDF.</div>
                     </div>
                 </div>
@@ -8579,6 +8668,19 @@
                     <div id="desc-descriptor-text" style="background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-primary); padding: 0.75rem; border-radius: var(--skb-radius-sm); border: 1px solid var(--skb-primary); word-break: break-all; line-height: 1.6; margin-bottom: 1rem; font-weight: 600;"></div>
 
                     <div id="desc-qr-wrap" style="display: none; margin-bottom: 1rem; text-align: center;">
+                        <!-- QR format: the descriptor itself, or Specter Desktop's wallet
+                             import (Add Wallet → Import from wallet software → Scan QR
+                             code reads one QR code of {"label","descriptor"} JSON). -->
+                        <div class="desc-qr-fmt" role="radiogroup" aria-label="QR code format">
+                            <button type="button" class="skb-btn" id="desc-qr-fmt-plain" role="radio" aria-checked="true" onclick="desc_setQRFormat('plain')">Descriptor</button>
+                            <button type="button" class="skb-btn" id="desc-qr-fmt-specter" role="radio" aria-checked="false" onclick="desc_setQRFormat('specter')">For Specter</button>
+                        </div>
+                        <div id="desc-specter-opts" class="desc-specter-opts" hidden>
+                            <label for="desc-specter-name">Wallet name in Specter</label>
+                            <input type="text" id="desc-specter-name" class="skb-input" maxlength="64" spellcheck="false" autocomplete="off" oninput="desc_renderQR()">
+                            <p>In Specter Desktop: <b>Add Wallet &rarr; Import from wallet software &rarr; Scan QR code</b>, then <b>Continue</b>. Specter adds any key it doesn&rsquo;t know yet as a new device.</p>
+                            <p id="desc-specter-msg" class="desc-specter-msg" hidden></p>
+                        </div>
                         <canvas id="desc-qr-canvas" style="max-width: 400px; width: 100%; height: auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);"></canvas>
                     </div>
 
@@ -8768,7 +8870,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -9165,7 +9267,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <div class="tool-hero">
                 <h2 class="tool-hero-title">Show an<span>Address</span></h2>
                 <p class="tool-hero-subtitle">Receive bitcoin</p>
-                <p class="tool-hero-desc">A receive address of your wallet as a large QR code. SafeKeep is offline and can't see which addresses already received money, so it shows the next one after the last address it showed you, and remembers that on this stick.</p>
+                <p class="tool-hero-desc">A receive address of your wallet as a large QR code. SafeKeep is offline and can't see which addresses already received money, so it shows the next one after the last address it showed you, and remembers that on this flash drive.</p>
             </div>
             <div class="skb-card rcv-card">
                 <label for="rcv-wallet" class="rcv-label">Wallet</label>
@@ -9635,6 +9737,9 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                             <div style="font-size: 0.72rem; color: var(--skb-text-dim);">BIP-39 mnemonic</div>
                         </div>
                     </label>
+                    <div id="rlq-seed-not-kept" style="display: none; padding: 0.6rem 0.75rem; font-size: 0.75rem; color: var(--skb-text-muted); line-height: 1.5;">
+                        Master Seed: this flash drive doesn&rsquo;t keep your seed (Device Options &rarr; Seed storage), so backups don&rsquo;t contain it. Your SeedQR and written words are its backup.
+                    </div>
                 </div>
 
                 <!-- Seed confirmation modal (hidden by default) -->
@@ -9763,7 +9868,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         </div>
 
                         <!-- Bring a backup in with the Courier (animated QR loop from a phone
-                             or computer), so a new stick never has to be plugged into another
+                             or computer), so a new flash drive never has to be plugged into another
                              computer. The file is saved to the Transfer Drive and selected. -->
                         <button type="button" id="rlq-courier-start-btn" class="skb-btn" style="width: 100%; margin-top: 0.5rem;" onclick="rlq_courierStart()">Receive a Backup with the Courier</button>
                         <div id="rlq-courier-area" style="display: none; margin-top: 0.5rem;">
@@ -10006,7 +10111,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                 <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                 <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                             </span>
-                            <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                            <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                         </button>
                         <div class="skb-seed-accordion__panel">
                             <div class="skb-seed-accordion__panel-inner">
@@ -10135,6 +10240,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                 <option value="slip132" selected>SLIP-132 (zpub / ypub / xpub)</option>
                                 <option value="bip380">BIP-32 Standard (xpub only)</option>
                                 <option value="descriptor_text">Output Descriptor (BIP-380)</option>
+                                <option value="key_origin">Key with origin ([fingerprint/path]xpub)</option>
                                 <option value="bcur">BC-UR Account (ur:crypto-account)</option>
                                 <option value="coldcard_json">Hardware Wallet JSON</option>
                                 <option value="nunchuk_json">Hardware Wallet JSON (Minimal)</option>
@@ -10400,7 +10506,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                                     <span class="skb-seed-accordion__fp-label">fingerprint</span>
                                     <span class="skb-seed-accordion__fp" data-role="fingerprint">--------</span>
                                 </span>
-                                <span class="skb-seed-accordion__chevron" aria-hidden="true">▾</span>
+                                <span class="skb-seed-accordion__chevron"><span class="skb-seed-accordion__show">Show words</span><span class="skb-seed-accordion__hide">Hide words</span></span>
                             </button>
                             <div class="skb-seed-accordion__panel">
                                 <div class="skb-seed-accordion__panel-inner">
@@ -11394,6 +11500,8 @@ window.addEventListener('DOMContentLoaded', () => {
        seeded              — vault has master seed, boots into dashboard
        ephemeral           — #ephemeral=true synthesized, no-vault boot
        amnesia             — sessionStorage flag set, amnesia badge on
+       seedfree            — vault open, set not to keep the seed (welcome
+                             asks for it; Device Options → Seed storage)
      ================================================================ -->
 <script>
 (function _SKB_DevModeWrapper() {
@@ -11439,7 +11547,7 @@ window.addEventListener('DOMContentLoaded', () => {
     var devMode = isDemo ? 'seeded' : 'normal';
     if (params) {
         var raw = (params.get('devMode') || '').toLowerCase();
-        var ALLOWED = { normal: 1, seeded: 1, ephemeral: 1, amnesia: 1 };
+        var ALLOWED = { normal: 1, seeded: 1, ephemeral: 1, amnesia: 1, seedfree: 1 };
         if (ALLOWED[raw]) devMode = raw;
     }
     window._SKB_DEV_URL_MODE = devMode;
@@ -11619,6 +11727,7 @@ window.addEventListener('DOMContentLoaded', () => {
     var _devSavedWallets = [];  // dev-mock saved wallets (in memory)
     var _devLastBackup = null;  // dev-mock "last backup" record (in memory)
     var _devReceiveIndex = {};  // dev-mock receive positions (in memory)
+    var _devKeepSeed = (devMode !== 'seedfree');  // dev-mock Seed storage setting
     var _devTzPairing = null;   // dev-mock Trezor pairing (in memory)
     var _devTzUnlocked = false; // dev-mock Trezor: PIN already entered?
     var _devTzPinShown = false; // dev-mock Trezor: grid showing (reset by detect, like the real one)
@@ -11664,7 +11773,7 @@ window.addEventListener('DOMContentLoaded', () => {
             _devSeedSessionSet({ mnemonic: mn, fingerprint: fp, wordCount: wc });
             await _sleep(400);
             _devAnnounce('generateMasterSeed → ' + fp + ' (dev mock, real fp)');
-            return { mnemonic: mn, fingerprint: fp, wordCount: wc, diskVerified: true };
+            return { mnemonic: mn, fingerprint: fp, wordCount: wc, diskVerified: true, ramOnly: !_devKeepSeed };
         },
 
         restoreMasterSeed: async function (mnemonic) {
@@ -11681,7 +11790,7 @@ window.addEventListener('DOMContentLoaded', () => {
             _devSeedSessionSet({ mnemonic: mn, fingerprint: fp, wordCount: wc });
             await _sleep(300);
             _devAnnounce('restoreMasterSeed → ' + fp + ' (dev mock, real fp)');
-            return { mnemonic: mn, fingerprint: fp, wordCount: wc, diskVerified: true };
+            return { mnemonic: mn, fingerprint: fp, wordCount: wc, diskVerified: true, ramOnly: !_devKeepSeed };
         },
 
         factoryReset: async function () {
@@ -11824,6 +11933,14 @@ window.addEventListener('DOMContentLoaded', () => {
             return { success: true, path: '/tmp/dev-mock-reliquary.7z' };
         },
         loadLastBackup: async function () { return _devLastBackup; },
+        isSeedKept: function () { return _devKeepSeed; },
+        setKeepSeed: async function (keep, mnemonic) {
+            if (keep === true && !mnemonic) return { ok: false, error: 'Load your seed first.' };
+            await _sleep(600);
+            _devKeepSeed = keep === true;
+            _devAnnounce('setKeepSeed → ' + _devKeepSeed + ' (dev mock)');
+            return { ok: true };
+        },
         loadReceiveIndex: async function () { return Object.assign({}, _devReceiveIndex); },
         saveReceiveIndex: async function (m) { _devReceiveIndex = Object.assign({}, m || {}); return { saved: true }; },
         commitReliquary: async function () {
@@ -12067,6 +12184,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 _link('seeded',    '\u2192 Seeded (vault has seed)') +
                 _link('ephemeral', '\u2192 Temporary Boot (RAM only)') +
                 _link('amnesia',   '\u2192 Temporary Session mode') +
+                _link('seedfree',  '\u2192 Seed not kept (vault open)') +
             '</div>' +
             '<div style="margin-top:8px;display:flex;gap:4px;">' +
                 '<button id="skb-dev-reset" type="button" ' +
@@ -12280,7 +12398,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
         console.log(
             '%c[DEV MODE]%c SafeKeep Live Server wrapper active — mode: ' + devMode +
-            '. URL params: ?devMode=normal|seeded|ephemeral|amnesia',
+            '. URL params: ?devMode=normal|seeded|ephemeral|amnesia|seedfree',
             'background:#f97316;color:#000;padding:2px 6px;font-weight:900;border-radius:3px;',
             'color:#f97316;font-weight:600;'
         );
@@ -12562,13 +12680,23 @@ function dashv2_renderWallet() {
     var ghost = document.getElementById('amnesia-ghost-badge');
     var temp = ghost && ghost.style.display !== 'none';
     var set = function (id, t) { var el = document.getElementById(id); if (el && el.textContent !== t) el.textContent = t; };
-    set('dashv2-name', nick);
+    // Title = the wallet in use. The three words come from the seed words
+    // alone (the same with any passphrase), while the picture and fingerprint
+    // come from seed + passphrase; with a passphrase on, the title names the
+    // passphrase wallet and the three words are labelled as the seed's.
+    var ppName = (ppOn && typeof _activePpName === 'string' && _activePpName) ? _activePpName : '';
+    set('dashv2-name', ppOn ? (ppName || 'Passphrase wallet') : nick);
     set('dashv2-fp', fp ? fp.toUpperCase() : '--------');
     set('dashv2-lh-src', fp);
     set('dashv2-words', words ? words + ' words' : '');
     var w = document.getElementById('dashv2-words'); if (w) w.hidden = !words;
-    set('dashv2-pp', ppOn ? 'Passphrase wallet' : 'No passphrase');
-    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' : (ppOn ? 'Your passphrase wallet' : 'Your wallet'));
+    var hasNick = nick && !/^Wallet [0-9A-F]{8}$|^No seed loaded$/i.test(nick);
+    set('dashv2-pp', ppOn ? (hasNick ? 'Seed: ' + nick : 'Passphrase on') : 'No passphrase');
+    var ppChip = document.getElementById('dashv2-pp');
+    if (ppChip) ppChip.title = ppOn ? 'The seed\u2019s three-word nickname. It comes from the seed words alone, so it stays the same with any passphrase.' : '';
+    var fpChip = document.getElementById('dashv2-fp');
+    if (fpChip) fpChip.title = ppOn ? 'Fingerprint of this passphrase wallet (seed + passphrase), as your wallet app shows it' : 'Master fingerprint, as your wallet app shows it';
+    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' : (ppName ? 'Passphrase wallet' : 'Your wallet'));
     var dash = document.getElementById('state-dashboard');
     if (dash && ppOn) dash.classList.add('dashv2-pp-open');
     var btn = document.getElementById('dashv2-pp-btn');
@@ -12597,7 +12725,7 @@ async function dashv2_renderHealth() {
     var list = document.getElementById('dashv2-health-list');
     if (!list) return;
     var html = '';
-    // 1. Encrypted backup. The stick's own record of its last backup comes
+    // 1. Encrypted backup. The flash drive's own record of its last backup comes
     //    first (it survives moving the .7z off the Transfer Drive); without
     //    one, the newest dated .7z on the Transfer Drive.
     var names = [], rec = null;
@@ -12633,9 +12761,15 @@ async function dashv2_renderHealth() {
     } else if (newest) {
         var d2 = daysSince(newest);
         html += _dashv2HealthItem(d2 > 30 ? 'warn' : 'ok', 'Backup on the Transfer Drive from ' + fmtDate(newest),
-            'Not made on this stick (or before it kept a record). Make one here to keep track.', backupBtn);
+            'Not made on this flash drive (or before it kept a record). Make one here to keep track.', backupBtn);
     } else {
-        html += _dashv2HealthItem('warn', 'No backup made on this stick yet', 'Make one, then send it to your phone with the Courier.', backupBtn);
+        html += _dashv2HealthItem('warn', 'No backup made on this flash drive yet', 'Make one, then send it to your phone with the Courier.', backupBtn);
+    }
+    // Seed not kept on this flash drive (Device Options → Seed storage).
+    var _ssTemp = (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot()) || (typeof _vaultVolatile !== 'undefined' && _vaultVolatile);
+    if (!_ssTemp && !_seedKept()) {
+        html += _dashv2HealthItem('ok', 'Seed not kept on this flash drive',
+            'It\u2019s in memory until you lock or shut down. Keep your SeedQR and words safe: they\u2019re the only copies.', '');
     }
     // 2. Transfer Drive
     var mounted = /\bMOUNTED\b/i.test(_dashv2Text('status-transfer-label')) && !/UNMOUNTED/i.test(_dashv2Text('status-transfer-label'));
@@ -12647,33 +12781,12 @@ async function dashv2_renderHealth() {
     html += _dashv2HealthItem('ok', /^v\d/.test(ver) ? 'SafeKeep ' + ver.split(' \u00b7 ').slice(0, 2).join(' \u00b7 ') : 'SafeKeep (' + ver + ')', 'Updates: Device Options \u2192 Update SafeKeep', '');
     list.innerHTML = html;
 }
-async function dashv2_renderSaved() {
-    var box = document.getElementById('dashv2-saved');
-    var list = document.getElementById('dashv2-saved-list');
-    if (!box || !list) return;
-    if (typeof _savedWalletsLoading !== 'undefined' && _savedWalletsLoading) { try { await _savedWalletsLoading; } catch (_) {} }
-    var wallets = typeof _savedWallets !== 'undefined' ? _savedWallets : [];
-    box.hidden = !wallets.length;
-    list.innerHTML = wallets.map(function (w, i) {
-        var r = typeof _savedWalletParse === 'function' ? _savedWalletParse(w.descriptor) : {};
-        var meta = r.parsed ? _savedWalletSummary(r.parsed) : 'Can\u2019t be read';
-        var addr = r.parsed && r.parsed.firstAddress ? r.parsed.firstAddress : '';
-        if (addr.length > 16) addr = addr.slice(0, 8) + '\u2026' + addr.slice(-6);
-        return '<div class="dashv2-saved-row"><div><b>' + _psbtEscape(w.name) + '</b><span>' + _psbtEscape(meta + (addr ? ' \u00b7 ' + addr : '')) + '</span></div>' +
-            (r.parsed ? '<button type="button" class="skb-btn" onclick="dashv2_openSaved(' + i + ')">Open</button>' : '') + '</div>';
-    }).join('');
-}
-function dashv2_openSaved(i) {
-    showState('state-descriptor');
-    if (typeof desc_openSavedWallet === 'function') desc_openSavedWallet(i);
-}
 function dashv2_render() {
     // On the full Dashboard all tools show (no drawer), so screen readers must see them too.
     var ac = document.getElementById('dash-advanced-content');
     if (ac && !document.body.classList.contains('tool-active')) ac.setAttribute('aria-hidden', 'false');
     try { dashv2_renderWallet(); } catch (e) { console.warn('[dashv2] wallet:', e && e.message); }
     dashv2_renderHealth().catch(function (e) { console.warn('[dashv2] health:', e && e.message); });
-    dashv2_renderSaved().catch(function (e) { console.warn('[dashv2] saved:', e && e.message); });
 }
 document.addEventListener('DOMContentLoaded', function () {
     // The icon rail hides tool names: give each tool card its name as a
@@ -12734,14 +12847,18 @@ var _CN_APPS = {
                 'Blue Wallet adds a watch-only wallet. Its first receive address should be the same as address #0 in <b>Show an address</b>.'
             ];
         } },
-    specter: { name: 'Specter', format: 'electrum_json', animate: false, file: true, multi: true, types: ['84', '86', '49', '44'],
+    // Specter Desktop's Add device → Other → Scan QR code takes
+    // [fingerprint/path]xpub text as it is (Specter-DIY's format): a short QR
+    // code, no BC-UR decoding, and no browser crypto needed on Specter's side
+    // (its UR:CRYPTO-ACCOUNT path rebuilds the xpub with crypto.subtle).
+    specter: { name: 'Specter', format: 'key_origin', animate: false, multi: true, types: ['84', '86', '49', '44'],
         steps: function (t, multi) {
             return [
-                'In SafeKeep, press <b>Download JSON</b> (highlighted just above). The file is saved to the Transfer Drive.',
-                'Take the file to your online computer on the stick, or send it with the <b>Courier</b> (Transfer Hub \u2192 Transmit).',
-                'In Specter Desktop: <b>Add Device</b>, device type <b>Other</b>, then <b>Upload from SD</b>, pick the file and <b>Continue</b>.',
-                multi ? 'Do the same for each cosigner, then <b>Add Wallet \u2192 Multiple Signature</b>, pick the devices and <b>Create Wallet</b>.'
-                      : 'Click <b>Create Single Key Wallet</b>, name it and <b>Continue</b>.'
+                'In Specter Desktop: <b>Devices → Add new device</b>, device type <b>Other</b>.',
+                'Click <b>Scan QR code</b> and hold SafeKeep’s QR code up to the computer’s camera.',
+                multi ? 'Name the device and <b>Continue</b>. Add each cosigner the same way, then <b>Add Wallet → Multiple Signature</b>, pick the devices and <b>Create Wallet</b>.'
+                      : 'Name the device and <b>Continue</b>, then <b>Create Single Key Wallet</b>.',
+                'No camera on that computer? In Seed Management choose Key Format <b>BIP-32 Watch-Only JSON</b>, press <b>Download JSON</b>, and in Specter use <b>Upload from SD</b> instead.'
             ];
         } },
     electrum: { name: 'Electrum', format: 'slip132', animate: false, multi: true, types: ['84', '49', '44'],
@@ -12779,6 +12896,10 @@ function connect_pick(app) {
     document.getElementById('cn-kind-wrap').hidden = !a.multi;
     if (!a.multi) kind.value = 'single';
     document.getElementById('cn-opts').hidden = app === 'other';
+    // Say what the button does: QR apps open with the QR showing, a file app
+    // at Download JSON, and "another wallet" just opens Seed Management.
+    var go = document.querySelector('.cn-go');
+    if (go) go.textContent = !a.format ? 'Open Seed Management' : (a.file ? 'Go to Download JSON' : 'Show the QR code');
     connect_renderSteps();
     var d = document.getElementById('cn-detail');
     d.hidden = false;
@@ -12818,7 +12939,7 @@ async function connect_go() {
     arm_onConfigChange();
     // Seed Management works the key out after a short delay (and hides its QR
     // while it does): wait until the key box holds this app's format.
-    var want = { bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/, slip132: /^[xyzXYZ]pub/ }[a.format];
+    var want = { key_origin: /^\[[0-9a-f]{8}\//i, bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/, slip132: /^[xyzXYZ]pub/ }[a.format];
     for (var i = 0; i < 60; i++) {
         await new Promise(function (r) { setTimeout(r, 150); });
         var txt = (document.getElementById('arm-xpub') || {}).textContent || '';
@@ -13847,7 +13968,7 @@ function _showDiskVerification(verified) {
             'Write down your words immediately and investigate the vault storage.';
     } else if (verified === true) {
         banner.className = 'disk-verify-banner disk-verify-ok';
-        banner.textContent = 'Seed safely written to vault.';
+        banner.textContent = _seedKept() ? 'Seed safely written to vault.' : 'Seed in memory only: this flash drive doesn\u2019t keep it.';
         // Graceful fade-out via the shared helper — adds .skui-fade-out
         // (opacity → 0 over 0.6s), then sets display:none + clears innerHTML.
         skui_fadeMessage('disk-verify-banner', 8000);
@@ -14254,6 +14375,20 @@ function onBackupContinue() {
 }
 
 
+/** Is the master seed kept on this flash drive? (Device Options → Seed storage) */
+function _seedKept() {
+    try {
+        var os = window.SafeKeepOS;
+        return !(os && typeof os.isSeedKept === 'function') || os.isSeedKept() !== false;
+    } catch (_) { return true; }
+}
+
+/* Welcome (seed not kept): open the recovery-word panel with the camera on. */
+function welcome_seedFreeScan() {
+    showRestorePanel();
+    try { rst_scanQR(); } catch (_) {}
+}
+
 /* Welcome: "I already have a backup" shows or hides the four restore methods. */
 function welcome_toggleRestoreOptions() {
     var opts = document.getElementById('welcome-restore-options');
@@ -14646,7 +14781,7 @@ async function rst_doRestore() {
             }
         }
 
-        showStatus('Master seed restored. Fingerprint: <strong>' + (result.fingerprint || '').toUpperCase() + '</strong>', 'success');
+        showStatus((result.ramOnly ? 'Seed loaded into memory only (this flash drive doesn\u2019t keep it). Fingerprint: <strong>' : 'Master seed restored. Fingerprint: <strong>') + (result.fingerprint || '').toUpperCase() + '</strong>', 'success');
         // Clear the grid
         rst_clearAll();
         transitionToDashboard(result);
@@ -15107,7 +15242,7 @@ function _dash_updatePassphraseButtons() {
  * the dashboard. Shared by the Dashboard's Apply and the Passphrase Library's
  * "Use this wallet now". Returns the new fingerprint; throws on failure.
  */
-async function _applySessionPassphrase(passphrase) {
+async function _applySessionPassphrase(passphrase, name) {
     var session = window.SeedSession ? window.SeedSession.get() : null;
     if (!session || !session.mnemonic) throw new Error('No seed loaded.');
     if (!window.BtcMath || !window.BtcMath.bip39 || !window.BtcMath.HDKey) throw new Error('Core crypto libraries not loaded.');
@@ -15137,6 +15272,8 @@ async function _applySessionPassphrase(passphrase) {
     var dashFP = document.getElementById('dash-fingerprint');
     if (dashFP) dashFP.textContent = newFP;
 
+    _activePpName = (typeof name === 'string' && name.trim()) ? name.trim() : null;
+
     // Update identity label → "Passphrase Wallet Active"
     var dashLabel = document.getElementById('dash-identity-label');
     if (dashLabel) dashLabel.textContent = 'Passphrase Wallet Active';
@@ -15152,6 +15289,10 @@ async function _applySessionPassphrase(passphrase) {
 // when they were saved, so they apply without being typed again. Anything
 // typed (or a loaded one that was then edited) must be confirmed.
 var _dashPpFromLibrary = null;
+var _dashPpLibraryName = null;   // its name in the Library
+// Name of the passphrase wallet in use (its Passphrase Library name), shown
+// as the wallet card's title; null for a typed passphrase or none.
+var _activePpName = null;
 
 async function dash_applyPassphrase() {
     var input = document.getElementById('dash-pp-input');
@@ -15227,7 +15368,7 @@ function _dash_setConfirmError(text) {
 
 async function _dash_applyConfirmedPassphrase(passphrase) {
     try {
-        var newFP = await _applySessionPassphrase(passphrase);
+        var newFP = await _applySessionPassphrase(passphrase, passphrase === _dashPpFromLibrary ? _dashPpLibraryName : null);
         showStatus('Passphrase applied. New fingerprint: <strong>' + (newFP || '').toUpperCase() + '</strong>. All tools now derive from the passphrase wallet. Check that this fingerprint matches the one you recorded for it.', 'success');
     } catch (err) {
         showStatus('Failed to apply passphrase: ' + err.message, 'error');
@@ -15243,6 +15384,8 @@ function dash_clearPassphrase() {
     var input = document.getElementById('dash-pp-input');
     if (input) input.value = '';
     _dashPpFromLibrary = null;
+    _dashPpLibraryName = null;
+    _activePpName = null;
     _dash_hidePassphraseConfirm();
 
     // Clear from both session stores
@@ -15334,8 +15477,11 @@ async function dash_showCipherDropdown() {
 }
 
 /**
- * Load a passphrase from the Cipher Library into the Dashboard passphrase field.
- * Populate-only: the user must click "Apply" to commit the change.
+ * Pick a passphrase from the Passphrase Library on the Dashboard: it fills
+ * the field and is applied right away. Library passphrases were checked
+ * against the written copy when they were saved, so there is nothing to
+ * confirm; picking one is the choice. (Typed passphrases still need Apply
+ * and typing twice.)
  */
 async function dash_loadFromCipher(slug) {
     var os = window.SafeKeepOS;
@@ -15347,23 +15493,22 @@ async function dash_loadFromCipher(slug) {
         return;
     }
 
-    // Inject into dashboard passphrase input (populate only — no apply)
+    // Fill the dashboard passphrase field (kept hidden), then apply it
     var input = document.getElementById('dash-pp-input');
     if (input) {
         input.value = result.passphrase;
         input.type = 'password'; // ensure hidden
     }
     _dashPpFromLibrary = result.passphrase;   // already checked when it was saved
+    _dashPpLibraryName = result.nickname || null;
     _dash_hidePassphraseConfirm();
 
     // Close dropdown
     var dropdown = document.getElementById('dash-cipher-dropdown');
     if (dropdown) dropdown.style.display = 'none';
 
-    // Update buttons — Apply will now be visible for the user to click
     _dash_updatePassphraseButtons();
-
-    showStatus('Passphrase loaded from Passphrase Library: <strong>' + (typeof _cipherEscape === 'function' ? _cipherEscape(result.nickname) : result.nickname) + '</strong>. Click <strong>Apply</strong> to derive the wallet.', 'info');
+    await _dash_applyConfirmedPassphrase(result.passphrase);
 }
 
 
@@ -16248,8 +16393,22 @@ function transitionToWelcome() {
             if (vln) vln.style.display = 'none';
             const hwb = document.getElementById('welcome-hw-btn');
             if (hwb) hwb.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none';
-            if (heading) heading.textContent = 'Welcome to SafeKeepVault';
-            if (subtitle) subtitle.textContent = 'Your keys stay on this stick and never touch the internet. Create a new wallet, or bring back one you already have.';
+            ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none'; });
+            const seedFree = !_seedKept();
+            if (wb) wb.classList.toggle('welcome-actions--seedfree', seedFree);
+            const hbl = document.querySelector('.welcome-have-backup-label');
+            if (hbl) hbl.textContent = seedFree ? 'Other kinds of backup' : 'I already have a backup';
+            const rph = document.querySelector('#restore-panel h3');
+            if (rph) rph.textContent = seedFree ? 'Enter Your Seed' : 'Restore Master Seed';
+            const rsb = document.getElementById('rst-submit-btn');
+            if (rsb) rsb.textContent = seedFree ? 'Load Seed' : 'Restore Seed';
+            if (seedFree) {
+                if (heading) heading.textContent = 'Enter your seed';
+                if (subtitle) subtitle.textContent = 'This flash drive doesn\u2019t keep your seed. Scan your SeedQR or type your words to start: they stay in memory until you lock or shut down. Your passphrases, saved wallets and notes are in the vault.';
+            } else {
+                if (heading) heading.textContent = 'Welcome to SafeKeepVault';
+                if (subtitle) subtitle.textContent = 'Your keys stay on this flash drive and never touch the internet. Create a new wallet, or bring back one you already have.';
+            }
         }
     } catch (e) {
         console.warn('[BOOT] welcome-message sync failed:', e && e.message);
@@ -16346,6 +16505,7 @@ function startEphemeralSession() {
         if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
         var hwb = document.getElementById('welcome-hw-btn');
         if (hwb) hwb.style.display = '';
+        ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
     } catch (e) {}
 
     var welcomeEl = document.getElementById('state-welcome');
@@ -16399,6 +16559,7 @@ function _wipeAllVolatileSeedState() {
         if (window.SafeKeepOS && window.SafeKeepOS.clearPassphrase) window.SafeKeepOS.clearPassphrase();
     } catch (_) {}
     try { _vaultVolatile = false; } catch (_) {}
+    try { _activePpName = null; _dashPpLibraryName = null; } catch (_) {}
 
     // --- Kill active camera scanners + any running PSBT QR animation ---
     try {
@@ -16545,6 +16706,7 @@ function ephemeralHotSwapSeed() {
         if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
         var hwb = document.getElementById('welcome-hw-btn');
         if (hwb) hwb.style.display = '';
+        ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
     } catch (_) {}
 
     // 5. Hide any Generate/Restore sub-panels lingering open from the prior session.
@@ -16906,6 +17068,7 @@ function vaultLock() {
     if (window.SeedSession && window.SeedSession.clear) window.SeedSession.clear();
     if (window.SafeKeepOS && window.SafeKeepOS.clearPassphrase) window.SafeKeepOS.clearPassphrase();
     _vaultVolatile = false;
+    try { _activePpName = null; _dashPpLibraryName = null; } catch (_) {}
 
     // Wipe dashboard identity, including the seed-derived Seed Nickname.
     try { var _nnEl = document.getElementById('dash-vault-fingerprint'); if (_nnEl) _nnEl.textContent = '--------'; var _nnChip = document.getElementById('dash-vfp-cc'); if (_nnChip) _nnChip.setAttribute('data-empty', 'true'); } catch (_) {}
@@ -16925,6 +17088,8 @@ function vaultLock() {
     if (muPw) muPw.value = '';
     // Reset the temp seed word grid to blank
     if (typeof vtmp_clearAll === 'function') vtmp_clearAll();
+    // Seed storage backup check: clear the typed words, stop the camera.
+    try { if (typeof ssSettingsCancel === 'function') ssSettingsCancel(); } catch (_) {}
 
     // Drop the Message Signer (THE WITNESS) per-session cache so a
     // locked-then-reopened vault never resurfaces the prior seed's
@@ -17907,6 +18072,7 @@ var _sensitiveSelectors = [
     '.bip85-out-grid',         // Entire word grids
     '.rst-grid input',         // Restore/merge input grids
     '#psbt-temp-seed-input',   // PSBT temporary seed textarea
+    '#settings-seed-words',    // Seed storage: backup check words (Device Options)
     '#psbt-passphrase',        // PSBT passphrase input
     '#bip85-passphrase',       // BIP-85 passphrase input
     '#cipher-passphrase',      // Cipher workspace input
@@ -18537,7 +18703,9 @@ function showState(stateId) {
         // Match the onclick attribute to find the right card
         var matchStr = "showState('" + stateId + "')";
         for (var ci = 0; ci < allCards.length; ci++) {
-            var oc = allCards[ci].getAttribute('onclick') || '';
+            // data-state names the screen for cards whose onclick doesn't
+            // (the PSBT Signer opens through openPsbtSigner()).
+            var oc = allCards[ci].getAttribute('data-state') || allCards[ci].getAttribute('onclick') || '';
             if (oc.indexOf(stateId) !== -1) {
                 allCards[ci].classList.add('sidebar-active');
                 break;
@@ -18648,6 +18816,7 @@ function psbtBackToDashboard() {
             }
             const hwb = document.getElementById('welcome-hw-btn');
             if (hwb) hwb.style.display = '';
+            ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
         } catch (_) {}
         return;
     }
@@ -25909,7 +26078,7 @@ function updSettingsRefresh() {
     if (install) install.style.display = 'none';
     if (!check) return;
     if (!os || typeof os.updateCheck !== 'function' || !os.isBootDrive || !os.isBootDrive()) {
-        _updStatus('Updates work when SafeKeep runs from its USB stick.', false);
+        _updStatus('Updates work when SafeKeep runs from its USB flash drive.', false);
         check.disabled = true;
         return;
     }
@@ -26065,7 +26234,7 @@ async function ppSettingsRefresh() {
     if (btn) btn.disabled = !onStick;
     if (!status) return;
     if (!onStick) {
-        status.textContent = 'You can change the Master Passphrase when SafeKeep runs from its USB stick.';
+        status.textContent = 'You can change the Master Passphrase when SafeKeep runs from its USB flash drive.';
         status.style.color = 'var(--skb-text-muted)';
         return;
     }
@@ -26113,6 +26282,185 @@ async function ppSettingsLockAndChange() {
 }
 
 window.addEventListener('load', function () { setTimeout(ppRefreshRating, 800); });
+
+// ===========================================================================
+// SETTINGS → SEED STORAGE — keep the master seed on this flash drive, or not
+// ===========================================================================
+// Off: the OS deletes seeds/master-seed.json and keeps a flag in
+// settings/seed-storage.json (see shared/boot.js setKeepSeed and the Seed
+// Storage Watcher). Before deleting, the user proves they hold the backup:
+// a scanned SeedQR or typed words must match the seed loaded now.
+let _ssScanner = null;
+let _ssMatched = false;
+
+function _ssNormWords(text) {
+    return String(text || '').toLowerCase().trim().split(/\s+/).filter(Boolean).join(' ');
+}
+
+function _ssLoadedMnemonic() {
+    try {
+        var s = window.SeedSession && window.SeedSession.get ? window.SeedSession.get() : null;
+        return s && s.mnemonic ? _ssNormWords(s.mnemonic) : '';
+    } catch (_) { return ''; }
+}
+
+function _ssSetCheck(html, kind) {
+    var el = document.getElementById('settings-seed-check');
+    if (!el) return;
+    el.innerHTML = html;
+    el.style.color = kind === 'ok' ? 'var(--skb-success, #22c55e)' : kind === 'bad' ? 'var(--skb-danger)' : 'var(--skb-text-muted)';
+}
+
+function _ssShow(id, on) { var el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; }
+
+function ssSettingsRefresh() {
+    var status = document.getElementById('settings-seed-status');
+    if (!status) return;
+    var os = window.SafeKeepOS;
+    _ssShow('settings-seed-stop-btn', false);
+    _ssShow('settings-seed-keep-btn', false);
+    status.style.color = 'var(--skb-text)';
+    if (!os || typeof os.isSeedKept !== 'function') { status.textContent = ''; return; }
+    if (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot()) {
+        status.textContent = 'Not available in a Temporary Session: the vault isn’t open.';
+        status.style.color = 'var(--skb-text-muted)';
+        return;
+    }
+    if (typeof _vaultVolatile !== 'undefined' && _vaultVolatile) {
+        status.textContent = 'A temporary seed is loaded. Lock the vault and unlock it again to change this.';
+        status.style.color = 'var(--skb-text-muted)';
+        return;
+    }
+    var loaded = !!_ssLoadedMnemonic();
+    if (os.isSeedKept()) {
+        status.textContent = 'This flash drive keeps your seed in the vault, so unlocking opens your wallet.';
+        _ssShow('settings-seed-stop-btn', loaded);
+    } else {
+        status.textContent = 'This flash drive doesn’t keep your seed. You scan your SeedQR or type your words each time you start.';
+        _ssShow('settings-seed-keep-btn', loaded);
+    }
+}
+
+function ssSettingsStartStop() {
+    ssSettingsCancel();
+    _ssShow('settings-seed-stop', true);
+    _ssShow('settings-seed-stop-btn', false);
+    _ssSetCheck('', '');
+}
+
+function ssSettingsStartKeep() {
+    ssSettingsCancel();
+    var fp = '';
+    try { var s = window.SeedSession.get(); fp = (s && s.fingerprint || '').toUpperCase(); } catch (_) {}
+    var fpEl = document.getElementById('settings-seed-keep-fp');
+    if (fpEl) fpEl.textContent = fp || '--------';
+    _ssShow('settings-seed-keep', true);
+    _ssShow('settings-seed-keep-btn', false);
+}
+
+function ssSettingsCancel() {
+    ssSettingsStopScan();
+    _ssMatched = false;
+    var ta = document.getElementById('settings-seed-words');
+    if (ta) ta.value = '';
+    var del = document.getElementById('settings-seed-delete-btn');
+    if (del) del.disabled = true;
+    _ssSetCheck('', '');
+    _ssShow('settings-seed-stop', false);
+    _ssShow('settings-seed-keep', false);
+    ssSettingsRefresh();
+}
+
+function ssSettingsOnWords() {
+    // Editing after a match must be checked again.
+    _ssMatched = false;
+    var del = document.getElementById('settings-seed-delete-btn');
+    if (del) del.disabled = true;
+    _ssSetCheck('', '');
+}
+
+/** Compare the given words (or the textarea) with the seed loaded now. */
+function ssSettingsCheck(words) {
+    var given = _ssNormWords(words != null ? words : (document.getElementById('settings-seed-words') || {}).value);
+    var loaded = _ssLoadedMnemonic();
+    var del = document.getElementById('settings-seed-delete-btn');
+    _ssMatched = false;
+    if (!loaded) { _ssSetCheck('No seed is loaded.', 'bad'); if (del) del.disabled = true; return false; }
+    var n = given ? given.split(' ').length : 0;
+    if (n !== 12 && n !== 24) {
+        _ssSetCheck(n ? 'That is ' + n + ' words. A seed has 12 or 24.' : 'Scan your SeedQR or type your words first.', 'bad');
+        if (del) del.disabled = true;
+        return false;
+    }
+    _ssMatched = given === loaded;
+    if (_ssMatched) _ssSetCheck('Your backup matches the seed loaded now.', 'ok');
+    else _ssSetCheck('That doesn’t match the seed loaded now. Check your backup before going on: without a working backup, deleting the seed here would lose this wallet.', 'bad');
+    if (del) del.disabled = !_ssMatched;
+    // Never leave typed words on screen once checked.
+    var ta = document.getElementById('settings-seed-words');
+    if (ta && _ssMatched) ta.value = '';
+    return _ssMatched;
+}
+
+async function ssSettingsScan() {
+    if (!window.jsQR || typeof SKScanner === 'undefined') { _ssSetCheck('The QR scanner isn’t available.', 'bad'); return; }
+    ssSettingsStopScan();
+    _ssShow('settings-seed-qr-area', true);
+    try {
+        _ssScanner = SKScanner.create('settings-seed-qr-reader');
+        await _ssScanner.start({ fps: 10 }, function (text, binaryData) {
+            ssSettingsStopScan();
+            var words = (typeof sqr_wordsFromScan === 'function') ? sqr_wordsFromScan(text, binaryData) : null;
+            if (words && (words.length === 12 || words.length === 24)) ssSettingsCheck(words.join(' '));
+            else _ssSetCheck('That QR code isn’t a SeedQR.', 'bad');
+        });
+    } catch (err) {
+        _ssShow('settings-seed-qr-area', false);
+        _ssSetCheck('Camera failed: ' + (err && err.message ? err.message : err), 'bad');
+    }
+}
+
+function ssSettingsStopScan() {
+    if (_ssScanner) { try { _ssScanner.stop(); } catch (_) {} _ssScanner = null; }
+    _ssShow('settings-seed-qr-area', false);
+}
+
+async function ssSettingsDelete() {
+    if (!_ssMatched) return;
+    var os = window.SafeKeepOS;
+    var btn = document.getElementById('settings-seed-delete-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+    var r = { ok: false, error: 'Not available.' };
+    try { r = await os.setKeepSeed(false); } catch (e) { r = { ok: false, error: e && e.message ? e.message : String(e) }; }
+    if (btn) btn.textContent = 'Delete the seed from this vault';
+    if (r.ok) {
+        ssSettingsCancel();
+        showStatus('The seed is no longer kept on this flash drive. It stays in memory until you lock or shut down.', 'success');
+    } else {
+        if (btn) btn.disabled = false;
+        _ssSetCheck('Not changed: ' + (r.error || 'unknown error'), 'bad');
+    }
+    ssSettingsRefresh();
+    try { if (typeof dashv2_renderHealth === 'function') dashv2_renderHealth(); } catch (_) {}
+}
+
+async function ssSettingsKeep() {
+    var os = window.SafeKeepOS;
+    var mn = _ssLoadedMnemonic();
+    var btn = document.getElementById('settings-seed-keep-go');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    var r = { ok: false, error: 'Not available.' };
+    try { r = await os.setKeepSeed(true, mn); } catch (e) { r = { ok: false, error: e && e.message ? e.message : String(e) }; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Keep my seed here'; }
+    if (r.ok) {
+        ssSettingsCancel();
+        showStatus('Your seed is kept in this vault again.', 'success');
+    } else {
+        showStatus('Not changed: ' + (r.error || 'unknown error'), 'error');
+    }
+    ssSettingsRefresh();
+    try { if (typeof dashv2_renderHealth === 'function') dashv2_renderHealth(); } catch (_) {}
+}
 
 // ===========================================================================
 // SETTINGS → COLDCARD — pair / forget
@@ -28170,7 +28518,8 @@ async function cipher_useNow() {
         return;
     }
     try {
-        var newFP = await _applySessionPassphrase(document.getElementById('cipher-passphrase').value);
+        var newFP = await _applySessionPassphrase(document.getElementById('cipher-passphrase').value,
+            (document.getElementById('cipher-nickname') || {}).value || '');
         _cipherUpdateUseBtn();
         showStatus('Now using this passphrase wallet. Fingerprint: <strong>' + newFP.toUpperCase() + '</strong>. All tools derive from it until you switch back on the Dashboard.', 'success');
     } catch (err) {
@@ -30248,7 +30597,7 @@ async function desc_importCosignerFromDevice(idx, kind) {
     var fn = kind === 'trezor' ? 'trezorXpub' : 'coldcardXpub';
     if (_descHwBusy) return;
     if (!os || typeof os[fn] !== 'function') {
-        _descHwStatus(idx, name + ' import only works when SafeKeep is running from its USB stick.', 'error');
+        _descHwStatus(idx, name + ' import only works when SafeKeep is running from its USB flash drive.', 'error');
         return;
     }
     var addrType = desc_state.msAddrType || (document.getElementById('desc-ms-addr-type') || {}).value || '84';
@@ -31183,14 +31532,85 @@ function desc_toggleQR() {
         // playing animated (a hidden canvas stops the animation).
         wrap.style.display = 'block';
         btn.textContent = 'Hide QR';
-        // A dense multisig descriptor gets the option to play animated.
-        if (canvas && window.QRCode) {
-            skqr_render(canvas, desc_state.currentDescriptor, {
-                width: 400,
-                errorCorrectionLevel: 'L',
-                color: { dark: '#000000', light: '#ffffff' }
-            });
+        desc_renderQR();
+    }
+}
+
+var _descQRFormat = 'plain';
+
+/** Descriptor or "For Specter" (Specter Desktop's wallet import format). */
+function desc_setQRFormat(fmt) {
+    _descQRFormat = fmt === 'specter' ? 'specter' : 'plain';
+    ['plain', 'specter'].forEach(function (f) {
+        var b = document.getElementById('desc-qr-fmt-' + f);
+        if (b) b.setAttribute('aria-checked', f === _descQRFormat ? 'true' : 'false');
+    });
+    var opts = document.getElementById('desc-specter-opts');
+    if (opts) opts.hidden = _descQRFormat !== 'specter';
+    var nameEl = document.getElementById('desc-specter-name');
+    if (_descQRFormat === 'specter' && nameEl && !nameEl.value) nameEl.value = _descSpecterDefaultName();
+    desc_renderQR();
+}
+
+/* The saved wallet's name when this descriptor is one, else a plain default. */
+function _descSpecterDefaultName() {
+    try {
+        var body = _savedWalletBody(desc_state.currentDescriptor);
+        for (var i = 0; i < (_savedWallets || []).length; i++) {
+            if (_savedWalletBody(_savedWallets[i].descriptor) === body) return _savedWallets[i].name;
         }
+    } catch (_) {}
+    return 'SafeKeep wallet';
+}
+
+/**
+ * Specter Desktop's wallet import: {"label", "descriptor"}. Specter accepts
+ * only keys ending /0/* (it adds the change branch itself), so SafeKeep's
+ * /<0;1>/* becomes /0/* and the checksum is worked out again. Returns
+ * { json } or { error } (silent payments, keys without the wildcard).
+ */
+function _descSpecterPayload(descriptor, label) {
+    var body = String(descriptor || '').split('#')[0].trim();
+    if (!body) return { error: 'No descriptor yet.' };
+    if (/^sp\(/i.test(body)) return { error: 'Specter can\u2019t import a Silent Payments descriptor.' };
+    body = body.split('/<0;1>/*').join('/0/*');
+    var keys = body.match(/\][xtyzuv]pub[1-9A-HJ-NP-Za-km-z]+[^,)]*/g) || [];
+    for (var i = 0; i < keys.length; i++) {
+        if (!/\/0\/\*$/.test(keys[i])) return { error: 'Specter imports only wallets whose keys end in /0/* (receive addresses).' };
+    }
+    var d = body + '#' + desc_checksum(body);
+    return { json: JSON.stringify({ label: String(label || '').trim() || 'SafeKeep wallet', descriptor: d }) };
+}
+
+async function desc_renderQR() {
+    var canvas = document.getElementById('desc-qr-canvas');
+    if (!canvas || !window.QRCode || !desc_state.currentDescriptor) return;
+    var msg = document.getElementById('desc-specter-msg');
+    if (msg) { msg.hidden = true; msg.textContent = ''; }
+    var qrOpts = { width: 400, errorCorrectionLevel: 'L', color: { dark: '#000000', light: '#ffffff' } };
+    if (_descQRFormat !== 'specter') {
+        // A dense multisig descriptor gets the option to play animated.
+        skqr_render(canvas, desc_state.currentDescriptor, qrOpts);
+        return;
+    }
+    skqr_stop(canvas);
+    var bar = document.getElementById(canvas.id + '-skqr-bar');
+    if (bar) bar.style.display = 'none';
+    var nameEl = document.getElementById('desc-specter-name');
+    var p = _descSpecterPayload(desc_state.currentDescriptor, nameEl ? nameEl.value : '');
+    var ctx = canvas.getContext('2d');
+    if (p.error) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (msg) { msg.textContent = p.error; msg.hidden = false; }
+        return;
+    }
+    // Specter's import scanner reads one QR code only (not animated).
+    try {
+        await window.QRCode.toCanvas(canvas, p.json, qrOpts);
+        _skqrStripSize(canvas);
+    } catch (e) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (msg) { msg.textContent = 'This wallet is too big for one QR code, and Specter\u2019s wallet import doesn\u2019t read animated ones. Use Copy and paste it into Specter instead.'; msg.hidden = false; }
     }
 }
 
@@ -32543,6 +32963,11 @@ async function desc_verify() {
 
         _descVerified = { descriptor: parsed.descriptor, parsed: parsed };
         if (useBtn) useBtn.style.display = parsed.addressNote ? 'none' : '';
+        // Import: save it right here (a single address can't be a wallet).
+        var _impSave = document.getElementById('desc-import-save');
+        if (_impSave) _impSave.style.display = parsed.addressNote ? 'none' : '';
+        var _impRes = document.getElementById('desc-import-save-result');
+        if (_impRes) { _impRes.style.display = 'none'; _impRes.textContent = ''; }
         detailsDiv.style.display = 'block';
         resultDiv.style.display = 'block';
 
@@ -32670,13 +33095,38 @@ function _descSaveResult(kind, text) {
 
 async function desc_saveWallet() {
     var nameEl = document.getElementById('desc-save-name');
+    var ok = await _descSaveAs(desc_state.currentDescriptor, nameEl, _descSaveResult, 'desc-save-btn');
+    if (ok && nameEl) nameEl.value = '';
+}
+
+/* Import tab: save the checked descriptor straight from the result. */
+async function desc_saveImported() {
+    var v = _descVerified;
+    var report = function (kind, text) {
+        var el = document.getElementById('desc-import-save-result');
+        if (!el) return;
+        el.className = 'desc-recv-result' + (kind ? ' is-' + kind : '');
+        el.textContent = text;
+        el.style.display = text ? 'block' : 'none';
+    };
+    if (!v || v.parsed.addressNote) { report('bad', 'Check a wallet descriptor first.'); return; }
+    await _descSaveAs(v.descriptor, document.getElementById('desc-import-save-name'), report, 'desc-import-save-btn');
+}
+
+/**
+ * Save `descriptor` under the name in nameEl, reporting through report(kind,
+ * text). Shared by Save Wallet in the output card and on the Import tab.
+ * Returns true once stored.
+ */
+async function _descSaveAs(descriptorIn, nameEl, report, btnId) {
+    var _descSaveResult = report;
     var name = (nameEl ? nameEl.value : '').trim();
-    var descriptor = String(desc_state.currentDescriptor || '').replace(/[\r\n]+/g, '').trim();
-    if (!descriptor) { _descSaveResult('bad', 'No descriptor yet. Generate or load one first.'); return; }
-    if (!name) { _descSaveResult('bad', 'Give the wallet a name first.'); if (nameEl) nameEl.focus(); return; }
-    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) { _descSaveResult('bad', 'Use a name of up to 64 characters.'); return; }
+    var descriptor = String(descriptorIn || '').replace(/[\r\n]+/g, '').trim();
+    if (!descriptor) { _descSaveResult('bad', 'No descriptor yet. Generate or load one first.'); return false; }
+    if (!name) { _descSaveResult('bad', 'Give the wallet a name first.'); if (nameEl) nameEl.focus(); return false; }
+    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) { _descSaveResult('bad', 'Use a name of up to 64 characters.'); return false; }
     var r = _savedWalletParse(descriptor);
-    if (r.error) { _descSaveResult('bad', 'Not saved: ' + r.error); return; }
+    if (r.error) { _descSaveResult('bad', 'Not saved: ' + r.error); return false; }
     if (descriptor.indexOf('#') === -1) descriptor += '#' + desc_checksum(descriptor);
 
     await savedWallets_load();
@@ -32684,26 +33134,26 @@ async function desc_saveWallet() {
     for (var i = 0; i < _savedWallets.length; i++) {
         if (_savedWalletBody(_savedWallets[i].descriptor) === body) {
             _descSaveResult('ok', 'Already saved as “' + _savedWallets[i].name + '”.');
-            return;
+            return false;
         }
         if (_savedWallets[i].name.toLowerCase() === name.toLowerCase()) {
             _descSaveResult('bad', 'A saved wallet is already called “' + _savedWallets[i].name + '”. Choose another name.');
-            return;
+            return false;
         }
     }
-    if (_savedWallets.length >= 50) { _descSaveResult('bad', 'The vault holds up to 50 saved wallets. Remove one first.'); return; }
+    if (_savedWallets.length >= 50) { _descSaveResult('bad', 'The vault holds up to 50 saved wallets. Remove one first.'); return false; }
 
-    var btn = document.getElementById('desc-save-btn');
+    var btn = document.getElementById(btnId);
     if (btn) btn.disabled = true;
     _descSaveResult('busy', 'Saving to the vault…');
     try {
         var res = await _savedWalletsStore(_savedWallets.concat([{ name: name, descriptor: descriptor, added: new Date().toISOString() }]));
         if (res.saved) {
             _descSaveResult('ok', 'Saved as “' + name + '”. The PSBT Signer will now check transactions against it.');
-            if (nameEl) nameEl.value = '';
-        } else {
-            _descSaveResult('bad', 'Not saved: ' + (res.error || 'unknown error.'));
+            return true;
         }
+        _descSaveResult('bad', 'Not saved: ' + (res.error || 'unknown error.'));
+        return false;
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -35971,7 +36421,7 @@ function _rlqShowSendWithCourier(filename) {
         '<div class="skb-card" style="border-color: var(--skb-success, #00c896);">' +
         '<div style="font-weight: 700; color: var(--skb-success, #00c896); margin-bottom: 0.35rem;">Backup saved to the Transfer Drive</div>' +
         '<div style="font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text); word-break: break-all; margin-bottom: 0.6rem;">' + _psbtEscape(filename) + '</div>' +
-        '<p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.6rem;">To keep a copy on your phone without plugging this stick into another computer, send it with the Courier and receive it with the Courier Tool at safekeepbitcoin.com.</p>' +
+        '<p style="font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.6rem;">To keep a copy on your phone without plugging this flash drive into another computer, send it with the Courier and receive it with the Courier Tool at safekeepbitcoin.com.</p>' +
         '<div class="tool-grid-2">' +
         '<button type="button" id="rlq-send-courier-btn" class="skb-btn" onclick="rlq_sendWithCourier()">Send with the Courier</button>' +
         '<button type="button" id="rlq-check-this-btn" class="skb-btn" onclick="rlq_checkThisBackup()">Check this backup</button>' +
@@ -36144,6 +36594,12 @@ function rlq_init() {
         seedChk.removeAttribute('disabled');
     }
     _rlqSeedConfirmed = false;
+    // Seed not kept on this flash drive: there is no seed file to back up.
+    var _rlqSeedKept = _seedKept() || (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot());
+    var _rlqSeedItem = document.getElementById('rlq-item-seed');
+    if (_rlqSeedItem) _rlqSeedItem.style.display = _rlqSeedKept ? 'flex' : 'none';
+    var _rlqSeedNote = document.getElementById('rlq-seed-not-kept');
+    if (_rlqSeedNote) _rlqSeedNote.style.display = _rlqSeedKept ? 'none' : 'block';
     // Reset visual styling
     ['rlq-item-cipher', 'rlq-item-seed'].forEach(function(id) {
         var el = document.getElementById(id);
@@ -38820,6 +39276,15 @@ async function arm_deriveWallet() {
             displayValue = isMulti
                 ? (await _descLocalKeyOrigin(mnemonic, passphrase, pathType)).origin
                 : _descSingleSig(seedBytes, pathType).descriptor;
+        } else if (effectiveKeyFormat === 'key_origin') {
+            // [fingerprint/path]xpub on its own: the key expression of a
+            // descriptor, as Specter-DIY shows it. Specter Desktop's Add
+            // device → Scan QR code reads this text directly; a short,
+            // easy-to-scan QR code. Hardened steps written with h.
+            var _ko = isMulti
+                ? (await _descLocalKeyOrigin(mnemonic, passphrase, pathType)).origin
+                : ((_descSingleSig(seedBytes, pathType).descriptor.match(/\[[0-9a-fA-F]{8}\/[^\]]*\][a-zA-Z]pub[1-9A-HJ-NP-Za-km-z]+/) || [''])[0]);
+            displayValue = _ko.replace(/'/g, 'h');
         } else if (effectiveKeyFormat === 'nunchuk_json') {
             // Nunchuk-specific minimal schema. Strictly:
             //   { xfp, bipNN_or_bip48_N: { deriv, xpub, path, name } }
@@ -39431,6 +39896,7 @@ function _armKeyFormatToSuffix(keyFormat) {
         case 'slip132':              return 'SLIP-132';
         case 'bip380':               return 'BIP-32';
         case 'descriptor_text':      return 'BIP-380';
+        case 'key_origin':           return 'KEY-ORIGIN';
         case 'coldcard_json':        return 'HWW';
         case 'nunchuk_json':         return 'HWW-MINIMAL';
         case 'electrum_json':        return 'BIP-32-WATCH';
@@ -44630,6 +45096,27 @@ function tfa_renderTable() {
     .welcome-actions .welcome-create { padding: 1.05rem 1.5rem; font-size: 1.05rem; border-radius: var(--dv2-radius) !important; }
     .welcome-actions .welcome-have-backup { padding: 0.95rem 1.5rem; font-size: 1rem; border-radius: var(--dv2-radius) !important; background: transparent; }
     .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
+    .welcome-actions .welcome-vault-btn { margin-top: 0.6rem; background: transparent; }
+    .welcome-vault-note { margin: 0.1rem 0 0; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
+    .desc-import-save { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--skb-border); }
+    .desc-import-save label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.4rem; }
+    .desc-import-save-row { display: flex; gap: 0.5rem; }
+    .desc-import-save-row input { flex: 1; min-width: 0; }
+    .desc-import-save-note { font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.4rem; }
+    .desc-qr-fmt { display: inline-flex; gap: 0.4rem; margin-bottom: 0.6rem; }
+    .desc-qr-fmt .skb-btn { font-size: 0.8rem; padding: 0.35rem 0.8rem; }
+    .desc-qr-fmt .skb-btn[aria-checked="true"] { border-color: var(--skb-primary); color: var(--skb-primary); }
+    .desc-specter-opts { max-width: 400px; margin: 0 auto 0.75rem; text-align: left; font-size: 0.8125rem; color: var(--skb-text-muted); }
+    .desc-specter-opts[hidden] { display: none; }
+    .desc-specter-opts label { display: block; margin-bottom: 0.25rem; color: var(--skb-text); font-weight: 600; }
+    .desc-specter-opts input { width: 100%; margin-bottom: 0.4rem; }
+    .desc-specter-opts p { margin: 0.25rem 0; line-height: 1.5; }
+    .desc-specter-msg { color: var(--skb-danger) !important; }
+    .welcome-actions .welcome-seedfree { display: none; }
+    .welcome-actions.welcome-actions--seedfree .welcome-seedfree { display: block; padding: 1rem 1.5rem; font-size: 1.02rem; border-radius: var(--dv2-radius) !important; }
+    .welcome-actions.welcome-actions--seedfree .skb-btn.welcome-seedfree:not(.skb-btn--primary) { background: transparent; }
+    .welcome-actions.welcome-actions--seedfree .welcome-create { display: none; }
+    .welcome-actions.welcome-actions--seedfree .welcome-have-backup { padding: 0.7rem 1.25rem; font-size: 0.9rem; border-color: transparent; color: var(--skb-text-muted); }
     .welcome-options[hidden] { display: none; }
     .welcome-options-lead { margin: 0.4rem 0 0.1rem; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
     .welcome-option { display: flex; gap: 0.85rem; align-items: flex-start; padding: 0.85rem 1rem; text-align: left; cursor: pointer;
@@ -44656,6 +45143,10 @@ function tfa_renderTable() {
     body.tool-active .dashv2, body.tool-active .dashv2-alltools-title { display: none !important; }
     body:not(.tool-active) #state-dashboard:not(.dashv2-pp-open) .dash-command-row { display: none !important; }
     body:not(.tool-active) #state-dashboard .dash-inner > .dash-tool-grid.cols-3 { display: none; }
+    body.tool-active #state-dashboard .dash-tool-card--dash-only { display: none !important; }
+    /* The wallet card shows the Seed Nickname in large type on the Dashboard,
+       so the small one in the top bar only shows on tool screens. */
+    body:not(.tool-active) #dash-vfp-cc { display: none !important; }
     body:not(.tool-active) #state-dashboard .dash-command-row .dash-command-identity { display: none; }
     body:not(.tool-active) #state-dashboard .dash-command-row { margin: -0.6rem 0 1.6rem; }
     body:not(.tool-active) .dash-advanced-toggle { display: none; }
@@ -44695,8 +45186,7 @@ function tfa_renderTable() {
       background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: var(--dv2-radius); color: var(--skb-text); font: inherit; }
     .dashv2-action:hover { border-color: var(--skb-primary); }
     .dashv2-action b { font-size: 1rem; }
-    .dashv2-action span:not(.dashv2-ico) { color: var(--skb-text-muted); font-size: 0.8125rem; }
-    .dashv2-action--primary { border-color: color-mix(in srgb, var(--skb-primary) 50%, var(--skb-border)); background: linear-gradient(160deg, var(--skb-primary-muted), var(--skb-bg-card, var(--skb-bg-secondary)) 70%); }
+    .dashv2-action span:not(.dashv2-ico) { color: var(--skb-text-muted); font-size: 0.8125rem; text-wrap: balance; }
     .dashv2-ico { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--skb-primary-muted); color: var(--skb-primary); }
     .dashv2-ico svg { width: 21px; height: 21px; }
     .dashv2-saved { padding: 1.1rem 1.1rem 0.5rem; margin-bottom: 1.6rem; }
@@ -44710,7 +45200,7 @@ function tfa_renderTable() {
     :root { --skb-ui-radius: 8px; }
     #state-dashboard .dashv2-chip, #global-status-bar .dash-status-summary { border-radius: 999px !important; }
     #state-dashboard .dashv2-dot, #global-status-bar .dash-status-summary__dot, #global-status-bar .dot { border-radius: 50% !important; }
-    #state-dashboard :is(.dashv2-wallet, .dashv2-health, .dashv2-saved, .dashv2-action, .dash-settings, .dash-tool-card),
+    #state-dashboard :is(.dashv2-wallet, .dashv2-health, .dashv2-action, .dash-settings, .dash-tool-card),
     #state-welcome .welcome-option { border-radius: 12px !important; }
     #state-dashboard .dashv2-lh canvas { border-radius: 12px !important; }
     .boot-header:not(#_), .dash-status-bar:not(#_) { border-radius: 0 !important; }  /* full-width bars stay square */

@@ -66,10 +66,12 @@ const fn = (name) => { const i = SRC.search(new RegExp('function ' + name + '\\s
 ck('Seed Management Show QR draws through skqr_render', /skqr_render\(canvas, payload/.test(fn('arm_toggleXpubQR')));
 ck('Seed Management Hide QR stops the animation', /skqr_stop\(/.test(fn('arm_toggleXpubQR')));
 ck('a key format change that hides the QR stops the animation', /_armXpubQRVisible = false;\n[^\n]*\n\s*skqr_stop\(/.test(fn('arm_deriveWallet')));
-ck('Output Descriptor Show QR draws through skqr_render, Hide stops it',
-    /skqr_render\(canvas, desc_state\.currentDescriptor/.test(fn('desc_toggleQR')) && /skqr_stop\(canvas\)/.test(fn('desc_toggleQR')));
+// Show QR opens the box, then desc_renderQR draws: the descriptor through
+// skqr_render (animated when dense), or Specter's one-QR import format.
+ck('Output Descriptor Show QR draws the descriptor through skqr_render, Hide stops it',
+    /desc_renderQR\(\)/.test(fn('desc_toggleQR')) && /skqr_render\(canvas, desc_state\.currentDescriptor/.test(fn('desc_renderQR')) && /skqr_stop\(canvas\)/.test(fn('desc_toggleQR')));
 ck('Output Descriptor shows the QR box before drawing (a hidden canvas stops the animation)',
-    fn('desc_toggleQR').indexOf("wrap.style.display = 'block'") < fn('desc_toggleQR').indexOf('skqr_render('));
+    fn('desc_toggleQR').indexOf("wrap.style.display = 'block'") < fn('desc_toggleQR').indexOf('desc_renderQR('));
 ck('animation stops by itself once the QR is off screen', /if \(!canvas\.getClientRects\(\)\.length\) \{ skqr_stop\(canvas\); return; \}/.test(fn('skqr_play')));
 ck('frames are drawn at error correction L', /errorCorrectionLevel: 'L'/.test(fn('skqr_play')));
 ck('Seed Management always offers animation for the JSON key formats (Nunchuk reads keys only as BC-UR)',

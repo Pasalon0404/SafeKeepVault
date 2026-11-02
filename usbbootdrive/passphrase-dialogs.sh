@@ -62,7 +62,7 @@ passphrase_ok() {
         weak)
             zenity --warning --title="Passphrase Too Easy to Guess" --width=450 \
                 --ok-label="Choose Another" \
-                --text="Strength: Weak (about ${bits} bits)\n\nThis Master Passphrase is too easy to guess. ${message}\n\nAnyone who finds this stick can copy the vault and try likely passwords on their own computers, as fast as they can.\n\nUse a long random password from a password manager (as a QR code), or 6 or more random words." || true
+                --text="Strength: Weak (about ${bits} bits)\n\nThis Master Passphrase is too easy to guess. ${message}\n\nAnyone who finds this flash drive can copy the vault and try likely passwords on their own computers, as fast as they can.\n\nUse a long random password from a password manager (as a QR code), or 6 or more random words." || true
             return 1 ;;
         fair)
             # zenity doesn't wrap the text above a list, and at GDK_SCALE=2

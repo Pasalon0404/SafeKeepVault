@@ -173,6 +173,10 @@ const SafeKeepOS = (() => {
     // These run in parallel since they're independent reads.
     await Promise.all([_hydrateCodex(), _hydratePassphrases(), _hydrateTwofa()]);
 
+    // Seed storage (Device Options): a flash drive can be set not to keep
+    // the seed. The vault still opens; the seed is entered at each start.
+    _keepSeed = await _readKeepSeed();
+
     // Fast path: already in sessionStorage from a previous tool navigation
     const existing = window.SeedSession?.get();
     if (existing && existing.mnemonic) {
@@ -180,6 +184,10 @@ const SafeKeepOS = (() => {
       _masterFingerprint = existing.fingerprint || null;
       return { state: STATE_DASHBOARD, seed: existing };
     }
+
+    // Not kept on this flash drive: never load a stored one (the OS deletes
+    // any that appears), go to the welcome screen to scan or type it.
+    if (!_keepSeed) return _welcomeState();
 
     // Cold boot: try to load master-seed.json from disk
     try {
@@ -284,7 +292,9 @@ const SafeKeepOS = (() => {
 
     const fingerprint = await _computeFingerprint(mnemonic);
 
-    const writeResult = await _silentSaveMasterSeed(mnemonic, fingerprint);
+    const writeResult = _keepSeed
+      ? await _silentSaveMasterSeed(mnemonic, fingerprint)
+      : { verified: true, ramOnly: true };
 
     // Load into session
     const wordCount = mnemonic.trim().split(/\s+/).length;
@@ -302,7 +312,7 @@ const SafeKeepOS = (() => {
     _currentState = STATE_DASHBOARD;
     _masterFingerprint = fingerprint;
 
-    return { mnemonic, fingerprint, wordCount, diskVerified: writeResult.verified };
+    return { mnemonic, fingerprint, wordCount, diskVerified: writeResult.verified, ramOnly: !!writeResult.ramOnly };
   }
 
   /**
@@ -331,7 +341,9 @@ const SafeKeepOS = (() => {
 
     const fingerprint = await _computeFingerprint(normalized);
 
-    const writeResult = await _silentSaveMasterSeed(normalized, fingerprint);
+    const writeResult = _keepSeed
+      ? await _silentSaveMasterSeed(normalized, fingerprint)
+      : { verified: true, ramOnly: true };
 
     // Load into session
     window.SeedSession?.set({
@@ -348,7 +360,7 @@ const SafeKeepOS = (() => {
     _currentState = STATE_DASHBOARD;
     _masterFingerprint = fingerprint;
 
-    return { mnemonic: normalized, fingerprint, wordCount: words.length, diskVerified: writeResult.verified };
+    return { mnemonic: normalized, fingerprint, wordCount: words.length, diskVerified: writeResult.verified, ramOnly: !!writeResult.ramOnly };
   }
 
 
@@ -2276,6 +2288,84 @@ const SafeKeepOS = (() => {
     return _silentDownload(DEVICE_SETTINGS_FILE, payload);
   }
 
+  // ---- Seed storage ----
+  // Device Options → Seed storage. By default the master seed is kept in
+  // the vault (seeds/master-seed.json). A flash drive can be set not to keep
+  // it: the vault still holds passphrases, saved wallets, notes and settings,
+  // and the seed is scanned or typed at each start and stays in RAM. The app
+  // downloads SEED_STORAGE.json { keepSeed } into seeds/; safekeep-boot.sh's
+  // Seed Storage Watcher stores the flag as settings/seed-storage.json and
+  // deletes the stored seed (and keeps deleting any that appears while the
+  // flag is set). Never in a Temporary Session (the vault isn't open).
+  // Never use the key "passphrase" here: the File Router would take the file.
+  const SEED_STORAGE_FILE = 'SEED_STORAGE.json';
+  const SEED_STORAGE_URL  = `file://${VAULT_ROOT}/settings/seed-storage.json`;
+  let _keepSeed = true;
+
+  /** true unless settings/seed-storage.json says { keepSeed: false }. */
+  async function _readKeepSeed() {
+    if (!isBootDrive() || _ccTemporarySession()) return true;
+    try {
+      const resp = await fetch(SEED_STORAGE_URL, { cache: 'no-store' });
+      if (!resp.ok) return true;
+      const data = await resp.json();
+      return !(data && data.keepSeed === false);
+    } catch (e) {
+      return true;
+    }
+  }
+
+  async function _seedFileOnDisk() {
+    try {
+      const resp = await fetch(MASTER_SEED_URL, { cache: 'no-store' });
+      if (!resp.ok) return false;
+      const data = await resp.json();
+      return !!(data && data.mnemonic);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Is the master seed kept on this flash drive (as of this boot)? */
+  function isSeedKept() { return _keepSeed; }
+
+  /**
+   * Stop or start keeping the master seed on this flash drive.
+   * keep=false: the OS stores the flag and deletes the stored seed; the
+   *   seed loaded now stays in RAM until lock or shutdown.
+   * keep=true: the OS removes the flag, then the seed loaded now
+   *   (mnemonic) is saved to the vault as usual, with read-back.
+   * @returns {{ ok: boolean, error?: string }}
+   */
+  async function setKeepSeed(keep, mnemonic) {
+    keep = keep === true;
+    if (_ccTemporarySession()) return { ok: false, error: 'A Temporary Session doesn’t open the vault.' };
+    if (keep && !mnemonic) return { ok: false, error: 'Load your seed first.' };
+    if (!isBootDrive()) {
+      _keepSeed = keep;
+      return { ok: true, memoryOnly: true };
+    }
+    if (!(await _isVaultMounted())) return { ok: false, error: 'The encrypted vault is not mounted.' };
+    if (!_silentDownload(SEED_STORAGE_FILE, JSON.stringify({ version: 1, keepSeed: keep }))) {
+      return { ok: false, error: 'The request was blocked.' };
+    }
+    for (let i = 0; i < 24; i++) {
+      await _sleep(500);
+      const kept = await _readKeepSeed();
+      if (!keep && !kept && !(await _seedFileOnDisk())) {
+        _keepSeed = false;
+        return { ok: true };
+      }
+      if (keep && kept) {
+        _keepSeed = true;
+        const fp = await _computeFingerprint(String(mnemonic).trim().split(/\s+/).join(' '));
+        const w = await _silentSaveMasterSeed(mnemonic, fp);
+        return w.verified ? { ok: true } : { ok: false, error: 'The seed wasn’t confirmed in the vault: ' + (w.error || 'unknown error') + '.' };
+      }
+    }
+    return { ok: false, error: 'SafeKeep didn’t confirm the change. Nothing was changed if the seed is still listed as kept.' };
+  }
+
   // ---- Saved wallets ----
   // Output descriptors saved from the Output Descriptor tool, so the PSBT
   // Signer can check a transaction's inputs and change against the wallets
@@ -3050,6 +3140,10 @@ const SafeKeepOS = (() => {
     vaultFingerprint,
     isBootDrive,
     isVaultMounted: _isVaultMounted,
+
+    // Seed storage (Device Options)
+    isSeedKept,
+    setKeepSeed,
     checkNetworkAlert,
 
     // Codex — Note Storage

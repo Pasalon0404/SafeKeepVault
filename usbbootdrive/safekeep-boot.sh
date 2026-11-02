@@ -888,6 +888,19 @@ POLICYEOF
     SEED_FILE="$VAULT_MOUNT/seeds/master-seed.json"
     LAUNCH_URL="$CHROMIUM_BASE_URL"
 
+    # A flash drive set not to keep the seed (Device Options → Seed storage,
+    # see the Seed Storage Watcher) must never boot into a stored seed, even
+    # one a restored backup brought back: delete it before the probe.
+    if [ "$EPHEMERAL_MODE" != "1" ] && [ -f "$VAULT_MOUNT/settings/seed-storage.json" ] \
+        && grep -q '"keepSeed": *false' "$VAULT_MOUNT/settings/seed-storage.json" 2>/dev/null; then
+        for _sf in "$VAULT_MOUNT"/seeds/master-seed*.json; do
+            [ -f "$_sf" ] || continue
+            shred -u -n 1 -z "$_sf" 2>/dev/null || rm -f "$_sf"
+            echo "Seed storage: this flash drive doesn't keep the seed; removed a stored one."
+        done
+        sync
+    fi
+
     if [ "$EPHEMERAL_MODE" = "1" ]; then
         LAUNCH_URL="${CHROMIUM_BASE_URL}#ephemeral=true"
         echo "TEMPORARY SESSION: launching with #ephemeral=true (RAM-only, vault bypassed)."
@@ -1670,6 +1683,79 @@ RIPYEOF
     echo "Receive watcher daemon started (PID $RECEIVE_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # SEED STORAGE WATCHER — A VAULT THAT DOESN'T KEEP THE SEED
+    # -------------------------------------------------------------------
+    # Device Options → Seed storage can turn off keeping the master seed on
+    # this flash drive. The vault still holds the passphrases, saved wallets,
+    # notes and settings; the seed is scanned (SeedQR) or typed at each start
+    # and stays in RAM. The app downloads SEED_STORAGE.json into seeds/:
+    #   { "keepSeed": false }  → write the flag, then delete master-seed*.json
+    #   { "keepSeed": true }   → remove the flag (the app then saves the seed)
+    # Untrusted data, nothing in it is run: anything but exactly one boolean
+    # "keepSeed" is refused. The flag lives at
+    #   $VAULT_MOUNT/settings/seed-storage.json   { "version": 1, "keepSeed": false }
+    # (in settings/, so Encrypted Backup and restore carry it). While it is
+    # set, this loop also deletes any master-seed*.json that appears in
+    # seeds/ (a restored backup, an app bug), so the seed can't be stored by
+    # mistake. Deleting a file can't erase it from flash memory for certain,
+    # but it was only ever inside the encrypted vault. Normal boots only.
+    SEED_STORAGE_FLAG="$VAULT_MOUNT/settings/seed-storage.json"
+    rm -f "$CHROMIUM_DOWNLOAD_DIR"/SEED_STORAGE*.json 2>/dev/null
+    (
+        _seed_free() { [ -f "$SEED_STORAGE_FLAG" ] && grep -q '"keepSeed": *false' "$SEED_STORAGE_FLAG" 2>/dev/null; }
+        _remove_seed_files() {
+            local f removed=0
+            for f in "$SEED_DIR"/master-seed*.json; do
+                [ -f "$f" ] || continue
+                shred -u -n 1 -z "$f" 2>/dev/null || rm -f "$f"
+                removed=1
+            done
+            [ "$removed" = 1 ] && sync && echo "Seed Storage Watcher: removed the master seed from the vault"
+            return 0
+        }
+        while true; do
+            if [ "$EPHEMERAL_MODE" != "1" ] && compgen -G "$CHROMIUM_DOWNLOAD_DIR/SEED_STORAGE*.json" > /dev/null; then
+                sleep 1
+                mapfile -t SS_FILES < <(ls -t "$CHROMIUM_DOWNLOAD_DIR"/SEED_STORAGE*.json 2>/dev/null)
+                if [ "${#SS_FILES[@]}" -gt 0 ]; then
+                    mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
+                    SS_KEEP=$(python3 -I - "${SS_FILES[0]}" <<'SSPYEOF'
+import json, sys
+with open(sys.argv[1], 'rb') as f:
+    raw = f.read(1025)
+if len(raw) > 1024:
+    sys.exit('file too large')
+data = json.loads(raw.decode('utf-8'))
+if not isinstance(data, dict) or set(data) - {'keepSeed', 'version'} or not isinstance(data.get('keepSeed'), bool):
+    sys.exit('bad request')
+print('true' if data['keepSeed'] else 'false')
+SSPYEOF
+                    )
+                    rm -f "${SS_FILES[@]}" 2>/dev/null
+                    if [ "$SS_KEEP" = "false" ]; then
+                        printf '{"version": 1, "keepSeed": false}\n' > "$SEED_STORAGE_FLAG.tmp" \
+                            && chmod 600 "$SEED_STORAGE_FLAG.tmp" \
+                            && mv -f "$SEED_STORAGE_FLAG.tmp" "$SEED_STORAGE_FLAG" && sync \
+                            && echo "Seed Storage Watcher: this flash drive no longer keeps the seed"
+                        _remove_seed_files
+                    elif [ "$SS_KEEP" = "true" ]; then
+                        rm -f "$SEED_STORAGE_FLAG" && sync
+                        echo "Seed Storage Watcher: this flash drive keeps the seed again"
+                    else
+                        echo "Seed Storage Watcher: rejected an invalid request"
+                    fi
+                fi
+            fi
+            if [ "$EPHEMERAL_MODE" != "1" ] && _seed_free; then
+                _remove_seed_files
+            fi
+            sleep 1
+        done
+    ) &
+    SEED_STORAGE_WATCHER_PID=$!
+    echo "Seed storage watcher daemon started (PID $SEED_STORAGE_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # TREZOR WATCHER DAEMON — USB SIGNING WITH A PAIRED TREZOR ONE
     # -------------------------------------------------------------------
     # Same pattern as the Coldcard watcher above. The web app downloads
@@ -1885,7 +1971,7 @@ RIPYEOF
 
                 # Skip known system trigger/result/sentinel files
                 case "$BASENAME" in
-                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|.transfer*|.backups*|.vault-sentinel*) continue ;;
+                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
                 esac
 
                 # Check if this is a passphrase file (contains "passphrase" key)
@@ -2846,12 +2932,20 @@ except Exception as e:
     #   --test-type             REMOVED. Google documents this as "not for
     #                           production" — relaxed policy enforcement.
     #                           Kiosk works without it.
-    #   --disable-web-security  RETAINED. Required by boot.html's call
-    #                           `fetch('file:///run/safekeep-amnesia.json')`,
-    #                           which is a cross-origin fetch under strict
-    #                           SOP on a file:// origin. Until we refactor
-    #                           to a localhost HTTP server inside the kiosk,
-    #                           dropping this flag breaks amnesia detection.
+    #   --disable-web-security  REMOVED (2026-11). Chromium ignored it on
+    #                           every boot ("Web security may only be disabled
+    #                           if '--user-data-dir' is also specified with a
+    #                           non-default value"), and the app's file://
+    #                           reads work through --allow-file-access-from-
+    #                           files. Now that each session has its own
+    #                           --user-data-dir, keeping the flag would turn
+    #                           web security off for real: it stays out.
+    #   --user-data-dir         A new, empty profile in RAM for every session
+    #                           (the previous one is deleted). A new Chromium
+    #                           can then never hand its window to a leftover
+    #                           browser of the previous session, which showed
+    #                           a Temporary Session that nothing in this script
+    #                           was waiting on.
     #   --no-sandbox            RETAINED. Chromium refuses to start its
     #                           sandbox when invoked as root (which the
     #                           live-boot systemd launcher is). Moving to
@@ -2866,6 +2960,51 @@ except Exception as e:
     # Without this, EVERY Chromium exit cascaded into sudo poweroff
     # below, which on a launch failure would casper-shutdown the box
     # before any error message was readable.
+    # Chromium processes still running (not zombies). The browser and its
+    # helpers are named "chrome" (/opt/ungoogled-chromium/chrome); the crash
+    # reporter (chrome_crashpad) can outlive the browser, so it is not counted.
+    _skb_old_chromium() {
+        ps -eo stat=,comm= 2>/dev/null | awk '$1 !~ /^Z/ && $2 == "chrome" { f = 1 } END { exit !f }'
+    }
+    _skb_log_chromium() {
+        echo "[BOOT] Chromium processes ($1):"
+        ps -eo pid=,ppid=,stat=,etimes=,comm=,args= 2>/dev/null \
+            | awk '$5 == "chrome" { print "         " substr($0, 1, 220) }' | head -n 12
+        # Save the log to the data partition now: if this session then has to
+        # be ended with the power button, the evidence is not lost with /tmp.
+        if mountpoint -q "$DATA_MOUNT" 2>/dev/null; then
+            cp -a /tmp/safekeep-boot.log "$DATA_MOUNT/safekeep-boot.log" 2>/dev/null || true
+            sync
+        fi
+    }
+
+    # Wait for the browser of a previous session to finish exiting (after a
+    # Lock it can take a few seconds), and stop it if it hangs on.
+    if _skb_old_chromium; then
+        _skb_log_chromium "before launch"
+        echo "[BOOT] A previous Chromium is still running — waiting for it to exit..."
+        for _skb_w in $(seq 1 40); do
+            _skb_old_chromium || break
+            sleep 0.25
+        done
+        if _skb_old_chromium; then
+            echo "[BOOT] Previous Chromium still running after 10 s — stopping it."
+            pkill -TERM -x chrome 2>/dev/null || true
+            sleep 1
+            pkill -KILL -x chrome 2>/dev/null || true
+            sleep 0.5
+        fi
+        echo "[BOOT] Previous Chromium gone."
+    fi
+
+    # Fresh profile for this session (see --user-data-dir above). Only
+    # deleted once no Chromium is left running.
+    SKB_PROFILE_ROOT="/tmp/safekeep-chromium"
+    _skb_old_chromium || rm -rf "$SKB_PROFILE_ROOT" 2>/dev/null || true
+    CHROMIUM_PROFILE_DIR="$SKB_PROFILE_ROOT/session-$(date +%s)-$$"
+    mkdir -p "$CHROMIUM_PROFILE_DIR" && chmod 700 "$SKB_PROFILE_ROOT" "$CHROMIUM_PROFILE_DIR"
+    echo "[BOOT] Chromium profile: $CHROMIUM_PROFILE_DIR"
+
     CHROMIUM_START_EPOCH=$(date +%s)
     # Binary is `ungoogled-chromium` from the xtradeb/apps PPA. The
     # package name is unique to that PPA — Canonical's official repos
@@ -2885,7 +3024,7 @@ except Exception as e:
         --force-device-scale-factor="$SCALE_FACTOR" \
         --no-first-run \
         --allow-file-access-from-files \
-        --disable-web-security \
+        --user-data-dir="$CHROMIUM_PROFILE_DIR" \
         --disable-gpu \
         --password-store=basic \
         --disable-notifications \
@@ -2899,6 +3038,23 @@ except Exception as e:
     CHROMIUM_EXIT=$?
     CHROMIUM_ELAPSED=$(( $(date +%s) - CHROMIUM_START_EPOCH ))
     echo "[BOOT] Chromium exited after ${CHROMIUM_ELAPSED}s with status ${CHROMIUM_EXIT}"
+
+    # The process we started can return within seconds while a Chromium it
+    # handed off to (or relaunched) keeps showing the session: seen when a
+    # Temporary Session was started right after a Lock. That is not a launch
+    # failure. Wait for the browser that is really running to close, then
+    # carry on as for any session (power sequence → Lock → unlock prompt).
+    # Without this the fast-fail check below halted the script for good, and
+    # closing that session left a blank screen.
+    if [ "$CHROMIUM_ELAPSED" -lt 5 ] && _skb_old_chromium; then
+        _skb_log_chromium "after a ${CHROMIUM_ELAPSED}s return"
+        echo "[BOOT] Chromium is still running: waiting for the session to close."
+        while _skb_old_chromium; do
+            sleep 0.5
+        done
+        CHROMIUM_ELAPSED=$(( $(date +%s) - CHROMIUM_START_EPOCH ))
+        echo "[BOOT] Chromium closed after ${CHROMIUM_ELAPSED}s"
+    fi
 
     # ====================================================================
     # FAST-FAIL DIAGNOSTIC HALT
