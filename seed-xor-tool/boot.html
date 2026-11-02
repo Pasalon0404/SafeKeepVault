@@ -9286,8 +9286,8 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <details class="rcv-more">
                             <summary>Show a different address number</summary>
                             <div class="rcv-goto">
-                                <input type="number" id="rcv-goto" min="0" max="2147483647" step="1" inputmode="numeric" class="skb-input" onkeydown="if (event.key === 'Enter') rcv_goto()">
-                                <button type="button" class="skb-btn" onclick="rcv_goto()">Show</button>
+                                <label for="rcv-goto" class="rcv-goto-label">Address number</label>
+                                <input type="number" id="rcv-goto" min="0" max="2147483647" step="1" inputmode="numeric" class="skb-input" oninput="rcv_gotoLive()" onkeydown="if (event.key === 'Enter') rcv_goto()">
                             </div>
                         </details>
                     </div>
@@ -13083,6 +13083,10 @@ function _rcvShow(idx) {
     _rcv.address = addr;
     var last = _rcv.map[w.id];
     document.getElementById('rcv-num').textContent = 'Address #' + idx;
+    // Keep the number box on the address shown, so its arrows step from
+    // here (left alone while it is being typed in).
+    var _goto = document.getElementById('rcv-goto');
+    if (_goto && document.activeElement !== _goto) _goto.value = String(idx);
     document.getElementById('rcv-addr').innerHTML = _descRecvGroups(addr);
     var fps = w.parsed.keys.map(function (k) { return (k.fingerprint || '????????').toUpperCase(); }).join(', ');
     document.getElementById('rcv-path').textContent = 'Receive path 0/' + idx + ' · ' + (w.parsed.isMulti ? w.parsed.msM + '-of-' + w.parsed.msN + ' multisig' : 'single-sig') + ' · ' + fps;
@@ -13101,9 +13105,24 @@ function rcv_new() {
     rcv_show(next);
 }
 function rcv_goto() {
+    clearTimeout(_rcvGotoTimer);
     var v = String((document.getElementById('rcv-goto') || {}).value || '').trim();
     if (!/^\d+$/.test(v) || +v > 2147483647) { showStatus('Enter an address number from 0 up.', 'error'); return; }
+    if (_rcv.cur && parseInt(v, 10) === _rcv.index && _rcv.address) return;
     rcv_show(parseInt(v, 10));
+}
+/* Typing or the arrows: show that address as soon as the number settles
+   (a short pause, so typing 12 doesn't flash #1). An empty or partial
+   entry is left alone instead of raising an error. */
+var _rcvGotoTimer = null;
+function rcv_gotoLive() {
+    clearTimeout(_rcvGotoTimer);
+    _rcvGotoTimer = setTimeout(function () {
+        var v = String((document.getElementById('rcv-goto') || {}).value || '').trim();
+        if (!/^\d+$/.test(v) || +v > 2147483647) return;
+        if (_rcv.cur && parseInt(v, 10) === _rcv.index && _rcv.address) return;
+        rcv_show(parseInt(v, 10));
+    }, 250);
 }
 function rcv_copy() {
     if (!_rcv.address || !navigator.clipboard) return;
@@ -45287,7 +45306,9 @@ function tfa_renderTable() {
     .rcv-btns { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0 0.75rem; }
     .rcv-note { font-size: 0.8125rem; color: var(--skb-text-muted); max-width: 60ch; margin: 0 0 0.75rem; }
     .rcv-more summary { cursor: pointer; font-size: 0.8125rem; color: var(--skb-primary); }
-    .rcv-goto { display: flex; gap: 0.5rem; margin-top: 0.5rem; max-width: 280px; }
+    .rcv-goto { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; max-width: 320px; }
+    .rcv-goto-label { font-size: 0.8125rem; color: var(--skb-text-muted); white-space: nowrap; }
+    .rcv-goto input { max-width: 9rem; }
     .rcv-empty { color: var(--skb-text-muted); }
     @media (max-width: 1100px) { .rcv-main { grid-template-columns: minmax(0, 1fr); } }
     @media (min-width: 1101px) { .dashv2-actions { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
