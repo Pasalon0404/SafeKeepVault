@@ -230,10 +230,11 @@ function createCourierCollector() {
     var cur = null;
     function start(f) {
         cur = { key: f.total + '~' + f.name + '~' + f.ext + '~' + f.mime, total: f.total,
-                filename: f.ext ? f.name + '.' + f.ext : f.name, mime: f.mime, chunks: {}, count: 0 };
+                filename: f.ext ? f.name + '.' + f.ext : f.name, mime: f.mime, chunks: {}, count: 0, chunkLen: null,
+                needConfirm: false };
     }
     function report(status) {
-        var done = cur.count === cur.total, bytes = null;
+        var done = cur.count === cur.total && !cur.needConfirm, bytes = null;
         if (done) {
             var len = 0, i;
             for (i = 0; i < cur.total; i++) len += cur.chunks[i].length;
@@ -249,10 +250,28 @@ function createCourierCollector() {
             var key = f.total + '~' + f.name + '~' + f.ext + '~' + f.mime;
             if (!cur) start(f);
             else if (cur.key !== key) { start(f); status = 'new-file'; }
-            if (cur.chunks[f.index]) return report('duplicate');
             var bytes;
             try { bytes = _courierBase64ToBytes(f.data); } catch (_) { return report('bad-checksum'); }
             if (_courierChecksum(bytes) !== f.checksum) return report('bad-checksum');
+            // The sender can change density (piece size) mid-transfer. Every
+            // piece but the last is exactly that size, so a middle piece of
+            // another size means a new cut: start over rather than join two
+            // cuts. The last piece's size can't be checked that way, so:
+            //  - it is taken only once a middle piece has set the size, and
+            //  - the file is finished only when a middle piece of the same
+            //    size follows it (the sender is still on this cut).
+            // A one-piece file is the whole file and finishes at once.
+            var isLast = f.index === f.total - 1;
+            if (!isLast && cur.chunkLen != null && bytes.length !== cur.chunkLen) { start(f); status = 'new-file'; }
+            if (!isLast) {
+                cur.chunkLen = bytes.length;
+                if (cur.needConfirm) { cur.needConfirm = false; if (cur.chunks[f.index]) return report('confirmed'); }
+            }
+            if (cur.chunks[f.index]) return report('duplicate');
+            if (isLast && f.total > 1) {
+                if (cur.chunkLen == null || bytes.length > cur.chunkLen) return report('wait');
+                cur.needConfirm = true;
+            }
             cur.chunks[f.index] = bytes;
             cur.count++;
             return report(status);

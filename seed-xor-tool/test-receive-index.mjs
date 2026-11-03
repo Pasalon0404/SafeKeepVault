@@ -76,7 +76,7 @@ function extract(name) {
   return HTML.slice(mm.index, j + 1);
 }
 const saved = [];
-const ctx = vm.createContext({ window: { SafeKeepOS: { saveReceiveIndex: async (mp) => { saved.push(JSON.stringify(mp)); return { saved: true }; } } }, console, Object, Math, JSON });
+const ctx = vm.createContext({ window: { SafeKeepOS: { saveReceiveIndex: async (mp) => { saved.push(JSON.stringify(mp)); return { saved: true }; } } }, console, Object, Math, JSON, document: { getElementById: () => null } });
 vm.runInContext("var _rcv = { wallets: [], cur: null, index: 0, map: {}, session: {} }; var shown = [];\nfunction rcv_show(i) { _rcv.index = i; shown.push(i); }\n" +
   ['rcv_selectWallet', 'rcv_record', 'rcv_new'].map(extract).join('\n') + '\nthis.T = { sel: rcv_selectWallet, nw: rcv_new, get: () => ({ shown: shown.slice(), map: _rcv.map }), reset: (m) => { _rcv.session = {}; _rcv.map = m; shown.length = 0; } };', ctx);
 vm.runInContext("_rcv.wallets = [{ id: 'seed:73c5da0a:84' }, { id: 'saved:abcd1234' }];", ctx);

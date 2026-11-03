@@ -74,9 +74,11 @@ const eq = (a, b) => a && b && a.length === b.length && a.every((x, i) => x === 
 }
 
 // ---- Collector ----
+// The sender loops, so frames are fed twice (a last piece seen before any
+// middle one is taken on the next loop).
 function collect(frames) {
   const c = QP.createCourierCollector(); let last;
-  for (const fr of frames) { const f = QP.parseCourierFrame(fr); if (f) last = c.add(f); }
+  for (const fr of [...frames, ...frames, ...frames]) { const f = QP.parseCourierFrame(fr); if (f) { last = c.add(f); if (last.done) break; } }
   return last;
 }
 {
@@ -127,6 +129,9 @@ function signerEnv() {
   vm.runInContext(['let _psbtCourier = null; let _psbtScanProcessing = false;',
     extract('_psbtHandleCourierFrame'), extract('_psbtCourierFileName'), extract('_psbtNormalizeIngestBytes'), extract('_psbtEscape')].join('\n'), ctx);
   const feed = (frames) => { for (const fr of frames) ctx._psbtHandleCourierFrame(QP.parseCourierFrame(fr)); };
+  // As the sender loops: the next loop's first piece follows the last one
+  // (a received file finishes once a middle piece confirms the cut).
+  feed.loop = (frames) => feed(frames.length > 1 ? [...frames, frames[0]] : frames);
   return { ctx, el, calls, feed };
 }
 {
@@ -140,19 +145,19 @@ function signerEnv() {
 }
 for (const [label, text] of [['base64 text file', Buffer.from(PSBT).toString('base64')], ['base64 wrapped at 64 with CRLF', Buffer.from(PSBT).toString('base64').replace(/(.{64})/g, '$1\r\n')], ['hex text file', Buffer.from(PSBT).toString('hex')]]) {
   const e = signerEnv();
-  e.feed(courierFrames('unsigned.txt', 'text/plain', new TextEncoder().encode(text), 250));
+  e.feed.loop(courierFrames('unsigned.txt', 'text/plain', new TextEncoder().encode(text), 250));
   ck(`${label}: loads as the same PSBT`, e.calls.ingest.length === 1 && eq(e.calls.ingest[0].bytes, PSBT) && e.calls.ingest[0].name === 'unsigned.txt');
 }
 {
   const e = signerEnv();
-  e.feed(courierFrames('<img src=x onerror=alert(1)>.pdf', 'application/pdf', new Uint8Array(600).fill(37), 250));
+  e.feed.loop(courierFrames('<img src=x onerror=alert(1)>.pdf', 'application/pdf', new Uint8Array(600).fill(37), 250));
   const msg = e.calls.status[0] || '';
   ck('not a PSBT: clear error, nothing loaded', e.calls.ingest.length === 0 && /^error:.*isn’t a PSBT/.test(msg), msg);
   ck('not a PSBT: file name escaped in the message', msg.includes('&lt;img src=x onerror=alert(1)&gt;.pdf') && !msg.includes('<img'), msg);
 }
 {
   const e = signerEnv();
-  e.feed(courierFrames('../../etc/evil\u0001name.psbt', '', PSBT, 800));
+  e.feed.loop(courierFrames('../../etc/evil\u0001name.psbt', '', PSBT, 800));
   ck('file name cleaned before use (no path, no control chars)', e.calls.ingest.length === 1 && e.calls.ingest[0].name === '_.._etc_evil_name.psbt', e.calls.ingest[0] && e.calls.ingest[0].name);
 }
 
@@ -178,6 +183,44 @@ for (const [label, text] of [['base64 text file', Buffer.from(PSBT).toString('ba
     vm.runInContext('_psbtLoadedFilename = ' + JSON.stringify(loaded), ctx);
     ck(`export name for "${loaded}" → ${want}`, ctx._psbtCourierExportName() === want, ctx._psbtCourierExportName());
   }
+}
+
+// ---- The sender changes density mid-transfer: never join two cuts ----
+console.log('Density changed mid-transfer:');
+{
+  const data = new Uint8Array(1000).map((_, i) => (i * 37 + 11) & 255);
+  const A = courierFrames('w.json', 'application/json', data, 500);   // 2 pieces: 500 + 500
+  const B = courierFrames('w.json', 'application/json', data, 550);   // 2 pieces: 550 + 450 (same count!)
+  const C = courierFrames('w.json', 'application/json', data, 300);   // 4 pieces
+  // seq, then the sender keeps looping its final cut (2 more passes)
+  const run = (seq, cut) => { const c = QP.createCourierCollector(); let r, bad = false;
+    for (const fr of [...seq, ...(cut || []), ...(cut || [])]) { r = c.add(QP.parseCourierFrame(fr)); if (r.done && !eq(r.bytes, data)) bad = true; if (r.done) break; } return { r, bad }; };
+  let o = run([A[1], A[0], B[0], B[1]], B);
+  ck('same piece count, old last piece seen first: finishes with the right bytes', o.r.done && !o.bad && eq(o.r.bytes, data));
+  o = run([A[0], B[1], B[0], B[1]], B);
+  ck('same piece count, new last piece after an old middle one: never joined', !o.bad && o.r.done && eq(o.r.bytes, data));
+  o = run([A[0], A[1], B[0], B[1]], B);
+  ck('a completed old cut is not mixed with the new one', !o.bad);
+  o = run([A[0], B[1]]);
+  ck('old middle + new last piece (450 fits under 500): not finished, waits for a confirming middle piece', !o.r.done);
+  o = run([A[0], C[1], C[0], C[2], C[3]], C);
+  ck('different piece count: starts over and finishes right', o.r.done && !o.bad && eq(o.r.bytes, data));
+  const c = QP.createCourierCollector();
+  c.add(QP.parseCourierFrame(A[0]));
+  const r = c.add(QP.parseCourierFrame(B[0]));
+  ck('a middle piece of another size is reported as a new file', r.status === 'new-file' && r.received === 1);
+  const one = courierFrames('s.txt', 'text/plain', new Uint8Array([1, 2, 3]), 500);
+  ck('a one-piece file is taken at once', run(one).r.done);
+}
+
+// SafeKeep's Transfer screen receives through the same collector, and its
+// sender applies speed and density while sending.
+{
+  const H = readFileSync(join(__dirname, 'boot.html'), 'utf8');
+  const i = H.indexOf('function xfr_processQR('); const src = H.slice(i, H.indexOf('\n}\n', i));
+  ck('Transfer receiver uses the shared Courier collector', /QRParser\.createCourierCollector\(\)/.test(src) && /recvCollector\.add\(frame\)/.test(src) && /receiving starts over/.test(src));
+  ck('Transfer receiver finishes only when the collector says done', /if \(r\.done\)/.test(src) && !/received === xfr_state\.recvTotalChunks/.test(src));
+  ck('Transfer sender: speed read every frame; density re-cuts while sending', /var frameDelay = 1000 \/ \(xfr_state\.txFps \|\| fps\)/.test(H) && /function xfr_applyDensityLive/.test(H));
 }
 
 console.log(`\nCOURIER FRAMES: ${pass} passed, ${fail} failed`);

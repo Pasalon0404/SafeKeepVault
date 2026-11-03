@@ -24,6 +24,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(join(__dirname, 'boot.html'), 'utf8');
 const QRP = readFileSync(join(__dirname, 'shared/qr-parser.js'), 'utf8');
 const { SKTransfer } = await import(join(__dirname, 'shared/transfer-drive.js'));
+// The Courier sender loops: after the last frame the next loop starts. A
+// received file finishes once a middle piece confirms the cut, so feed one more.
+const loopOnce = (frames) => frames.length > 1 ? [...frames, frames[0]] : frames;
 let pass = 0, fail = 0; const ck = (n, c, x) => { c ? pass++ : fail++; if (!c || process.env.V) console.log((c ? '  PASS ' : '  FAIL ') + n + (c ? '' : '  -> ' + x)); };
 
 function extract(name) {
@@ -103,6 +106,7 @@ const SEVENZ = new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, ...body]);
   scan(bad);
   ck('damaged chunk is reported, scanning goes on', /damaged chunk/.test(t.els['rlq-courier-status'].textContent), t.els['rlq-courier-status'].textContent);
   for (const k of order.slice(1)) scan(frames[k]);
+  scan(frames[order[0]]); scan(frames[0]);   // the sender loops: the last piece comes round again, then a middle piece confirms the cut
   await settle();
   ck('camera stopped when the file is complete', t.scanners[0].stopped === true, '');
   ck('receiver hidden again', t.els['rlq-courier-area'].style.display === 'none', '');
@@ -119,7 +123,7 @@ const SEVENZ = new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, ...body]);
   const OLD = new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 1, 2, 3]);
   const t = setup([['backup.7z', OLD]]);
   await t.T.rlq_courierStart();
-  for (const f of courierFrames('backup.7z', 'application/x-7z-compressed', SEVENZ, 500)) t.scanners[0].cb(f);
+  for (const f of loopOnce(courierFrames('backup.7z', 'application/x-7z-compressed', SEVENZ, 500))) t.scanners[0].cb(f);
   await settle();
   ck('existing file untouched', eq(await read(t.backend, 'backup.7z'), OLD), '');
   ck('new file saved as "backup (2).7z"', eq(await read(t.backend, 'backup (2).7z').catch(() => null), SEVENZ), '');
@@ -131,7 +135,7 @@ const SEVENZ = new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, ...body]);
   const t = setup();
   await t.T.rlq_courierStart();
   const notes = new TextEncoder().encode('{"not":"a backup"}');
-  for (const f of courierFrames('wallet.json', 'application/json', notes, 200)) t.scanners[0].cb(f);
+  for (const f of loopOnce(courierFrames('wallet.json', 'application/json', notes, 200))) t.scanners[0].cb(f);
   await settle();
   ck('non-7z file refused with a message', t.statuses.some((s) => s.t === 'error' && /not a \.7z backup/.test(s.m)), JSON.stringify(t.statuses));
   ck('nothing written to the Transfer Drive', (await t.backend.list()).length === 0, '');
@@ -142,7 +146,7 @@ const SEVENZ = new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, ...body]);
 {
   const t = setup();
   await t.T.rlq_courierStart();
-  for (const f of courierFrames('my-backup.bin', 'application/octet-stream', SEVENZ, 800)) t.scanners[0].cb(f);
+  for (const f of loopOnce(courierFrames('my-backup.bin', 'application/octet-stream', SEVENZ, 800))) t.scanners[0].cb(f);
   await settle();
   ck('saved with a .7z extension', eq(await read(t.backend, 'my-backup.7z').catch(() => null), SEVENZ), JSON.stringify((await t.backend.list()).map((f) => f.name)));
 }
@@ -220,7 +224,7 @@ const SEVENZ = new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, ...body]);
   chunks.forEach((c, i) => X.send(c, i, chunks.length));
   const t = setup();
   await t.T.rlq_courierStart();
-  for (const f of frames.slice(3).concat(frames.slice(0, 3))) t.scanners[0].cb(f);   // joined mid-loop
+  for (const f of loopOnce(frames.slice(3).concat(frames.slice(0, 3)))) t.scanners[0].cb(f);   // joined mid-loop
   await settle();
   ck('stick-to-stick: frames from the stick\'s sender restore the same bytes', eq(await read(t.backend, 'SafeKeep_Backup_2026-10-28.7z').catch(() => null), SEVENZ), frames.length);
 }

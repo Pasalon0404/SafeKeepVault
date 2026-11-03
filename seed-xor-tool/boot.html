@@ -6915,6 +6915,7 @@
                             <div class="dashv2-wallet-body">
                                 <div class="dashv2-eyebrow" id="dashv2-eyebrow">Your wallet</div>
                                 <h2 class="dashv2-name" id="dashv2-name">Wallet</h2>
+                                <p class="dashv2-nick-note" id="dashv2-nick-note" hidden>A nickname to help you recognize this seed. It is not part of your recovery words.</p>
                                 <div class="dashv2-chips">
                                     <span class="dashv2-chip dashv2-chip--mono" id="dashv2-fp" title="Master fingerprint">--------</span>
                                     <span class="dashv2-chip" id="dashv2-words"></span>
@@ -7733,7 +7734,7 @@
                                    title="Lower density = more frames but visually simpler / larger QR squares.">Density:</label>
                             <input type="range" id="psbt-qr-density"
                                    min="400" max="1800" step="100" value="1800"
-                                   oninput="psbtPreviewQrDensity(this.value)"
+                                   oninput="psbtPreviewQrDensity(this.value); psbtSetQrDensityLive(this.value)"
                                    onchange="psbtSetQrDensity(this.value)"
                                    aria-label="QR fragment size (characters per frame)"
                                    style="flex: 1; min-width: 80px;">
@@ -7746,7 +7747,7 @@
                                    title="Frame cadence. Slower = more time for the receiving camera to lock onto each frame.">Speed:</label>
                             <input type="range" id="psbt-qr-speed"
                                    min="100" max="500" step="25" value="300"
-                                   oninput="psbtPreviewQrFrameMs(this.value)"
+                                   oninput="psbtSetQrFrameMs(this.value)"
                                    onchange="psbtSetQrFrameMs(this.value)"
                                    aria-label="QR animation frame interval in milliseconds"
                                    style="flex: 1; min-width: 80px;">
@@ -9280,14 +9281,14 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <div class="rcv-path" id="rcv-path"></div>
                         <div class="rcv-btns">
                             <button type="button" class="skb-btn" onclick="rcv_copy()">Copy address</button>
-                            <button type="button" class="skb-btn skb-btn--primary" onclick="rcv_new()">New address</button>
+                            <button type="button" class="skb-btn skb-btn--primary" id="rcv-new-btn" onclick="rcv_new()">New address</button>
                         </div>
                         <p class="rcv-note" id="rcv-note"></p>
-                        <details class="rcv-more">
+                        <details class="rcv-more" id="rcv-more">
                             <summary>Show a different address number</summary>
                             <div class="rcv-goto">
-                                <input type="number" id="rcv-goto" min="0" max="2147483647" step="1" inputmode="numeric" class="skb-input" onkeydown="if (event.key === 'Enter') rcv_goto()">
-                                <button type="button" class="skb-btn" onclick="rcv_goto()">Show</button>
+                                <label for="rcv-goto" class="rcv-goto-label">Address number</label>
+                                <input type="number" id="rcv-goto" min="0" max="2147483647" step="1" inputmode="numeric" class="skb-input" oninput="rcv_gotoLive()" onkeydown="if (event.key === 'Enter') rcv_goto()">
                             </div>
                         </details>
                     </div>
@@ -10290,6 +10291,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                             <button type="button" class="skb-btn arm-no-print" id="arm-xpub-qr-btn" style="flex: 1; font-size: 0.8rem;" onclick="arm_toggleXpubQR()">Show QR</button>
                             <button type="button" class="skb-btn arm-no-print" id="arm-download-export-btn" style="flex: 1; font-size: 0.8rem;" onclick="arm_downloadActiveExport()">Download JSON</button>
                         </div>
+                        <div class="arm-courier-offer arm-no-print" id="arm-courier-offer" hidden aria-live="polite"></div>
                         <div class="cn-guide" id="arm-connect-guide" hidden>
                             <div class="cn-guide-head"><b id="arm-connect-title"></b><button type="button" class="skb-btn" onclick="connect_closeGuide()">Close</button></div>
                             <ol class="cn-steps" id="arm-connect-steps"></ol>
@@ -12685,18 +12687,23 @@ function dashv2_renderWallet() {
     // come from seed + passphrase; with a passphrase on, the title names the
     // passphrase wallet and the three words are labelled as the seed's.
     var ppName = (ppOn && typeof _activePpName === 'string' && _activePpName) ? _activePpName : '';
-    set('dashv2-name', ppOn ? (ppName || 'Passphrase wallet') : nick);
+    var hasNick = nick && !/^Wallet [0-9A-F]{8}$|^No seed loaded$/i.test(nick);
+    // The nickname is three made-up words: in quotes and labelled, so it is
+    // never mistaken for recovery words.
+    var showNick = !ppOn && hasNick;
+    set('dashv2-name', ppOn ? (ppName || 'Passphrase wallet') : (hasNick ? '\u201c' + nick + '\u201d' : nick));
+    var nickNote = document.getElementById('dashv2-nick-note');
+    if (nickNote) nickNote.hidden = !showNick;
     set('dashv2-fp', fp ? fp.toUpperCase() : '--------');
     set('dashv2-lh-src', fp);
     set('dashv2-words', words ? words + ' words' : '');
     var w = document.getElementById('dashv2-words'); if (w) w.hidden = !words;
-    var hasNick = nick && !/^Wallet [0-9A-F]{8}$|^No seed loaded$/i.test(nick);
-    set('dashv2-pp', ppOn ? (hasNick ? 'Seed: ' + nick : 'Passphrase on') : 'No passphrase');
+    set('dashv2-pp', ppOn ? (hasNick ? 'Seed nickname: \u201c' + nick + '\u201d' : 'Passphrase on') : 'No passphrase');
     var ppChip = document.getElementById('dashv2-pp');
-    if (ppChip) ppChip.title = ppOn ? 'The seed\u2019s three-word nickname. It comes from the seed words alone, so it stays the same with any passphrase.' : '';
+    if (ppChip) ppChip.title = ppOn ? 'A nickname to help you recognize this seed, not part of your recovery words. It comes from the seed words alone, so it stays the same with any passphrase.' : '';
     var fpChip = document.getElementById('dashv2-fp');
     if (fpChip) fpChip.title = ppOn ? 'Fingerprint of this passphrase wallet (seed + passphrase), as your wallet app shows it' : 'Master fingerprint, as your wallet app shows it';
-    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' : (ppName ? 'Passphrase wallet' : 'Your wallet'));
+    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' + (showNick ? ' \u00b7 seed nickname' : '') : (ppName ? 'Passphrase wallet' : (showNick ? 'Your wallet \u00b7 seed nickname' : 'Your wallet')));
     var dash = document.getElementById('state-dashboard');
     if (dash && ppOn) dash.classList.add('dashv2-pp-open');
     var btn = document.getElementById('dashv2-pp-btn');
@@ -12805,6 +12812,22 @@ document.addEventListener('DOMContentLoaded', function () {
     ['dash-fingerprint', 'dash-vault-fingerprint', 'dash-word-count', 'dash-identity-label'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) mo.observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    // Health follows the Transfer Drive and version lines, which are filled in
+    // a moment after start-up (the drive mounts in the background).
+    var _hTimer = null;
+    var moH = new MutationObserver(function () {
+        clearTimeout(_hTimer);
+        _hTimer = setTimeout(function () {
+            var dash = document.getElementById('state-dashboard');
+            if (dash && dash.style.display !== 'none' && typeof dashv2_renderHealth === 'function') {
+                dashv2_renderHealth().catch(function () {});
+            }
+        }, 300);
+    });
+    ['status-transfer-label', 'dash-version'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) moH.observe(el, { childList: true, characterData: true, subtree: true });
     });
     try { dashv2_renderWallet(); } catch (_) {}
 });
@@ -13001,12 +13024,27 @@ async function rcv_init() {
             if (!r.ok || r.addressNote) return;
             wallets.push({ id: 'seed:' + d.fingerprint + ':' + t[0], label: 'This seed' + (pp ? ' (passphrase)' : '') + ' · ' + t[1], parsed: r });
         });
+        // Silent Payment (BIP-352): one reusable sp1q address, worked out as
+        // Output Descriptor does (m/352'/0'/0'/1'/0 scan, /0'/0 spend). Only
+        // public keys are needed for the address.
+        try {
+            var spw = _rcvSilentPayment(seedBytes);
+            if (spw) wallets.push({ id: 'sp:' + spw.fingerprint, sp: true, address: spw.address, fingerprint: spw.fingerprint,
+                label: 'This seed' + (pp ? ' (passphrase)' : '') + ' · Silent Payment (sp1q\u2026)' });
+        } catch (e) { console.warn('[receive] Silent Payment address:', e && e.message); }
     }
     if (typeof _savedWalletsLoading !== 'undefined' && _savedWalletsLoading) { try { await _savedWalletsLoading; } catch (_) {} }
     (typeof _savedWallets !== 'undefined' ? _savedWallets : []).forEach(function (w) {
         var r = _savedWalletParse(w.descriptor);
-        if (!r.parsed || r.parsed.kind === 'sp') return;
+        if (!r.parsed) return;
         var cs = (String(w.descriptor).match(/#([0-9a-z]{8})\s*$/i) || [])[1] || desc_checksum(_savedWalletBody(w.descriptor));
+        if (r.parsed.kind === 'sp') {
+            // A saved Silent Payment wallet: its one static address.
+            if (r.parsed.firstAddress) wallets.push({ id: 'saved:' + cs, sp: true, address: r.parsed.firstAddress,
+                fingerprint: ((r.parsed.keys && r.parsed.keys[0] && r.parsed.keys[0].fingerprint) || ''),
+                label: w.name + ' \u00b7 Silent Payment' });
+            return;
+        }
         wallets.push({ id: 'saved:' + cs, label: w.name + ' · ' + _savedWalletSummary(r.parsed), parsed: r.parsed });
     });
     _rcv.wallets = wallets;
@@ -13021,10 +13059,37 @@ async function rcv_init() {
     sel.value = keep;
     rcv_selectWallet(keep);
 }
+/* This seed's Silent Payment address (mainnet), or null without the module. */
+function _rcvSilentPayment(seedBytes) {
+    var SP = window.SilentPayments, HDKey = window.BtcMath && window.BtcMath.HDKey;
+    if (!SP || !HDKey) return null;
+    var root = HDKey.fromMasterSeed(seedBytes, { public: 0x0488b21e, private: 0x0488ade4 });
+    var scan = root.derive("m/352'/0'/0'/1'/0"), spend = root.derive("m/352'/0'/0'/0'/0");
+    return { address: SP.encodeSilentPaymentAddress(scan.publicKey, spend.publicKey),
+             fingerprint: root.fingerprint.toString(16).padStart(8, '0') };
+}
+
+/* A Silent Payment wallet has one reusable address: no numbers, no New address. */
+function _rcvShowStatic(w) {
+    _rcv.index = 0;
+    _rcv.address = w.address;
+    var addrEl = document.getElementById('rcv-addr');
+    if (addrEl) { addrEl.style.color = ''; addrEl.innerHTML = _descRecvGroups(w.address); }
+    document.getElementById('rcv-num').textContent = 'Silent Payment address';
+    document.getElementById('rcv-path').textContent = 'BIP-352 \u00b7 reusable' + (w.fingerprint ? ' \u00b7 ' + w.fingerprint.toUpperCase() : '');
+    document.getElementById('rcv-note').textContent = 'Use this same address for every payment. Each payment still lands at its own, unlinkable address on the blockchain, so there is no need for a new one. The sender\u2019s wallet must support Silent Payments (sp1q addresses).';
+    var canvas = document.getElementById('rcv-qr');
+    if (canvas && window.QRCode) QRCode.toCanvas(canvas, w.address, { width: 300, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
+}
+
 function rcv_selectWallet(id) {
     var w = _rcv.wallets.filter(function (x) { return x.id === id; })[0];
     if (!w) return;
     _rcv.cur = w;
+    var newBtn = document.getElementById('rcv-new-btn'), more = document.getElementById('rcv-more');
+    if (newBtn) newBtn.hidden = !!w.sp;
+    if (more) more.hidden = !!w.sp;
+    if (w.sp) { try { _rcvShowStatic(w); } catch (e) { rcv_show(0); } return; }
     var idx;
     if (_rcv.session[id] !== undefined) idx = _rcv.session[id];
     else { idx = _rcv.map[id] !== undefined ? _rcv.map[id] + 1 : 0; _rcv.session[id] = idx; rcv_record(id, idx); }
@@ -13066,6 +13131,10 @@ function _rcvShow(idx) {
     _rcv.address = addr;
     var last = _rcv.map[w.id];
     document.getElementById('rcv-num').textContent = 'Address #' + idx;
+    // Keep the number box on the address shown, so its arrows step from
+    // here (left alone while it is being typed in).
+    var _goto = document.getElementById('rcv-goto');
+    if (_goto && document.activeElement !== _goto) _goto.value = String(idx);
     document.getElementById('rcv-addr').innerHTML = _descRecvGroups(addr);
     var fps = w.parsed.keys.map(function (k) { return (k.fingerprint || '????????').toUpperCase(); }).join(', ');
     document.getElementById('rcv-path').textContent = 'Receive path 0/' + idx + ' · ' + (w.parsed.isMulti ? w.parsed.msM + '-of-' + w.parsed.msN + ' multisig' : 'single-sig') + ' · ' + fps;
@@ -13076,7 +13145,7 @@ function _rcvShow(idx) {
     if (canvas && window.QRCode) QRCode.toCanvas(canvas, addr, { width: 300, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
 }
 function rcv_new() {
-    if (!_rcv.cur) return;
+    if (!_rcv.cur || _rcv.cur.sp) return;
     var id = _rcv.cur.id;
     var next = Math.max(_rcv.map[id] !== undefined ? _rcv.map[id] : -1, _rcv.index) + 1;
     _rcv.session[id] = next;
@@ -13084,9 +13153,26 @@ function rcv_new() {
     rcv_show(next);
 }
 function rcv_goto() {
+    clearTimeout(_rcvGotoTimer);
+    if (_rcv.cur && _rcv.cur.sp) return;
     var v = String((document.getElementById('rcv-goto') || {}).value || '').trim();
     if (!/^\d+$/.test(v) || +v > 2147483647) { showStatus('Enter an address number from 0 up.', 'error'); return; }
+    if (_rcv.cur && parseInt(v, 10) === _rcv.index && _rcv.address) return;
     rcv_show(parseInt(v, 10));
+}
+/* Typing or the arrows: show that address as soon as the number settles
+   (a short pause, so typing 12 doesn't flash #1). An empty or partial
+   entry is left alone instead of raising an error. */
+var _rcvGotoTimer = null;
+function rcv_gotoLive() {
+    clearTimeout(_rcvGotoTimer);
+    if (_rcv.cur && _rcv.cur.sp) return;
+    _rcvGotoTimer = setTimeout(function () {
+        var v = String((document.getElementById('rcv-goto') || {}).value || '').trim();
+        if (!/^\d+$/.test(v) || +v > 2147483647) return;
+        if (_rcv.cur && parseInt(v, 10) === _rcv.index && _rcv.address) return;
+        rcv_show(parseInt(v, 10));
+    }, 250);
 }
 function rcv_copy() {
     if (!_rcv.address || !navigator.clipboard) return;
@@ -16340,6 +16426,12 @@ function transitionToDashboard(seedData) {
 
     // Show/hide the ghost badge based on amnesia mode state
     if (typeof _updateAmnesiaBadge === 'function') _updateAmnesiaBadge();
+
+    // Fill the Dashboard (wallet card, Health). Arriving here at start-up
+    // or after an unlock doesn't go through showState(), which used to be
+    // the only caller, so Health stayed blank until another screen was
+    // opened and closed.
+    try { if (typeof dashv2_render === 'function') dashv2_render(); } catch (_) {}
 }
 
 function transitionToWelcome() {
@@ -27062,7 +27154,17 @@ function psbtPreviewQrDensity(v) {
     if (label) label.textContent = n + cfg.unit;
 }
 
+/* Density applies while the slider moves, once it pauses briefly (each new
+   density re-encodes the QR codes). Receivers handle the new cut: UR
+   decoders ignore parts of another size, and Courier receivers start over. */
+var _psbtDensityTimer = null;
+function psbtSetQrDensityLive(v) {
+    clearTimeout(_psbtDensityTimer);
+    _psbtDensityTimer = setTimeout(function () { psbtSetQrDensity(v); }, 200);
+}
+
 function psbtSetQrDensity(v) {
+    clearTimeout(_psbtDensityTimer);
     var n = parseInt(v, 10);
     // Defensive clamp matching the widest supported range across all
     // formats; per-format min/max enforcement happens via the slider's
@@ -27126,7 +27228,12 @@ function psbtSetQrFrameMs(v) {
     if (actualMs < 50 || actualMs > 2000) return;
     PSBT_QR_FRAME_MS = actualMs;
     psbtPreviewQrFrameMs(v);
-    _psbtRenderQr();
+    // Applied at once, keeping the frame position: re-time the running
+    // animation instead of rendering it again from the first frame.
+    if (_psbtQrAnimTimer && _psbtQrPaintFrame) {
+        clearInterval(_psbtQrAnimTimer);
+        _psbtQrAnimTimer = setInterval(_psbtQrPaintFrame, PSBT_QR_FRAME_MS);
+    }
 }
 
 // Toggle the visual enabled-state of the Density + Speed sliders based
@@ -27728,7 +27835,12 @@ async function _psbtAnimateFrames(canvas, frames, qrOpts, counterEl, counterBuil
     // hand off to setInterval for the remaining cycles.
     await paintFrame();
     _psbtQrAnimTimer = setInterval(paintFrame, PSBT_QR_FRAME_MS);
+    _psbtQrPaintFrame = paintFrame;
 }
+
+// The running animation's painter, so a Speed change can re-time it without
+// restarting from the first frame (psbtSetQrFrameMs).
+var _psbtQrPaintFrame = null;
 
 
 // ---- EXPORT: Save to Transfer Drive ----
@@ -34625,12 +34737,39 @@ function xfr_updateDensityReadout(v) {
     var el = document.getElementById('xfr-chunk-size-value');
     if (el) el.textContent = v + ' bytes';
     _xfrUpdateSliderFill(document.getElementById('xfr-chunk-size'));
+    xfr_applyDensityLive(v);
+}
+
+/* While transmitting, a new density re-cuts the file and starts again from
+   the first piece (after a short pause, so dragging doesn't re-cut on every
+   step). Receivers see the new cut and start over (the Courier
+   collector in shared/qr-parser.js). */
+var _xfrDensityTimer = null;
+function xfr_applyDensityLive(v) {
+    clearTimeout(_xfrDensityTimer);
+    if (!xfr_state.isTransmitting) return;
+    var size = parseInt(v, 10);
+    if (!(size >= 50) || size === xfr_state.txChunkSize) return;
+    _xfrDensityTimer = setTimeout(async function () {
+        if (!xfr_state.isTransmitting || !xfr_state.originalFile) return;
+        var chunks = await xfr_splitFile(xfr_state.originalFile, size);
+        if (!xfr_state.isTransmitting) return;
+        xfr_state.fileChunks = chunks;
+        xfr_state.totalChunks = chunks.length;
+        xfr_state.currentChunkIdx = 0;
+        xfr_state.currentLoop = 0;
+        xfr_state.txChunkSize = size;
+        showStatus('Density changed: now ' + chunks.length + ' frames. The receiver starts over automatically.', 'info');
+    }, 300);
 }
 
 function xfr_updateSpeedReadout(v) {
     var el = document.getElementById('xfr-fps-value');
     if (el) el.textContent = v + ' FPS';
     _xfrUpdateSliderFill(document.getElementById('xfr-fps'));
+    // Applies to the next frame while transmitting.
+    var fps = parseInt(v, 10);
+    if (fps >= 1 && fps <= 30) xfr_state.txFps = fps;
 }
 
 // Orange fill from the left end of a range slider up to its thumb
@@ -34668,10 +34807,13 @@ async function xfr_startTransmit() {
 
     showStatus('Transmitting ' + xfr_state.totalChunks + ' chunks at ' + fps + ' FPS...', 'info');
 
-    var frameDelay = 1000 / fps;
+    xfr_state.txFps = fps;
+    xfr_state.txChunkSize = chunkSize;
 
     function runLoop() {
         if (!xfr_state.isTransmitting) return;
+        // Speed is read every frame, so the slider applies at once.
+        var frameDelay = 1000 / (xfr_state.txFps || fps);
 
         if (xfr_state.currentChunkIdx < xfr_state.totalChunks) {
             xfr_sendChunk(
@@ -34713,6 +34855,8 @@ function xfr_startReceive() {
     // Reset state
     xfr_state.receivedChunks = {};
     xfr_state.recvTotalChunks = null;
+    xfr_state.recvCollector = null;
+    xfr_state.recvBytes = null;
     xfr_state.recvFilename = '';
     xfr_state.recvExtension = '';
     xfr_state.recvMimeType = '';
@@ -34759,38 +34903,31 @@ function xfr_processQR(qrData, binaryData) {
 
         if (isAnimated) {
             // --- ANIMATED FILE CHUNK ---
-            var seq = parts[0].split('/');
-            var index = parseInt(seq[1]);
-            var total = parseInt(seq[2]);
-            var filename = decodeURIComponent(parts[1]);
-            var extension = decodeURIComponent(parts[2]);
-            var mimeType = parts[3];
-            var data = parts[4];
-            var checksum = parts[5];
-
-            if (xfr_state.recvTotalChunks === null) {
-                xfr_state.recvTotalChunks = total;
-                xfr_state.recvFilename = filename;
-                xfr_state.recvExtension = extension;
-                xfr_state.recvMimeType = mimeType;
-                document.getElementById('xfr-recv-filename').textContent = filename + '.' + extension;
-            }
-
-            // Verify checksum and store
-            if (!xfr_state.receivedChunks[index]) {
-                var dataBytes = xfr_base64ToArray(data);
-                if (xfr_checksumPad(dataBytes) === checksum) {
-                    xfr_state.receivedChunks[index] = data;
-
-                    var received = Object.keys(xfr_state.receivedChunks).length;
-                    document.getElementById('xfr-recv-chunk-count').textContent = received + ' / ' + xfr_state.recvTotalChunks;
-                    document.getElementById('xfr-recv-progress-bar').style.width =
-                        ((received / xfr_state.recvTotalChunks) * 100) + '%';
-
-                    if (received === xfr_state.recvTotalChunks) {
-                        xfr_onTransferComplete();
-                    }
+            // The shared Courier collector (shared/qr-parser.js), as Restore,
+            // the PSBT Signer and Output Descriptor use: checks each piece,
+            // and never joins two cuts when the sender changes density
+            // mid-transfer (it starts over instead).
+            var frame = window.QRParser.parseCourierFrame(qrData);
+            if (!frame) return;
+            if (!xfr_state.recvCollector) xfr_state.recvCollector = window.QRParser.createCourierCollector();
+            var r = xfr_state.recvCollector.add(frame);
+            if (r.status === 'bad-checksum' || r.status === 'wait') return;
+            if (r.status === 'new-file' || xfr_state.recvTotalChunks === null) {
+                if (r.status === 'new-file' && xfr_state.recvTotalChunks !== null) {
+                    showStatus('The sender changed its settings, so receiving starts over.', 'info');
                 }
+                xfr_state.recvTotalChunks = r.total;
+                xfr_state.recvFilename = frame.name;
+                xfr_state.recvExtension = frame.ext;
+                xfr_state.recvMimeType = frame.mime;
+                document.getElementById('xfr-recv-filename').textContent = frame.name + (frame.ext ? '.' + frame.ext : '');
+            }
+            xfr_state.recvTotalChunks = r.total;
+            document.getElementById('xfr-recv-chunk-count').textContent = r.received + ' / ' + r.total;
+            document.getElementById('xfr-recv-progress-bar').style.width = ((r.received / r.total) * 100) + '%';
+            if (r.done) {
+                xfr_state.recvBytes = r.bytes;
+                xfr_onTransferComplete();
             }
         } else {
             // --- STATIC TEXT / PASSWORD ---
@@ -34813,13 +34950,8 @@ function xfr_processQR(qrData, binaryData) {
 function xfr_onTransferComplete() {
     xfr_stopReceive();
 
-    var allBytes = [];
-    for (var i = 0; i < xfr_state.recvTotalChunks; i++) {
-        var chunkBytes = xfr_base64ToArray(xfr_state.receivedChunks[i]);
-        for (var j = 0; j < chunkBytes.length; j++) allBytes.push(chunkBytes[j]);
-    }
-
-    xfr_state.completedBlob = new Blob([new Uint8Array(allBytes)], { type: xfr_state.recvMimeType });
+    var allBytes = xfr_state.recvBytes || new Uint8Array(0);
+    xfr_state.completedBlob = new Blob([allBytes], { type: xfr_state.recvMimeType });
 
     var suggestedName = xfr_state.recvExtension
         ? xfr_state.recvFilename + '.' + xfr_state.recvExtension
@@ -38444,6 +38576,8 @@ function arm_init() {
 }
 
 function arm_onConfigChange() {
+    // A new format or wallet: the last "Send with the Courier" offer was for the old file.
+    try { arm_dismissCourierOffer(); } catch (_) {}
     // Cross-field gate runs synchronously — has to fire BEFORE the
     // debounced derive so the user never sees a flash of the invalid
     // combo (Multi-Sig + Electrum Watch-Only JSON, which our Electrum
@@ -40071,6 +40205,41 @@ async function _armResolveUniqueFilename(dirHandle, desiredName) {
     return stem + '-' + Date.now() + ext;
 }
 
+// ---- After a download: offer to send it with the Courier ----
+// The exported file usually goes on to an online computer or phone. Offer
+// the Courier right there (as the Backup screen does after Export Backup),
+// sending the text just written, so nothing is read back from the drive.
+var _armLastExport = null;
+
+function _armOfferCourier(name, text) {
+    var box = document.getElementById('arm-courier-offer');
+    if (!box || !name || typeof text !== 'string') return;
+    _armLastExport = { name: String(name), text: text };
+    box.innerHTML =
+        '<div class="arm-courier-offer-title">Saved to the Transfer Drive</div>' +
+        '<div class="arm-courier-offer-file">' + _psbtEscape(String(name)) + '</div>' +
+        '<p>Ready to send it to your online computer or phone? The Courier plays it as an animated QR code; receive it with the Courier Tool at safekeepbitcoin.com. No cables, and nothing touches the internet from here.</p>' +
+        '<div class="arm-courier-offer-btns">' +
+        '<button type="button" class="skb-btn skb-btn--primary" onclick="arm_sendExportWithCourier()">Send with the Courier</button>' +
+        '<button type="button" class="skb-btn" onclick="arm_dismissCourierOffer()">Not now</button>' +
+        '</div>';
+    box.hidden = false;
+    if (typeof skui_revealPanel === 'function') skui_revealPanel(box);
+}
+
+function arm_sendExportWithCourier() {
+    var x = _armLastExport;
+    if (!x) return;
+    arm_dismissCourierOffer();
+    var file = new File([x.text], x.name, { type: 'application/json' });
+    _xfrOpenWithFile(file, true);
+}
+
+function arm_dismissCourierOffer() {
+    var box = document.getElementById('arm-courier-offer');
+    if (box) { box.hidden = true; box.innerHTML = ''; }
+}
+
 async function _armSaveExportToTransfer(filename, text) {
     // (1) Boot-drive daemon path
     const os = window.SafeKeepOS;
@@ -40082,6 +40251,7 @@ async function _armSaveExportToTransfer(filename, text) {
             if (res && res.exported) {
                 const sizeNote = res.size ? ' (' + res.size + ' bytes)' : '';
                 showStatus('Exported ' + filename + ' to Transfer Drive' + sizeNote + '.', 'success');
+                _armOfferCourier(filename, text);
                 return true;
             }
             showStatus('Export failed: ' + ((res && res.error) || 'unknown error'), 'error');
@@ -40115,6 +40285,7 @@ async function _armSaveExportToTransfer(filename, text) {
                 ? ' (renamed from ' + filename + ' — earlier export preserved)'
                 : '';
             showStatus('Saved ' + writeName + ' to Transfer Drive' + renotice + '.', 'success');
+            _armOfferCourier(writeName, text);
             // The Archive UI mirrors the transfer drive — kick it to
             // pick up the new file without the user having to refresh.
             if (typeof archive_refresh === 'function') {
@@ -40151,6 +40322,7 @@ async function _armSaveExportToTransfer(filename, text) {
                 'mount it from the dashboard for one-click protected exports.',
                 'success'
             );
+            _armOfferCourier(filename, text);
             return true;
         } catch (e) {
             // AbortError = the user closed the picker. Treat as a
@@ -45098,6 +45270,12 @@ function tfa_renderTable() {
     .welcome-options { display: grid; gap: 0.6rem; margin-top: 0.4rem; text-align: left; }
     .welcome-actions .welcome-vault-btn { margin-top: 0.6rem; background: transparent; }
     .welcome-vault-note { margin: 0.1rem 0 0; font-size: 0.8125rem; color: var(--skb-text-muted); text-align: center; }
+    .arm-courier-offer { margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid var(--skb-success, #00c896); border-radius: var(--skb-radius-sm); }
+    .arm-courier-offer[hidden] { display: none; }
+    .arm-courier-offer-title { font-weight: 700; color: var(--skb-success, #00c896); margin-bottom: 0.25rem; }
+    .arm-courier-offer-file { font-family: var(--skb-mono); font-size: 0.8rem; word-break: break-all; margin-bottom: 0.45rem; }
+    .arm-courier-offer p { font-size: 0.8125rem; color: var(--skb-text-muted); margin: 0 0 0.6rem; line-height: 1.5; }
+    .arm-courier-offer-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .desc-import-save { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--skb-border); }
     .desc-import-save label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.4rem; }
     .desc-import-save-row { display: flex; gap: 0.5rem; }
@@ -45167,6 +45345,8 @@ function tfa_renderTable() {
     .dashv2-lh-src { display: none; }
     .dashv2-eyebrow { font-size: 0.75rem; color: var(--skb-text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
     .dashv2-name { font-family: var(--skb-sans); font-size: 1.6rem; font-weight: 800; margin: 0.1rem 0 0.55rem; color: var(--skb-text); text-transform: none; letter-spacing: 0; }
+    .dashv2-nick-note { margin: -0.35rem 0 0.6rem; font-size: 0.8125rem; color: var(--skb-text-muted); line-height: 1.45; }
+    .dashv2-nick-note[hidden] { display: none; }
     .dashv2-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
     .dashv2-chip { display: inline-flex; align-items: center; padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--skb-bg-input); border: 1px solid var(--skb-border); font-size: 0.8rem; color: var(--skb-text-muted); }
     .dashv2-chip[hidden] { display: none; }
@@ -45218,7 +45398,9 @@ function tfa_renderTable() {
     .rcv-btns { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0 0.75rem; }
     .rcv-note { font-size: 0.8125rem; color: var(--skb-text-muted); max-width: 60ch; margin: 0 0 0.75rem; }
     .rcv-more summary { cursor: pointer; font-size: 0.8125rem; color: var(--skb-primary); }
-    .rcv-goto { display: flex; gap: 0.5rem; margin-top: 0.5rem; max-width: 280px; }
+    .rcv-goto { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; max-width: 320px; }
+    .rcv-goto-label { font-size: 0.8125rem; color: var(--skb-text-muted); white-space: nowrap; }
+    .rcv-goto input { max-width: 9rem; }
     .rcv-empty { color: var(--skb-text-muted); }
     @media (max-width: 1100px) { .rcv-main { grid-template-columns: minmax(0, 1fr); } }
     @media (min-width: 1101px) { .dashv2-actions { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
