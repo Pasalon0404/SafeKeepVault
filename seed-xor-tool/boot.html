@@ -7734,7 +7734,7 @@
                                    title="Lower density = more frames but visually simpler / larger QR squares.">Density:</label>
                             <input type="range" id="psbt-qr-density"
                                    min="400" max="1800" step="100" value="1800"
-                                   oninput="psbtPreviewQrDensity(this.value)"
+                                   oninput="psbtPreviewQrDensity(this.value); psbtSetQrDensityLive(this.value)"
                                    onchange="psbtSetQrDensity(this.value)"
                                    aria-label="QR fragment size (characters per frame)"
                                    style="flex: 1; min-width: 80px;">
@@ -7747,7 +7747,7 @@
                                    title="Frame cadence. Slower = more time for the receiving camera to lock onto each frame.">Speed:</label>
                             <input type="range" id="psbt-qr-speed"
                                    min="100" max="500" step="25" value="300"
-                                   oninput="psbtPreviewQrFrameMs(this.value)"
+                                   oninput="psbtSetQrFrameMs(this.value)"
                                    onchange="psbtSetQrFrameMs(this.value)"
                                    aria-label="QR animation frame interval in milliseconds"
                                    style="flex: 1; min-width: 80px;">
@@ -27154,7 +27154,17 @@ function psbtPreviewQrDensity(v) {
     if (label) label.textContent = n + cfg.unit;
 }
 
+/* Density applies while the slider moves, once it pauses briefly (each new
+   density re-encodes the QR codes). Receivers handle the new cut: UR
+   decoders ignore parts of another size, and Courier receivers start over. */
+var _psbtDensityTimer = null;
+function psbtSetQrDensityLive(v) {
+    clearTimeout(_psbtDensityTimer);
+    _psbtDensityTimer = setTimeout(function () { psbtSetQrDensity(v); }, 200);
+}
+
 function psbtSetQrDensity(v) {
+    clearTimeout(_psbtDensityTimer);
     var n = parseInt(v, 10);
     // Defensive clamp matching the widest supported range across all
     // formats; per-format min/max enforcement happens via the slider's
@@ -27218,7 +27228,12 @@ function psbtSetQrFrameMs(v) {
     if (actualMs < 50 || actualMs > 2000) return;
     PSBT_QR_FRAME_MS = actualMs;
     psbtPreviewQrFrameMs(v);
-    _psbtRenderQr();
+    // Applied at once, keeping the frame position: re-time the running
+    // animation instead of rendering it again from the first frame.
+    if (_psbtQrAnimTimer && _psbtQrPaintFrame) {
+        clearInterval(_psbtQrAnimTimer);
+        _psbtQrAnimTimer = setInterval(_psbtQrPaintFrame, PSBT_QR_FRAME_MS);
+    }
 }
 
 // Toggle the visual enabled-state of the Density + Speed sliders based
@@ -27820,7 +27835,12 @@ async function _psbtAnimateFrames(canvas, frames, qrOpts, counterEl, counterBuil
     // hand off to setInterval for the remaining cycles.
     await paintFrame();
     _psbtQrAnimTimer = setInterval(paintFrame, PSBT_QR_FRAME_MS);
+    _psbtQrPaintFrame = paintFrame;
 }
+
+// The running animation's painter, so a Speed change can re-time it without
+// restarting from the first frame (psbtSetQrFrameMs).
+var _psbtQrPaintFrame = null;
 
 
 // ---- EXPORT: Save to Transfer Drive ----
@@ -34717,12 +34737,39 @@ function xfr_updateDensityReadout(v) {
     var el = document.getElementById('xfr-chunk-size-value');
     if (el) el.textContent = v + ' bytes';
     _xfrUpdateSliderFill(document.getElementById('xfr-chunk-size'));
+    xfr_applyDensityLive(v);
+}
+
+/* While transmitting, a new density re-cuts the file and starts again from
+   the first piece (after a short pause, so dragging doesn't re-cut on every
+   step). Receivers see the new cut and start over (the Courier
+   collector in shared/qr-parser.js). */
+var _xfrDensityTimer = null;
+function xfr_applyDensityLive(v) {
+    clearTimeout(_xfrDensityTimer);
+    if (!xfr_state.isTransmitting) return;
+    var size = parseInt(v, 10);
+    if (!(size >= 50) || size === xfr_state.txChunkSize) return;
+    _xfrDensityTimer = setTimeout(async function () {
+        if (!xfr_state.isTransmitting || !xfr_state.originalFile) return;
+        var chunks = await xfr_splitFile(xfr_state.originalFile, size);
+        if (!xfr_state.isTransmitting) return;
+        xfr_state.fileChunks = chunks;
+        xfr_state.totalChunks = chunks.length;
+        xfr_state.currentChunkIdx = 0;
+        xfr_state.currentLoop = 0;
+        xfr_state.txChunkSize = size;
+        showStatus('Density changed: now ' + chunks.length + ' frames. The receiver starts over automatically.', 'info');
+    }, 300);
 }
 
 function xfr_updateSpeedReadout(v) {
     var el = document.getElementById('xfr-fps-value');
     if (el) el.textContent = v + ' FPS';
     _xfrUpdateSliderFill(document.getElementById('xfr-fps'));
+    // Applies to the next frame while transmitting.
+    var fps = parseInt(v, 10);
+    if (fps >= 1 && fps <= 30) xfr_state.txFps = fps;
 }
 
 // Orange fill from the left end of a range slider up to its thumb
@@ -34760,10 +34807,13 @@ async function xfr_startTransmit() {
 
     showStatus('Transmitting ' + xfr_state.totalChunks + ' chunks at ' + fps + ' FPS...', 'info');
 
-    var frameDelay = 1000 / fps;
+    xfr_state.txFps = fps;
+    xfr_state.txChunkSize = chunkSize;
 
     function runLoop() {
         if (!xfr_state.isTransmitting) return;
+        // Speed is read every frame, so the slider applies at once.
+        var frameDelay = 1000 / (xfr_state.txFps || fps);
 
         if (xfr_state.currentChunkIdx < xfr_state.totalChunks) {
             xfr_sendChunk(
@@ -34805,6 +34855,8 @@ function xfr_startReceive() {
     // Reset state
     xfr_state.receivedChunks = {};
     xfr_state.recvTotalChunks = null;
+    xfr_state.recvCollector = null;
+    xfr_state.recvBytes = null;
     xfr_state.recvFilename = '';
     xfr_state.recvExtension = '';
     xfr_state.recvMimeType = '';
@@ -34851,38 +34903,31 @@ function xfr_processQR(qrData, binaryData) {
 
         if (isAnimated) {
             // --- ANIMATED FILE CHUNK ---
-            var seq = parts[0].split('/');
-            var index = parseInt(seq[1]);
-            var total = parseInt(seq[2]);
-            var filename = decodeURIComponent(parts[1]);
-            var extension = decodeURIComponent(parts[2]);
-            var mimeType = parts[3];
-            var data = parts[4];
-            var checksum = parts[5];
-
-            if (xfr_state.recvTotalChunks === null) {
-                xfr_state.recvTotalChunks = total;
-                xfr_state.recvFilename = filename;
-                xfr_state.recvExtension = extension;
-                xfr_state.recvMimeType = mimeType;
-                document.getElementById('xfr-recv-filename').textContent = filename + '.' + extension;
-            }
-
-            // Verify checksum and store
-            if (!xfr_state.receivedChunks[index]) {
-                var dataBytes = xfr_base64ToArray(data);
-                if (xfr_checksumPad(dataBytes) === checksum) {
-                    xfr_state.receivedChunks[index] = data;
-
-                    var received = Object.keys(xfr_state.receivedChunks).length;
-                    document.getElementById('xfr-recv-chunk-count').textContent = received + ' / ' + xfr_state.recvTotalChunks;
-                    document.getElementById('xfr-recv-progress-bar').style.width =
-                        ((received / xfr_state.recvTotalChunks) * 100) + '%';
-
-                    if (received === xfr_state.recvTotalChunks) {
-                        xfr_onTransferComplete();
-                    }
+            // The shared Courier collector (shared/qr-parser.js), as Restore,
+            // the PSBT Signer and Output Descriptor use: checks each piece,
+            // and never joins two cuts when the sender changes density
+            // mid-transfer (it starts over instead).
+            var frame = window.QRParser.parseCourierFrame(qrData);
+            if (!frame) return;
+            if (!xfr_state.recvCollector) xfr_state.recvCollector = window.QRParser.createCourierCollector();
+            var r = xfr_state.recvCollector.add(frame);
+            if (r.status === 'bad-checksum' || r.status === 'wait') return;
+            if (r.status === 'new-file' || xfr_state.recvTotalChunks === null) {
+                if (r.status === 'new-file' && xfr_state.recvTotalChunks !== null) {
+                    showStatus('The sender changed its settings, so receiving starts over.', 'info');
                 }
+                xfr_state.recvTotalChunks = r.total;
+                xfr_state.recvFilename = frame.name;
+                xfr_state.recvExtension = frame.ext;
+                xfr_state.recvMimeType = frame.mime;
+                document.getElementById('xfr-recv-filename').textContent = frame.name + (frame.ext ? '.' + frame.ext : '');
+            }
+            xfr_state.recvTotalChunks = r.total;
+            document.getElementById('xfr-recv-chunk-count').textContent = r.received + ' / ' + r.total;
+            document.getElementById('xfr-recv-progress-bar').style.width = ((r.received / r.total) * 100) + '%';
+            if (r.done) {
+                xfr_state.recvBytes = r.bytes;
+                xfr_onTransferComplete();
             }
         } else {
             // --- STATIC TEXT / PASSWORD ---
@@ -34905,13 +34950,8 @@ function xfr_processQR(qrData, binaryData) {
 function xfr_onTransferComplete() {
     xfr_stopReceive();
 
-    var allBytes = [];
-    for (var i = 0; i < xfr_state.recvTotalChunks; i++) {
-        var chunkBytes = xfr_base64ToArray(xfr_state.receivedChunks[i]);
-        for (var j = 0; j < chunkBytes.length; j++) allBytes.push(chunkBytes[j]);
-    }
-
-    xfr_state.completedBlob = new Blob([new Uint8Array(allBytes)], { type: xfr_state.recvMimeType });
+    var allBytes = xfr_state.recvBytes || new Uint8Array(0);
+    xfr_state.completedBlob = new Blob([allBytes], { type: xfr_state.recvMimeType });
 
     var suggestedName = xfr_state.recvExtension
         ? xfr_state.recvFilename + '.' + xfr_state.recvExtension
