@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 2, 2026).**
+> **Start with the "Current state" section below (updated Nov 3, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,38 @@
 
 ---
 
-## Current state (Nov 2, 2026) — v1.58
+## Current state (Nov 3, 2026) — v1.59
+
+**v1.59** (Nov 3) — app-only changes, tested on Dave's flash drive as
+quick updates from `main` (#91–#93):
+- **Live QR sliders**: Density and Speed apply while a QR is running, in
+  the Courier (Transfer) and the PSBT Signer. Speed is read every frame;
+  Density re-cuts the file (Courier, 300 ms debounce) or re-encodes (PSBT,
+  200 ms) and starts from the first piece.
+- **Courier receiving across a density change**: every piece but the last
+  is exactly the density in bytes. `QRParser.createCourierCollector()`
+  (`shared/qr-parser.js`) starts over on a middle piece of another size or
+  a changed total/name, takes the last piece only once the size is known,
+  and finishes only after a confirming middle piece (`needConfirm`), so two
+  cuts are never joined (500+500 vs 550+450). The Transfer screen's
+  receiver now uses this collector too. The web Courier Tool got the same
+  rules (safekeep-companion #8, cache `skv-courier-v11`); v1.58 and older
+  flash drives lack them. Test: `test-courier-frames.mjs`.
+- **Show an address**: this seed's Silent Payment address (BIP-352, scan
+  `m/352'/0'/0'/1'/0`, spend `m/352'/0'/0'/0'/0`), one reusable `sp1q…`
+  with no New address or number box; the number box updates the address
+  as you type (no Show button). Test: `test-receive-sp.mjs`.
+- **Seed Management**: after Download JSON, "Saved to the Transfer Drive"
+  offers Send with the Courier. Test: `test-export-courier.mjs`.
+- **Dashboard**: Health is filled in at start-up (`transitionToDashboard`
+  now renders it); the nickname is labelled "Your wallet · seed nickname",
+  in quotes, with a note that it isn't part of the recovery words; the
+  wallet card and Health are the same width; tiles are Sign, Show an
+  address, Connect a wallet app, Transfer files, Back up; the title is
+  28px and the nickname 22px; the wallet card has the plain card border.
+  Test: `test-dashboard-health.mjs`.
+
+## Earlier: v1.58 (Nov 2, `v1.58 · build 445 · 934ec90`)
 
 **v1.58** (Nov 2) — tested on Dave's flash drive as builds from the branch:
 - **Seed storage** (Device Options): a flash drive can stop keeping the
@@ -609,10 +640,10 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.58:** merge the v1.58 website PR, and install
-   `SafeKeep-Update-v1.58.tar` on a flash drive from the release itself.
-   Seed storage and the Chromium profile change are OS changes: check Lock →
-   Boot Temporary Session → Unlock my vault instead on the release too.
+1. **After v1.59:** update the website for v1.59 (download page, release
+   notes; docs for Silent Payments in Show an address and the live
+   sliders), and install `SafeKeep-Update-v1.59.tar` on a flash drive from
+   the release itself. The v1.57–v1.58 docs refresh may still be open.
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
