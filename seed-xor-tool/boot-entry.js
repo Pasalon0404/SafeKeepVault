@@ -142,6 +142,9 @@ import './shared/dice-fairness.js';
 // entropy credits, Verifiable dice (SeedSigner/COLDCARD method) and camera
 // noise-bit sampling.
 import './shared/entropy-sources.js';
+// coldcard-backup.js exposes window.ColdcardBackup: reads a COLDCARD
+// backup.7z (welcome screen → I already have a backup → COLDCARD backup).
+import './shared/coldcard-backup.js';
 // core-import.js exposes window.CoreImport — the Descriptor tool's Bitcoin Core
 // importdescriptors (watch-only) export.
 import './shared/core-import.js';

@@ -375,6 +375,23 @@
       margin: 0 auto 3rem;
     }
 
+    /* ---- COLDCARD backup panel ---- */
+    #coldcard-recovery-panel { display: none; max-width: 560px; margin: 0 auto 3rem; }
+    .ccb-step { margin-bottom: 1rem; }
+    .ccb-step > label, .ccb-label { font-size: 0.8125rem; font-weight: 600; color: var(--skb-text); display: block; margin-bottom: 0.5rem; }
+    .ccb-file-info { font-size: 0.8rem; color: var(--skb-text-muted); margin-top: 0.4rem; }
+    .ccb-file-info[hidden], .ccb-step[hidden], #ccb-review[hidden], #ccb-typed-wrap[hidden], #ccb-words-wrap[hidden] { display: none; }
+    .ccb-link { background: none; border: 0; padding: 0; color: var(--skb-primary); cursor: pointer; font-size: 0.8rem; text-decoration: underline; }
+    .ccb-box { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.75rem 0.9rem; margin-bottom: 0.75rem; background: var(--skb-bg-input); font-size: 0.85rem; }
+    .ccb-box h4 { margin: 0 0 0.4rem; font-size: 0.85rem; }
+    .ccb-box p { margin: 0.25rem 0; color: var(--skb-text-muted); font-size: 0.8rem; }
+    .ccb-box.is-bad { border-color: var(--skb-danger); }
+    .ccb-box.is-warn { border-color: var(--skb-warning, #f59e0b); }
+    .ccb-wallet { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.45rem 0; border-top: 1px solid var(--skb-border); }
+    .ccb-wallet:first-of-type { border-top: 0; }
+    .ccb-wallet b { display: block; font-size: 0.85rem; }
+    .ccb-wallet span { display: block; font-size: 0.78rem; color: var(--skb-text-muted); }
+
     /* ---- SLIP-39 Recovery Panel ---- */
     #shamir-recovery-panel {
       display: none;
@@ -6491,6 +6508,10 @@
                         <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg></span>
                         <span><b>Seed XOR shares</b><span>2 to 4 shares that each look like a normal seed</span></span>
                     </button>
+                    <button type="button" class="welcome-option" onclick="showColdcardRecoveryPanel()">
+                        <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M9 6h6M10 18h4"/></svg></span>
+                        <span><b>COLDCARD backup</b><span>The backup.7z a COLDCARD saved to its SD card, and the 12 words it showed you</span></span>
+                    </button>
                     <button type="button" class="welcome-option" onclick="showShamirRecoveryPanel()">
                         <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><circle cx="12" cy="6" r="3"/><path d="M8 15l3-6M16 15l-3-6M9 17h6"/></svg></span>
                         <span><b>Shamir shares (SLIP-39)</b><span>20- or 33-word shares, such as 2 of 3</span></span>
@@ -6664,6 +6685,43 @@
             </div>
 
             <!-- SLIP-39 Shamir Recovery Panel -->
+            <!-- COLDCARD backup: read backup.7z in memory (shared/coldcard-backup.js, ccb_*) -->
+            <div id="coldcard-recovery-panel">
+                <div class="restore-panel-inner">
+                    <h3>Restore from a COLDCARD Backup</h3>
+                    <p style="font-size: 0.875rem; color: var(--skb-text-muted); margin: 0 0 1rem;">
+                        Open the <strong>backup.7z</strong> that a COLDCARD&rsquo;s Backup System saved to its SD card, using the 12 words it showed you. The file is read and decrypted in memory; you see what&rsquo;s in it before anything is saved.
+                    </p>
+
+                    <div class="ccb-step">
+                        <label>1. The backup file</label>
+                        <button type="button" class="skb-btn" style="width: 100%; border: 1px dashed var(--skb-border);" onclick="document.getElementById('ccb-file-input').click()">Choose backup file&hellip;</button>
+                        <input type="file" id="ccb-file-input" accept=".7z,.txt" style="display: none;" onchange="ccb_fileChosen(event)">
+                        <p class="ccb-file-info" id="ccb-file-info" hidden></p>
+                    </div>
+
+                    <div class="ccb-step" id="ccb-password-step">
+                        <label>2. The backup password</label>
+                        <div id="ccb-words-wrap">
+                            <p style="font-size: 0.78rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">The 12 words the COLDCARD showed when it made the backup (not your recovery words).</p>
+                            <div id="ccb-boxes"></div>
+                        </div>
+                        <div id="ccb-typed-wrap" hidden>
+                            <p style="font-size: 0.78rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">The password you typed on the COLDCARD Q. Capitals and spaces count.</p>
+                            <input type="password" id="ccb-typed" class="skb-input" autocomplete="off" spellcheck="false" style="width: 100%; box-sizing: border-box; font-family: var(--skb-mono);" onkeydown="if (event.key === 'Enter') ccb_open()">
+                        </div>
+                        <button type="button" class="ccb-link" id="ccb-mode-link" onclick="ccb_togglePasswordMode()">I typed my own password on a COLDCARD Q</button>
+                    </div>
+
+                    <button type="button" class="skb-btn skb-btn--primary" id="ccb-open-btn" style="width: 100%; margin-bottom: 0.75rem;" onclick="ccb_open()" disabled>Open Backup</button>
+                    <div id="ccb-status" class="ccb-file-info" role="status" aria-live="polite" hidden></div>
+
+                    <div id="ccb-review" hidden></div>
+
+                    <button type="button" class="skb-btn" style="width: 100%; margin-top: 0.5rem;" onclick="hideColdcardRecoveryPanel()">&larr; Back</button>
+                </div>
+            </div>
+
             <div id="shamir-recovery-panel">
                 <div class="restore-panel-inner">
                     <h3>Recover from Shamir Shares</h3>
@@ -43730,6 +43788,262 @@ async function s39r_restorePending() {
         showStatus('SLIP-39 recovery failed: ' + e.message, 'error');
     } finally {
         if (btn && _s39rPending) { btn.disabled = false; btn.textContent = 'Restore This Wallet (' + _s39rPending.safekeepFp + ')'; }
+    }
+}
+
+
+// ---- Restore from a COLDCARD backup (ccb_*) ----
+// ======================================================================
+// Welcome → I already have a backup → COLDCARD backup. Reads the
+// backup.7z a COLDCARD's Backup System writes (window.ColdcardBackup,
+// shared/coldcard-backup.js): the file is decrypted in memory with the 12
+// words the COLDCARD showed (or a COLDCARD Q's typed password), checked,
+// and shown before anything is saved. Restore writes the recovery words
+// as the master seed (the same path as every other restore) and the
+// multisig wallets the user keeps ticked as saved wallets.
+// Not yet imported (Part 2): Secure Notes and Seed Vault entries.
+// ======================================================================
+var _ccbBytes = null;        // the chosen file, in memory only
+var _ccbFileName = '';
+var _ccbEncrypted = true;
+var _ccbBoxes = null;        // 12 word boxes for the backup password
+var _ccbTyped = false;       // COLDCARD Q typed password instead of words
+var _ccbSummary = null;      // ColdcardBackup.summarizeBackup result (holds the words)
+
+function showColdcardRecoveryPanel() {
+    ['welcome-buttons', 'restore-panel', 'generate-panel', 'xor-recovery-panel', 'shamir-recovery-panel'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+    document.getElementById('coldcard-recovery-panel').style.display = 'block';
+    clearStatus();
+    ccb_reset();
+    skui_revealPanel('coldcard-recovery-panel');
+}
+
+function hideColdcardRecoveryPanel() {
+    ccb_reset();
+    if (_ccbBoxes) { _ccbBoxes.destroy(); _ccbBoxes = null; }
+    document.getElementById('coldcard-recovery-panel').style.display = 'none';
+    document.getElementById('welcome-buttons').style.display = 'flex';
+    clearStatus();
+}
+
+/* Forget the file, the password and what was read. */
+function ccb_reset() {
+    if (_ccbBytes) _ccbBytes.fill(0);
+    _ccbBytes = null; _ccbFileName = ''; _ccbEncrypted = true;
+    if (_ccbSummary) _ccbSummary.mnemonic = '';
+    _ccbSummary = null;
+    var SF = window.ShareFlow;
+    if (_ccbBoxes) _ccbBoxes.clear();
+    else if (SF && SF.createWordBoxes) {
+        _ccbBoxes = SF.createWordBoxes(document.getElementById('ccb-boxes'), { count: 12, wordlist: SF.wordlists.bip39, idPrefix: 'ccb', columns: 4 });
+        _ccbBoxes.onChange(ccb_updateButton);
+    }
+    var typed = document.getElementById('ccb-typed');
+    if (typed) typed.value = '';
+    _ccbTyped = true; ccb_togglePasswordMode();   // back to the 12 words
+    document.getElementById('ccb-file-info').hidden = true;
+    document.getElementById('ccb-password-step').hidden = false;
+    document.getElementById('ccb-review').hidden = true;
+    document.getElementById('ccb-review').innerHTML = '';
+    _ccbStatus('', '');
+    ccb_updateButton();
+}
+
+function _ccbStatus(kind, text) {
+    var el = document.getElementById('ccb-status');
+    if (!el) return;
+    el.hidden = !text;
+    el.textContent = text;
+    el.style.color = kind === 'bad' ? 'var(--skb-danger)' : kind === 'ok' ? 'var(--skb-success, #34d399)' : 'var(--skb-text-muted)';
+}
+
+function ccb_togglePasswordMode() {
+    _ccbTyped = !_ccbTyped;
+    document.getElementById('ccb-words-wrap').hidden = _ccbTyped;
+    document.getElementById('ccb-typed-wrap').hidden = !_ccbTyped;
+    document.getElementById('ccb-mode-link').textContent = _ccbTyped
+        ? 'Use the 12 words the COLDCARD showed instead'
+        : 'I typed my own password on a COLDCARD Q';
+    ccb_updateButton();
+}
+
+function _ccbPassword() {
+    if (!_ccbEncrypted) return '';
+    if (_ccbTyped) return document.getElementById('ccb-typed').value;
+    var words = _ccbBoxes ? _ccbBoxes.getWords() : [];
+    return words.every(Boolean) ? words.join(' ').toLowerCase() : '';
+}
+
+function ccb_updateButton() {
+    var btn = document.getElementById('ccb-open-btn');
+    if (btn) btn.disabled = !_ccbBytes || (_ccbEncrypted && !_ccbPassword().trim());
+}
+
+function ccb_fileChosen(event) {
+    var file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    var CB = window.ColdcardBackup;
+    var info = document.getElementById('ccb-file-info');
+    document.getElementById('ccb-review').hidden = true;
+    _ccbStatus('', '');
+    if (!CB) { _ccbStatus('bad', 'The COLDCARD reader didn’t load. Restart SafeKeep and try again.'); return; }
+    if (file.size > CB.MAX_FILE) {
+        info.hidden = false;
+        info.textContent = '“' + file.name + '” is too large (' + Math.round(file.size / 1024) + ' KB) to be a COLDCARD backup.';
+        return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+        var bytes = new Uint8Array(e.target.result);
+        if (_ccbBytes) _ccbBytes.fill(0);
+        _ccbBytes = null;
+        info.hidden = false;
+        try {
+            if (CB.is7z(bytes)) {
+                var p = CB.parseColdcard7z(bytes);
+                _ccbEncrypted = true;
+                info.textContent = '“' + file.name + '”: a COLDCARD backup (' + p.name + ' inside, ' + p.unpackedSize + ' bytes). Enter its password below.';
+            } else {
+                var head = new TextDecoder().decode(bytes.subarray(0, 64));
+                if (!/^# Coldcard backup file/.test(head)) throw new Error('This isn’t a COLDCARD backup file (backup.7z).');
+                _ccbEncrypted = false;
+                info.textContent = '“' + file.name + '”: an unencrypted COLDCARD backup. No password is needed.';
+            }
+            _ccbBytes = bytes; _ccbFileName = file.name;
+        } catch (err) {
+            bytes.fill(0);
+            info.textContent = '“' + file.name + '”: ' + err.message;
+        }
+        document.getElementById('ccb-password-step').hidden = !_ccbEncrypted;
+        ccb_updateButton();
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+async function ccb_open() {
+    var CB = window.ColdcardBackup;
+    if (!CB || !_ccbBytes) return;
+    var pw = _ccbPassword();
+    if (_ccbEncrypted && !pw.trim()) { _ccbStatus('bad', 'Enter all 12 words of the backup password first.'); return; }
+    var btn = document.getElementById('ccb-open-btn');
+    btn.disabled = true;
+    _ccbStatus('', 'Opening the backup…');
+    try {
+        var opened = await CB.openColdcardBackup(_ccbBytes, pw);
+        var fields = CB.parseBackupText(opened.text);
+        opened.text = '';
+        if (_ccbSummary) _ccbSummary.mnemonic = '';
+        _ccbSummary = CB.summarizeBackup(fields);
+        Object.keys(fields).forEach(function (k) { fields[k] = null; });
+        var typed = document.getElementById('ccb-typed');
+        if (typed) typed.value = '';
+        _ccbStatus('ok', 'Backup opened. Check what’s in it below.');
+        _ccbRenderReview();
+    } catch (e) {
+        _ccbStatus('bad', e && e.message ? e.message : String(e));
+    } finally {
+        ccb_updateButton();
+    }
+}
+
+function _ccbRenderReview() {
+    var s = _ccbSummary, box = document.getElementById('ccb-review');
+    if (!s) return;
+    var esc = _wrecEscape, h = [];
+    if (s.problems.length) {
+        h.push('<div class="ccb-box is-bad"><h4>This backup can’t be restored</h4>' +
+            s.problems.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') + '</div>');
+    } else if (s.passphraseWallet) {
+        h.push('<div class="ccb-box is-warn"><h4>No recovery words in this backup</h4>' +
+            '<p>A BIP-39 passphrase was in use when the COLDCARD made this backup, so it saved that passphrase wallet’s master key and not your recovery words. SafeKeep is built on recovery words: restore with <strong>Recovery words</strong> instead, then add the passphrase on the Dashboard.</p></div>');
+    } else {
+        h.push('<div class="ccb-box"><h4>Wallet</h4><p>' + s.words + ' recovery words · fingerprint <strong>' + esc(s.fingerprint) + '</strong></p>' +
+            (s.chain && s.chain !== 'BTC' ? '<p>This COLDCARD was set to <strong>' + esc(s.chain) + '</strong> (testnet). The words work the same; check the network in your wallet apps.</p>' : '') +
+            (s.firmware ? '<p>Made by COLDCARD firmware ' + esc(s.firmware) + '.</p>' : '') +
+            s.notesForUser.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('') + '</div>');
+    }
+    if (s.multisig.length || s.multisigErrors.length) {
+        var canSave = !s.problems.length && !s.passphraseWallet && !_isEphemeralBoot();
+        h.push('<div class="ccb-box"><h4>Multisig wallets (' + s.multisig.length + ')</h4>' +
+            (canSave ? '<p>Ticked wallets are saved in Output Descriptor, so the PSBT Signer checks transactions against them.</p>'
+                     : _isEphemeralBoot() ? '<p>A Temporary Session keeps nothing, so these aren’t saved.</p>' : '') +
+            s.multisig.map(function (w, i) {
+                var mine = w.mine >= 0 ? 'Your key is key ' + (w.mine + 1) + ' (' + w.keys[w.mine].fingerprint + ')' : 'None of its keys belongs to this seed';
+                return '<label class="ccb-wallet">' +
+                    (canSave ? '<input type="checkbox" class="ccb-ms-pick" data-i="' + i + '" checked>' : '') +
+                    '<span><b>' + esc(w.name) + '</b><span>' + w.M + '-of-' + w.N + ' · ' + esc(w.format.toUpperCase()) + (w.sorted ? '' : ' · keys in fixed order') + (w.testnet ? ' · testnet' : '') + '</span><span>' + esc(mine) + '</span></span></label>';
+            }).join('') +
+            s.multisigErrors.map(function (e) { return '<p style="color: var(--skb-danger);">' + esc(e) + '</p>'; }).join('') + '</div>');
+    }
+    if (s.notes || s.seedVault) {
+        h.push('<div class="ccb-box"><h4>Also in the file</h4><p>' +
+            [s.notes ? s.notes + ' Secure Note' + (s.notes === 1 ? '' : 's') : '', s.seedVault ? s.seedVault + ' Seed Vault entr' + (s.seedVault === 1 ? 'y' : 'ies') : ''].filter(Boolean).join(' and ') +
+            '. SafeKeep can’t import these yet; they stay in the file.</p></div>');
+    }
+    if (!s.problems.length && !s.passphraseWallet) {
+        h.push('<button type="button" class="skb-btn skb-btn--primary" id="ccb-restore-btn" style="width: 100%;" onclick="ccb_restore()">Restore This Wallet (' + esc(s.fingerprint) + ')</button>');
+    }
+    box.innerHTML = h.join('');
+    box.hidden = false;
+    try { box.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+}
+
+/* Save the ticked multisig wallets; returns a sentence for the status line. */
+async function _ccbSaveMultisig(wallets) {
+    if (!wallets.length) return '';
+    await savedWallets_load();
+    var list = _savedWallets.slice(), added = [], skipped = [];
+    wallets.forEach(function (w) {
+        var r = _savedWalletParse(w.descriptor);
+        if (r.error) { skipped.push(w.name + ' (' + r.error + ')'); return; }
+        var desc = w.descriptor + '#' + desc_checksum(w.descriptor);
+        var body = _savedWalletBody(desc);
+        if (list.some(function (x) { return _savedWalletBody(x.descriptor) === body; })) { skipped.push(w.name + ' (already saved)'); return; }
+        var name = String(w.name).slice(0, 56) || 'COLDCARD multisig', n = 2;
+        while (list.some(function (x) { return x.name.toLowerCase() === name.toLowerCase(); })) name = String(w.name).slice(0, 56) + ' (' + (n++) + ')';
+        if (list.length >= 50) { skipped.push(w.name + ' (the vault holds up to 50 saved wallets)'); return; }
+        list.push({ name: name, descriptor: desc, added: new Date().toISOString() });
+        added.push(name);
+    });
+    if (added.length) {
+        var res = await _savedWalletsStore(list);
+        if (!res.saved) return ' The multisig wallets weren’t saved: ' + (res.error || 'unknown error') + '.';
+    }
+    return (added.length ? ' Saved ' + added.length + ' multisig wallet' + (added.length === 1 ? '' : 's') + ' in Output Descriptor.' : '') +
+           (skipped.length ? ' Not saved: ' + skipped.join('; ') + '.' : '');
+}
+
+async function ccb_restore() {
+    var s = _ccbSummary;
+    if (!s || !s.mnemonic || s.problems.length) return;
+    var btn = document.getElementById('ccb-restore-btn');
+    try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Restoring...'; }
+        var picks = Array.prototype.slice.call(document.querySelectorAll('.ccb-ms-pick'))
+            .filter(function (c) { return c.checked; })
+            .map(function (c) { return s.multisig[Number(c.dataset.i)]; });
+        // CIRCUIT BREAKER: ephemeral boot MUST NEVER call SafeKeepOS.
+        var result = _isEphemeralBoot()
+            ? await _ephemeralCommitSeed(s.mnemonic)
+            : await window.SafeKeepOS.restoreMasterSeed(s.mnemonic);
+        _showDiskVerification(result.diskVerified);
+        if (result.diskVerified === false && !_SKB_DEV_MODE) {
+            _ccbStatus('bad', 'Seed restored to RAM but disk write FAILED. Do not proceed until resolved.');
+            showStatus('CRITICAL: Seed exists only in RAM — disk write failed. Write down your words immediately.', 'error');
+            return;
+        }
+        var msNote = _isEphemeralBoot() ? '' : await _ccbSaveMultisig(picks);
+        hideColdcardRecoveryPanel();
+        showStatus('Master seed restored from the COLDCARD backup. Fingerprint: <strong>' + (result.fingerprint || '').toUpperCase() + '</strong>.' + _wrecEscape(msNote), 'success');
+        transitionToDashboard(result);
+    } catch (e) {
+        _ccbStatus('bad', 'Restore failed: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+        if (btn && _ccbSummary) { btn.disabled = false; btn.textContent = 'Restore This Wallet (' + _ccbSummary.fingerprint + ')'; }
     }
 }
 
