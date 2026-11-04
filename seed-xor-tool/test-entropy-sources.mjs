@@ -17,6 +17,11 @@
  *      with the device draw, the pool empties after a seed, the camera uses
  *      the noise bits, resets go back to Mixed. test-entropy-built.mjs runs
  *      the same paths in the built app.
+ *   8. Draw Your Own Words: the drawn words come back as the first 11 / 23
+ *      words, the coin flips are the top bits of the last word (Heads = 1),
+ *      the checksum fills the rest, as SeedSigner's "Calc 12th/24th word"
+ *      does; all-tails flips equal SeedSigner's "Finalize with zeros"; bad
+ *      input is refused; patterned draws are refused; boot.html wiring.
  *
  * Run:  node test-entropy-sources.mjs
  */
@@ -25,6 +30,7 @@ import {
     ENTROPY_CREDIT, MOUSE_SHARE_MAX, mouseCredit, VERIFIABLE_DICE_ROLLS, verifiableRollsNeeded,
     diceRollsToEntropy, cameraFrameLsbs, cameraFrameCredit,
     DECK_SIZE, CARD_RANKS, CARD_SUITS, cardRankFromKey, cardSuitFromKey, cardLabel, cardCredit,
+    FINAL_WORD_FLIPS, finalWordFlipsNeeded, finalWordEntropy, drawnWordsGate,
 } from './shared/entropy-sources.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -211,6 +217,105 @@ console.log('\n7. boot.html wiring');
         ck(`${name.replace(/^(async )?function /, '')} parses`, ok, err);
     }
     ck('meter says "bits from you"', fn('function eob_updateMeter').includes("bits from you"));
+}
+
+console.log('\n8. Draw Your Own Words (final word)');
+{
+    const WL = bip39.wordlists.english;
+    const html = readFileSync(new URL('./boot.html', import.meta.url), 'utf8');
+    const fn = (name) => {
+        const start = html.indexOf(name);
+        if (start < 0) return '';
+        const next = html.indexOf('\nfunction ', start + 10), nextAsync = html.indexOf('\nasync function ', start + 10);
+        const end = Math.min(...[next, nextAsync].filter(i => i > 0));
+        return html.slice(start, end);
+    };
+    const idxBits = (ws) => ws.map((w) => WL.indexOf(w).toString(2).padStart(11, '0')).join('');
+    // SeedSigner's calculate_checksum, re-done independently: the drawn
+    // words, then the last word's index = flips padded with zeros to 11
+    // bits; read the first 128 / 256 bits as entropy and let BIP-39 rewrite
+    // the checksum.
+    const seedSignerFinal = (ws, flips) => {
+        const bits = idxBits(ws) + flips.padEnd(11, '0');
+        const ent = bits.slice(0, ws.length === 11 ? 128 : 256);
+        const hex = ent.match(/.{4}/g).map((b) => parseInt(b, 2).toString(16)).join('');
+        return bip39.entropyToMnemonic(hex);
+    };
+    ck('flips: 7 for 12 words, 3 for 24', FINAL_WORD_FLIPS[12] === 7 && FINAL_WORD_FLIPS[24] === 3 && finalWordFlipsNeeded(12) === 7 && finalWordFlipsNeeded(24) === 3);
+    const w11 = 'crawl focus rescue cable view pledge rather dinner cousin unfair day'.split(' ');
+    const w23 = 'bubble father debate ankle injury fence mesh evolve section wet coyote violin pyramid flower rent arrow round clutch myth safe base skin mobile'.split(' ');
+    for (const [ws, flips] of [[w11, '1011001'], [w11, '0000000'], [w11, '1111111'], [w23, '101'], [w23, '000'], [w23, '111']]) {
+        const m = words(finalWordEntropy(ws, flips, WL));
+        const parts = m.split(' ');
+        const n = ws.length + 1;
+        ck(`${n} words, flips ${flips}: valid and starts with the drawn words`, bip39.validateMnemonic(m) && parts.slice(0, -1).join(' ') === ws.join(' '), m);
+        const last = WL.indexOf(parts[n - 1]);
+        ck(`  last word's top bits are the flips`, (last >> (11 - flips.length)) === parseInt(flips, 2));
+        ck(`  same as SeedSigner's calculation`, m === seedSignerFinal(ws, flips), seedSignerFinal(ws, flips));
+    }
+    // SeedSigner tests/test_mnemonic_generation.py: the default final word
+    // ("abandon", index 0) is the same as finalizing with zeros.
+    ck('all tails = SeedSigner "Finalize with zeros" (12)', words(finalWordEntropy(w11, '0000000', WL)) === seedSignerFinal([...w11], '0'));
+    ck('all tails = SeedSigner "Finalize with zeros" (24)', words(finalWordEntropy(w23, '000', WL)) === seedSignerFinal([...w23], '0'));
+    // Random round trips against the bip39 package.
+    let rt = true;
+    for (let k = 0; k < 300; k++) {
+        const n = k % 2 ? 24 : 12;
+        const m = bip39.entropyToMnemonic(randomBytes(n === 12 ? 16 : 32).toString('hex')).split(' ');
+        const li = WL.indexOf(m[n - 1]);
+        const flips = (li >> (n === 12 ? 4 : 8)).toString(2).padStart(finalWordFlipsNeeded(n), '0');
+        if (words(finalWordEntropy(m.slice(0, -1), flips, WL)) !== m.join(' ')) { rt = false; break; }
+    }
+    ck('300 random seeds: their words and the top bits of the last word give the same seed back', rt);
+    ck('array flips and string flips agree', Buffer.from(finalWordEntropy(w11, ['1', '0', '1', '1', '0', '0', '1'], WL)).equals(Buffer.from(finalWordEntropy(w11, '1011001', WL))));
+    ck('words are trimmed and lower-cased', words(finalWordEntropy(w11.map((w) => ' ' + w.toUpperCase()), '0000000', WL)) === words(finalWordEntropy(w11, '0000000', WL)));
+    const throws = (f) => { try { f(); return false; } catch { return true; } };
+    ck('refuses 10 words', throws(() => finalWordEntropy(w11.slice(1), '0000000', WL)));
+    ck('refuses 12 words', throws(() => finalWordEntropy([...w11, 'abandon'], '0000000', WL)));
+    ck('refuses a word not in the list', throws(() => finalWordEntropy([...w11.slice(1), 'bitcoinz'], '0000000', WL)));
+    ck('refuses 6 or 8 flips for 12 words', throws(() => finalWordEntropy(w11, '000000', WL)) && throws(() => finalWordEntropy(w11, '00000000', WL)));
+    ck('refuses 7 flips for 24 words', throws(() => finalWordEntropy(w23, '0000000', WL)));
+    ck('refuses flips other than 0 / 1', throws(() => finalWordEntropy(w11, '10H1001', WL)));
+
+    console.log('   pattern check');
+    ck('a real-looking draw passes', drawnWordsGate(w11, WL).id === 'ok' && drawnWordsGate(w23, WL).id === 'ok');
+    ck('four neighbouring words in a row are refused', drawnWordsGate(['abandon', 'ability', 'able', 'about', ...w11.slice(4)], WL).id === 'block');
+    ck('...going backwards too', drawnWordsGate([...w11.slice(0, 7), 'about', 'able', 'ability', 'abandon'], WL).id === 'block');
+    ck('three neighbours are allowed', drawnWordsGate(['abandon', 'ability', 'able', ...w11.slice(3)], WL).id === 'ok');
+    ck('a word drawn three times is refused', drawnWordsGate(['zoo', 'zoo', 'zoo', ...w11.slice(3)], WL).id === 'block');
+    ck('a word drawn twice is allowed', drawnWordsGate(['zoo', 'zoo', ...w11.slice(2)], WL).id === 'ok');
+    ck('words in alphabetical order are refused', drawnWordsGate([...w11].sort(), WL).id === 'block');
+    ck('the reason is given', drawnWordsGate(['zoo', 'zoo', 'zoo', ...w11.slice(3)], WL).reasons.join().includes('"zoo" is drawn 3 times'));
+    // A random draw is almost never refused.
+    let refused = 0;
+    for (let k = 0; k < 2000; k++) {
+        const ws = Array.from({ length: 11 }, () => WL[randomBytes(2).readUInt16BE() & 2047]);
+        if (drawnWordsGate(ws, WL).id !== 'ok') refused++;
+    }
+    ck('2000 random 11-word draws: none refused', refused === 0, refused + ' refused');
+
+    console.log('   boot.html wiring');
+    ck('mode button and panel exist', html.includes('id="eob-mode-words"') && html.includes("eob_setEntropyMode('words')") && html.includes('id="eob-mode-desc-words"'));
+    ck('panel says Heads = 1, Tails = 0 and names SeedSigner\'s menu', html.includes('Heads = 1, Tails = 0') && html.includes('Calc 12th/24th word'));
+    ck('words card, flips input and confirm box exist', html.includes('id="eob-card-words"') && html.includes('onkeydown="eob_handleFlipKey(event)"') && html.includes('id="eob-words-confirm-check"'));
+    const setMode = fn('function eob_setEntropyMode');
+    ck('words mode hides the dice and Mixed cards and shows the words card',
+        setMode.includes("getElementById('eob-card-dice').hidden = _eobWordsMode") && setMode.includes("getElementById('eob-card-words').hidden = !_eobWordsMode") && setMode.includes('el.hidden = !mixed'));
+    const canF = fn('function _eobCanForge');
+    ck('forge needs every word, every flip, no pattern and the confirmation',
+        canF.includes('st.filled !== st.needed') && canF.includes('st.flips !== st.flipsNeeded') && canF.includes("st.gate.id !== 'ok'") && canF.includes('eob-words-confirm-check'));
+    const forge8 = fn('async function eob_forgeSeed');
+    const wordsBranch = forge8.slice(forge8.indexOf('if (_eobWordsMode)'), forge8.indexOf('if (_eobVerifiable)'));
+    ck('words forge uses finalWordEntropy and mixes nothing in', wordsBranch.includes('finalWordEntropy(st.words') && !wordsBranch.includes('getRandomValues') && !wordsBranch.includes('mixWithDeviceRandom'));
+    ck('flip keys: H / 1 heads, T / 0 tails, Backspace undoes', (() => { const f = fn('function eob_handleFlipKey'); return f.includes("k === 'h' || k === '1' ? '1' : '0'") && f.includes('_eobFlips.pop()'); })());
+    ck('a new word or flip needs confirming again', fn('function eob_handleFlipKey').includes('ack.checked = false') && fn('function _eobBuildWordBoxes').includes('ack.checked = false'));
+    ck('Back / cancel and Reset Tool clear the drawn words and flips', fn('function eob_cancel').includes('_eobClearWords();') && fn('function eob_clearAll').includes('_eobClearWords();'));
+    ck('eob_init resets words mode', fn('function eob_init').includes('_eobWordsMode = false;') && fn('function eob_init').includes('_eobFlips = [];'));
+    for (const name of ['function eob_setWordCount', 'function _eobBuildWordBoxes', 'function _eobRenderFlips', 'function eob_handleFlipKey', 'function _eobWordsState', 'function _eobClearWords', 'function _eobUpdateWordsMeter']) {
+        let ok = true, err = '';
+        try { new Function(fn(name).replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }
+        ck(`${name.replace(/^function /, '')} parses`, ok, err);
+    }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
