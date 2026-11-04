@@ -4938,7 +4938,7 @@
       border-radius: var(--skb-radius-sm);
       background: var(--skb-bg-input);
     }
-    .eob-verify-panel ul { margin: 0.5rem 0; padding-left: 1.2rem; }
+    .eob-verify-panel ul, .eob-verify-panel ol { margin: 0.5rem 0; padding-left: 1.2rem; }
     .eob-verify-panel li { margin: 0.2rem 0; }
     .eob-methods {
       display: grid;
@@ -5001,6 +5001,13 @@
     .eob-dice-fairness p { margin: 0.35rem 0 0; }
     .eob-dice-confirm { display: flex; gap: 0.4rem; align-items: flex-start; margin-top: 0.5rem; font-size: 0.75rem; color: var(--skb-text); text-align: left; }
     .eob-dice-confirm[hidden] { display: none; }
+    /* Draw your own words: word boxes and coin flips, full width. */
+    .eob-method-card--wide { grid-column: 1 / -1; }
+    .eob-method-card[hidden] { display: none; }
+    .eob-words-flips { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-top: 0.75rem; }
+    .eob-words-flips input { width: 14rem; }
+    .eob-words-gate { margin-top: 0.5rem; font-size: 0.78rem; color: var(--skb-danger); }
+    .eob-words-gate[hidden] { display: none; }
     .eob-wiggle-zone {
       width: 100%;
       height: 100px;
@@ -9079,6 +9086,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <div class="eob-word-toggle eob-mode-toggle" role="group" aria-label="Entropy mode">
                 <button type="button" id="eob-mode-mixed" class="active" onclick="eob_setEntropyMode('mixed')">Mixed (recommended)</button>
                 <button type="button" id="eob-mode-verifiable" onclick="eob_setEntropyMode('verifiable')">Verifiable Dice</button>
+                <button type="button" id="eob-mode-words" onclick="eob_setEntropyMode('words')">Draw Your Own Words</button>
             </div>
             <p id="eob-mode-desc-mixed" class="eob-mode-desc">
                 Your dice, cards, mouse and camera input is hashed and mixed with the device's random number generator. The seed is safe if either is good, but it can't be reproduced on another device.
@@ -9092,6 +9100,17 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 </ul>
                 Enter the same rolls in the same order. If the words don't match exactly, don't use this seed. The security depends entirely on your dice: use a fair die, and never let anyone see or record the rolls.
                 <p class="eob-verify-warning"><strong>Check a website only with practice rolls.</strong> Your rolls <em>are</em> your seed: typing your real rolls into a web page on an online computer gives your seed to that computer. To check real rolls with Ian Coleman&rsquo;s tool, use its offline copy on a computer that never goes online again. SeedSigner and COLDCARD are offline devices, so they are safe for this.</p>
+            </div>
+
+            <div id="eob-mode-desc-words" class="eob-mode-desc eob-verify-panel" hidden>
+                <strong>Your own randomness, every bit of it.</strong> You draw the first <span class="eob-words-n">11</span> words by hand and flip a coin <span class="eob-flips-n">7</span> times; SafeKeep works out the last word. Nothing else is mixed in.
+                <ol>
+                    <li>Put the 2048 BIP-39 words on slips (or the numbers 1&ndash;2048, and look each number up in the word list), mix them in a bag, and draw one. Write it down, <strong>put it back</strong>, mix again, and draw the next. Repeat until you have <span class="eob-words-n">11</span> words.</li>
+                    <li>Flip a fair coin <span class="eob-flips-n">7</span> times: <strong>Heads = 1, Tails = 0</strong>.</li>
+                    <li>Enter the words and the flips below, in the order you drew and flipped them.</li>
+                </ol>
+                To check the last word, use SeedSigner&rsquo;s <strong>Tools &rarr; Calc 12th/24th word &rarr; Coin flip entropy</strong> with the same words and flips: it shows the same last word.
+                <p class="eob-verify-warning"><strong>Draw the words; never choose them.</strong> Words you pick yourself, or remember, follow patterns that an attacker can guess, however random they feel. The seed is only as random as your draw and your coin.</p>
             </div>
 
             <!-- Entropy Meter -->
@@ -9110,8 +9129,31 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <!-- Input methods: physical dice, playing cards, mouse, camera -->
             <div class="eob-methods">
 
+                <!-- Draw Your Own Words mode only: drawn words + coin flips -->
+                <div class="eob-method-card eob-method-card--wide" id="eob-card-words" hidden>
+                    <h4>Your Drawn Words</h4>
+                    <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
+                        Type each word as you drew it. The first four letters are enough.
+                    </p>
+                    <div id="eob-words-grid"></div>
+                    <div class="eob-words-flips">
+                        <label for="eob-flips-input" style="font-size: 0.8rem; font-weight: 600;">Coin flips</label>
+                        <input type="text" id="eob-flips-input" placeholder="Press H or T (or 1 / 0)..."
+                               autocomplete="off" spellcheck="false"
+                               style="box-sizing: border-box; padding: 0.5rem; background: var(--skb-bg-card); border: 1px solid var(--skb-border); border-radius: 4px; color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.9rem; text-align: center;"
+                               onkeydown="eob_handleFlipKey(event)">
+                        <span class="eob-dice-display" id="eob-flips-display" style="min-width: 6rem; margin: 0;"></span>
+                        <span style="font-size: 0.75rem; color: var(--skb-text-muted);"><span id="eob-flips-count">0</span> of <span class="eob-flips-n">7</span> flips &middot; Backspace undoes</span>
+                    </div>
+                    <div id="eob-words-gate" class="eob-words-gate" role="status" aria-live="polite" hidden></div>
+                    <label id="eob-words-confirm" class="eob-dice-confirm">
+                        <input type="checkbox" id="eob-words-confirm-check" onchange="eob_updateMeter()">
+                        <span>I drew these words at random and flipped a real coin. I didn&rsquo;t choose any of them.</span>
+                    </label>
+                </div>
+
                 <!-- Method A: Manual Dice -->
-                <div class="eob-method-card">
+                <div class="eob-method-card" id="eob-card-dice">
                     <h4>Manual Dice</h4>
                     <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
                         Roll physical dice and press 1-6. Each roll adds ~2.58 bits.
@@ -18493,6 +18535,7 @@ function eob_clearAll() {
     _eobCardRank = null;
     _eobForgedMnemonic = '';
     _eobHasWork = false;
+    _eobClearWords();   // Draw Your Own Words: the drawn words and flips
 
     // Reset UI
     document.getElementById('eob-btn-12').classList.remove('active');
@@ -42176,6 +42219,9 @@ var _eobCamStream = null;
 var _eobForgedMnemonic = '';  // stored for copy/set-as-master in forge mode
 var _eobHasWork = false;      // Tracks whether The Forge has entropy/result state to preserve
 var _eobVerifiable = false;   // Verifiable dice mode: seed = SHA-256(rolls), nothing mixed in
+var _eobWordsMode = false;    // Draw Your Own Words: drawn words + coin flips, last word calculated
+var _eobFlips = [];           // coin flips for the last word, '1' heads / '0' tails, in order
+var _eobWordBoxes = null;     // word boxes for the drawn words (ShareFlow.createWordBoxes)
 var _eobCamPrevLsbs = null;   // previous camera frame's noise bits, to credit only changing frames
 var _eobDeckCards = [];       // cards drawn from the current deck, in order ("AS", "TH", ...)
 var _eobCardRank = null;      // rank typed, waiting for its suit
@@ -42227,6 +42273,9 @@ function eob_init(context) {
     _eobCardRank = null;
     _eobForgedMnemonic = '';
     _eobVerifiable = false;
+    _eobWordsMode = false;
+    _eobFlips = [];
+    if (_eobWordBoxes) { _eobWordBoxes.destroy(); _eobWordBoxes = null; }
     // Default to 12 words (128 bits). eob_setWordCount syncs both the
     // _targetEntropyBits state AND the toggle button active-classes, so a
     // re-entry after the user previously picked 24 words snaps back to the
@@ -42293,10 +42342,96 @@ function eob_init(context) {
 }
 
 function eob_setWordCount(count) {
+    var changed = _targetEntropyBits !== (count === 12 ? 128 : 256);
     _targetEntropyBits = count === 12 ? 128 : 256;
     document.getElementById('eob-btn-12').classList.toggle('active', count === 12);
     document.getElementById('eob-btn-24').classList.toggle('active', count === 24);
+    // Draw Your Own Words: 11 or 23 boxes, 7 or 3 flips. Keep the words
+    // already typed; the flips start over, since their number changes.
+    if (changed || !_eobWordBoxes) {
+        if (changed) _eobFlips = [];
+        _eobBuildWordBoxes();
+    }
     eob_updateMeter();
+}
+
+// ---- Draw Your Own Words ----
+// The user draws 11 (23) words by hand and flips a coin 7 (3) times; the
+// seed's entropy is exactly those bits and the last word carries the
+// checksum (shared/entropy-sources.js finalWordEntropy, SeedSigner's
+// "Calc 12th/24th word" with coin flips).
+function _eobWordCount() { return _targetEntropyBits === 128 ? 12 : 24; }
+function _eobFlipsNeeded() { return _eobWordCount() === 12 ? 7 : 3; }
+
+function _eobBuildWordBoxes() {
+    var host = document.getElementById('eob-words-grid');
+    var SF = window.ShareFlow;
+    if (!host || !SF || !SF.createWordBoxes) return;
+    var kept = _eobWordBoxes ? _eobWordBoxes.getWords() : [];
+    if (_eobWordBoxes) _eobWordBoxes.destroy();
+    _eobWordBoxes = SF.createWordBoxes(host, { count: _eobWordCount() - 1, wordlist: SF.wordlists.bip39, idPrefix: 'eob-dw', columns: 4 });
+    if (kept.some(Boolean)) _eobWordBoxes.setWords(kept.slice(0, _eobWordCount() - 1));
+    _eobWordBoxes.onChange(function () {
+        if (eob_context === 'forge') _eobHasWork = true;
+        var ack = document.getElementById('eob-words-confirm-check');
+        if (ack) ack.checked = false;   // a changed word needs confirming again
+        eob_updateMeter();
+    });
+    _eobRenderFlips();
+}
+
+function _eobRenderFlips() {
+    var disp = document.getElementById('eob-flips-display');
+    if (disp) disp.textContent = _eobFlips.map(function (f) { return f === '1' ? 'H' : 'T'; }).join(' ');
+    var cnt = document.getElementById('eob-flips-count');
+    if (cnt) cnt.textContent = _eobFlips.length;
+    var input = document.getElementById('eob-flips-input');
+    if (input) input.value = '';
+    document.querySelectorAll('.eob-words-n').forEach(function (el) { el.textContent = _eobWordCount() - 1; });
+    document.querySelectorAll('.eob-flips-n').forEach(function (el) { el.textContent = _eobFlipsNeeded(); });
+}
+
+function eob_handleFlipKey(e) {
+    if (e.key === 'Tab') return;
+    e.preventDefault();
+    var k = String(e.key).toLowerCase();
+    if (k === 'backspace') {
+        if (!_eobFlips.length) return;
+        _eobFlips.pop();
+    } else if (k === 'h' || k === '1' || k === 't' || k === '0') {
+        if (_eobFlips.length >= _eobFlipsNeeded()) {
+            showStatus('All ' + _eobFlipsNeeded() + ' coin flips are in. Press Backspace to change the last one.', 'info');
+            return;
+        }
+        _eobFlips.push(k === 'h' || k === '1' ? '1' : '0');
+    } else {
+        return;
+    }
+    if (eob_context === 'forge') _eobHasWork = true;
+    var ack = document.getElementById('eob-words-confirm-check');
+    if (ack) ack.checked = false;
+    _eobRenderFlips();
+    eob_updateMeter();
+}
+
+// The drawn words (only complete ones count), the flips and the pattern check.
+function _eobWordsState() {
+    var words = _eobWordBoxes ? _eobWordBoxes.getWords() : [];
+    var filled = words.filter(Boolean).length;
+    var needed = _eobWordCount() - 1;
+    var gate = { id: 'ok', reasons: [] };
+    var ES = window.EntropySources;
+    if (filled === needed && ES && ES.drawnWordsGate) gate = ES.drawnWordsGate(words, window.ShareFlow.wordlists.bip39);
+    return { words: words, filled: filled, needed: needed, flips: _eobFlips.length, flipsNeeded: _eobFlipsNeeded(), gate: gate };
+}
+
+// Clear the drawn words and flips (they are the seed).
+function _eobClearWords() {
+    _eobFlips = [];
+    if (_eobWordBoxes) _eobWordBoxes.clear();
+    var ack = document.getElementById('eob-words-confirm-check');
+    if (ack) ack.checked = false;
+    _eobRenderFlips();
 }
 
 // Mixed: every source plus the device's random number generator.
@@ -42304,16 +42439,24 @@ function eob_setWordCount(count) {
 // COLDCARD method), so the user can reproduce it on one of those devices.
 function eob_setEntropyMode(mode) {
     _eobVerifiable = mode === 'verifiable';
-    document.getElementById('eob-mode-mixed').classList.toggle('active', !_eobVerifiable);
+    _eobWordsMode = mode === 'words';
+    var mixed = !_eobVerifiable && !_eobWordsMode;
+    document.getElementById('eob-mode-mixed').classList.toggle('active', mixed);
     document.getElementById('eob-mode-verifiable').classList.toggle('active', _eobVerifiable);
-    document.getElementById('eob-mode-desc-mixed').hidden = _eobVerifiable;
+    document.getElementById('eob-mode-words').classList.toggle('active', _eobWordsMode);
+    document.getElementById('eob-mode-desc-mixed').hidden = !mixed;
     document.getElementById('eob-mode-desc-verifiable').hidden = !_eobVerifiable;
+    document.getElementById('eob-mode-desc-words').hidden = !_eobWordsMode;
     ['eob-card-cards', 'eob-card-wiggle', 'eob-card-cam', 'eob-pool-wrap', 'eob-live-hash-wrap'].forEach(function (id) {
         var el = document.getElementById(id);
-        if (el) el.hidden = _eobVerifiable;
+        if (el) el.hidden = !mixed;
     });
-    // Verifiable mode hides the camera card, so stop a running camera too.
-    if (_eobVerifiable && _eobCamStream) {
+    document.getElementById('eob-card-dice').hidden = _eobWordsMode;
+    document.getElementById('eob-card-words').hidden = !_eobWordsMode;
+    if (_eobWordsMode && !_eobWordBoxes) _eobBuildWordBoxes();
+    _eobRenderFlips();
+    // Only Mixed mode shows the camera card, so stop a running camera too.
+    if (!mixed && _eobCamStream) {
         _eobCamStream.getTracks().forEach(function (t) { t.stop(); });
         _eobCamStream = null;
         document.getElementById('eob-cam-preview').style.display = 'none';
@@ -42340,6 +42483,12 @@ function _eobCountedBits() {
 }
 
 function _eobCanForge() {
+    if (_eobWordsMode) {
+        var st = _eobWordsState();
+        if (st.filled !== st.needed || st.flips !== st.flipsNeeded || st.gate.id !== 'ok') return false;
+        var wack = document.getElementById('eob-words-confirm-check');
+        return !!(wack && wack.checked);
+    }
     if (_eobVerifiable) {
         if (_eobDiceRolls.length !== _eobRollsNeeded()) return false;
         var gate = _eobVerifiableGate();
@@ -42401,6 +42550,7 @@ async function eob_updateLiveHash() {
 }
 
 function eob_updateMeter() {
+    if (_eobWordsMode) { _eobUpdateWordsMeter(); return; }
     var needed = _eobRollsNeeded();
     var have = _eobVerifiable ? _eobDiceRolls.length : _eobCountedBits();
     var target = _eobVerifiable ? needed : _targetEntropyBits;
@@ -42420,6 +42570,8 @@ function eob_updateMeter() {
     if (labelEl) labelEl.textContent = _eobVerifiable ? 'Dice Rolls' : 'Your Entropy';
     var noteEl = document.getElementById('eob-meter-note');
     if (noteEl) noteEl.hidden = _eobVerifiable;
+    var wgate = document.getElementById('eob-words-gate');
+    if (wgate) wgate.hidden = true;
     var neededEl = document.getElementById('eob-verify-needed');
     if (neededEl) neededEl.textContent = needed;
     var bitsEl = document.getElementById('eob-meter-bits');
@@ -42458,6 +42610,50 @@ function eob_updateMeter() {
                     : 'Keep adding entropy.');
         }
         forgeHint.style.color = 'var(--skb-text-muted, #888)';
+    }
+}
+
+// Draw Your Own Words: the meter counts words and flips.
+function _eobUpdateWordsMeter() {
+    var st = _eobWordsState();
+    var have = st.filled + st.flips, target = st.needed + st.flipsNeeded;
+    var pct = Math.min(100, (have / target) * 100);
+    var fill = document.getElementById('eob-meter-fill');
+    if (fill) { fill.style.width = pct + '%'; void fill.offsetWidth; }
+    var pctEl = document.getElementById('eob-meter-pct');
+    if (pctEl) pctEl.textContent = Math.floor(pct) + '%';
+    var labelEl = document.getElementById('eob-meter-label');
+    if (labelEl) labelEl.textContent = 'Words and Coin Flips';
+    var noteEl = document.getElementById('eob-meter-note');
+    if (noteEl) noteEl.hidden = true;
+    var bitsEl = document.getElementById('eob-meter-bits');
+    if (bitsEl) bitsEl.textContent = st.filled + ' / ' + st.needed + ' words \u00b7 ' + st.flips + ' / ' + st.flipsNeeded + ' coin flips';
+
+    var gateEl = document.getElementById('eob-words-gate');
+    if (gateEl) {
+        gateEl.hidden = st.gate.id === 'ok';
+        gateEl.textContent = st.gate.id === 'ok' ? '' :
+            'These words follow a pattern (' + st.gate.reasons.join('; ') + '), so the seed could be guessed. Draw them again.';
+    }
+
+    var ready = _eobCanForge();
+    var forgeBtn = document.getElementById('eob-forge-btn');
+    if (forgeBtn) forgeBtn.disabled = !ready;
+    var hint = document.getElementById('eob-forge-hint');
+    if (!hint) return;
+    hint.style.color = 'var(--skb-text-muted, #888)';
+    if (ready) {
+        hint.textContent = 'Words and flips entered. Ready to work out the last word.';
+        hint.style.color = 'var(--skb-primary, #34d399)';
+    } else if (st.filled < st.needed) {
+        hint.textContent = (st.needed - st.filled) + ' more ' + (st.needed - st.filled === 1 ? 'word' : 'words') + ' needed.';
+    } else if (st.gate.id !== 'ok') {
+        hint.textContent = 'These words follow a pattern. Draw them again.';
+        hint.style.color = 'var(--skb-danger)';
+    } else if (st.flips < st.flipsNeeded) {
+        hint.textContent = (st.flipsNeeded - st.flips) + ' more coin ' + (st.flipsNeeded - st.flips === 1 ? 'flip' : 'flips') + ' needed.';
+    } else {
+        hint.textContent = 'Tick the box to confirm you drew the words and flipped a real coin.';
     }
 }
 
@@ -42896,6 +43092,25 @@ async function eob_forgeSeed() {
         var wordlist = window.BtcMath?.wordlist;
         if (!bip39 || !wordlist) throw new Error('BIP-39 library not available');
 
+        if (_eobWordsMode) {
+            // Drawn words + coin flips, nothing mixed in: the entropy is the
+            // words' 11-bit indices followed by the flips, and the last word
+            // gets the checksum (SeedSigner's "Calc 12th/24th word").
+            var st = _eobWordsState();
+            var wordsEntropy = window.EntropySources.finalWordEntropy(st.words, _eobFlips.join(''), wordlist);
+            var wordsCommitted = await _eobFinalizeEntropy(wordsEntropy);
+            wordsEntropy.fill(0);
+            if (!wordsCommitted) {
+                if (forgeBtn) { forgeBtn.disabled = false; forgeBtn.textContent = 'Generate Master Seed'; }
+                return;
+            }
+            if (eob_context === 'forge' && forgeBtn) {
+                forgeBtn.textContent = 'Generate Seed';
+                forgeBtn.disabled = true;
+            }
+            return;
+        }
+
         if (_eobVerifiable) {
             // Verifiable dice: SHA-256 of the rolls and nothing else, so the
             // same rolls give the same words on SeedSigner and COLDCARD.
@@ -43013,6 +43228,7 @@ function eob_cancel() {
     _eobHasWork = false;
     _eobForgedMnemonic = '';
     _activeEntropyPool = '';
+    _eobClearWords();
     // Always clear the full-screen wizard class — whether returning to
     // welcome (onboarding cancel) or dashboard (forge-in-progress cancel).
     document.body.classList.remove('onboarding-forge');

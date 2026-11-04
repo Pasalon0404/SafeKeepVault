@@ -27,6 +27,13 @@
  * 12 words or all 32 for 24 — with nothing else mixed in, so the same rolls
  * entered on either device give the same words. SeedSigner accepts exactly
  * 50 rolls (12 words) or 99 rolls (24 words), so those are the counts here.
+ *
+ * Draw your own words: the user draws 11 (or 23) words at random, by hand,
+ * and flips a coin 7 (or 3) times for the rest of the last word. The seed's
+ * entropy is exactly those bits: each word's 11-bit index, then the flips
+ * (Heads = 1, Tails = 0), and the last word's remaining 4 (or 8) bits are
+ * the BIP-39 checksum. This is SeedSigner's Tools → "Calc 12th/24th word" →
+ * "Coin flip entropy", so the same words and flips give the same last word.
  */
 
 export const ENTROPY_CREDIT = Object.freeze({
@@ -154,10 +161,75 @@ export function cameraFrameCredit(lsbs, prevLsbs) {
     return ENTROPY_CREDIT.cameraFrame;
 }
 
+/** Coin flips that fill the last word: 7 for 12 words, 3 for 24. */
+export const FINAL_WORD_FLIPS = Object.freeze({ 12: 7, 24: 3 });
+
+/** The flips needed to finish a seed of `words` words (12 or 24). */
+export function finalWordFlipsNeeded(words) {
+    const n = FINAL_WORD_FLIPS[words];
+    if (!n) throw new Error('Final word: the seed must be 12 or 24 words');
+    return n;
+}
+
+/**
+ * Entropy bytes for a seed whose first 11 (or 23) words were drawn by hand.
+ * `drawn` is those words, `flips` the coin flips as '1' (heads) and '0'
+ * (tails), in the order flipped, `wordlist` the BIP-39 English list. The
+ * mnemonic of the result starts with `drawn`; its last word follows from the
+ * flips and the checksum.
+ */
+export function finalWordEntropy(drawn, flips, wordlist) {
+    const total = drawn.length + 1;
+    if (total !== 12 && total !== 24) throw new Error('Final word: enter 11 or 23 words');
+    const flipText = Array.isArray(flips) ? flips.join('') : String(flips);
+    const needed = finalWordFlipsNeeded(total);
+    if (!/^[01]*$/.test(flipText)) throw new Error('Coin flips must be heads (1) or tails (0)');
+    if (flipText.length !== needed) throw new Error(`A ${total}-word seed needs exactly ${needed} coin flips (got ${flipText.length})`);
+    let bits = '';
+    for (const w of drawn) {
+        const i = wordlist.indexOf(String(w).trim().toLowerCase());
+        if (i < 0) throw new Error(`"${w}" is not a BIP-39 word`);
+        bits += i.toString(2).padStart(11, '0');
+    }
+    bits += flipText;
+    const out = new Uint8Array(bits.length / 8);
+    for (let b = 0; b < out.length; b++) out[b] = parseInt(bits.slice(b * 8, b * 8 + 8), 2);
+    return out;
+}
+
+/**
+ * Drawn words that someone could guess: a word drawn three or more times,
+ * four or more words in a row that sit next to each other in the word list
+ * (abandon ability able about), or every word in alphabetical order. A real
+ * draw almost never does any of these (each is well under one in a million
+ * for 11 words). Returns { id: 'ok' | 'block', reasons: [...] }.
+ */
+export function drawnWordsGate(drawn, wordlist) {
+    const idx = drawn.map((w) => wordlist.indexOf(String(w).trim().toLowerCase()));
+    const reasons = [];
+    const counts = new Map();
+    for (const i of idx) counts.set(i, (counts.get(i) || 0) + 1);
+    for (const [i, c] of counts) if (c >= 3) reasons.push(`"${wordlist[i]}" is drawn ${c} times`);
+    // Longest stretch where each word is the next (or the previous) word in
+    // the list, going the same way throughout.
+    let run = 1, step = 0, longest = 1;
+    for (let k = 1; k < idx.length; k++) {
+        const d = idx[k] - idx[k - 1];
+        if ((d === 1 || d === -1) && (run === 1 || d === step)) run++;
+        else run = (d === 1 || d === -1) ? 2 : 1;
+        step = d;
+        longest = Math.max(longest, run);
+    }
+    if (longest >= 4) reasons.push(`${longest} words in a row are next to each other in the word list`);
+    if (idx.length >= 6 && idx.every((v, k) => k === 0 || v >= idx[k - 1])) reasons.push('the words are in alphabetical order');
+    return { id: reasons.length ? 'block' : 'ok', reasons };
+}
+
 if (typeof window !== 'undefined') {
     window.EntropySources = {
         ENTROPY_CREDIT, MOUSE_SHARE_MAX, mouseCredit, VERIFIABLE_DICE_ROLLS, verifiableRollsNeeded,
         DECK_SIZE, CARD_RANKS, CARD_SUITS, cardRankFromKey, cardSuitFromKey, cardLabel, cardCredit,
         diceRollsToEntropy, cameraFrameLsbs, cameraFrameCredit,
+        FINAL_WORD_FLIPS, finalWordFlipsNeeded, finalWordEntropy, drawnWordsGate,
     };
 }

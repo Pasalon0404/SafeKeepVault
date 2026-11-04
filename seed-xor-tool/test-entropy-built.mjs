@@ -20,6 +20,10 @@
  *      confirmation box, ordinary rolls go through.
  *   6. Mouse: 0.25 bits a sample and no more than half the target, also
  *      after switching from 24 to 12 words.
+ *   7. Draw Your Own Words: the seed starts with the drawn words, its last
+ *      word is the one the coin flips and checksum give (worked out here
+ *      independently), nothing is drawn from the random number generator,
+ *      and the button needs every word, every flip and the confirmation.
  *
  * Needs `npm run build` first and a Chromium-family browser: set
  * CHROMIUM_BINARY, or it looks for Google Chrome / chromium in the usual
@@ -212,6 +216,70 @@ console.log('\n6. Mouse credit');
     ck('switching to 12 words: still only half (64 of 128)', r.at12.counted === 64 && r.at12.btn === true, JSON.stringify(r.at12));
     ck('the hint says to add dice, cards or camera', /dice, cards or camera/.test(r.at12.hint), r.at12.hint);
     ck('samples record fine timing', /M\d+,\d+,\d+(\.\d+)?,\d+/.test(r.pool), r.pool.slice(0, 60));
+}
+
+console.log('\n7. Draw Your Own Words');
+{
+    // Expected last word, worked out here: entropy = word indices + flips.
+    const WL = (await import('bip39')).default.wordlists.english;
+    const bip39 = (await import('bip39')).default;
+    const expect = (ws, flips) => {
+        const bits = ws.map((w) => WL.indexOf(w).toString(2).padStart(11, '0')).join('') + flips;
+        return bip39.entropyToMnemonic(bits.match(/.{4}/g).map((b) => parseInt(b, 2).toString(16)).join(''));
+    };
+    const draw = (ws, flips, { tick = true, words = 12 } = {}) => page.evaluate(async ({ ws, flips, tick, words }) => {
+        __fresh();
+        if (words === 24) eob_setWordCount(24);
+        eob_setEntropyMode('words');
+        _eobWordBoxes.setWords(ws);
+        for (const f of flips) eob_handleFlipKey({ key: f, preventDefault() {} });
+        const before = document.getElementById('eob-forge-btn').disabled;
+        if (tick) { document.getElementById('eob-words-confirm-check').checked = true; eob_updateMeter(); }
+        const btn = document.getElementById('eob-forge-btn').disabled;
+        const hint = document.getElementById('eob-forge-hint').textContent;
+        const gate = document.getElementById('eob-words-gate');
+        let words_ = '', draws = -1;
+        if (!btn) {
+            __rng.draws.length = 0;
+            __rng.use((a) => a.fill(7));
+            try { await eob_forgeSeed(); } finally { __rng.restore(); }
+            draws = __rng.draws.length; __rng.draws.length = 0;
+            words_ = document.getElementById('eob-result-words').textContent;
+        }
+        return { before, btn, hint, words: words_, draws, gateShown: !gate.hidden, gateText: gate.textContent,
+                 diceHidden: document.getElementById('eob-card-dice').hidden, cardHidden: document.getElementById('eob-card-words').hidden,
+                 meter: document.getElementById('eob-meter-bits').textContent };
+    }, { ws, flips, tick, words });
+    const norm = (t) => t.replace(/\d+\.\s*/g, ' ').split(/\s+/).filter((w) => /^[a-z]+$/.test(w)).join(' ');
+
+    const w11 = 'crawl focus rescue cable view pledge rather dinner cousin unfair day'.split(' ');
+    const r = await draw(w11, 'HTHHTTH');
+    ck('words mode shows the words card and hides the dice', r.cardHidden === false && r.diceHidden === true);
+    ck('meter counts words and flips', r.meter === '11 / 11 words · 7 / 7 coin flips', r.meter);
+    ck('button waits for the confirmation', r.before === true && r.btn === false, r.hint);
+    ck('12-word seed = drawn words + last word from the flips', norm(r.words) === expect(w11, '1011001'), norm(r.words) + ' vs ' + expect(w11, '1011001'));
+    ck('nothing drawn from the random number generator', r.draws === 0, r.draws);
+
+    const w23 = 'bubble father debate ankle injury fence mesh evolve section wet coyote violin pyramid flower rent arrow round clutch myth safe base skin mobile'.split(' ');
+    const r24 = await draw(w23, '101', { words: 24 });
+    ck('24-word seed = drawn words + last word from 3 flips', norm(r24.words) === expect(w23, '101'), norm(r24.words));
+    ck('…with nothing from the generator', r24.draws === 0);
+
+    const missing = await draw(w11.slice(0, 10), 'HTHHTTH');
+    ck('10 of 11 words: button stays off', missing.btn === true && /1 more word needed/.test(missing.hint), missing.hint);
+    const fewFlips = await draw(w11, 'HTH');
+    ck('3 of 7 flips: button stays off', fewFlips.btn === true && /4 more coin flips needed/.test(fewFlips.hint), fewFlips.hint);
+    const noTick = await draw(w11, 'HTHHTTH', { tick: false });
+    ck('without the confirmation: button stays off', noTick.btn === true && /Tick the box/.test(noTick.hint), noTick.hint);
+    const pattern = await draw(['abandon', 'ability', 'able', 'about', ...w11.slice(4)], 'HTHHTTH');
+    ck('four neighbouring words are refused, even when confirmed', pattern.btn === true && pattern.gateShown && /pattern/.test(pattern.gateText), pattern.gateText);
+    const zeros = await draw(w11, 'TTTTTTT');
+    ck('all tails gives SeedSigner\'s "Finalize with zeros" word', norm(zeros.words) === expect(w11, '0000000'));
+    const after = await page.evaluate(() => { eob_handleFlipKey({ key: 'Backspace', preventDefault() {} }); eob_handleFlipKey({ key: 'h', preventDefault() {} });
+        return document.getElementById('eob-words-confirm-check').checked; });
+    ck('changing a flip clears the confirmation', after === false);
+    const cleared = await page.evaluate(() => { eob_cancel(); return { words: _eobWordBoxes.getWords().filter(Boolean).length, flips: _eobFlips.length }; });
+    ck('Back clears the drawn words and flips', cleared.words === 0 && cleared.flips === 0, JSON.stringify(cleared));
 }
 
 ck('no page errors from the Entropy Generator', !pageErrors.some((m) => /eob_|Entropy|DiceFairness|SKEntropyMix/.test(m)), pageErrors.join(' | '));
