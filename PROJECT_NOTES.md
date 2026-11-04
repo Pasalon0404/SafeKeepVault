@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 3, 2026).**
+> **Start with the "Current state" section below (updated Nov 4, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,24 @@
 
 ---
 
-## Current state (Nov 3, 2026) — v1.59
+## Current state (Nov 4, 2026) — v1.60
+
+**v1.60** (Nov 4) — app-only, tested on Dave's flash drive as a quick
+update from `main` (#95, #96):
+- **Draw Your Own Words** (Entropy Generator → Advanced, a third mode next
+  to Mixed and Verifiable Dice): the user draws 11 / 23 words by hand and
+  flips a coin 7 / 3 times; the seed's entropy is the words' 11-bit indices
+  then the flips (Heads = 1), and the last word's remaining bits are the
+  checksum. Nothing is mixed in. Same as SeedSigner's Tools → Calc
+  12th/24th word → Coin flip entropy. Guardrails: draw-don't-choose
+  instructions, `drawnWordsGate` refuses a word three times, four list
+  neighbours in a row or alphabetical order, and a confirmation box that
+  any change unticks. Code: `finalWordEntropy` / `drawnWordsGate` in
+  `shared/entropy-sources.js`. Tests: `test-entropy-sources.mjs` §8,
+  `test-entropy-built.mjs` §7.
+- **LICENSE**: the MIT license is now a file in the repo (#95).
+
+## Earlier: v1.59 (Nov 3, `v1.59 · build 460 · 069d482`)
 
 **v1.59** (Nov 3) — app-only changes, tested on Dave's flash drive as
 quick updates from `main` (#91–#93):
@@ -640,10 +657,10 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.59:** update the website for v1.59 (download page, release
-   notes; docs for Silent Payments in Show an address and the live
-   sliders), and install `SafeKeep-Update-v1.59.tar` on a flash drive from
-   the release itself. The v1.57–v1.58 docs refresh may still be open.
+1. **After v1.60:** update the website for v1.60 (download page, release
+   notes; docs for Draw Your Own Words in the Entropy Generator), and
+   install `SafeKeep-Update-v1.60.tar` on a flash drive from the release
+   itself.
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
