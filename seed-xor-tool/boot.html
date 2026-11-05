@@ -407,6 +407,11 @@
     .ccb-wallet:first-of-type { border-top: 0; }
     .ccb-wallet b { display: block; font-size: 0.85rem; }
     .ccb-wallet span { display: block; font-size: 0.78rem; color: var(--skb-text-muted); }
+    .ccb-vault-words { font-family: var(--skb-mono); color: var(--skb-text) !important; margin-top: 0.35rem; line-height: 1.6; word-spacing: 0.15em; }
+    .ccb-vault-words[hidden] { display: none !important; }
+    #ccb-intro-import[hidden], #ccb-intro-restore[hidden] { display: none; }
+    .ccb-import-overlay { position: fixed; inset: 0; z-index: 10040; background: var(--skb-bg, #0b0b0c); overflow-y: auto; padding: 2rem 1rem; }
+    .ccb-import-overlay #coldcard-recovery-panel { display: block; }
 
     /* ---- SLIP-39 Recovery Panel ---- */
     #shamir-recovery-panel {
@@ -6707,8 +6712,11 @@
             <!-- COLDCARD backup: read backup.7z in memory (shared/coldcard-backup.js, ccb_*) -->
             <div id="coldcard-recovery-panel">
                 <div class="restore-panel-inner">
-                    <h3>Restore from a COLDCARD Backup</h3>
-                    <p style="font-size: 0.875rem; color: var(--skb-text-muted); margin: 0 0 1rem;">
+                    <h3 id="ccb-heading">Restore from a COLDCARD Backup</h3>
+                    <p id="ccb-intro-import" hidden style="font-size: 0.875rem; color: var(--skb-text-muted); margin: 0 0 1rem;">
+                        Add multisig wallets and Secure Notes from a COLDCARD&rsquo;s backup to this vault. Your seed isn&rsquo;t changed. The backup is read and decrypted in memory; you choose what to import.
+                    </p>
+                    <p id="ccb-intro-restore" style="font-size: 0.875rem; color: var(--skb-text-muted); margin: 0 0 1rem;">
                         Bring in a COLDCARD&rsquo;s encrypted backup and open it with the 12 words the COLDCARD showed you. The backup is read and decrypted in memory; you see what&rsquo;s in it before anything is saved.
                     </p>
 
@@ -7497,6 +7505,13 @@
                                 <button type="button" class="skb-btn" id="settings-trezor-log-btn" onclick="tzSettingsShowLog()">Show Trezor log</button>
                             </div>
                             <pre id="settings-trezor-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
+                        </div>
+                        <div id="settings-ccb-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Import from a COLDCARD backup</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                Add the multisig wallets and Secure Notes from a COLDCARD backup to this vault: over USB from the COLDCARD, with the Courier, or from a file on the Transfer Drive. Your seed isn&rsquo;t changed. You can also view the words of the backup&rsquo;s Seed Vault entries.
+                            </p>
+                            <button type="button" class="skb-btn" id="settings-ccb-btn" onclick="ccb_openImport()">Import from a COLDCARD Backup</button>
                         </div>
                         <div id="settings-seed-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Seed storage</h4>
@@ -43927,6 +43942,7 @@ function showColdcardRecoveryPanel() {
 function hideColdcardRecoveryPanel() {
     ccb_reset();
     if (_ccbBoxes) { _ccbBoxes.destroy(); _ccbBoxes = null; }
+    if (_ccbMode === 'import') { _ccbCloseImport(); return; }
     document.getElementById('coldcard-recovery-panel').style.display = 'none';
     document.getElementById('welcome-buttons').style.display = 'flex';
     clearStatus();
@@ -44154,48 +44170,6 @@ async function ccb_open() {
     }
 }
 
-function _ccbRenderReview() {
-    var s = _ccbSummary, box = document.getElementById('ccb-review');
-    if (!s) return;
-    var esc = _wrecEscape, h = [];
-    if (s.problems.length) {
-        h.push('<div class="ccb-box is-bad"><h4>This backup can’t be restored</h4>' +
-            s.problems.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') + '</div>');
-    } else if (s.passphraseWallet) {
-        h.push('<div class="ccb-box is-warn"><h4>No recovery words in this backup</h4>' +
-            '<p>A BIP-39 passphrase was in use when the COLDCARD made this backup, so it saved that passphrase wallet’s master key and not your recovery words. SafeKeep is built on recovery words: restore with <strong>Recovery words</strong> instead, then add the passphrase on the Dashboard.</p></div>');
-    } else {
-        h.push('<div class="ccb-box"><h4>Wallet</h4><p>' + s.words + ' recovery words · fingerprint <strong>' + esc(s.fingerprint) + '</strong></p>' +
-            (s.chain && s.chain !== 'BTC' ? '<p>This COLDCARD was set to <strong>' + esc(s.chain) + '</strong> (testnet). The words work the same; check the network in your wallet apps.</p>' : '') +
-            (s.firmware ? '<p>Made by COLDCARD firmware ' + esc(s.firmware) + '.</p>' : '') +
-            s.notesForUser.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('') + '</div>');
-    }
-    if (s.multisig.length || s.multisigErrors.length) {
-        var canSave = !s.problems.length && !s.passphraseWallet && !_isEphemeralBoot();
-        h.push('<div class="ccb-box"><h4>Multisig wallets (' + s.multisig.length + ')</h4>' +
-            (canSave ? '<p>Ticked wallets are saved in Output Descriptor, so the PSBT Signer checks transactions against them.</p>'
-                     : _isEphemeralBoot() ? '<p>A Temporary Session keeps nothing, so these aren’t saved.</p>' : '') +
-            s.multisig.map(function (w, i) {
-                var mine = w.mine >= 0 ? 'Your key is key ' + (w.mine + 1) + ' (' + w.keys[w.mine].fingerprint + ')' : 'None of its keys belongs to this seed';
-                return '<label class="ccb-wallet">' +
-                    (canSave ? '<input type="checkbox" class="ccb-ms-pick" data-i="' + i + '" checked>' : '') +
-                    '<span><b>' + esc(w.name) + '</b><span>' + w.M + '-of-' + w.N + ' · ' + esc(w.format.toUpperCase()) + (w.sorted ? '' : ' · keys in fixed order') + (w.testnet ? ' · testnet' : '') + '</span><span>' + esc(mine) + '</span></span></label>';
-            }).join('') +
-            s.multisigErrors.map(function (e) { return '<p style="color: var(--skb-danger);">' + esc(e) + '</p>'; }).join('') + '</div>');
-    }
-    if (s.notes || s.seedVault) {
-        h.push('<div class="ccb-box"><h4>Also in the file</h4><p>' +
-            [s.notes ? s.notes + ' Secure Note' + (s.notes === 1 ? '' : 's') : '', s.seedVault ? s.seedVault + ' Seed Vault entr' + (s.seedVault === 1 ? 'y' : 'ies') : ''].filter(Boolean).join(' and ') +
-            '. SafeKeep can’t import these yet; they stay in the file.</p></div>');
-    }
-    if (!s.problems.length && !s.passphraseWallet) {
-        h.push('<button type="button" class="skb-btn skb-btn--primary" id="ccb-restore-btn" style="width: 100%;" onclick="ccb_restore()">Restore This Wallet (' + esc(s.fingerprint) + ')</button>');
-    }
-    box.innerHTML = h.join('');
-    box.hidden = false;
-    try { box.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
-}
-
 /* Save the ticked multisig wallets; returns a sentence for the status line. */
 async function _ccbSaveMultisig(wallets) {
     if (!wallets.length) return '';
@@ -44221,33 +44195,282 @@ async function _ccbSaveMultisig(wallets) {
            (skipped.length ? ' Not saved: ' + skipped.join('; ') + '.' : '');
 }
 
-async function ccb_restore() {
+// The seed a restore will use: the backup's main wallet, or one of its
+// Seed Vault entries (radio "ccb-seed-pick"). { mnemonic, fingerprint, label } or null.
+function _ccbChosenSeed() {
     var s = _ccbSummary;
-    if (!s || !s.mnemonic || s.problems.length) return;
+    if (!s) return null;
+    var pick = document.querySelector('input[name="ccb-seed-pick"]:checked');
+    var v = pick ? pick.value : 'main';
+    if (v === 'main') return s.mnemonic && !s.problems.length ? { mnemonic: s.mnemonic, fingerprint: s.fingerprint, label: 'main wallet' } : null;
+    var e = s.seedVaultItems[Number(v)];
+    return e && e.kind === 'words' && e.mnemonic && !e.problem ? { mnemonic: e.mnemonic, fingerprint: e.fingerprint, label: e.label || 'Seed Vault entry' } : null;
+}
+
+/* The fingerprint multisig keys are matched against: the seed chosen for
+   a restore, or in import mode the seed loaded in this vault. */
+function _ccbMatchFp() {
+    if (_ccbMode === 'import') {
+        try { return String((window.SafeKeepOS && window.SafeKeepOS.getFingerprint && window.SafeKeepOS.getFingerprint()) || '').toUpperCase(); } catch (_) { return ''; }
+    }
+    var c = _ccbChosenSeed();
+    return c ? c.fingerprint : '';
+}
+
+function _ccbRenderReview() {
+    var s = _ccbSummary, box = document.getElementById('ccb-review');
+    if (!s) return;
+    var esc = _wrecEscape, h = [], imp = _ccbMode === 'import', eph = _isEphemeralBoot();
+    var canStore = !eph;   // a Temporary Session keeps nothing
+
+    // ---- The wallet in the backup ----
+    var vaultWords = s.seedVaultItems.filter(function (e) { return e.kind === 'words' && !e.problem; });
+    var opts = [], prevVal = null;
+    if (imp) {
+        h.push('<div class="ccb-box"><h4>Your seed stays as it is</h4><p>Importing adds the multisig wallets and Secure Notes you tick below to this vault. ' +
+            (s.fingerprint ? 'The backup&rsquo;s own wallet (' + esc(s.fingerprint) + ') isn&rsquo;t imported.' : 'The backup&rsquo;s own wallet isn&rsquo;t imported.') + '</p>' +
+            s.problems.map(function (p) { return '<p style="color: var(--skb-warning, #f59e0b);">' + esc(p) + '</p>'; }).join('') + '</div>');
+    } else if (s.problems.length) {
+        h.push('<div class="ccb-box is-bad"><h4>The main wallet in this backup can’t be restored</h4>' +
+            s.problems.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') + '</div>');
+    } else if (s.passphraseWallet) {
+        h.push('<div class="ccb-box is-warn"><h4>No recovery words for the main wallet</h4>' +
+            '<p>A BIP-39 passphrase was in use when the COLDCARD made this backup, so it saved that passphrase wallet’s master key and not your recovery words. SafeKeep is built on recovery words: restore with <strong>Recovery words</strong> instead, then add the passphrase on the Dashboard' +
+            (vaultWords.length ? ', or restore a Seed Vault entry below' : '') + '.</p></div>');
+    }
+    if (!imp) {
+        if (s.mnemonic && !s.problems.length) {
+            opts.push('<label class="ccb-wallet"><input type="radio" name="ccb-seed-pick" value="main" checked onchange="_ccbRenderReview()"><span><b>Main wallet</b><span>' +
+                s.words + ' recovery words · fingerprint <strong>' + esc(s.fingerprint) + '</strong></span>' +
+                (s.chain && s.chain !== 'BTC' ? '<span>This COLDCARD was set to ' + esc(s.chain) + ' (testnet). The words work the same; check the network in your wallet apps.</span>' : '') +
+                s.notesForUser.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join('') + '</span></label>');
+        }
+        s.seedVaultItems.forEach(function (e, i) {
+            if (e.kind !== 'words' || e.problem) return;
+            opts.push('<label class="ccb-wallet"><input type="radio" name="ccb-seed-pick" value="' + i + '"' + (!opts.length ? ' checked' : '') + ' onchange="_ccbRenderReview()"><span><b>Seed Vault: ' + esc(e.label || 'unnamed') + '</b><span>' +
+                e.words + ' recovery words · fingerprint <strong>' + esc(e.fingerprint) + '</strong></span></span></label>');
+        });
+        // Keep the choice across redraws.
+        var prev = document.querySelector('input[name="ccb-seed-pick"]:checked');
+        prevVal = prev ? prev.value : null;
+        if (opts.length) {
+            h.push('<div class="ccb-box"><h4>' + (opts.length > 1 ? 'Which wallet to restore' : 'Wallet') + '</h4>' + opts.join('') +
+                (s.firmware ? '<p>Made by COLDCARD firmware ' + esc(s.firmware) + '.</p>' : '') + '</div>');
+        }
+    }
+
+    // ---- Multisig wallets ----
+    var matchFp = null;
+    if (s.multisig.length || s.multisigErrors.length) {
+        h.push('<div class="ccb-box" id="ccb-ms-box"><h4>Multisig wallets (' + s.multisig.length + ')</h4>' +
+            (canStore ? '<p>Ticked wallets are saved in Output Descriptor, so the PSBT Signer checks transactions against them.</p>'
+                      : '<p>A Temporary Session keeps nothing, so these aren’t saved.</p>') +
+            s.multisig.map(function (w, i) {
+                return '<label class="ccb-wallet">' + (canStore ? '<input type="checkbox" class="ccb-ms-pick" data-i="' + i + '" checked>' : '') +
+                    '<span><b>' + esc(w.name) + '</b><span>' + w.M + '-of-' + w.N + ' · ' + esc(w.format.toUpperCase()) + (w.sorted ? '' : ' · keys in fixed order') + (w.testnet ? ' · testnet' : '') +
+                    '</span><span class="ccb-ms-mine" data-i="' + i + '"></span></span></label>';
+            }).join('') +
+            s.multisigErrors.map(function (e) { return '<p style="color: var(--skb-danger);">' + esc(e) + '</p>'; }).join('') + '</div>');
+    }
+
+    // ---- Secure Notes & Passwords ----
+    if (s.noteItems.length) {
+        h.push('<div class="ccb-box"><h4>Secure Notes &amp; Passwords (' + s.noteItems.length + ')</h4>' +
+            (canStore ? '<p>Ticked ones are saved as notes in this vault (Notes). A password becomes a note holding its username, password and website.</p>'
+                      : '<p>A Temporary Session keeps nothing, so these aren’t saved.</p>') +
+            s.noteItems.map(function (n, i) {
+                return '<label class="ccb-wallet">' + (canStore ? '<input type="checkbox" class="ccb-note-pick" data-i="' + i + '" checked>' : '') +
+                    '<span><b>' + esc(n.title) + '</b><span>' + (n.kind === 'password' ? 'Password' + (n.site ? ' · ' + esc(n.site) : '') : 'Note') + (n.group ? ' · ' + esc(n.group) : '') + '</span></span></label>';
+            }).join('') +
+            (s.notesSkipped ? '<p>' + s.notesSkipped + ' entr' + (s.notesSkipped === 1 ? 'y' : 'ies') + ' couldn’t be read and will be left out.</p>' : '') + '</div>');
+    }
+
+    // ---- Seed Vault ----
+    if (s.seedVaultItems.length) {
+        h.push('<div class="ccb-box"><h4>Seed Vault (' + s.seedVaultItems.length + ')</h4>' +
+            '<p>' + (imp ? 'These seeds aren’t imported: SafeKeep keeps one seed per vault. You can view their words here, to write them down or check them.'
+                         : 'You can restore one of these instead of the main wallet (choose it above), or view its words to write them down.') + '</p>' +
+            s.seedVaultItems.map(function (e, i) {
+                var head = '<b>' + esc(e.label || 'Unnamed') + '</b><span>' + (e.kind === 'words' ? e.words + ' words · ' : '') + 'fingerprint ' + esc(e.fingerprint || '?') +
+                    (e.origin ? ' · ' + esc(e.origin) : '') + '</span>';
+                if (e.problem) return '<div class="ccb-wallet"><span>' + head + '<span style="color: var(--skb-warning, #f59e0b);">' + esc(e.problem) + '</span></span></div>';
+                return '<div class="ccb-wallet"><span style="flex: 1;">' + head +
+                    '<span class="ccb-vault-words" id="ccb-vault-words-' + i + '" hidden></span></span>' +
+                    '<button type="button" class="skb-btn" style="padding: 0.3rem 0.7rem; font-size: 0.78rem;" onclick="ccb_toggleVaultWords(' + i + ', this)">Show words</button></div>';
+            }).join('') + '</div>');
+    }
+
+    if (imp) {
+        h.push('<button type="button" class="skb-btn skb-btn--primary" id="ccb-import-btn" style="width: 100%;" onclick="ccb_importSelected()">Import Selected</button>');
+    } else if (opts.length) {
+        // Its label is set below, once the wallet choice is on the page.
+        h.push('<button type="button" class="skb-btn skb-btn--primary" id="ccb-restore-btn" style="width: 100%;" onclick="ccb_restore()">Restore This Wallet</button>');
+    }
+    // Ticks survive a redraw (choosing another wallet redraws).
+    var ticks = {};
+    document.querySelectorAll('#ccb-review .ccb-ms-pick, #ccb-review .ccb-note-pick').forEach(function (c) { ticks[c.className + c.dataset.i] = c.checked; });
+    box.innerHTML = h.join('');
+    if (prevVal !== null && prevVal !== undefined) {
+        var again = document.querySelector('input[name="ccb-seed-pick"][value="' + prevVal + '"]');
+        if (again) again.checked = true;
+    }
+    var rbtn = document.getElementById('ccb-restore-btn'), c2 = _ccbChosenSeed();
+    if (rbtn) { rbtn.hidden = !c2; if (c2) rbtn.textContent = 'Restore This Wallet (' + c2.fingerprint + ')'; }
+    document.querySelectorAll('#ccb-review .ccb-ms-pick, #ccb-review .ccb-note-pick').forEach(function (c) { if ((c.className + c.dataset.i) in ticks) c.checked = ticks[c.className + c.dataset.i]; });
+    // Which multisig key belongs to the seed being restored (or to this vault's seed).
+    matchFp = _ccbMatchFp();
+    document.querySelectorAll('#ccb-review .ccb-ms-mine').forEach(function (el) {
+        var w = s.multisig[Number(el.dataset.i)];
+        var k = matchFp ? w.keys.findIndex(function (x) { return x.fingerprint === matchFp; }) : -1;
+        el.textContent = k >= 0 ? (imp ? 'Key ' + (k + 1) + ' is this vault’s seed (' + matchFp + ')' : 'Your key is key ' + (k + 1) + ' (' + matchFp + ')')
+                                : (imp ? 'None of its keys is this vault’s seed' : 'None of its keys belongs to this seed');
+    });
+    box.hidden = false;
+}
+
+function ccb_toggleVaultWords(i, btn) {
+    var el = document.getElementById('ccb-vault-words-' + i);
+    var e = _ccbSummary && _ccbSummary.seedVaultItems[i];
+    if (!el || !e || !e.mnemonic) return;
+    if (el.hidden) {
+        el.textContent = e.mnemonic.split(' ').map(function (w, k) { return (k + 1) + '. ' + w; }).join('   ');
+        el.hidden = false; btn.textContent = 'Hide words';
+    } else {
+        el.textContent = ''; el.hidden = true; btn.textContent = 'Show words';
+    }
+}
+
+function _ccbPicked(cls, list) {
+    return Array.prototype.slice.call(document.querySelectorAll('#ccb-review .' + cls))
+        .filter(function (c) { return c.checked; }).map(function (c) { return list[Number(c.dataset.i)]; });
+}
+
+/* A COLDCARD note or password as the HTML body of a SafeKeep note. */
+function _ccbNoteBody(n) {
+    var esc = _wrecEscape, rows = [];
+    if (n.kind === 'password') {
+        if (n.user) rows.push('<p><strong>Username:</strong> ' + esc(n.user) + '</p>');
+        if (n.password) rows.push('<p><strong>Password:</strong> ' + esc(n.password) + '</p>');
+        if (n.site) rows.push('<p><strong>Website:</strong> ' + esc(n.site) + '</p>');
+    }
+    if (n.misc) rows.push('<p>' + esc(n.misc).replace(/\r?\n/g, '<br>') + '</p>');
+    if (n.group) rows.push('<p><em>Group: ' + esc(n.group) + '</em></p>');
+    rows.push('<p><em>Imported from a COLDCARD backup.</em></p>');
+    return rows.join('');
+}
+
+/* Save the ticked notes; a title already in use gets " (COLDCARD)", then a number. */
+async function _ccbSaveNotes(notes) {
+    var os = window.SafeKeepOS;
+    if (!notes.length) return '';
+    if (!os || typeof os.saveNote !== 'function') return ' The notes weren’t saved: notes aren’t available here.';
+    var used = {};
+    try { (await os.listNotes()).forEach(function (x) { used[String(x.title || '').toLowerCase()] = 1; used['slug:' + x.slug] = 1; }); } catch (_) {}
+    var slug = function (t) { return String(t).toLowerCase().replace(/[^a-z0-9\s\-_]/g, '').replace(/\s+/g, '-').substring(0, 80) || 'untitled'; };
+    var saved = 0, failed = [];
+    for (var i = 0; i < notes.length; i++) {
+        var n = notes[i], base = n.title.slice(0, 120), title = base, k = 2;
+        if (used[title.toLowerCase()] || used['slug:' + slug(title)]) title = base + ' (COLDCARD)';
+        while (used[title.toLowerCase()] || used['slug:' + slug(title)]) title = base + ' (COLDCARD ' + (k++) + ')';
+        _ccbStatus('', 'Saving note ' + (i + 1) + ' of ' + notes.length + '…');
+        try {
+            var r = await os.saveNote(title, _ccbNoteBody(n));
+            if (r && r.saved) { saved++; used[title.toLowerCase()] = 1; used['slug:' + slug(title)] = 1; }
+            else failed.push(n.title + (r && r.error ? ' (' + r.error + ')' : ''));
+        } catch (e) { failed.push(n.title); }
+    }
+    return (saved ? ' Saved ' + saved + ' note' + (saved === 1 ? '' : 's') + ' in Notes.' : '') + (failed.length ? ' Not saved: ' + failed.join('; ') + '.' : '');
+}
+
+async function ccb_restore() {
+    var s = _ccbSummary, chosen = _ccbChosenSeed();
+    if (!s || !chosen) return;
     var btn = document.getElementById('ccb-restore-btn');
     try {
         if (btn) { btn.disabled = true; btn.textContent = 'Restoring...'; }
-        var picks = Array.prototype.slice.call(document.querySelectorAll('.ccb-ms-pick'))
-            .filter(function (c) { return c.checked; })
-            .map(function (c) { return s.multisig[Number(c.dataset.i)]; });
+        var picks = _ccbPicked('ccb-ms-pick', s.multisig);
+        var notes = _ccbPicked('ccb-note-pick', s.noteItems);
         // CIRCUIT BREAKER: ephemeral boot MUST NEVER call SafeKeepOS.
         var result = _isEphemeralBoot()
-            ? await _ephemeralCommitSeed(s.mnemonic)
-            : await window.SafeKeepOS.restoreMasterSeed(s.mnemonic);
+            ? await _ephemeralCommitSeed(chosen.mnemonic)
+            : await window.SafeKeepOS.restoreMasterSeed(chosen.mnemonic);
         _showDiskVerification(result.diskVerified);
         if (result.diskVerified === false && !_SKB_DEV_MODE) {
             _ccbStatus('bad', 'Seed restored to RAM but disk write FAILED. Do not proceed until resolved.');
             showStatus('CRITICAL: Seed exists only in RAM — disk write failed. Write down your words immediately.', 'error');
             return;
         }
-        var msNote = _isEphemeralBoot() ? '' : await _ccbSaveMultisig(picks);
+        var note = '';
+        if (!_isEphemeralBoot()) {
+            note += await _ccbSaveMultisig(picks);
+            note += await _ccbSaveNotes(notes);
+        }
         hideColdcardRecoveryPanel();
-        showStatus('Master seed restored from the COLDCARD backup. Fingerprint: <strong>' + (result.fingerprint || '').toUpperCase() + '</strong>.' + _wrecEscape(msNote), 'success');
+        showStatus('Restored the COLDCARD backup’s ' + _wrecEscape(chosen.label) + '. Fingerprint: <strong>' + (result.fingerprint || '').toUpperCase() + '</strong>.' + _wrecEscape(note), 'success');
         transitionToDashboard(result);
     } catch (e) {
         _ccbStatus('bad', 'Restore failed: ' + (e && e.message ? e.message : String(e)));
     } finally {
-        if (btn && _ccbSummary) { btn.disabled = false; btn.textContent = 'Restore This Wallet (' + _ccbSummary.fingerprint + ')'; }
+        var c = _ccbChosenSeed();
+        if (btn && c) { btn.disabled = false; btn.textContent = 'Restore This Wallet (' + c.fingerprint + ')'; }
+    }
+}
+
+// ---- Import into this vault (Device Options) ----
+// The same panel, moved into an overlay over the Dashboard in "import"
+// mode: no seed is restored; ticked multisig wallets and notes are added.
+var _ccbMode = 'restore';
+var _ccbHome = null;
+
+function _ccbApplyMode() {
+    var imp = _ccbMode === 'import';
+    document.getElementById('ccb-heading').textContent = imp ? 'Import from a COLDCARD Backup' : 'Restore from a COLDCARD Backup';
+    document.getElementById('ccb-intro-restore').hidden = imp;
+    document.getElementById('ccb-intro-import').hidden = !imp;
+}
+
+function ccb_openImport() {
+    if (_isEphemeralBoot()) { showStatus('A Temporary Session keeps nothing, so there’s no vault to import into. Unlock your vault first.', 'error'); return; }
+    var panel = document.getElementById('coldcard-recovery-panel');
+    if (!panel || document.getElementById('ccb-import-overlay')) return;
+    if (!_ccbHome) _ccbHome = { parent: panel.parentNode, next: panel.nextSibling };
+    var ov = document.createElement('div');
+    ov.id = 'ccb-import-overlay';
+    ov.className = 'ccb-import-overlay';
+    ov.appendChild(panel);
+    document.body.appendChild(ov);
+    _ccbMode = 'import';
+    _ccbApplyMode();
+    panel.style.display = 'block';
+    ccb_reset();
+    ov.scrollTop = 0;
+}
+
+function _ccbCloseImport() {
+    var panel = document.getElementById('coldcard-recovery-panel');
+    var ov = document.getElementById('ccb-import-overlay');
+    if (panel && _ccbHome) _ccbHome.parent.insertBefore(panel, _ccbHome.next);
+    if (ov) ov.remove();
+    if (panel) panel.style.display = 'none';
+    _ccbMode = 'restore';
+    _ccbApplyMode();
+}
+
+async function ccb_importSelected() {
+    var s = _ccbSummary;
+    if (!s) return;
+    var picks = _ccbPicked('ccb-ms-pick', s.multisig);
+    var notes = _ccbPicked('ccb-note-pick', s.noteItems);
+    if (!picks.length && !notes.length) { _ccbStatus('bad', 'Tick at least one multisig wallet or note to import.'); return; }
+    var btn = document.getElementById('ccb-import-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+    try {
+        var msg = (await _ccbSaveMultisig(picks)) + (await _ccbSaveNotes(notes));
+        hideColdcardRecoveryPanel();
+        showStatus('COLDCARD backup imported.' + _wrecEscape(msg), 'success');
+    } catch (e) {
+        _ccbStatus('bad', 'Import failed: ' + (e && e.message ? e.message : String(e)));
+        if (btn) { btn.disabled = false; btn.textContent = 'Import Selected'; }
     }
 }
 

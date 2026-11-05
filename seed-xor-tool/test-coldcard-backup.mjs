@@ -16,6 +16,10 @@
  *      descriptors whose first receive address matches one worked out here
  *      independently with @scure/btc-signer, for P2WSH, P2SH-P2WSH, P2SH,
  *      per-key paths, unsorted keys, SLIP-132 keys and old 2-element keys.
+ *   7. Secure Notes & Passwords and Seed Vault (Part 2): notes and
+ *      passwords told apart (notes.py), Seed Vault entries decoded from
+ *      COLDCARD's SecretStash encoding (12 and 24 words, trailing zero
+ *      bytes put back), raw keys and wrong fingerprints refused; import mode.
  *   6. Wiring: boot.html (file, USB and Courier all go through one check),
  *      SafeKeepOS.coldcardBackup and the COLDCARD helper's backup action
  *      (its behaviour is tested with a fake COLDCARD in
@@ -26,6 +30,7 @@
 import {
     openColdcardBackup, parseColdcard7z, parseBackupText, summarizeBackup,
     multisigToDescriptor, xfpToHex, crc32, deriveKey, toStandardXpub,
+    notesFromBackup, decodeVaultEntry, mnemonicFingerprint,
 } from './shared/coldcard-backup.js';
 import { createHash, randomBytes, createCipheriv } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
@@ -275,10 +280,10 @@ console.log('\n6. boot.html wiring');
     ck('the panel has a file picker, 12 word boxes and a Q password field', html.includes('id="ccb-file-input"') && fn('function ccb_reset').includes('count: 12') && html.includes('id="ccb-typed"'));
     ck('the 12 words are joined lower-case with single spaces', fn('function _ccbPassword').includes("words.join(' ').toLowerCase()"));
     const restore = fn('async function ccb_restore');
-    ck('restore uses the same seed path as the other restores (and none in a Temporary Session)', restore.includes('_isEphemeralBoot()') && restore.includes('_ephemeralCommitSeed(s.mnemonic)') && restore.includes('SafeKeepOS.restoreMasterSeed(s.mnemonic)'));
+    ck('restore uses the same seed path as the other restores (and none in a Temporary Session)', restore.includes('_isEphemeralBoot()') && restore.includes('_ephemeralCommitSeed(chosen.mnemonic)') && restore.includes('SafeKeepOS.restoreMasterSeed(chosen.mnemonic)'));
     ck('restore stops on a failed disk write', restore.includes("result.diskVerified === false && !_SKB_DEV_MODE") && restore.indexOf('return;') < restore.indexOf('_ccbSaveMultisig'));
-    ck('only ticked multisig wallets are saved, through the saved-wallet checks', restore.includes('.ccb-ms-pick') && fn('async function _ccbSaveMultisig').includes('_savedWalletParse(w.descriptor)') && fn('async function _ccbSaveMultisig').includes('_savedWalletsStore(list)'));
-    ck('no restore button when the file has problems or no words', fn('function _ccbRenderReview').includes("if (!s.problems.length && !s.passphraseWallet)"));
+    ck('only ticked multisig wallets are saved, through the saved-wallet checks', restore.includes("_ccbPicked('ccb-ms-pick'") && fn('async function _ccbSaveMultisig').includes('_savedWalletParse(w.descriptor)') && fn('async function _ccbSaveMultisig').includes('_savedWalletsStore(list)'));
+    ck('no restore button unless a wallet with good words is chosen', fn('function _ccbChosenSeed').includes("s.mnemonic && !s.problems.length") && fn('function _ccbChosenSeed').includes("e.kind === 'words' && e.mnemonic && !e.problem") && fn('function _ccbRenderReview').includes('rbtn.hidden = !c2'));
     ck('Back forgets the file, the password and the words', fn('function ccb_reset').includes('_ccbBytes.fill(0)') && fn('function ccb_reset').includes("_ccbSummary.mnemonic = ''") && fn('function hideColdcardRecoveryPanel').includes('ccb_reset()'));
     const bootjs = readFileSync(new URL('./shared/boot.js', import.meta.url), 'utf8');
     ck('SafeKeepOS.coldcardBackup asks the helper for "backup" and waits up to 11 minutes', /coldcardBackup\(\) \{\s*const r = await _coldcardRequest\(\{ action: 'backup' \}, 11 \* 60 \* 1000\)/.test(bootjs) && bootjs.includes('    coldcardBackup,\n'));
@@ -291,6 +296,47 @@ console.log('\n6. boot.html wiring');
     ck('Back stops the camera', fn('function ccb_reset').includes('ccb_courierStop()'));
     for (const name of ['function _ccbShowInfo', 'function _ccbLoadBytes', 'async function ccb_fromUsb', 'async function ccb_courierStart', 'function ccb_courierStop', 'function _ccbCourierOnScan',
         'function showColdcardRecoveryPanel', 'function hideColdcardRecoveryPanel', 'function ccb_reset', 'function _ccbStatus', 'function ccb_togglePasswordMode', 'function _ccbPassword', 'function ccb_updateButton', 'function ccb_fileChosen', 'async function ccb_open', 'function _ccbRenderReview', 'async function _ccbSaveMultisig', 'async function ccb_restore']) {
+        let ok = true, err = '';
+        try { new Function(fn(name).replace(/^async function/, 'return async function').replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }
+        ck(`${name.replace(/^(async )?function /, '')} parses`, ok, err);
+    }
+}
+
+console.log('\n7. Secure Notes & Passwords, Seed Vault, import mode');
+{
+    const n = notesFromBackup([{ title: 'Wifi', misc: 'key' }, { title: 'Bank', user: 'dave', password: 'p', site: 'b.com', group: 'money' }, { user: '' }, 7, null, [1]]);
+    ck('notes and passwords told apart ("user" present = password)', n.items.length === 3 && n.items[0].kind === 'note' && n.items[1].kind === 'password' && n.items[1].password === 'p' && n.items[2].kind === 'password');
+    ck('an untitled password gets a title, junk entries are counted', n.items[2].title === 'Password' && n.skipped === 3);
+    ck('fields are length-limited strings', notesFromBackup([{ title: 'x'.repeat(500), misc: { a: 1 } }]).items[0].title.length === 200);
+    const enc = (m, marker) => Buffer.concat([Buffer.from([marker]), Buffer.from(bip39.mnemonicToEntropy(m, wordlist))]).toString('hex').replace(/(00)+$/, '');
+    const v12 = decodeVaultEntry([fpOf(M3), enc(M3, 0x80), 'Kids', 'Imported']);
+    ck('Seed Vault 12-word entry decodes, fingerprint checked', v12.kind === 'words' && v12.mnemonic === M3 && v12.words === 12 && !v12.problem && v12.fingerprint === fpOf(M3));
+    const m24 = bip39.entropyToMnemonic(Buffer.concat([Buffer.alloc(29, 9), Buffer.alloc(3, 0)]), wordlist);
+    const v24 = decodeVaultEntry([fpOf(m24), enc(m24, 0x82), 'Long', 'x']);
+    ck('24-word entry whose entropy ends in zero bytes (stripped by COLDCARD) decodes', v24.mnemonic === m24 && v24.words === 24);
+    ck('a [bracketed] fingerprint is accepted', decodeVaultEntry(['[' + fpOf(M3) + ']', enc(M3, 0x80), 'K', 'x']).mnemonic === M3);
+    ck('a raw-key entry (xprv) has no words and says why', (() => { const r = decodeVaultEntry(['AABBCCDD', '01' + 'ab'.repeat(64), 'k', 'x']); return r.kind === 'key' && !r.mnemonic && /raw key/.test(r.problem); })());
+    ck('a master-secret entry (length marker) has no words', decodeVaultEntry(['AABBCCDD', '20' + 'ab'.repeat(32), 'k', 'x']).kind === 'key');
+    ck('words that don\'t match the recorded fingerprint are withheld', (() => { const r = decodeVaultEntry(['DEADBEEF', enc(M3, 0x80), 'k', 'x']); return !r.mnemonic && /don’t match/.test(r.problem); })());
+    ck('an over-long or unreadable secret is refused', /longer/.test(decodeVaultEntry([fpOf(M3), '80' + 'ab'.repeat(20), 'k', 'x']).problem) && /can’t be read/.test(decodeVaultEntry(['x', 'zz', 'k', 'x']).problem));
+    const s = summarizeBackup(parseBackupText(backupText(walletFields(M2, { 'setting.notes': [{ title: 'a' }], 'setting.seeds': [[fpOf(M3), enc(M3, 0x80), 'Kids', 'Imported']] }))));
+    ck('the summary lists notes and Seed Vault entries', s.noteItems.length === 1 && s.seedVaultItems.length === 1 && s.seedVaultItems[0].mnemonic === M3 && s.notes === 1 && s.seedVault === 1);
+    const pw = summarizeBackup(parseBackupText(backupText((() => { const f = walletFields(M2, { 'setting.seeds': [[fpOf(M3), enc(M3, 0x80), 'Kids', 'Imported']] }); delete f.mnemonic; f.raw_secret = '01ab'; return f; })())));
+    ck('a passphrase-wallet backup can still offer its Seed Vault words', pw.passphraseWallet && pw.seedVaultItems[0].mnemonic === M3);
+
+    const html = readFileSync(new URL('./boot.html', import.meta.url), 'utf8');
+    const fn = (name) => { const a = html.indexOf(name); if (a < 0) return ''; const nx = [html.indexOf('\nfunction ', a + 10), html.indexOf('\nasync function ', a + 10)].filter((i) => i > 0); return html.slice(a, Math.min(...nx)); };
+    ck('Device Options has "Import from a COLDCARD Backup"', html.includes('id="settings-ccb-section"') && html.includes('onclick="ccb_openImport()"'));
+    ck('import mode moves the same panel into an overlay and puts it back', fn('function ccb_openImport').includes('ov.appendChild(panel)') && fn('function _ccbCloseImport').includes('_ccbHome.parent.insertBefore(panel, _ccbHome.next)') && fn('function hideColdcardRecoveryPanel').includes("if (_ccbMode === 'import') { _ccbCloseImport(); return; }"));
+    ck('import never restores a seed', !/restoreMasterSeed|_ephemeralCommitSeed/.test(fn('async function ccb_importSelected')) && fn('async function ccb_importSelected').includes('_ccbSaveMultisig(picks)') && fn('async function ccb_importSelected').includes('_ccbSaveNotes(notes)'));
+    ck('import refuses in a Temporary Session (no vault)', fn('function ccb_openImport').includes('if (_isEphemeralBoot())'));
+    ck('in import mode keys are matched against this vault\'s seed', fn('function _ccbMatchFp').includes('SafeKeepOS.getFingerprint()'));
+    const sn = fn('async function _ccbSaveNotes');
+    ck('notes never overwrite: a title in use gets " (COLDCARD)", then a number', sn.includes("title = base + ' (COLDCARD)'") && sn.includes("' (COLDCARD ' + (k++) + ')'") && sn.includes("used['slug:' + slug(title)]"));
+    ck('note bodies are escaped HTML', fn('function _ccbNoteBody').split('esc(').length > 5 && !/\+ n\.(user|password|site|misc|group) \+/.test(fn('function _ccbNoteBody')));
+    ck('Seed Vault words are shown only on request, as text', fn('function ccb_toggleVaultWords').includes('el.textContent = e.mnemonic') && fn('function ccb_toggleVaultWords').includes("el.textContent = ''"));
+    ck('restore can use a Seed Vault entry (radio choice)', html.includes('name="ccb-seed-pick"') && fn('function _ccbChosenSeed').includes('s.seedVaultItems[Number(v)]'));
+    for (const name of ['function _ccbChosenSeed', 'function _ccbMatchFp', 'function _ccbRenderReview', 'function ccb_toggleVaultWords', 'function _ccbPicked', 'function _ccbNoteBody', 'async function _ccbSaveNotes', 'async function ccb_restore', 'function _ccbApplyMode', 'function ccb_openImport', 'function _ccbCloseImport', 'async function ccb_importSelected']) {
         let ok = true, err = '';
         try { new Function(fn(name).replace(/^async function/, 'return async function').replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }
         ck(`${name.replace(/^(async )?function /, '')} parses`, ok, err);
