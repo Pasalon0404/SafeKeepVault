@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 4, 2026).**
+> **Start with the "Current state" section below (updated Nov 6, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,41 @@
 
 ---
 
-## Current state (Nov 4, 2026) — v1.60
+## Current state (Nov 6, 2026) — v1.61
+
+**v1.61** (Nov 6) — tested on Dave's flash drive as quick updates from
+`main` (#98–#102); one OS file changed (the Coldcard helper), so the
+release needs the full build:
+- **Restore from a COLDCARD backup** (welcome → I already have a backup →
+  COLDCARD backup). `shared/coldcard-backup.js` ports COLDCARD's 7z reader
+  (compat7z.py: unencrypted header, 7z SHA-256 key stretching, AES-256-CBC
+  via WebCrypto with one extra block for its zero padding, CRC-32 for a
+  wrong password) and reads the backup text: the words (checked against
+  raw_secret, xprv, old setting.xfp), multisig wallets (setting.multisig →
+  descriptors), Secure Notes (setting.notes) and Seed Vault
+  (setting.seeds, SecretStash encoding). A backup made with a passphrase
+  holds only that wallet's xprv: no restore, said plainly.
+- **Three ways in:** over USB (new `backup` action in
+  `usbbootdrive/safekeep-coldcard.py`, Coinkite's `ckcc backup` steps: the
+  COLDCARD makes a fresh backup, shows a new 12-word password and waits
+  for confirmation; it can't send older SD-card files), the Courier (kept
+  in memory), or a file. Tested over USB on Dave's Mk4.
+- **Review:** choose the main wallet or a Seed Vault entry to restore,
+  tick multisig wallets (saved wallets) and notes (SafeKeep notes; a
+  clashing title gets " (COLDCARD)"), Show words for Seed Vault entries.
+- **Import into this vault:** Device Options → Import from a COLDCARD
+  backup moves the same panel into an overlay; never touches the seed.
+- **SafeKeep's own file picker** (`skfp_*`): on the flash drive every file
+  input opens a Transfer-Drive-only list instead of the GTK dialog (which
+  offered Home and Other Locations). All four file inputs. The Transfer
+  screen's drive list now escapes file names.
+- **Entropy Generator setup:** a Back to Welcome button (the wizard hid
+  the sidebar, so there was no way out); Back clears what was collected.
+- Tests: `test-coldcard-backup.mjs` (117, incl. COLDCARD's two sample
+  backups and a cross-check with the 7z tool), `test-file-picker.mjs`,
+  `usbbootdrive/tests/test-coldcard-helper.py` (fake COLDCARD).
+
+## Earlier: v1.60 (Nov 4, `v1.60 · build 466 · 207ddc3`)
 
 **v1.60** (Nov 4) — app-only, tested on Dave's flash drive as a quick
 update from `main` (#95, #96):
@@ -657,10 +691,10 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.60:** update the website for v1.60 (download page, release
-   notes; docs for Draw Your Own Words in the Entropy Generator), and
-   install `SafeKeep-Update-v1.60.tar` on a flash drive from the release
-   itself.
+1. **After v1.61:** update the website for v1.61 (download page, release
+   notes; docs for the COLDCARD backup restore and import, and the
+   Transfer Drive file picker), and install `SafeKeep-Update-v1.61.tar` on
+   a flash drive from the release itself (it changes the Coldcard helper).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
