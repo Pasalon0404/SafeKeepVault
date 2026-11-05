@@ -389,6 +389,14 @@
     .skfp-empty { font-size: 0.85rem; color: var(--skb-text-muted); padding: 1rem 0; margin: 0; }
     .skfp-foot { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.75rem 1.25rem 1rem; border-top: 1px solid var(--skb-border); }
 
+    /* ---- Backup screen: Temporary Session exit ---- */
+    .backup-exit { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--skb-border); text-align: center; }
+    .backup-exit[hidden], .backup-exit-confirm[hidden], .backup-exit-btn[hidden] { display: none; }
+    .backup-exit-btn { opacity: 0.85; }
+    .backup-exit-confirm { text-align: left; font-size: 0.85rem; color: var(--skb-text-muted); }
+    .backup-exit-confirm p { margin: 0 0 0.75rem; line-height: 1.5; }
+    .backup-exit-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
     /* ---- COLDCARD backup panel ---- */
     #coldcard-recovery-panel { display: none; max-width: 560px; margin: 0 auto 3rem; }
     .ccb-step { margin-bottom: 1rem; }
@@ -6927,6 +6935,20 @@
                         Continue to Dashboard
                     </button>
                 </div>
+
+                <!-- Temporary Session only: a way out without keeping the new
+                     seed. Lock wipes the session from memory and returns to the
+                     unlock screen (vault or another Temporary Session). -->
+                <div id="backup-ephemeral-exit" class="backup-exit" hidden>
+                    <button type="button" class="skb-btn backup-exit-btn" id="backup-exit-btn" onclick="backup_exitAsk()">Leave Without Keeping This Seed</button>
+                    <div id="backup-exit-confirm" class="backup-exit-confirm" hidden>
+                        <p>This is a Temporary Session, so nothing is kept: the new seed is wiped from memory. SafeKeep locks and goes back to the unlock screen, where you can open your vault or start another Temporary Session.</p>
+                        <div class="backup-exit-row">
+                            <button type="button" class="skb-btn" style="border-color: var(--skb-danger); color: var(--skb-danger);" onclick="backup_exitConfirm()">Discard and Lock</button>
+                            <button type="button" class="skb-btn" onclick="backup_exitCancel()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -6991,10 +7013,10 @@
             <div class="dash-inner">
 
                 <!-- ---- Sidebar Seed Status (visible only in sidebar/tool-active mode) ---- -->
-                <div id="sidebar-seed-status" style="display: none; margin-bottom: 0.75rem; padding: 0.6rem 0.65rem; border: 2px solid var(--skb-danger); background: rgba(239, 68, 68, 0.06); cursor: pointer;" onclick="showState('state-dashboard')">
+                <div id="sidebar-seed-status" style="display: none; margin-bottom: 0.75rem; padding: 0.6rem 0.65rem; border: 2px solid var(--skb-danger); background: rgba(239, 68, 68, 0.06); cursor: pointer;" onclick="sidebar_goHome()">
                     <div id="sidebar-seed-label" style="font-size: 0.75rem; font-weight: 700; color: var(--skb-danger); letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Vault Locked</div>
                     <div id="sidebar-seed-fp" data-lifehash="36" data-lifehash-place="parent-right" style="font-family: var(--skb-mono); font-size: 1rem; font-weight: 900; letter-spacing: 0.12em; color: var(--skb-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No seed loaded</div>
-                    <div style="margin-top: 0.4rem; font-family: var(--skb-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--skb-text-muted); text-align: right;">&#8592; Dashboard</div>
+                    <div id="sidebar-seed-home" style="margin-top: 0.4rem; font-family: var(--skb-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--skb-text-muted); text-align: right;">&#8592; Dashboard</div>
                 </div>
 
                 <!-- ---- Unified Command Row ----
@@ -14367,6 +14389,27 @@ let _backupVerified = false;        // true once challenge passed
 let _backupVerifyScanner = null;    // SKScanner instance for QR verify
 let _seedIsNew = false;             // true = just generated (no SeedQR exists yet)
 
+/* Temporary Session: leave the backup screen without keeping the new seed. */
+function backup_exitAsk() {
+    var c = document.getElementById('backup-exit-confirm');
+    if (c) c.hidden = false;
+    var b = document.getElementById('backup-exit-btn');
+    if (b) b.hidden = true;
+}
+function backup_exitCancel() {
+    var c = document.getElementById('backup-exit-confirm');
+    if (c) c.hidden = true;
+    var b = document.getElementById('backup-exit-btn');
+    if (b) b.hidden = false;
+}
+function backup_exitConfirm() {
+    if (!_isEphemeralBoot()) return;   // only offered in a Temporary Session
+    // Clear the words from the page before handing over to Lock.
+    var grid = document.getElementById('backup-word-grid');
+    if (grid) grid.innerHTML = '';
+    vaultLock();
+}
+
 function transitionToBackup(seedData) {
     // Hide ALL other states — including entropy-onboarding which is a separate creation flow
     document.body.classList.remove('onboarding-forge');
@@ -14378,6 +14421,11 @@ function transitionToBackup(seedData) {
     document.getElementById('state-entropy').style.display = 'none';
     document.getElementById('state-backup').style.display = 'block';
     clearStatus();
+
+    // A Temporary Session's way out (nothing is kept there).
+    var _bExit = document.getElementById('backup-ephemeral-exit');
+    if (_bExit) _bExit.hidden = !_isEphemeralBoot();
+    backup_exitCancel();
 
     // Reset to Phase 1 (show words)
     document.getElementById('backup-phase-words').style.display = 'block';
@@ -15393,6 +15441,44 @@ function togglePassphraseVisibility() {
  * status box. Call this whenever the fingerprint or identity label changes.
  * Reads from the canonical dash-fingerprint / dash-identity-label elements.
  */
+/* True when a seed is loaded (same test as the sidebar status box). */
+function _sidebarHasSeed() {
+    var fp = (document.getElementById('dash-fingerprint')?.textContent || '').trim();
+    return !!(fp && fp !== '--------' && fp.length >= 4);
+}
+
+/* The sidebar's way home. With a seed: the Dashboard. Without one (a
+   Temporary Session, or setup before a seed exists) the Dashboard's tools
+   can't work, so go back to the welcome screen, where every restore option
+   and, in a Temporary Session, "Unlock my vault instead" are. */
+function sidebar_goHome() {
+    if (_sidebarHasSeed()) { showState('state-dashboard'); return; }
+    var psbt = document.getElementById('state-psbt-signer');
+    if (typeof _psbtHwMode !== 'undefined' && _psbtHwMode && psbt && getComputedStyle(psbt).display !== 'none') {
+        psbtBackToDashboard();   // its own way back to the welcome screen (wipes PSBT state)
+        return;
+    }
+    try { if (typeof rlq_courierStop === 'function') rlq_courierStop(); } catch (_) {}
+    welcome_returnNoSeed();
+}
+
+/* Back to the welcome screen with no seed loaded, keeping a Temporary
+   Session's wording and buttons (transitionToWelcome sets a normal boot's). */
+function welcome_returnNoSeed() {
+    document.body.classList.remove('tool-active');
+    transitionToWelcome();
+    if (!_isEphemeralBoot()) return;
+    try {
+        var heading = document.querySelector('.welcome-message h2');
+        var subtitle = document.querySelector('.welcome-message p');
+        if (heading) heading.textContent = 'Temporary Session';
+        if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
+        var hwb = document.getElementById('welcome-hw-btn');
+        if (hwb) hwb.style.display = '';
+        ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
+    } catch (_) {}
+}
+
 function _globalSeedStatusUpdate() {
     var statusEl = document.getElementById('sidebar-seed-status');
     if (!statusEl) return;
@@ -15405,6 +15491,10 @@ function _globalSeedStatusUpdate() {
     var identity = (document.getElementById('dash-identity-label')?.textContent || '').trim();
 
     var hasSeed  = fp && fp !== '--------' && fp.length >= 4;
+    // With no seed there is no real Dashboard: the link goes back to the
+    // welcome screen instead (sidebar_goHome).
+    var homeEl = document.getElementById('sidebar-seed-home');
+    if (homeEl) homeEl.textContent = hasSeed ? '\u2190 Dashboard' : '\u2190 Back to Welcome';
 
     if (hasSeed) {
         // Seed is loaded
@@ -17121,7 +17211,7 @@ function _updateAmnesiaBadge() {
 
     if (isEphemeral) {
         if (titleEl) titleEl.innerHTML = 'TEMPORARY BOOT — VAULT UNMOUNTED';
-        if (subEl) subEl.textContent = 'The encrypted vault is not mounted. Nothing can be saved. Write down your words, power off, and reboot normally to persist a seed.';
+        if (subEl) subEl.textContent = 'The encrypted vault is not mounted, so nothing here is saved. To keep a seed, write down its words, then Lock: you go back to the unlock screen, where you can open your vault.';
         if (saveBtn) saveBtn.style.display = 'none';
     } else {
         if (titleEl) titleEl.innerHTML = 'TEMPORARY SESSION ACTIVE';
@@ -17147,7 +17237,7 @@ async function amnesiaSaveToVault() {
     // session is: write down words, power off, reboot normally, unlock
     // the real vault, then enter them via the Setup Wizard.
     if (_isEphemeralBoot()) {
-        showStatus('Cannot save — this is a Temporary boot. The encrypted vault is not mounted; a save would land on unencrypted OS storage. Write your words down, power off, and reboot normally to persist a seed.', 'error');
+        showStatus('Cannot save — this is a Temporary boot. The encrypted vault is not mounted; a save would land on unencrypted OS storage. To keep this seed, write its words down, then Lock: you go back to the unlock screen, where you can open your vault.', 'error');
         return;
     }
 
