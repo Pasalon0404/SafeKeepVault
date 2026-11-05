@@ -20,7 +20,12 @@
  *   chain          "BTC" or "XTN" (testnet)
  *   fw_version...  informational
  *   setting.multisig  multisig wallets: [name, [M, N], keys, opts, (0)]
- *   setting.notes / setting.seeds  Secure Notes, Seed Vault (read in Part 2)
+ *   setting.notes  Secure Notes & Passwords (COLDCARD Q, notes.py): a list of
+ *                  {title, misc, group}, or for a password also
+ *                  {user, password, site}
+ *   setting.seeds  Seed Vault (seed.py VaultEntry): [xfp, encoded, label,
+ *                  origin], encoded = hex of the stored secret
+ *                  (SecretStash), trailing zero bytes removed
  *
  * Everything here runs in memory; nothing is written. Used by the welcome
  * screen's "COLDCARD backup" restore (boot.html, ccb_*).
@@ -28,7 +33,7 @@
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { createBase58check } from '@scure/base';
-import { mnemonicToSeedSync, validateMnemonic, mnemonicToEntropy } from '@scure/bip39';
+import { mnemonicToSeedSync, validateMnemonic, mnemonicToEntropy, entropyToMnemonic } from '@scure/bip39';
 import { wordlist as ENGLISH } from '@scure/bip39/wordlists/english.js';
 import { HDKey } from '@scure/bip32';
 
@@ -292,6 +297,67 @@ export function multisigToDescriptor(rec) {
              chain: opts.ch || 'BTC', testnet: legs.some((l) => l.testnet), keys: legs, descriptor };
 }
 
+// ---- Secure Notes & Passwords ----
+const str = (v, max) => (typeof v === 'string' ? v : v == null ? '' : String(v)).slice(0, max);
+
+/**
+ * setting.notes as a list of { kind: 'note' | 'password', title, misc,
+ * group, user, password, site }. A record with a "user" field is a
+ * password (NoteContentBase.constructor in notes.py). Anything that isn't
+ * an object is skipped and counted in `skipped`.
+ */
+export function notesFromBackup(list) {
+    const items = [];
+    let skipped = 0;
+    for (const j of Array.isArray(list) ? list : []) {
+        if (!j || typeof j !== 'object' || Array.isArray(j)) { skipped++; continue; }
+        const isPw = Object.prototype.hasOwnProperty.call(j, 'user');
+        items.push({
+            kind: isPw ? 'password' : 'note',
+            title: str(j.title, 200).trim() || (isPw ? 'Password' : 'Note'),
+            group: str(j.group, 200), misc: str(j.misc, 20000),
+            user: isPw ? str(j.user, 500) : '', password: isPw ? str(j.password, 500) : '', site: isPw ? str(j.site, 500) : '',
+        });
+    }
+    return { items, skipped };
+}
+
+// ---- Seed Vault ----
+/**
+ * One Seed Vault entry, decoded. The stored secret (SecretStash.encode in
+ * stash.py) starts with a marker byte: 0x80, 0x81, 0x82 → recovery words
+ * from 16, 24 or 32 bytes of entropy; anything else is a raw key (xprv or
+ * BIP-32 master secret), which has no words. The entry's fingerprint is
+ * checked against the words.
+ *   → { label, origin, fingerprint, kind: 'words' | 'key', mnemonic, words, problem }
+ */
+export function decodeVaultEntry(rec) {
+    const [xfp, encoded, label, origin] = Array.isArray(rec) ? rec : [];
+    const out = { label: str(label, 200).trim(), origin: str(origin, 200), fingerprint: str(xfp, 16).toUpperCase().replace(/^\[|\]$/g, ''),
+                  kind: 'key', mnemonic: '', words: 0, problem: '' };
+    const h = str(encoded, 200).toLowerCase();
+    if (!/^([0-9a-f]{2})+$/.test(h)) { out.problem = 'The stored secret can’t be read.'; return out; }
+    const bytes = Uint8Array.from(h.match(/../g).map((x) => parseInt(x, 16)));
+    const marker = bytes[0];
+    if (!(marker & 0x80) || (marker & 0x7c)) { out.problem = 'This entry is a raw key, not recovery words, so it can’t be restored here.'; return out; }
+    const len = ((marker & 0x3) + 2) * 8;
+    if (len !== 16 && len !== 24 && len !== 32) { out.problem = 'The stored secret can’t be read.'; return out; }
+    const ent = new Uint8Array(len);
+    ent.set(bytes.subarray(1, 1 + len));
+    if (bytes.length > 1 + len) { out.problem = 'The stored secret is longer than its marker says.'; return out; }
+    out.kind = 'words';
+    out.mnemonic = entropyToMnemonic(ent, ENGLISH);
+    out.words = out.mnemonic.split(' ').length;
+    ent.fill(0);
+    const fp = mnemonicFingerprint(out.mnemonic);
+    if (out.fingerprint && out.fingerprint !== fp) {
+        out.problem = 'The words don’t match the fingerprint the COLDCARD recorded (' + out.fingerprint + ').';
+        out.mnemonic = '';
+    }
+    out.fingerprint = fp;
+    return out;
+}
+
 /** Fingerprint (8 hex, uppercase) of a mnemonic with no passphrase. */
 export function mnemonicFingerprint(mnemonic) {
     const seed = mnemonicToSeedSync(mnemonic);
@@ -310,8 +376,11 @@ export function mnemonicFingerprint(mnemonic) {
  */
 export function summarizeBackup(fields) {
     const problems = [];
+    const notes = notesFromBackup(fields['setting.notes']);
+    const vault = (Array.isArray(fields['setting.seeds']) ? fields['setting.seeds'] : []).map(decodeVaultEntry);
     const r = {
         mnemonic: '', words: 0, fingerprint: '', chain: fields.chain || fields['setting.chain'] || 'BTC',
+        noteItems: notes.items, notesSkipped: notes.skipped, seedVaultItems: vault,
         firmware: [fields.fw_version, fields.fw_date].filter(Boolean).join(' · '),
         passphraseWallet: false, multisig: [], multisigErrors: [], problems, notesForUser: [],
         notes: Array.isArray(fields['setting.notes']) ? fields['setting.notes'].length : 0,
@@ -374,5 +443,6 @@ export function summarizeBackup(fields) {
 if (typeof window !== 'undefined') {
     window.ColdcardBackup = Object.freeze({
         openColdcardBackup, parseColdcard7z, is7z, parseBackupText, summarizeBackup, multisigToDescriptor, xfpToHex, MAX_FILE,
+        notesFromBackup, decodeVaultEntry, mnemonicFingerprint,
     });
 }
