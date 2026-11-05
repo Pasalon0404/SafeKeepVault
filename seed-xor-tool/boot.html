@@ -382,7 +382,7 @@
     .ccb-file-info { font-size: 0.8rem; color: var(--skb-text-muted); margin-top: 0.4rem; }
     .ccb-file-info[hidden], .ccb-step[hidden], #ccb-review[hidden], #ccb-typed-wrap[hidden], #ccb-words-wrap[hidden] { display: none; }
     .ccb-hint { font-size: 0.78rem; color: var(--skb-text-muted); margin: 0.4rem 0 0; line-height: 1.45; }
-    .ccb-alt { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.6rem; }
+    .ccb-alt { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem; align-items: start; }
     .ccb-link { background: none; border: 0; padding: 0; color: var(--skb-primary); cursor: pointer; font-size: 0.8rem; text-decoration: underline; }
     .ccb-box { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.75rem 0.9rem; margin-bottom: 0.75rem; background: var(--skb-bg-input); font-size: 0.85rem; }
     .ccb-box h4 { margin: 0 0 0.4rem; font-size: 0.85rem; }
@@ -6512,7 +6512,7 @@
                     </button>
                     <button type="button" class="welcome-option" onclick="showColdcardRecoveryPanel()">
                         <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M9 6h6M10 18h4"/></svg></span>
-                        <span><b>COLDCARD backup</b><span>Straight from a COLDCARD over USB, or its backup.7z, with the 12 words it shows you</span></span>
+                        <span><b>COLDCARD backup</b><span>Straight from a COLDCARD over USB, or one of its backup files</span></span>
                     </button>
                     <button type="button" class="welcome-option" onclick="showShamirRecoveryPanel()">
                         <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><circle cx="12" cy="6" r="3"/><path d="M8 15l3-6M16 15l-3-6M9 17h6"/></svg></span>
@@ -6698,10 +6698,16 @@
                     <div class="ccb-step">
                         <label>1. The backup</label>
                         <button type="button" class="skb-btn skb-btn--primary" id="ccb-usb-btn" style="width: 100%;" onclick="ccb_fromUsb()">Get It from the COLDCARD over USB</button>
-                        <p class="ccb-hint" id="ccb-usb-hint">Plug the COLDCARD into this computer and unlock it with its PIN. It makes a fresh backup and shows its 12-word password on its own screen: write the words down, confirm on the COLDCARD, and the backup comes straight across the cable. Nothing goes through an SD card or another computer.</p>
+                        <p class="ccb-hint" id="ccb-usb-hint"><strong>A fresh backup of what&rsquo;s on the COLDCARD now.</strong> Plug it into this computer and unlock it with its PIN. It shows a <strong>new</strong> 12-word password for this backup (not your recovery words): write the words down, confirm on the COLDCARD, and the backup comes straight across the cable. COLDCARD can&rsquo;t send older backup files from its SD card this way.</p>
                         <div class="ccb-alt">
-                            <button type="button" class="skb-btn" id="ccb-courier-btn" onclick="ccb_courierStart()">Receive with the Courier</button>
-                            <button type="button" class="skb-btn" onclick="document.getElementById('ccb-file-input').click()">Choose backup file&hellip;</button>
+                            <div>
+                                <button type="button" class="skb-btn" id="ccb-courier-btn" style="width: 100%;" onclick="ccb_courierStart()">Receive with the Courier</button>
+                                <p class="ccb-hint">For an older backup file, such as one on the COLDCARD&rsquo;s SD card: copy it to your phone or another computer first.</p>
+                            </div>
+                            <div>
+                                <button type="button" class="skb-btn" style="width: 100%;" onclick="document.getElementById('ccb-file-input').click()">Choose backup file&hellip;</button>
+                                <p class="ccb-hint">For a backup file already on the Transfer Drive.</p>
+                            </div>
                         </div>
                         <input type="file" id="ccb-file-input" accept=".7z,.txt" style="display: none;" onchange="ccb_fileChosen(event)">
                         <div id="ccb-courier-area" style="display: none; margin-top: 0.5rem;">
@@ -6719,7 +6725,7 @@
                     <div class="ccb-step" id="ccb-password-step">
                         <label>2. The backup password</label>
                         <div id="ccb-words-wrap">
-                            <p style="font-size: 0.78rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">The 12 words the COLDCARD showed when it made the backup (not your recovery words).</p>
+                            <p style="font-size: 0.78rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">The 12 words the COLDCARD showed when it made this backup. Each backup has its own password; these aren&rsquo;t your recovery words.</p>
                             <div id="ccb-boxes"></div>
                         </div>
                         <div id="ccb-typed-wrap" hidden>
@@ -43976,7 +43982,7 @@ async function ccb_fromUsb() {
     var btn = document.getElementById('ccb-usb-btn');
     btn.disabled = true;
     btn.textContent = 'Waiting for the COLDCARD…';
-    _ccbStatus('', 'Look at the COLDCARD: write down the 12 words it shows, then confirm there. This page waits for you.');
+    _ccbStatus('', 'Look at the COLDCARD: it shows a new 12-word password for this backup (not your recovery words). Write the words down, then confirm there. This page waits for you.');
     try {
         var r = await os.coldcardBackup();
         if (!r || !r.ok || !r.bytes) {
@@ -43984,7 +43990,7 @@ async function ccb_fromUsb() {
             return;
         }
         if (_ccbLoadBytes(r.bytes, 'From the COLDCARD' + (r.xfp ? ' (' + r.xfp + ')' : ''))) {
-            _ccbStatus('ok', 'Backup received over USB. Type the 12 words the COLDCARD showed, then press Open Backup.');
+            _ccbStatus('ok', 'Backup received over USB. Type the 12-word password the COLDCARD just showed, then press Open Backup.');
             try { document.getElementById('ccb-word-0').focus(); } catch (_) {}
         }
     } catch (e) {
