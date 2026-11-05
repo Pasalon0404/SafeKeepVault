@@ -310,6 +310,9 @@ console.log('\n8. Draw Your Own Words (final word)');
     ck('flip keys: H / 1 heads, T / 0 tails, Backspace undoes', (() => { const f = fn('function eob_handleFlipKey'); return f.includes("k === 'h' || k === '1' ? '1' : '0'") && f.includes('_eobFlips.pop()'); })());
     ck('a new word or flip needs confirming again', fn('function eob_handleFlipKey').includes('ack.checked = false') && fn('function _eobBuildWordBoxes').includes('ack.checked = false'));
     ck('Back / cancel and Reset Tool clear the drawn words and flips', fn('function eob_cancel').includes('_eobClearWords();') && fn('function eob_clearAll').includes('_eobClearWords();'));
+    ck('the setup wizard has a way back: a Back to Welcome button shown only in full-screen setup, which runs eob_cancel',
+        html.includes('id="eob-back-btn" onclick="eob_cancel()"') && /\.eob-back-btn \{ display: none;[^}]*\}\s*body\.onboarding-forge \.eob-back-btn \{ display: inline-flex; \}/.test(html));
+    ck('Back clears everything collected (pool, rolls, cards, mouse, camera, drawn words)', fn('function eob_cancel').includes('_eobResetCollection();') && fn('function eob_cancel').includes('_eobClearWords();'));
     ck('eob_init resets words mode', fn('function eob_init').includes('_eobWordsMode = false;') && fn('function eob_init').includes('_eobFlips = [];'));
     for (const name of ['function eob_setWordCount', 'function _eobBuildWordBoxes', 'function _eobRenderFlips', 'function eob_handleFlipKey', 'function _eobWordsState', 'function _eobClearWords', 'function _eobUpdateWordsMeter']) {
         let ok = true, err = '';
