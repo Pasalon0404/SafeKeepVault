@@ -313,6 +313,9 @@ console.log('\n8. Draw Your Own Words (final word)');
     ck('the setup wizard has a way back: a Back to Welcome button shown only in full-screen setup, which runs eob_cancel',
         html.includes('id="eob-back-btn" onclick="eob_cancel()"') && /\.eob-back-btn \{ display: none;[^}]*\}\s*body\.onboarding-forge \.eob-back-btn \{ display: inline-flex; \}/.test(html));
     ck('Back clears everything collected (pool, rolls, cards, mouse, camera, drawn words)', fn('function eob_cancel').includes('_eobResetCollection();') && fn('function eob_cancel').includes('_eobClearWords();'));
+    ck('after a seed is made in a Temporary Session, the backup screen has a way out (Leave Without Keeping This Seed → Discard and Lock)',
+        html.includes('id="backup-ephemeral-exit"') && html.includes('onclick="backup_exitConfirm()"') && fn('function transitionToBackup').includes('_bExit.hidden = !_isEphemeralBoot()'));
+    ck('…which only locks in a Temporary Session, after clearing the words from the page', fn('function backup_exitConfirm').includes('if (!_isEphemeralBoot()) return;') && fn('function backup_exitConfirm').includes("grid.innerHTML = ''") && fn('function backup_exitConfirm').includes('vaultLock();'));
     ck('eob_init resets words mode', fn('function eob_init').includes('_eobWordsMode = false;') && fn('function eob_init').includes('_eobFlips = [];'));
     for (const name of ['function eob_setWordCount', 'function _eobBuildWordBoxes', 'function _eobRenderFlips', 'function eob_handleFlipKey', 'function _eobWordsState', 'function _eobClearWords', 'function _eobUpdateWordsMeter']) {
         let ok = true, err = '';
