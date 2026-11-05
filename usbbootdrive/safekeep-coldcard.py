@@ -22,6 +22,11 @@ SECURITY MODEL
                 account key at ONE of the three BIP-48 paths
                 (m/48'/0'/0'/0', /1' or /2'), for building a multisig
                 descriptor. Read-only, no pairing needed, nothing stored.
+      backup -> ask the connected Coldcard for its encrypted backup (the same
+                backup.7z its Backup System writes to SD). The Coldcard shows
+                the 12-word password on its own screen and the user must
+                confirm there; the 7z (AES-256, still encrypted) is returned
+                to the app in memory. No pairing needed, nothing stored.
   * The pairing is stored by THIS helper (path in SAFEKEEP_CC_PAIRING: the
     vault's settings folder, or RAM in a temporary session). "sign" trusts
     only that stored pairing — never device identity sent by the browser.
@@ -35,7 +40,7 @@ SECURITY MODEL
   * The result is always written (ok or error) so the app never hangs.
 
 Result JSON: {"ok": true/false, "status": "...", ...}
-  ok statuses   : detected, paired, unpaired, signed, xpub
+  ok statuses   : detected, paired, unpaired, signed, xpub, backup
   error statuses: bad_request, not_installed, not_paired, not_connected,
                   multiple_devices, no_seed, wrong_device, mitm_failed,
                   refused, busy, timeout, rejected, error
@@ -44,6 +49,7 @@ Result JSON: {"ok": true/false, "status": "...", ...}
 """
 import base64
 import binascii
+import hashlib
 import json
 import os
 import re
@@ -58,6 +64,8 @@ MAX_PSBT_BYTES = 2 * 1024 * 1024
 APPROVAL_TIMEOUT_S = int(os.environ.get('SAFEKEEP_CC_TIMEOUT', '600'))
 POLL_INTERVAL_S = 0.25
 PSBT_MAGIC = b'psbt\xff'
+SEVENZ_MAGIC = b"7z\xbc\xaf'\x1c"
+MAX_BACKUP_BYTES = 256 * 1024     # a Coldcard backup is a few KB; its own limit is 128 KiB of text
 XFP_RE = re.compile(r'^[0-9a-f]{8}$')
 XPUB_RE = re.compile(r'^[xt]pub[1-9A-HJ-NP-Za-km-z]{100,112}$')
 SERIAL_RE = re.compile(r'^[0-9A-Za-z]{1,64}$')
@@ -327,7 +335,58 @@ def do_xpub(data):
     return {'ok': True, 'status': 'xpub', 'xfp': xfp, 'deriv': deriv, 'xpub': xpub}
 
 
-ACTIONS = {'detect': do_detect, 'pair': do_pair, 'unpair': do_unpair, 'sign': do_sign, 'xpub': do_xpub}
+def do_backup(data):
+    # Same steps as Coinkite's own `ckcc backup`: check the device is genuine,
+    # ask for a backup (the Coldcard shows the password words and waits for
+    # the user), poll until it is ready, download it with its SHA-256.
+    hid, ColdcardDevice, protocol = load_ckcc()
+    P = protocol.CCProtocolPacker
+    dev = open_single_device(hid, ColdcardDevice)
+    try:
+        xfp = xfp_to_str(dev.master_fingerprint)
+        try:
+            dev.check_mitm()
+        except Exception:
+            raise Fail('mitm_failed', 'The Coldcard failed its authenticity check, so no backup was '
+                                      'asked for. Unplug it, check the cable, and try again.')
+        try:
+            dev.send_recv(P.start_backup(), timeout=None)
+            deadline = time.monotonic() + APPROVAL_TIMEOUT_S
+            while True:
+                time.sleep(POLL_INTERVAL_S)
+                done = dev.send_recv(P.get_backup_file(), timeout=None)
+                if done is not None:
+                    break
+                if time.monotonic() > deadline:
+                    raise Fail('timeout', 'No answer from the Coldcard in time. Cancel the backup on '
+                                          'its screen, then try again.')
+            if not isinstance(done, (tuple, list)) or len(done) != 2:
+                raise Fail('error', 'Unexpected reply from the Coldcard.')
+            length, sha = done
+            if not isinstance(length, int) or length <= 0 or length > MAX_BACKUP_BYTES:
+                raise Fail('error', 'The Coldcard offered a backup of an unexpected size (%r bytes).' % (length,))
+            backup = dev.download_file(length, sha, file_number=0)
+        except protocol.CCUserRefused:
+            raise Fail('refused', 'You declined the backup on the Coldcard. Nothing was sent.')
+        except protocol.CCBusyError:
+            raise Fail('busy', 'The Coldcard is busy. Finish or cancel what is on its screen, then try again.')
+        except protocol.CCProtoError as e:
+            raise Fail('rejected', 'The Coldcard would not make a backup: %s' % str(e)[:200])
+    finally:
+        dev.close()
+    backup = bytes(backup) if isinstance(backup, (bytes, bytearray)) else b''
+    if len(backup) != length or hashlib.sha256(backup).digest() != bytes(sha):
+        raise Fail('error', 'The backup from the Coldcard arrived damaged (its checksum does not match). Try again.')
+    if not backup.startswith(SEVENZ_MAGIC):
+        raise Fail('error', 'The Coldcard sent something that is not an encrypted backup (.7z). '
+                            'If it is set to make unencrypted backups, use an SD card instead.')
+    return {'ok': True, 'status': 'backup', 'xfp': xfp, 'size': len(backup),
+            'sha256': hashlib.sha256(backup).hexdigest(),
+            'backup_b64': base64.b64encode(backup).decode('ascii')}
+
+
+ACTIONS = {'detect': do_detect, 'pair': do_pair, 'unpair': do_unpair, 'sign': do_sign, 'xpub': do_xpub,
+           'backup': do_backup}
 
 
 def main(argv):

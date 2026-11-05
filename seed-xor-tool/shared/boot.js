@@ -2726,6 +2726,25 @@ const SafeKeepOS = (() => {
     return r;
   }
 
+  /**
+   * Ask the connected Coldcard for its encrypted backup (the backup.7z its
+   * Backup System writes to SD). The Coldcard shows the 12-word password
+   * on its own screen and the user confirms there; writing the words down
+   * can take a while, so this waits up to 11 minutes. Read-only: no
+   * pairing needed, nothing is saved. The result stays in memory.
+   * ok → { bytes: Uint8Array (the still-encrypted 7z), xfp, sha256 }
+   */
+  async function coldcardBackup() {
+    const r = await _coldcardRequest({ action: 'backup' }, 11 * 60 * 1000);
+    if (r.ok && r.backup_b64) {
+      try { r.bytes = _ccFromBase64(r.backup_b64); }
+      catch (e) { return { ok: false, status: 'error', error: 'The backup from the Coldcard could not be read.' }; }
+      delete r.backup_b64;
+      if (r.xfp) r.xfp = String(r.xfp).toUpperCase();
+    }
+    return r;
+  }
+
   // ===================================================================
   //  TREZOR ONE — USB signing (Trezor Watcher in safekeep-boot.sh)
   // ===================================================================
@@ -3190,6 +3209,7 @@ const SafeKeepOS = (() => {
     coldcardUnpair,
     coldcardSign,
     coldcardXpub,
+    coldcardBackup,
 
     // Trezor One — USB signing via the Trezor Watcher
     updateCheck,

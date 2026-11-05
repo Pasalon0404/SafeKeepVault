@@ -381,6 +381,8 @@
     .ccb-step > label, .ccb-label { font-size: 0.8125rem; font-weight: 600; color: var(--skb-text); display: block; margin-bottom: 0.5rem; }
     .ccb-file-info { font-size: 0.8rem; color: var(--skb-text-muted); margin-top: 0.4rem; }
     .ccb-file-info[hidden], .ccb-step[hidden], #ccb-review[hidden], #ccb-typed-wrap[hidden], #ccb-words-wrap[hidden] { display: none; }
+    .ccb-hint { font-size: 0.78rem; color: var(--skb-text-muted); margin: 0.4rem 0 0; line-height: 1.45; }
+    .ccb-alt { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.6rem; }
     .ccb-link { background: none; border: 0; padding: 0; color: var(--skb-primary); cursor: pointer; font-size: 0.8rem; text-decoration: underline; }
     .ccb-box { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.75rem 0.9rem; margin-bottom: 0.75rem; background: var(--skb-bg-input); font-size: 0.85rem; }
     .ccb-box h4 { margin: 0 0 0.4rem; font-size: 0.85rem; }
@@ -6510,7 +6512,7 @@
                     </button>
                     <button type="button" class="welcome-option" onclick="showColdcardRecoveryPanel()">
                         <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M9 6h6M10 18h4"/></svg></span>
-                        <span><b>COLDCARD backup</b><span>The backup.7z a COLDCARD saved to its SD card, and the 12 words it showed you</span></span>
+                        <span><b>COLDCARD backup</b><span>Straight from a COLDCARD over USB, or its backup.7z, with the 12 words it shows you</span></span>
                     </button>
                     <button type="button" class="welcome-option" onclick="showShamirRecoveryPanel()">
                         <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><circle cx="12" cy="6" r="3"/><path d="M8 15l3-6M16 15l-3-6M9 17h6"/></svg></span>
@@ -6690,13 +6692,27 @@
                 <div class="restore-panel-inner">
                     <h3>Restore from a COLDCARD Backup</h3>
                     <p style="font-size: 0.875rem; color: var(--skb-text-muted); margin: 0 0 1rem;">
-                        Open the <strong>backup.7z</strong> that a COLDCARD&rsquo;s Backup System saved to its SD card, using the 12 words it showed you. The file is read and decrypted in memory; you see what&rsquo;s in it before anything is saved.
+                        Bring in a COLDCARD&rsquo;s encrypted backup and open it with the 12 words the COLDCARD showed you. The backup is read and decrypted in memory; you see what&rsquo;s in it before anything is saved.
                     </p>
 
                     <div class="ccb-step">
-                        <label>1. The backup file</label>
-                        <button type="button" class="skb-btn" style="width: 100%; border: 1px dashed var(--skb-border);" onclick="document.getElementById('ccb-file-input').click()">Choose backup file&hellip;</button>
+                        <label>1. The backup</label>
+                        <button type="button" class="skb-btn skb-btn--primary" id="ccb-usb-btn" style="width: 100%;" onclick="ccb_fromUsb()">Get It from the COLDCARD over USB</button>
+                        <p class="ccb-hint" id="ccb-usb-hint">Plug the COLDCARD into this computer and unlock it with its PIN. It makes a fresh backup and shows its 12-word password on its own screen: write the words down, confirm on the COLDCARD, and the backup comes straight across the cable. Nothing goes through an SD card or another computer.</p>
+                        <div class="ccb-alt">
+                            <button type="button" class="skb-btn" id="ccb-courier-btn" onclick="ccb_courierStart()">Receive with the Courier</button>
+                            <button type="button" class="skb-btn" onclick="document.getElementById('ccb-file-input').click()">Choose backup file&hellip;</button>
+                        </div>
                         <input type="file" id="ccb-file-input" accept=".7z,.txt" style="display: none;" onchange="ccb_fileChosen(event)">
+                        <div id="ccb-courier-area" style="display: none; margin-top: 0.5rem;">
+                            <p class="ccb-hint">On your phone or another computer, open the Courier Tool at safekeepbitcoin.com, choose the COLDCARD&rsquo;s backup .7z and start the loop. Hold it in front of this computer&rsquo;s camera. The file is still encrypted with its 12 words.</p>
+                            <div id="ccb-courier-reader" style="max-width: 450px; margin: 0 auto 0.5rem; border-radius: 8px; overflow: hidden;"></div>
+                            <div style="width: 100%; height: 8px; background: var(--skb-bg-input); border-radius: 4px; overflow: hidden; margin-bottom: 0.4rem;">
+                                <div id="ccb-courier-progress" style="height: 100%; background: var(--skb-primary); width: 0%; transition: width 0.15s ease;"></div>
+                            </div>
+                            <div id="ccb-courier-status" class="ccb-hint">Waiting for the Courier loop...</div>
+                            <button type="button" class="skb-btn" style="width: 100%; border-color: var(--skb-danger); color: var(--skb-danger);" onclick="ccb_courierStop()">Cancel</button>
+                        </div>
                         <p class="ccb-file-info" id="ccb-file-info" hidden></p>
                     </div>
 
@@ -12141,6 +12157,16 @@ window.addEventListener('DOMContentLoaded', () => {
             await new Promise(function (r) { setTimeout(r, 600); });
             if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on.' };
             return _devMockXpub('legal winner thank year wave sausage worth useful legal winner thank yellow', deriv);
+        },
+        // COLDCARD backup over USB: set window._devColdcardBackupB64 to a
+        // backup.7z (base64) to simulate one; otherwise no device.
+        coldcardBackup: async function () {
+            await new Promise(function (r) { setTimeout(r, 900); });
+            if (window._devColdcard === 'refuse') return { ok: false, status: 'refused', error: '[DEV MOCK] You declined the backup on the Coldcard. Nothing was sent.' };
+            if (!window._devColdcardBackupB64) return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on (Settings > Hardware On/Off > USB).' };
+            var bin = atob(window._devColdcardBackupB64), out = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+            return { ok: true, status: 'backup', bytes: out, xfp: 'B8688DF1', sha256: '' };
         },
         trezorXpub: async function (deriv) {
             await new Promise(function (r) { setTimeout(r, 600); });
@@ -43831,6 +43857,7 @@ function hideColdcardRecoveryPanel() {
 
 /* Forget the file, the password and what was read. */
 function ccb_reset() {
+    ccb_courierStop();
     if (_ccbBytes) _ccbBytes.fill(0);
     _ccbBytes = null; _ccbFileName = ''; _ccbEncrypted = true;
     if (_ccbSummary) _ccbSummary.mnemonic = '';
@@ -43887,41 +43914,141 @@ function ccb_fileChosen(event) {
     event.target.value = '';
     if (!file) return;
     var CB = window.ColdcardBackup;
-    var info = document.getElementById('ccb-file-info');
-    document.getElementById('ccb-review').hidden = true;
-    _ccbStatus('', '');
-    if (!CB) { _ccbStatus('bad', 'The COLDCARD reader didn’t load. Restart SafeKeep and try again.'); return; }
-    if (file.size > CB.MAX_FILE) {
-        info.hidden = false;
-        info.textContent = '“' + file.name + '” is too large (' + Math.round(file.size / 1024) + ' KB) to be a COLDCARD backup.';
+    if (CB && file.size > CB.MAX_FILE) {
+        _ccbShowInfo('“' + file.name + '” is too large (' + Math.round(file.size / 1024) + ' KB) to be a COLDCARD backup.');
         return;
     }
     var reader = new FileReader();
-    reader.onload = function (e) {
-        var bytes = new Uint8Array(e.target.result);
-        if (_ccbBytes) _ccbBytes.fill(0);
-        _ccbBytes = null;
-        info.hidden = false;
-        try {
-            if (CB.is7z(bytes)) {
-                var p = CB.parseColdcard7z(bytes);
-                _ccbEncrypted = true;
-                info.textContent = '“' + file.name + '”: a COLDCARD backup (' + p.name + ' inside, ' + p.unpackedSize + ' bytes). Enter its password below.';
-            } else {
-                var head = new TextDecoder().decode(bytes.subarray(0, 64));
-                if (!/^# Coldcard backup file/.test(head)) throw new Error('This isn’t a COLDCARD backup file (backup.7z).');
-                _ccbEncrypted = false;
-                info.textContent = '“' + file.name + '”: an unencrypted COLDCARD backup. No password is needed.';
-            }
-            _ccbBytes = bytes; _ccbFileName = file.name;
-        } catch (err) {
-            bytes.fill(0);
-            info.textContent = '“' + file.name + '”: ' + err.message;
-        }
-        document.getElementById('ccb-password-step').hidden = !_ccbEncrypted;
-        ccb_updateButton();
-    };
+    reader.onload = function (e) { _ccbLoadBytes(new Uint8Array(e.target.result), '“' + file.name + '”'); };
     reader.readAsArrayBuffer(file);
+}
+
+function _ccbShowInfo(text) {
+    var info = document.getElementById('ccb-file-info');
+    info.hidden = !text;
+    info.textContent = text;
+}
+
+/* Take a backup from any source (file, USB, Courier): check it is a
+   COLDCARD backup and keep it in memory for Open Backup. */
+function _ccbLoadBytes(bytes, label) {
+    var CB = window.ColdcardBackup;
+    document.getElementById('ccb-review').hidden = true;
+    _ccbStatus('', '');
+    if (_ccbSummary) { _ccbSummary.mnemonic = ''; _ccbSummary = null; }
+    if (_ccbBytes) _ccbBytes.fill(0);
+    _ccbBytes = null;
+    if (!CB) { _ccbStatus('bad', 'The COLDCARD reader didn’t load. Restart SafeKeep and try again.'); return false; }
+    try {
+        if (bytes.length > CB.MAX_FILE) throw new Error('It is too large to be a COLDCARD backup.');
+        if (CB.is7z(bytes)) {
+            var p = CB.parseColdcard7z(bytes);
+            _ccbEncrypted = true;
+            _ccbShowInfo(label + ': a COLDCARD backup (' + p.name + ' inside, ' + p.unpackedSize + ' bytes). Enter its password below.');
+        } else {
+            var head = new TextDecoder().decode(bytes.subarray(0, 64));
+            if (!/^# Coldcard backup file/.test(head)) throw new Error('This isn’t a COLDCARD backup file (backup.7z).');
+            _ccbEncrypted = false;
+            _ccbShowInfo(label + ': an unencrypted COLDCARD backup. No password is needed.');
+        }
+        _ccbBytes = bytes;
+    } catch (err) {
+        bytes.fill(0);
+        _ccbShowInfo(label + ': ' + err.message);
+    }
+    document.getElementById('ccb-password-step').hidden = !_ccbEncrypted;
+    ccb_updateButton();
+    return !!_ccbBytes;
+}
+
+/* Over USB: the COLDCARD makes a fresh backup, shows its 12 words and
+   sends the encrypted 7z across the cable (SafeKeepOS.coldcardBackup). */
+var _ccbUsbBusy = false;
+async function ccb_fromUsb() {
+    var os = window.SafeKeepOS;
+    if (_ccbUsbBusy) return;
+    if (!os || typeof os.coldcardBackup !== 'function') {
+        _ccbStatus('bad', 'Getting a backup over USB isn’t available here. Choose the backup file instead.');
+        return;
+    }
+    ccb_courierStop();
+    _ccbUsbBusy = true;
+    var btn = document.getElementById('ccb-usb-btn');
+    btn.disabled = true;
+    btn.textContent = 'Waiting for the COLDCARD…';
+    _ccbStatus('', 'Look at the COLDCARD: write down the 12 words it shows, then confirm there. This page waits for you.');
+    try {
+        var r = await os.coldcardBackup();
+        if (!r || !r.ok || !r.bytes) {
+            _ccbStatus('bad', (r && r.error) || 'No backup came from the COLDCARD.');
+            return;
+        }
+        if (_ccbLoadBytes(r.bytes, 'From the COLDCARD' + (r.xfp ? ' (' + r.xfp + ')' : ''))) {
+            _ccbStatus('ok', 'Backup received over USB. Type the 12 words the COLDCARD showed, then press Open Backup.');
+            try { document.getElementById('ccb-word-0').focus(); } catch (_) {}
+        }
+    } catch (e) {
+        _ccbStatus('bad', 'USB backup failed: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+        _ccbUsbBusy = false;
+        btn.disabled = false;
+        btn.textContent = 'Get It from the COLDCARD over USB';
+    }
+}
+
+/* With the Courier: same collector as the other Courier receivers; the
+   file stays in memory (never written to the Transfer Drive). */
+var _ccbCourierScanner = null, _ccbCourier = null, _ccbCourierDone = false;
+async function ccb_courierStart() {
+    if (!window.jsQR || !window.QRParser || !window.QRParser.createCourierCollector) {
+        _ccbStatus('bad', 'QR scanner library not available.');
+        return;
+    }
+    ccb_courierStop();
+    _ccbCourier = window.QRParser.createCourierCollector();
+    _ccbCourierDone = false;
+    document.getElementById('ccb-courier-btn').disabled = true;
+    document.getElementById('ccb-courier-area').style.display = 'block';
+    document.getElementById('ccb-courier-progress').style.width = '0%';
+    document.getElementById('ccb-courier-status').textContent = 'Waiting for the Courier loop...';
+    try {
+        _ccbCourierScanner = SKScanner.create('ccb-courier-reader');
+        await _ccbCourierScanner.start({ fps: 15 }, function (text, binaryData) { _ccbCourierOnScan(text, binaryData); });
+    } catch (err) {
+        ccb_courierStop();
+        _ccbStatus('bad', 'Camera failed: ' + (err && err.message ? err.message : err));
+    }
+}
+
+function ccb_courierStop() {
+    if (_ccbCourierScanner) { try { _ccbCourierScanner.stop(); } catch (_) {} _ccbCourierScanner = null; }
+    _ccbCourier = null;
+    var area = document.getElementById('ccb-courier-area');
+    if (area) area.style.display = 'none';
+    var btn = document.getElementById('ccb-courier-btn');
+    if (btn) btn.disabled = false;
+}
+
+function _ccbCourierOnScan(text, binaryData) {
+    if (_ccbCourierDone || !_ccbCourier) return;
+    var parsed = window.QRParser.parseQRScan ? window.QRParser.parseQRScan(text, binaryData) : text;
+    var frame = window.QRParser.parseCourierFrame(String(parsed || '').trim());
+    var statusEl = document.getElementById('ccb-courier-status');
+    if (!frame) {
+        if (statusEl) statusEl.textContent = 'That QR code is not a Courier file loop. Choose File in the Courier Tool and send the backup .7z.';
+        return;
+    }
+    var r = _ccbCourier.add(frame);
+    document.getElementById('ccb-courier-progress').style.width = (r.total ? (r.received / r.total) * 100 : 0) + '%';
+    if (statusEl) statusEl.textContent = 'Receiving “' + (r.filename || 'file') + '” — chunk ' + r.received + ' / ' + r.total +
+        (r.status === 'bad-checksum' ? ' (a damaged chunk was skipped, keep scanning)' : '') +
+        (r.status === 'new-file' ? ' (the sender changed its settings, so receiving starts over)' : '');
+    if (!r.done) return;
+    _ccbCourierDone = true;
+    var name = String(r.filename || 'backup.7z');
+    var bytes = r.bytes;
+    ccb_courierStop();
+    if (_ccbLoadBytes(bytes, 'Received with the Courier (“' + name + '”)')) _ccbStatus('ok', 'Backup received. Type its 12 words, then press Open Backup.');
 }
 
 async function ccb_open() {
