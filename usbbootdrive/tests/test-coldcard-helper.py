@@ -40,6 +40,12 @@ class CCProtocolPacker:
     @staticmethod
     def get_xpub(subpath='m'):
         return ('xpub', subpath)
+    @staticmethod
+    def start_backup():
+        return ('back',)
+    @staticmethod
+    def get_backup_file():
+        return ('bkok',)
 '''
 
 FAKE_CLIENT = '''
@@ -72,6 +78,20 @@ class ColdcardDevice:
             return CFG.get('ms_xpub', 'xpub' + 'M' * 107)
         if msg[0] == 'stxn':
             log('sign'); return None
+        if msg[0] == 'back':
+            log('backup-start'); return None
+        if msg[0] == 'bkok':
+            bm = CFG.get('backup', 'approve')
+            if bm == 'refuse': raise CCUserRefused()
+            if bm == 'busy': raise CCBusyError()
+            if bm == 'proto': raise CCProtoError('Coldcard Error: no seed')
+            if bm == 'hang': return None
+            self.bk = b"7z\\xbc\\xaf'\\x1c" + b'\\x00\\x04' + b'ENCRYPTED' * 50
+            if bm == 'not7z': self.bk = b'# Coldcard backup file! DO NOT CHANGE.\\n'
+            if bm == 'huge': return (10 * 1024 * 1024, hashlib.sha256(b'x').digest())
+            sha = hashlib.sha256(self.bk).digest()
+            if bm == 'badsha': sha = hashlib.sha256(b'other').digest()
+            return (len(self.bk), sha)
         mode = CFG.get('sign', 'approve')
         if mode == 'refuse': raise CCUserRefused()
         if mode == 'busy': raise CCBusyError()
@@ -81,6 +101,8 @@ class ColdcardDevice:
         self.signed = self.data + b'SIGNED-BY-FAKE'
         return (len(self.signed), hashlib.sha256(self.signed).digest())
     def download_file(self, length, checksum, blksize=1024, file_number=1):
+        if file_number == 0:
+            log('download-backup'); return self.bk
         log('download'); return b'notpsbt' if CFG.get('sign') == 'badresult' else self.signed
 ''' % (PAIRED_XFP, PAIRED_XPUB)
 
@@ -226,6 +248,29 @@ def main():
         rc, r, log, _ = run(tmp, good, {'mitm_fail': True})
         check('authenticity check fails -> mitm_failed', r.get('status') == 'mitm_failed', str(r))
         check('  ...and nothing was uploaded', not any(l.startswith('upload') for l in log), str(log))
+
+        print('backup')
+        BK = b"7z\xbc\xaf'\x1c" + b'\x00\x04' + b'ENCRYPTED' * 50
+        pairing_before = read_pairing(tmp)
+        rc, r, log, left = run(tmp, {'action': 'backup'})
+        check('backup -> the encrypted 7z, base64, with its size and SHA-256',
+              rc == 0 and r.get('status') == 'backup' and base64.b64decode(r.get('backup_b64', '')) == BK
+              and r.get('size') == len(BK) and r.get('xfp') == PAIRED_XFP and not left, str(r)[:200])
+        import hashlib as _h
+        check('  ...sha256 is of the downloaded bytes', r.get('sha256') == _h.sha256(BK).hexdigest())
+        check('  ...after the authenticity check, then start, then download', [l.split(' ')[0] for l in log if l and not l.startswith(('open', 'close'))][:3] == ['mitm', 'backup-start', 'download-backup'], str(log))
+        check('  ...no pairing needed, and the pairing file is untouched', read_pairing(tmp) == pairing_before)
+        rc, r, log, _ = run(tmp, {'action': 'backup'}, {'mitm_fail': True})
+        check('backup: authenticity check fails -> mitm_failed, nothing asked', r.get('status') == 'mitm_failed' and 'backup-start' not in log, str(r))
+        for mode, status in (('refuse', 'refused'), ('busy', 'busy'), ('proto', 'rejected'), ('badsha', 'error'), ('not7z', 'error'), ('huge', 'error')):
+            rc, r, log, _ = run(tmp, {'action': 'backup'}, {'backup': mode})
+            check('backup: %s -> %s' % (mode, status), r.get('status') == status and 'backup_b64' not in r and rc != 0, str(r)[:200])
+        rc, r, *_ = run(tmp, {'action': 'backup'}, {'backup': 'hang'}, env_extra={'SAFEKEEP_CC_TIMEOUT': '1'})
+        check('backup: no answer -> timeout', r.get('status') == 'timeout', str(r))
+        rc, r, *_ = run(tmp, {'action': 'backup'}, {'devices': 0})
+        check('backup: no Coldcard -> not_connected', r.get('status') == 'not_connected', str(r))
+        rc, r, *_ = run(tmp, {'action': 'backup'}, {'devices': 2})
+        check('backup: two Coldcards -> multiple_devices', r.get('status') == 'multiple_devices', str(r))
 
         print('bad requests (nothing touches the device)')
         bad = [

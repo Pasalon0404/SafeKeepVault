@@ -16,7 +16,10 @@
  *      descriptors whose first receive address matches one worked out here
  *      independently with @scure/btc-signer, for P2WSH, P2SH-P2WSH, P2SH,
  *      per-key paths, unsorted keys, SLIP-132 keys and old 2-element keys.
- *   6. boot.html wiring.
+ *   6. Wiring: boot.html (file, USB and Courier all go through one check),
+ *      SafeKeepOS.coldcardBackup and the COLDCARD helper's backup action
+ *      (its behaviour is tested with a fake COLDCARD in
+ *      usbbootdrive/tests/test-coldcard-helper.py).
  *
  * Run:  node test-coldcard-backup.mjs
  */
@@ -277,7 +280,17 @@ console.log('\n6. boot.html wiring');
     ck('only ticked multisig wallets are saved, through the saved-wallet checks', restore.includes('.ccb-ms-pick') && fn('async function _ccbSaveMultisig').includes('_savedWalletParse(w.descriptor)') && fn('async function _ccbSaveMultisig').includes('_savedWalletsStore(list)'));
     ck('no restore button when the file has problems or no words', fn('function _ccbRenderReview').includes("if (!s.problems.length && !s.passphraseWallet)"));
     ck('Back forgets the file, the password and the words', fn('function ccb_reset').includes('_ccbBytes.fill(0)') && fn('function ccb_reset').includes("_ccbSummary.mnemonic = ''") && fn('function hideColdcardRecoveryPanel').includes('ccb_reset()'));
-    for (const name of ['function showColdcardRecoveryPanel', 'function hideColdcardRecoveryPanel', 'function ccb_reset', 'function _ccbStatus', 'function ccb_togglePasswordMode', 'function _ccbPassword', 'function ccb_updateButton', 'function ccb_fileChosen', 'async function ccb_open', 'function _ccbRenderReview', 'async function _ccbSaveMultisig', 'async function ccb_restore']) {
+    const bootjs = readFileSync(new URL('./shared/boot.js', import.meta.url), 'utf8');
+    ck('SafeKeepOS.coldcardBackup asks the helper for "backup" and waits up to 11 minutes', /coldcardBackup\(\) \{\s*const r = await _coldcardRequest\(\{ action: 'backup' \}, 11 \* 60 \* 1000\)/.test(bootjs) && bootjs.includes('    coldcardBackup,\n'));
+    ck('…and turns the base64 into bytes, dropping the base64', bootjs.includes('r.bytes = _ccFromBase64(r.backup_b64)') && bootjs.includes('delete r.backup_b64'));
+    const helper = readFileSync(new URL('../usbbootdrive/safekeep-coldcard.py', import.meta.url), 'utf8');
+    ck('the COLDCARD helper has a backup action: authenticity check, start, poll, download, SHA-256', ["'backup': do_backup", 'dev.check_mitm()', 'P.start_backup()', 'P.get_backup_file()', 'download_file(length, sha, file_number=0)', 'hashlib.sha256(backup).digest() != bytes(sha)'].every((x) => helper.includes(x)));
+    ck('three ways in: USB, the Courier, a file', html.includes('onclick="ccb_fromUsb()"') && html.includes('onclick="ccb_courierStart()"') && html.includes('id="ccb-file-input"'));
+    ck('every way in goes through the same check (_ccbLoadBytes)', ['async function ccb_fromUsb', 'function _ccbCourierOnScan', 'function ccb_fileChosen'].every((n) => fn(n).includes('_ccbLoadBytes(')));
+    ck('a Courier-received backup stays in memory (nothing written to the Transfer Drive)', !/vaultTransferDriveHandle|getFileHandle|createWritable/.test(fn('function _ccbCourierOnScan') + fn('function _ccbLoadBytes')));
+    ck('Back stops the camera', fn('function ccb_reset').includes('ccb_courierStop()'));
+    for (const name of ['function _ccbShowInfo', 'function _ccbLoadBytes', 'async function ccb_fromUsb', 'async function ccb_courierStart', 'function ccb_courierStop', 'function _ccbCourierOnScan',
+        'function showColdcardRecoveryPanel', 'function hideColdcardRecoveryPanel', 'function ccb_reset', 'function _ccbStatus', 'function ccb_togglePasswordMode', 'function _ccbPassword', 'function ccb_updateButton', 'function ccb_fileChosen', 'async function ccb_open', 'function _ccbRenderReview', 'async function _ccbSaveMultisig', 'async function ccb_restore']) {
         let ok = true, err = '';
         try { new Function(fn(name).replace(/^async function/, 'return async function').replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }
         ck(`${name.replace(/^(async )?function /, '')} parses`, ok, err);
