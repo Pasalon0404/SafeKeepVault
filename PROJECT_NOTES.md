@@ -9,11 +9,12 @@
 
 ---
 
-## Current state (Nov 6, 2026) — v1.61
+## Current state (Nov 6, 2026) — v1.62
 
-**v1.61** (Nov 6) — tested on Dave's flash drive as quick updates from
-`main` (#98–#102); one OS file changed (the Coldcard helper), so the
-release needs the full build:
+**v1.62** (Nov 6) — tested on Dave's flash drive as quick updates from
+`main` (#98–#102, #104); one OS file changed (the Coldcard helper), so
+the release needs the full build. (A v1.61 tag was pushed for #98–#102,
+then withdrawn before its image was published, so v1.62 follows v1.60.)
 - **Restore from a COLDCARD backup** (welcome → I already have a backup →
   COLDCARD backup). `shared/coldcard-backup.js` ports COLDCARD's 7z reader
   (compat7z.py: unencrypted header, 7z SHA-256 key stretching, AES-256-CBC
@@ -37,8 +38,14 @@ release needs the full build:
   input opens a Transfer-Drive-only list instead of the GTK dialog (which
   offered Home and Other Locations). All four file inputs. The Transfer
   screen's drive list now escapes file names.
-- **Entropy Generator setup:** a Back to Welcome button (the wizard hid
-  the sidebar, so there was no way out); Back clears what was collected.
+- **No dead ends from the welcome screen** (#100, #104): the Entropy
+  Generator's setup wizard has Back to Welcome (it hid the sidebar); in a
+  Temporary Session the "write down your words" screen has Leave Without
+  Keeping This Seed (asks, clears the words, runs Lock); with no seed the
+  sidebar link reads Back to Welcome (`sidebar_goHome`), covering
+  Encrypted backup and Sign with Hardware Wallet. Banner text: Lock, not
+  "power off and reboot", is the way back. `test-session-exits.mjs`
+  checks the way back from all nine welcome paths.
 - Tests: `test-coldcard-backup.mjs` (117, incl. COLDCARD's two sample
   backups and a cross-check with the 7z tool), `test-file-picker.mjs`,
   `usbbootdrive/tests/test-coldcard-helper.py` (fake COLDCARD).
@@ -691,9 +698,9 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.61:** update the website for v1.61 (download page, release
+1. **After v1.62:** update the website for v1.62 (download page, release
    notes; docs for the COLDCARD backup restore and import, and the
-   Transfer Drive file picker), and install `SafeKeep-Update-v1.61.tar` on
+   Transfer Drive file picker), and install `SafeKeep-Update-v1.62.tar` on
    a flash drive from the release itself (it changes the Coldcard helper).
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
