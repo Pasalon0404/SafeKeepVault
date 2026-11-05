@@ -3003,6 +3003,9 @@
     body.onboarding-forge #amnesia-ghost-badge {
       display: none !important;
     }
+    /* The wizard's own way back (the sidebar is hidden there). */
+    .eob-back-btn { display: none; margin: 0 0 1rem; }
+    body.onboarding-forge .eob-back-btn { display: inline-flex; }
 
 
     /* ---- Nuclear Brutalist Override ---- */
@@ -9124,6 +9127,11 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
              eob_context ('forge' | 'onboarding') controls routing.
              ============================================ -->
         <div id="state-entropy">
+            <!-- Way out of the full-screen setup wizard (body.onboarding-forge
+                 hides the sidebar, the only other way back). eob_init sets its
+                 text; eob_cancel clears what was collected and returns to the
+                 welcome screen. -->
+            <button type="button" class="skb-btn eob-back-btn" id="eob-back-btn" onclick="eob_cancel()">&larr; Back to Welcome</button>
             <!-- Context-aware header: swapped by eob_init() -->
             <div class="tool-hero">
                 <h2 class="tool-hero-title" id="eob-title">Entropy<span>Generator</span></h2>
@@ -43319,6 +43327,7 @@ function eob_cancel() {
     _eobForgedMnemonic = '';
     _activeEntropyPool = '';
     _eobClearWords();
+    _eobResetCollection();   // dice, cards, mouse and camera input: seed material, so not kept
     // Always clear the full-screen wizard class — whether returning to
     // welcome (onboarding cancel) or dashboard (forge-in-progress cancel).
     document.body.classList.remove('onboarding-forge');
