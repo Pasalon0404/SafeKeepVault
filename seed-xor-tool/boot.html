@@ -375,6 +375,20 @@
       margin: 0 auto 3rem;
     }
 
+    /* ---- SafeKeep file picker (Transfer Drive only) ---- */
+    .skfp-overlay { position: fixed; inset: 0; z-index: 10050; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 2rem; }
+    .skfp-dialog { width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+    .skfp-head { padding: 1.1rem 1.25rem 0.6rem; }
+    .skfp-title { margin: 0; font-size: 1.05rem; color: var(--skb-text); }
+    .skfp-sub { margin: 0.25rem 0 0; font-size: 0.8rem; color: var(--skb-text-muted); }
+    .skfp-list { padding: 0.25rem 1.25rem; overflow-y: auto; flex: 1; }
+    .skfp-item { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; width: 100%; text-align: left; padding: 0.6rem 0.75rem; margin-bottom: 0.4rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: 8px; color: var(--skb-text); cursor: pointer; }
+    .skfp-item:hover, .skfp-item:focus-visible { border-color: var(--skb-primary); }
+    .skfp-name { font-family: var(--skb-mono); font-size: 0.85rem; overflow-wrap: anywhere; }
+    .skfp-meta { font-size: 0.75rem; color: var(--skb-text-muted); white-space: nowrap; }
+    .skfp-empty { font-size: 0.85rem; color: var(--skb-text-muted); padding: 1rem 0; margin: 0; }
+    .skfp-foot { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.75rem 1.25rem 1rem; border-top: 1px solid var(--skb-border); }
+
     /* ---- COLDCARD backup panel ---- */
     #coldcard-recovery-panel { display: none; max-width: 560px; margin: 0 auto 3rem; }
     .ccb-step { margin-bottom: 1rem; }
@@ -6712,7 +6726,7 @@
                                 <p class="ccb-hint">For a backup file already on the Transfer Drive.</p>
                             </div>
                         </div>
-                        <input type="file" id="ccb-file-input" accept=".7z,.txt" style="display: none;" onchange="ccb_fileChosen(event)">
+                        <input type="file" id="ccb-file-input" data-skfp-title="Choose the COLDCARD backup" accept=".7z,.txt" style="display: none;" onchange="ccb_fileChosen(event)">
                         <div id="ccb-courier-area" style="display: none; margin-top: 0.5rem;">
                             <p class="ccb-hint">On your phone or another computer, open the Courier Tool at safekeepbitcoin.com, choose the COLDCARD&rsquo;s backup .7z and start the loop. Hold it in front of this computer&rsquo;s camera. The file is still encrypted with its 12 words.</p>
                             <div id="ccb-courier-reader" style="max-width: 450px; margin: 0 auto 0.5rem; border-radius: 8px; overflow: hidden;"></div>
@@ -7636,7 +7650,7 @@
                     </div>
 
                     <!-- Hidden file input for Transfer Drive -->
-                    <input type="file" id="psbt-file-input" accept=".psbt" style="display: none;" onchange="psbtHandleFileSelect(event)">
+                    <input type="file" id="psbt-file-input" data-skfp-title="Choose a PSBT to sign" accept=".psbt" style="display: none;" onchange="psbtHandleFileSelect(event)">
                 </div>
             </div>
 
@@ -8670,7 +8684,7 @@
                             Load File (Transfer Drive)
                         </button>
                     </div>
-                    <input type="file" id="desc-verify-file-input" accept=".txt,.json,.bsms,.descriptor,.desc,text/plain,application/json" style="display: none;" onchange="desc_verifyLoadFile(event)">
+                    <input type="file" id="desc-verify-file-input" data-skfp-title="Choose a wallet file to import" accept=".txt,.json,.bsms,.descriptor,.desc,text/plain,application/json" style="display: none;" onchange="desc_verifyLoadFile(event)">
                     <div id="descv-qr-area" style="display: none; margin-top: 0.75rem;">
                         <div id="descv-qr-reader" style="width: 100%; min-height: 280px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>
                         <div id="descv-scan-status" style="text-align: center; font-size: 0.8125rem; color: var(--skb-text-muted); margin-top: 0.4rem;">Awaiting QR code...</div>
@@ -9504,7 +9518,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <!-- The real file input covers the zone invisibly, so clicking and
                              dropping a file both use the browser's own file handling. -->
                         <div class="xfr-file-drop" id="xfr-file-drop">
-                            <input type="file" id="xfr-file-input" accept=".7z,.psbt,.txt,.json,.pdf,.csv,application/x-7z-compressed,application/pdf,text/csv,application/octet-stream">
+                            <input type="file" id="xfr-file-input" accept=".7z,.psbt,.txt,.json,.pdf,.csv,application/x-7z-compressed,application/pdf,text/csv,application/octet-stream" data-skfp-title="Choose a file to send with the Courier">
                             <svg class="xfr-file-drop-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                             <span class="xfr-file-drop-text">
                                 <span class="xfr-file-drop-title" id="xfr-file-drop-title">Choose a file or drop it here</span>
@@ -19983,110 +19997,9 @@ function psbtStopSeedScan() {
 // of truth for the sneakernet drive. Fall back to the native file picker
 // only when the handle is absent (Live Server / unmounted testing).
 async function psbtLoadFromTransfer() {
-    var driveHandle = window.vaultTransferDriveHandle;
-    if (!driveHandle) {
-        // No Archive mount — fall back to the native OS file dialog.
-        document.getElementById('psbt-file-input').click();
-        return;
-    }
-
-    try {
-        var files = [];
-        for await (var entry of driveHandle.values()) {
-            if (entry.kind !== 'file') continue;
-            if (entry.name.startsWith('.')) continue;
-            if (!/\.psbt$/i.test(entry.name)) continue;
-            try {
-                var f = await entry.getFile();
-                files.push({ name: entry.name, handle: entry, size: f.size, lastModified: f.lastModified });
-            } catch (e) { /* unreadable — skip */ }
-        }
-
-        if (files.length === 0) {
-            showStatus('No .psbt files found on Transfer Drive. Opening native picker...', 'warning');
-            document.getElementById('psbt-file-input').click();
-            return;
-        }
-
-        files.sort(function(a, b) { return b.lastModified - a.lastModified; });
-        _psbtShowDrivePicker(files);
-    } catch (err) {
-        console.warn('[Scribe] Transfer Drive scan failed:', err.message);
-        showStatus('Failed to scan Transfer Drive: ' + err.message, 'error');
-        document.getElementById('psbt-file-input').click();
-    }
-}
-
-// Render a quick-pick list of .psbt files from the mounted Transfer Drive
-// directly inside the ingest card. Selecting an entry loads the file via
-// the same directory handle that The Courier wrote to — no path mismatch.
-function _psbtShowDrivePicker(files) {
-    var card = document.querySelector('#psbt-phase-ingest .psbt-card');
-    if (!card) return;
-
-    // Remove any stale picker from a previous invocation
-    var existing = document.getElementById('psbt-drive-picker');
-    if (existing) existing.remove();
-
-    var wrap = document.createElement('div');
-    wrap.id = 'psbt-drive-picker';
-    wrap.style.cssText = 'margin-top: 0.75rem; padding: 0.65rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); background: rgba(247, 147, 26, 0.04);';
-
-    var title = document.createElement('div');
-    title.style.cssText = 'font-size: 0.8125rem; color: var(--skb-text-dim); padding: 0.25rem 0 0.5rem 0; font-family: var(--skb-mono); text-transform: uppercase; letter-spacing: 0.05em;';
-    title.textContent = 'Transfer Drive — .psbt files (' + files.length + ')';
-    wrap.appendChild(title);
-
-    var listDiv = document.createElement('div');
-    for (var i = 0; i < files.length; i++) {
-        var sizeKB = (files[i].size / 1024).toFixed(1);
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.setAttribute('data-psbt-drive-idx', String(i));
-        btn.style.cssText = 'display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 0.45rem 0.65rem; margin-bottom: 0.3rem; background: rgba(247, 147, 26, 0.06); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8125rem; cursor: pointer;';
-        // File names come from the transfer drive (untrusted) — build the label
-        // with textContent so a crafted name can never become markup.
-        var nameSpan = document.createElement('span');
-        nameSpan.textContent = files[i].name;
-        var sizeSpan = document.createElement('span');
-        sizeSpan.style.cssText = 'font-size: 0.75rem; color: var(--skb-text-dim);';
-        sizeSpan.textContent = sizeKB + ' KB';
-        btn.appendChild(nameSpan);
-        btn.appendChild(sizeSpan);
-        listDiv.appendChild(btn);
-    }
-    wrap.appendChild(listDiv);
-
-    var cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'skb-btn';
-    cancelBtn.style.cssText = 'margin-top: 0.4rem; padding: 0.35rem 0.9rem; font-size: 0.8125rem;';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.onclick = function() { wrap.remove(); };
-    wrap.appendChild(cancelBtn);
-
-    listDiv.onclick = async function(e) {
-        var target = e.target.closest('[data-psbt-drive-idx]');
-        if (!target) return;
-        var idx = parseInt(target.getAttribute('data-psbt-drive-idx'), 10);
-        var entry = files[idx];
-        if (!entry) return;
-        try {
-            var file = await entry.handle.getFile();
-            var buf = await file.arrayBuffer();
-            var bytes = new Uint8Array(buf);
-            // Defensive auto-decode: Courier-exported PSBTs on the
-            // Transfer Drive can be Base64 or Hex text. Sniff and
-            // normalize to raw binary before the parser sees them.
-            bytes = _psbtNormalizeIngestBytes(bytes);
-            wrap.remove();
-            _psbtIngestComplete(bytes, file.name);
-        } catch (err) {
-            showStatus('Failed to read file: ' + err.message, 'error');
-        }
-    };
-
-    card.appendChild(wrap);
+    // On the flash drive this opens SafeKeep's own Transfer Drive picker
+    // (skfp_*, which catches every file input); elsewhere the browser's.
+    document.getElementById('psbt-file-input').click();
 }
 
 function psbtHandleFileSelect(event) {
@@ -34709,7 +34622,7 @@ async function xfr_populateDriveFiles() {
                 ' color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8rem; cursor: pointer;"' +
                 ' onmouseover="this.style.borderColor=\'var(--skb-primary)\';this.style.background=\'rgba(187,134,252,0.15)\'"' +
                 ' onmouseout="this.style.borderColor=\'var(--skb-border)\';this.style.background=\'rgba(187,134,252,0.06)\'">' +
-                '<span>' + files[i].name + '</span>' +
+                '<span>' + _wrecEscape(files[i].name) + '</span>' +
                 '<span style="font-size: 0.72rem; color: var(--skb-text-dim);">' + sizeKB + ' KB</span>' +
                 '</button>';
         }
@@ -43832,6 +43745,155 @@ async function s39r_restorePending() {
     }
 }
 
+
+// ======================================================================
+// SafeKeep file picker (skfp_*) — Transfer Drive only
+// ======================================================================
+// On the flash drive the system's file dialog (GTK) would offer Home,
+// Other Locations and every mounted drive, and a web page can't restrict
+// it. So whenever SafeKeep runs from its flash drive (file://), or on the
+// dev server's in-memory Transfer Drive, EVERY attempt to open a file
+// input — a click or input.click() from code — is caught here and shows
+// SafeKeep's own list of files on the Transfer Drive instead, filtered by
+// that input's `accept` extensions. The chosen file is handed to the input
+// (DataTransfer + a "change" event), so each screen's handler is unchanged.
+// The online demo (http/https) keeps the browser's normal picker.
+var _skfpOpen = null;   // { resolve } while the picker is showing
+
+function skfp_inApp() {
+    return window.location.protocol === 'file:' || !!(window.SafeKeepOS && window.SafeKeepOS._mockLabel);
+}
+
+/* ".7z,.txt,text/plain" → ['.7z', '.txt'] (MIME types are ignored). */
+function _skfpExts(accept) {
+    return String(accept || '').split(',').map(function (s) { return s.trim().toLowerCase(); })
+        .filter(function (s) { return /^\.[a-z0-9]{1,12}$/.test(s); });
+}
+
+function _skfpFmtSize(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+/* Files on the Transfer Drive matching `exts`, newest first, or null if
+   the drive isn't available. */
+async function _skfpList(exts) {
+    if (!window.vaultTransferDriveHandle && typeof _transferAutoMount === 'function') {
+        try { await _transferAutoMount(); } catch (_) {}
+    }
+    var h = window.vaultTransferDriveHandle;
+    if (!h) return null;
+    var out = [];
+    for await (var entry of h.values()) {
+        if (entry.kind !== 'file' || entry.name.charAt(0) === '.') continue;
+        var lower = entry.name.toLowerCase();
+        if (exts.length && !exts.some(function (x) { return lower.endsWith(x); })) continue;
+        var m = entry._meta || {};
+        out.push({ name: entry.name, handle: entry, size: m.size, lastModified: m.lastModified || 0 });
+    }
+    out.sort(function (a, b) { return (b.lastModified || 0) - (a.lastModified || 0) || a.name.localeCompare(b.name); });
+    return out;
+}
+
+function skfp_close(file) {
+    var ov = document.getElementById('skfp-overlay');
+    if (ov) ov.remove();
+    document.removeEventListener('keydown', _skfpKey, true);
+    var o = _skfpOpen; _skfpOpen = null;
+    if (o) o.resolve(file || null);
+}
+
+function _skfpKey(e) { if (e.key === 'Escape') { e.preventDefault(); skfp_close(null); } }
+
+/* Show the picker; resolves with a File, or null if cancelled. */
+function skfp_open(opts) {
+    opts = opts || {};
+    if (_skfpOpen) skfp_close(null);
+    return new Promise(function (resolve) {
+        _skfpOpen = { resolve: resolve };
+        var ov = document.createElement('div');
+        ov.id = 'skfp-overlay';
+        ov.className = 'skfp-overlay';
+        ov.setAttribute('role', 'dialog');
+        ov.setAttribute('aria-modal', 'true');
+        ov.innerHTML =
+            '<div class="skfp-dialog">' +
+                '<div class="skfp-head"><h3 class="skfp-title"></h3><p class="skfp-sub"></p></div>' +
+                '<div class="skfp-list" id="skfp-list"><p class="skfp-empty">Reading the Transfer Drive…</p></div>' +
+                '<div class="skfp-foot">' +
+                    '<button type="button" class="skb-btn" id="skfp-refresh">Refresh</button>' +
+                    '<button type="button" class="skb-btn" id="skfp-cancel">Cancel</button>' +
+                '</div>' +
+            '</div>';
+        ov.querySelector('.skfp-title').textContent = opts.title || 'Choose a file';
+        var exts = opts.exts || [];
+        ov.querySelector('.skfp-sub').textContent = 'Files on the Transfer Drive' + (exts.length ? ' (' + exts.join(', ') + ')' : '');
+        ov.addEventListener('click', function (e) { if (e.target === ov) skfp_close(null); });
+        document.body.appendChild(ov);
+        document.getElementById('skfp-cancel').onclick = function () { skfp_close(null); };
+        document.getElementById('skfp-refresh').onclick = function () { _skfpRender(exts); };
+        document.addEventListener('keydown', _skfpKey, true);
+        _skfpRender(exts);
+    });
+}
+
+async function _skfpRender(exts) {
+    var list = document.getElementById('skfp-list');
+    if (!list) return;
+    list.innerHTML = '<p class="skfp-empty">Reading the Transfer Drive…</p>';
+    var files;
+    try { files = await _skfpList(exts); }
+    catch (e) { files = null; }
+    if (!document.getElementById('skfp-list')) return;   // closed meanwhile
+    list.innerHTML = '';
+    var p = document.createElement('p');
+    p.className = 'skfp-empty';
+    if (files === null) {
+        p.textContent = 'The Transfer Drive isn’t available. Restart SafeKeep and try again.';
+        list.appendChild(p); return;
+    }
+    if (!files.length) {
+        p.textContent = 'No ' + (exts.length ? exts.join(' or ') + ' ' : '') + 'files on the Transfer Drive. Copy the file onto the Transfer Drive, or receive it with the Courier, then press Refresh.';
+        list.appendChild(p); return;
+    }
+    files.forEach(function (f, i) {
+        // Names come from the drive: built with textContent, never as markup.
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'skfp-item';
+        btn.setAttribute('data-skfp-idx', String(i));
+        var n = document.createElement('span'); n.className = 'skfp-name'; n.textContent = f.name;
+        var m = document.createElement('span'); m.className = 'skfp-meta';
+        m.textContent = [f.size != null ? _skfpFmtSize(f.size) : '', f.lastModified ? new Date(f.lastModified).toLocaleString() : ''].filter(Boolean).join(' · ');
+        btn.append(n, m);
+        btn.onclick = async function () {
+            btn.disabled = true;
+            try { skfp_close(await f.handle.getFile()); }
+            catch (e) { btn.disabled = false; showStatus('“' + _wrecEscape(f.name) + '” couldn’t be read: ' + _wrecEscape(e && e.message ? e.message : String(e)), 'error'); }
+        };
+        list.appendChild(btn);
+    });
+}
+
+/* Open the picker for a file input and hand the chosen file to it. */
+async function skfp_chooseFor(input) {
+    var file = await skfp_open({ title: input.getAttribute('data-skfp-title') || 'Choose a file', exts: _skfpExts(input.accept) });
+    if (!file) return;
+    var dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+// Catch every file input before the system dialog opens.
+document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'INPUT' || t.type !== 'file' || !skfp_inApp()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    skfp_chooseFor(t);
+}, true);
 
 // ---- Restore from a COLDCARD backup (ccb_*) ----
 // ======================================================================
