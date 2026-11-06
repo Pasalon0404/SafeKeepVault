@@ -375,6 +375,27 @@
       margin: 0 auto 3rem;
     }
 
+    /* ---- Draw my SeedQR (light box, square by square) ---- */
+    .sqrd-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .sqrd-overlay { position: fixed; inset: 0; z-index: 10060; display: flex; flex-direction: column; background: #ffffff; color: #111; overflow: auto; }
+    .sqrd-bar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; padding: 0.6rem 1rem; background: #111; color: #eee; }
+    .sqrd-bar .skb-btn { padding: 0.35rem 0.8rem; font-size: 0.8125rem; }
+    .sqrd-bar-title { font-weight: 700; margin-right: auto; }
+    .sqrd-size { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; }
+    .sqrd-size input { width: 14rem; }
+    .sqrd-hint { margin: 0.5rem auto 0; max-width: 60rem; padding: 0 1rem; font-size: 0.85rem; color: #333; text-align: center; line-height: 1.45; }
+    .sqrd-stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 1rem; }
+    .sqrd-card { position: absolute; border: 2px dashed #f7931a; border-radius: 3.2mm; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
+    .sqrd-card[hidden] { display: none; }
+    .sqrd-card span { font-size: 0.75rem; color: #b85f00; margin-bottom: 0.35rem; background: rgba(255,255,255,0.85); padding: 0 0.4rem; border-radius: 4px; }
+    .sqrd-progress { font-size: 0.8125rem; color: #ccc; }
+    .sqrd-blockview { flex: 1; display: flex; gap: 2rem; align-items: flex-start; justify-content: center; padding: 1.5rem; flex-wrap: wrap; }
+    .sqrd-side { max-width: 22rem; }
+    .sqrd-side h4 { margin: 1rem 0 0.4rem; font-size: 0.95rem; }
+    .sqrd-side canvas { border: 1px solid #ccc; }
+    .sqrd-rows { margin: 0; padding-left: 0; list-style: none; font-family: var(--skb-mono); font-size: 0.95rem; line-height: 1.7; }
+    .sqrd-note { font-size: 0.78rem; color: #555; line-height: 1.45; }
+
     /* ---- SafeKeep file picker (Transfer Drive only) ---- */
     .skfp-overlay { position: fixed; inset: 0; z-index: 10050; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 2rem; }
     .skfp-dialog { width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: var(--skb-bg-card, var(--skb-bg-secondary)); border: 1px solid var(--skb-border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
@@ -9093,6 +9114,17 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         </div>
                     </div>
 
+                    <!-- Draw my SeedQR: copy it onto a blank template without a printer (sqrd_*) -->
+                    <div class="skb-card sqrd-card-intro" style="margin-bottom: 0.75rem;">
+                        <h4 style="margin: 0 0 0.35rem; font-size: 0.95rem;">Draw my SeedQR</h4>
+                        <p style="margin: 0 0 0.75rem; font-size: 0.8125rem; color: var(--skb-text-muted); line-height: 1.5;">Copy this code onto a blank template by hand, without a printer. Get the blank 21&times;21 or 25&times;25 template from Print QR at safekeepbitcoin.com (it&rsquo;s empty, so any printer is fine), or print it here with Print Blank Grid. When you&rsquo;re done, Scan to Verify checks your copy.</p>
+                        <div class="sqrd-choices">
+                            <button type="button" class="skb-btn skb-btn--primary" onclick="sqrd_open('lightbox')">Trace It on the Screen</button>
+                            <button type="button" class="skb-btn" onclick="sqrd_open('blocks')">Copy It Square by Square</button>
+                        </div>
+                        <p style="margin: 0.6rem 0 0; font-size: 0.75rem; color: var(--skb-text-muted); line-height: 1.5;"><strong>Trace</strong> shows the code at the template&rsquo;s real size: lay the template on the screen and fill in what shows through. <strong>Square by square</strong> goes one block at a time and lists the dark squares in each row, which also suits punching steel or placing tiles.</p>
+                    </div>
+
                     <div style="margin-bottom: 0.75rem;">
                         <button type="button" class="skb-btn" style="width: 100%;" onclick="sqr_printBlankGrid()">Print Blank Grid</button>
                     </div>
@@ -11063,6 +11095,15 @@ document.addEventListener('keydown', function(evt) {
     for (var i = 0; i < acList.length; i++) {
         var style = window.getComputedStyle(acList[i]);
         if (style.display !== 'none') return;
+    }
+    // Yield to an open overlay (file picker, Draw my SeedQR, COLDCARD
+    // import): its own Escape closes it, and the tool stays open.
+    if (document.querySelector('#skfp-overlay, #sqrd-overlay, #ccb-import-overlay')) return;
+    // No seed loaded: home is the welcome screen, as for the sidebar link.
+    if (typeof sidebar_goHome === 'function') {
+        evt.preventDefault();
+        sidebar_goHome();
+        return;
     }
     // Hardware-only signing has no dashboard to return to (no seed).
     if (typeof _psbtHwMode !== 'undefined' && _psbtHwMode && typeof psbtBackToDashboard === 'function') {
@@ -33696,6 +33737,7 @@ var sqr_state = {
     format: 'compact',          // 'compact' (SeedSigner CompactSeedQR) or 'standard' (numeric SeedQR)
     lastGridSize: null,         // module count of the last generated QR (drives the blank print grid)
     currentEntropyBytes: null,  // Uint8Array — entropy of the last generated SeedQR (verify compares this)
+    modules: null,              // rows of booleans (dark = true) of the last SeedQR, for Draw my SeedQR
     importScanner: null,
     verifyScanner: null
 };
@@ -34279,6 +34321,14 @@ async function sqr_generate() {
         // Read the tiny QR data and paint scaled blocks
         var tempCtx = tempCanvas.getContext('2d');
         var imgData = tempCtx.getImageData(0, 0, gridSize, gridSize).data;
+        // The grid of modules, kept for Draw my SeedQR (sqrd_*).
+        var modules = [];
+        for (var my = 0; my < gridSize; my++) {
+            var mrow = [];
+            for (var mx = 0; mx < gridSize; mx++) mrow.push(imgData[(my * gridSize + mx) * 4] === 0);
+            modules.push(mrow);
+        }
+        sqr_state.modules = modules;
 
         for (var y = 0; y < gridSize; y++) {
             for (var x = 0; x < gridSize; x++) {
@@ -34534,7 +34584,214 @@ function sqr_stopVerify() {
 function sqr_cleanup() {
     sqr_stopImportScan();
     sqr_stopVerify();
+    sqrd_close();
 }
+
+// ---- Draw my SeedQR (sqrd_*) ----
+// ======================================================================
+// Copy the generated SeedQR onto a blank template without a printer
+// (window.QrDraw, shared/qr-draw.js):
+//   light box   — the code full-screen on white at the template's real
+//                 size; the printed template laid on the screen shows the
+//                 squares to fill in. The scale comes from a bank card held
+//                 to the screen (85.6 mm) or from lining up the template.
+//   square by square — one 7×7 block at a time, numbered as the template
+//                 is, with the dark squares of each row listed.
+// Both end at Scan to Verify. Nothing is printed or written anywhere.
+// ======================================================================
+var sqrd_state = { mode: null, block: 0, pxPerMm: null, showCard: false };
+
+function _sqrdPxPerMm() {
+    if (sqrd_state.pxPerMm) return sqrd_state.pxPerMm;
+    try { var v = parseFloat(localStorage.getItem('skv.sqrd.pxPerMm')); if (v > 1 && v < 20) return (sqrd_state.pxPerMm = v); } catch (_) {}
+    return (sqrd_state.pxPerMm = 96 / 25.4);   // CSS's own guess; the card check corrects it
+}
+
+function sqrd_open(mode) {
+    var m = sqr_state.modules;
+    if (!m || !m.length || !window.QrDraw) { showStatus('Generate a SeedQR first.', 'error'); return; }
+    sqrd_close();
+    sqrd_state.mode = mode;
+    sqrd_state.block = 0;
+    var ov = document.createElement('div');
+    ov.id = 'sqrd-overlay';
+    ov.className = 'sqrd-overlay sqrd-' + mode;
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    if (mode === 'lightbox') {
+        ov.innerHTML =
+            '<div class="sqrd-bar">' +
+                '<span class="sqrd-bar-title">Light box</span>' +
+                '<label class="sqrd-size">Size <input type="range" id="sqrd-scale" min="2" max="12" step="0.01" oninput="sqrd_setScale(this.value)"></label>' +
+                '<button type="button" class="skb-btn" id="sqrd-card-btn" onclick="sqrd_toggleCard()">Match a bank card</button>' +
+                '<button type="button" class="skb-btn" onclick="sqrd_verify()">Scan to Verify</button>' +
+                '<button type="button" class="skb-btn" onclick="sqrd_close()">Done</button>' +
+            '</div>' +
+            '<p class="sqrd-hint" id="sqrd-hint"></p>' +
+            '<div class="sqrd-stage"><canvas id="sqrd-canvas"></canvas><div class="sqrd-card" id="sqrd-card" hidden><span>Hold a bank card here</span></div></div>';
+    } else {
+        ov.innerHTML =
+            '<div class="sqrd-bar">' +
+                '<span class="sqrd-bar-title">Square by square</span>' +
+                '<span class="sqrd-progress" id="sqrd-progress"></span>' +
+                '<button type="button" class="skb-btn" onclick="sqrd_step(-1)">&larr; Previous</button>' +
+                '<button type="button" class="skb-btn skb-btn--primary" id="sqrd-next" onclick="sqrd_step(1)">Next &rarr;</button>' +
+                '<button type="button" class="skb-btn" onclick="sqrd_close()">Done</button>' +
+            '</div>' +
+            '<div class="sqrd-blockview">' +
+                '<div><canvas id="sqrd-block-canvas"></canvas></div>' +
+                '<div class="sqrd-side"><canvas id="sqrd-map"></canvas>' +
+                    '<h4>Dark squares in this block</h4><ol class="sqrd-rows" id="sqrd-rows"></ol>' +
+                    '<p class="sqrd-note">Numbers match the template: rows top to bottom, columns left to right, starting at 1. The three big corner squares are already printed on the template.</p>' +
+                '</div>' +
+            '</div>';
+    }
+    document.body.appendChild(ov);
+    document.addEventListener('keydown', _sqrdKey, true);
+    window.addEventListener('resize', _sqrdRender);
+    if (mode === 'lightbox') document.getElementById('sqrd-scale').value = _sqrdPxPerMm();
+    _sqrdRender();
+}
+
+function sqrd_close() {
+    var ov = document.getElementById('sqrd-overlay');
+    if (ov) {
+        ov.querySelectorAll('canvas').forEach(function (c) { c.width = 1; c.height = 1; });   // drop the drawn code
+        ov.remove();
+    }
+    document.removeEventListener('keydown', _sqrdKey, true);
+    window.removeEventListener('resize', _sqrdRender);
+    sqrd_state.mode = null;
+}
+
+function _sqrdKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); sqrd_close(); return; }
+    if (sqrd_state.mode === 'blocks') {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); sqrd_step(1); }
+        if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); sqrd_step(-1); }
+    } else if (sqrd_state.mode === 'lightbox' && (e.key === '+' || e.key === '=' || e.key === '-')) {
+        e.preventDefault();
+        sqrd_setScale(_sqrdPxPerMm() + (e.key === '-' ? -0.01 : 0.01));
+    }
+}
+
+function sqrd_setScale(v) {
+    var n = Math.max(2, Math.min(12, Number(v) || 0));
+    sqrd_state.pxPerMm = n;
+    try { localStorage.setItem('skv.sqrd.pxPerMm', String(n)); } catch (_) {}
+    var r = document.getElementById('sqrd-scale');
+    if (r && Number(r.value) !== n) r.value = n;
+    _sqrdRender();
+}
+
+function sqrd_toggleCard() {
+    sqrd_state.showCard = !sqrd_state.showCard;
+    _sqrdRender();
+}
+
+/* Draw `modules` rows r0.. and columns c0.. into ctx, cell px each, with
+   thin grid lines and the template's numbers (odd ones) around it. */
+function _sqrdDrawGrid(ctx, modules, r0, c0, rows, cols, cell, pad, labelEvery) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    for (var y = 0; y < rows; y++) for (var x = 0; x < cols; x++) {
+        if (modules[r0 + y][c0 + x]) { ctx.fillStyle = '#000000'; ctx.fillRect(pad + x * cell, pad + y * cell, cell, cell); }
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+    ctx.lineWidth = 1;
+    for (var i = 0; i <= Math.max(rows, cols); i++) {
+        if (i <= cols) { ctx.beginPath(); ctx.moveTo(Math.round(pad + i * cell) + 0.5, pad); ctx.lineTo(Math.round(pad + i * cell) + 0.5, pad + rows * cell); ctx.stroke(); }
+        if (i <= rows) { ctx.beginPath(); ctx.moveTo(pad, Math.round(pad + i * cell) + 0.5); ctx.lineTo(pad + cols * cell, Math.round(pad + i * cell) + 0.5); ctx.stroke(); }
+    }
+    ctx.fillStyle = '#555555';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = Math.max(9, Math.min(16, cell * 0.45)) + 'px ui-monospace, monospace';
+    for (var k = 0; k < Math.max(rows, cols); k++) {
+        var colNo = c0 + k + 1, rowNo = r0 + k + 1;
+        if (k < cols && (labelEvery === 1 || colNo % 2 === 1)) {
+            ctx.fillText(String(colNo), pad + k * cell + cell / 2, pad / 2);
+            ctx.fillText(String(colNo), pad + k * cell + cell / 2, pad + rows * cell + pad / 2);
+        }
+        if (k < rows && (labelEvery === 1 || rowNo % 2 === 1)) {
+            ctx.fillText(String(rowNo), pad / 2, pad + k * cell + cell / 2);
+            ctx.fillText(String(rowNo), pad + cols * cell + pad / 2, pad + k * cell + cell / 2);
+        }
+    }
+}
+
+function _sqrdRender() {
+    var m = sqr_state.modules, QD = window.QrDraw;
+    if (!m || !QD || !sqrd_state.mode) return;
+    var n = m.length;
+    if (sqrd_state.mode === 'lightbox') {
+        var ppm = _sqrdPxPerMm();
+        var gridMm = QD.templateGridMm(n);
+        var cell = (gridMm * ppm) / n;
+        var pad = Math.max(18, Math.round(cell * 1.2));
+        var cv = document.getElementById('sqrd-canvas');
+        var dpr = window.devicePixelRatio || 1;
+        var css = n * cell + 2 * pad;
+        cv.style.width = css + 'px'; cv.style.height = css + 'px';
+        cv.width = Math.round(css * dpr); cv.height = Math.round(css * dpr);
+        var ctx = cv.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        _sqrdDrawGrid(ctx, m, 0, 0, n, n, cell, pad, 2);
+        var card = document.getElementById('sqrd-card');
+        card.hidden = !sqrd_state.showCard;
+        card.style.width = (QD.CARD_WIDTH_MM * ppm) + 'px';
+        card.style.height = (QD.CARD_HEIGHT_MM * ppm) + 'px';
+        document.getElementById('sqrd-card-btn').textContent = sqrd_state.showCard ? 'Hide the card outline' : 'Match a bank card';
+        document.getElementById('sqrd-hint').textContent = sqrd_state.showCard
+            ? 'Hold any bank card flat against the outline and move the Size slider until the outline is exactly as wide as the card. The code is then the template’s size.'
+            : 'Turn the screen to full brightness. Lay the printed ' + n + '×' + n + ' template on the screen, line its grid up with this one (fine-tune with the Size slider or the + and − keys), and fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
+    } else {
+        var blocks = QD.blocksFor(n, 7), b = blocks[sqrd_state.block];
+        var bc = document.getElementById('sqrd-block-canvas');
+        var avail = Math.min(window.innerHeight - 160, window.innerWidth * 0.55);
+        var cellB = Math.max(28, Math.floor((avail - 80) / 7));
+        var padB = Math.round(cellB * 0.9);
+        bc.width = b.cols * cellB + 2 * padB; bc.height = b.rows * cellB + 2 * padB;
+        _sqrdDrawGrid(bc.getContext('2d'), m, b.row0, b.col0, b.rows, b.cols, cellB, padB, 1);
+        // Where this block sits in the whole code.
+        var mp = document.getElementById('sqrd-map'), mc = 6, mctx = mp.getContext('2d');
+        mp.width = n * mc; mp.height = n * mc;
+        mctx.fillStyle = '#ffffff'; mctx.fillRect(0, 0, mp.width, mp.height);
+        for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) if (m[y][x]) { mctx.fillStyle = '#bbbbbb'; mctx.fillRect(x * mc, y * mc, mc, mc); }
+        mctx.strokeStyle = '#f7931a'; mctx.lineWidth = 2;
+        mctx.strokeRect(b.col0 * mc + 1, b.row0 * mc + 1, b.cols * mc - 2, b.rows * mc - 2);
+        var list = document.getElementById('sqrd-rows');
+        list.innerHTML = '';
+        for (var r = b.row0; r < b.row0 + b.rows; r++) {
+            var li = document.createElement('li');
+            var runs = QD.rowRuns(m, r, b.col0, b.col0 + b.cols);
+            li.textContent = 'Row ' + (r + 1) + ': ' + (runs || 'none');
+            list.appendChild(li);
+        }
+        document.getElementById('sqrd-progress').textContent = 'Block ' + (sqrd_state.block + 1) + ' of ' + blocks.length +
+            ' · rows ' + (b.row0 + 1) + '–' + (b.row0 + b.rows) + ', columns ' + (b.col0 + 1) + '–' + (b.col0 + b.cols);
+        var next = document.getElementById('sqrd-next');
+        var last = sqrd_state.block === blocks.length - 1;
+        next.innerHTML = last ? 'Scan to Verify' : 'Next &rarr;';
+        next.onclick = last ? sqrd_verify : function () { sqrd_step(1); };
+    }
+}
+
+function sqrd_step(d) {
+    var n = sqr_state.modules ? sqr_state.modules.length : 0;
+    var count = window.QrDraw.blocksFor(n, 7).length;
+    sqrd_state.block = Math.max(0, Math.min(count - 1, sqrd_state.block + d));
+    _sqrdRender();
+}
+
+/* Finish: check the drawn copy with the camera. */
+function sqrd_verify() {
+    sqrd_close();
+    sqr_switchTab('verify');
+    sqr_startVerify();
+}
+
+
 
 // ---- Tool 6: The Forge — Unified Entropy Engine ----
 // ent_* functions removed. The advanced multi-source entropy engine (eob_*)
