@@ -30,7 +30,7 @@
       window._skbVaultDeviceSettings = null;
       if (window.location.protocol === 'file:' && window.location.hash !== '#ephemeral=true') {
         try {
-          var _skbDsKeys = ['safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers'];
+          var _skbDsKeys = ['safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize', 'safekeepBrightness'];
           var _skbDsXhr = new XMLHttpRequest();
           _skbDsXhr.open('GET', 'file:///media/.safekeep-vault/settings/device-settings.json', false);
           _skbDsXhr.send(null);
@@ -382,7 +382,9 @@
     .sqrd-bar .skb-btn { padding: 0.35rem 0.8rem; font-size: 0.8125rem; }
     .sqrd-bar-title { font-weight: 700; margin-right: auto; }
     .sqrd-size { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; }
-    .sqrd-size input { width: 14rem; }
+    .sqrd-size input[type=range] { width: 14rem; }
+    .skbright-off { display: none !important; }
+    .sqrd-size input[type=number] { width: 5.2rem; padding: 0.2rem 0.35rem; font: inherit; font-variant-numeric: tabular-nums; border-radius: 4px; border: 1px solid #555; background: #222; color: #fff; }
     .sqrd-hint { margin: 0.5rem auto 0; max-width: 60rem; padding: 0 1rem; font-size: 0.85rem; color: #333; text-align: center; line-height: 1.45; }
     .sqrd-stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 1rem; }
     .sqrd-card { position: absolute; border: 2px dashed #f7931a; border-radius: 3.2mm; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
@@ -7415,7 +7417,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh(); if (this.open && typeof ssSettingsRefresh === 'function') ssSettingsRefresh()">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh(); if (this.open && typeof ssSettingsRefresh === 'function') ssSettingsRefresh(); if (this.open && typeof skbright_refresh === 'function') skbright_refresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -7492,6 +7494,20 @@
                                     <span id="settings-audio-volume-label" style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); min-width: 3rem; text-align: right; letter-spacing: 0.05em;">50%</span>
                                 </div>
                             </div>
+                        </div>
+                        <!-- Screen Brightness (skbright_*) -->
+                        <div id="settings-brightness-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Screen Brightness</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 1rem; line-height: 1.6;">The built-in screen&rsquo;s brightness. The keyboard&rsquo;s brightness keys work too.</p>
+                            <div class="skbright-row" style="flex: 1; min-width: 200px; max-width: 33vw; display: flex; align-items: center; gap: 0.6rem;">
+                                <span style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); letter-spacing: 0.06em;">DIM</span>
+                                <input type="range" id="settings-brightness" class="skbright-range" min="10" max="100" step="5" value="80"
+                                       oninput="skbright_set(this.value)" aria-label="Screen brightness"
+                                       style="flex: 1; accent-color: var(--skb-primary); cursor: pointer;">
+                                <span style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); letter-spacing: 0.06em;">BRIGHT</span>
+                                <span class="skbright-label" style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); min-width: 3rem; text-align: right; letter-spacing: 0.05em;">80%</span>
+                            </div>
+                            <p class="skbright-none" hidden style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0; line-height: 1.6;">SafeKeep can&rsquo;t set this screen&rsquo;s brightness. An external monitor has its own buttons for it.</p>
                         </div>
                         <!-- Idle Timers -->
                         <div id="settings-idle-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
@@ -9064,7 +9080,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
 
                         <!-- Editable word grid (no privacy-mask, no accordion — see
                              rationale comment above). -->
-                        <div id="sqr-input-grid" class="rst-grid" style="margin-bottom: 0.75rem;"></div>
+                        <div id="sqr-input-grid" style="margin-bottom: 0.75rem;"></div>
 
                         <!-- Camera import for manual section -->
                         <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem; font-size: 0.8125rem;" onclick="sqr_startImportScan()">Import from QR Scan</button>
@@ -12076,6 +12092,20 @@ window.addEventListener('DOMContentLoaded', () => {
             return Promise.resolve(false);
         },
         getPassphraseRating: function () { return Promise.resolve(null); },
+
+        // --- Screen brightness (Brightness Watcher) ---
+        // A pretend backlight, so the sliders and keys can be tried here.
+        setBrightness: function (pct) {
+            window._devBrightness = Math.max(10, Math.min(100, Math.round(pct)));
+            return true;
+        },
+        stepBrightness: function (dir) {
+            var now = window._devBrightness || 80;
+            window._devBrightness = Math.max(10, Math.min(100, dir > 0 ? (Math.floor(now / 10) + 1) * 10 : (Math.ceil(now / 10) - 1) * 10));
+            _devAnnounce('Brightness ' + window._devBrightness + '% (mock)');
+            return true;
+        },
+        getBrightness: function () { return Promise.resolve({ available: true, percent: window._devBrightness || 80 }); },
 
         // --- Display Sleep bridge (task #198) ---
         // Real backend (shared/boot.js on the live USB) translates this
@@ -33852,137 +33882,19 @@ function sqr_setLength(len) {
     sqr_buildInputGrid(len);
 }
 
-// --- Build editable word grid with BIP-39 autocomplete ---
+// --- Editable word boxes: the app's standard ones (ShareFlow.createWordBoxes,
+// shared/word-boxes.js), the same as Seed XOR, Shamir, Draw Your Own Words
+// and the COLDCARD backup: suggestions as you type, Enter or Tab takes one,
+// green for a list word and red for none, pasting fills several boxes.
+// Box ids stay sqr-in-word-0… ---
+var _sqrBoxes = null;
 function sqr_buildInputGrid(count) {
-    var grid = document.getElementById('sqr-input-grid');
-    grid.innerHTML = '';
-    for (var i = 0; i < count; i++) {
-        var cell = document.createElement('div');
-        cell.className = 'rst-cell';
-        cell.style.position = 'relative';
-        cell.innerHTML = '<span class="bip85-out-num">' + (i + 1) + '.</span>' +
-            '<input type="text" id="sqr-in-word-' + i + '" class="rst-word-input" ' +
-            'spellcheck="false" autocomplete="off" autocapitalize="off" ' +
-            'oninput="sqr_onInput(event,' + i + ')" ' +
-            'onkeydown="sqr_onKeydown(event,' + i + ')" ' +
-            'placeholder="">';
-        grid.appendChild(cell);
-    }
-    // Focus first input
-    var first = document.getElementById('sqr-in-word-0');
-    if (first) first.focus();
-}
-
-// --- Autocomplete keydown handler ---
-function sqr_onKeydown(e, idx) {
-    // ALWAYS block Enter to prevent phantom reload
-    if (e.key === 'Enter') e.preventDefault();
-
-    var dropdown = document.getElementById('sqr-ac-' + idx);
-    var items = dropdown ? dropdown.querySelectorAll('.rst-autocomplete-item') : [];
-    var active = dropdown ? dropdown.querySelector('.rst-autocomplete-active') : null;
-
-    if (e.key === 'ArrowDown' && items.length > 0) {
-        e.preventDefault();
-        var nextIdx = -1;
-        for (var i = 0; i < items.length; i++) {
-            if (items[i] === active) { nextIdx = i; break; }
-        }
-        nextIdx = (nextIdx + 1) % items.length;
-        for (var j = 0; j < items.length; j++) items[j].classList.remove('rst-autocomplete-active');
-        items[nextIdx].classList.add('rst-autocomplete-active');
-    } else if (e.key === 'ArrowUp' && items.length > 0) {
-        e.preventDefault();
-        var prevIdx = 0;
-        for (var i = 0; i < items.length; i++) {
-            if (items[i] === active) { prevIdx = i; break; }
-        }
-        prevIdx = (prevIdx - 1 + items.length) % items.length;
-        for (var j = 0; j < items.length; j++) items[j].classList.remove('rst-autocomplete-active');
-        items[prevIdx].classList.add('rst-autocomplete-active');
-    } else if (e.key === 'Enter' && active) {
-        sqr_selectWord(idx, active.textContent);
-    } else if (e.key === 'Enter' && items.length === 0) {
-        // No dropdown — advance to next input
-        var next = document.getElementById('sqr-in-word-' + (idx + 1));
-        if (next) next.focus();
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-        // Accept top suggestion on bare Tab. Shift+Tab is intentionally
-        // NOT handled here — it falls through to native DOM reverse-nav
-        // so the user can step back to an earlier seed input.
-        if (items.length > 0) {
-            e.preventDefault();
-            var topWord = active ? active.textContent : items[0].textContent;
-            sqr_selectWord(idx, topWord);
-        }
-    }
-}
-
-// --- Autocomplete input handler ---
-function sqr_onInput(e, idx) {
-    var val = e.target.value.trim().toLowerCase();
-    // Handle paste of multiple words
-    if (val.indexOf(' ') !== -1) {
-        var pasted = val.split(/\s+/).filter(function(w) { return w.length > 0; });
-        for (var p = 0; p < pasted.length && (idx + p) < sqr_state.inputLength; p++) {
-            var inp = document.getElementById('sqr-in-word-' + (idx + p));
-            if (inp) inp.value = pasted[p];
-        }
-        sqr_closeDropdown(idx);
-        var nextFocus = document.getElementById('sqr-in-word-' + Math.min(idx + pasted.length, sqr_state.inputLength - 1));
-        if (nextFocus) nextFocus.focus();
-        return;
-    }
-
-    sqr_closeDropdown(idx);
-    if (val.length < 1) return;
-
-    var wl = window.BtcMath ? window.BtcMath.wordlist : null;
-    if (!wl) return;
-
-    var matches = [];
-    for (var i = 0; i < wl.length && matches.length < 6; i++) {
-        if (wl[i].indexOf(val) === 0) matches.push(wl[i]);
-    }
-    if (matches.length === 0) return;
-
-    // If exact match and only one, auto-accept
-    if (matches.length === 1 && matches[0] === val) {
-        sqr_selectWord(idx, val);
-        return;
-    }
-
-    var dd = document.createElement('div');
-    dd.id = 'sqr-ac-' + idx;
-    dd.className = 'rst-autocomplete';
-    for (var m = 0; m < matches.length; m++) {
-        var item = document.createElement('div');
-        item.className = 'rst-autocomplete-item';
-        if (m === 0) item.classList.add('rst-autocomplete-active');
-        item.textContent = matches[m];
-        (function(word) {
-            item.onmousedown = function(ev) {
-                ev.preventDefault();
-                sqr_selectWord(idx, word);
-            };
-        })(matches[m]);
-        dd.appendChild(item);
-    }
-    e.target.parentNode.appendChild(dd);
-}
-
-function sqr_closeDropdown(idx) {
-    var old = document.getElementById('sqr-ac-' + idx);
-    if (old) old.parentNode.removeChild(old);
-}
-
-function sqr_selectWord(idx, word) {
-    var inp = document.getElementById('sqr-in-word-' + idx);
-    if (inp) inp.value = word;
-    sqr_closeDropdown(idx);
-    // Advance to next
-    var next = document.getElementById('sqr-in-word-' + (idx + 1));
-    if (next) next.focus();
+    var host = document.getElementById('sqr-input-grid');
+    var SF = window.ShareFlow;
+    if (_sqrBoxes) { _sqrBoxes.destroy(); _sqrBoxes = null; }
+    if (!host || !SF || !SF.createWordBoxes) return;
+    _sqrBoxes = SF.createWordBoxes(host, { count: count, wordlist: SF.wordlists.bip39, idPrefix: 'sqr-in' });
+    _sqrBoxes.focus();
 }
 
 // --- Extract seed from whichever mode is active ---
@@ -34516,13 +34428,8 @@ function sqr_startImportScan() {
         }
         var len = words.length;
         sqr_setLength(len);
-        setTimeout(function() {
-            for (var i = 0; i < len; i++) {
-                var inp = document.getElementById('sqr-in-word-' + i);
-                if (inp) inp.value = words[i];
-            }
-            showStatus('Imported ' + len + ' words from SeedQR.', 'success');
-        }, 50);
+        if (_sqrBoxes) _sqrBoxes.setWords(words);
+        showStatus('Imported ' + len + ' words from SeedQR.', 'success');
     }).catch(function(err) {
         showStatus('Camera error: ' + err, 'error');
     });
@@ -34585,6 +34492,7 @@ function sqr_cleanup() {
     sqr_stopImportScan();
     sqr_stopVerify();
     sqrd_close();
+    if (_sqrBoxes) { _sqrBoxes.destroy(); _sqrBoxes = null; }   // typed words don't linger
 }
 
 // ---- Draw my SeedQR (sqrd_*) ----
@@ -34599,12 +34507,41 @@ function sqr_cleanup() {
 //                 is, with the dark squares of each row listed.
 // Both end at Scan to Verify. Nothing is printed or written anywhere.
 // ======================================================================
-var sqrd_state = { mode: null, block: 0, pxPerMm: null, showCard: false };
+var sqrd_state = { mode: null, block: 0, size: null, showCard: false };
+
+// The light box's Size is shown as a percentage of CSS's own millimetre
+// (96 px per inch), with one decimal: 100.0 % = 96 / 25.4 px per mm. A
+// screen's right number never changes, so Remember as Default keeps it in
+// localStorage `safekeepSeedQrSize`, one of the Device Options keys the
+// settings sync copies into the vault (the browser forgets localStorage at
+// every boot). In a Temporary Session it lasts until the session ends.
+var SQRD_BASE_PX_PER_MM = 96 / 25.4;
+var SQRD_SIZE_MIN = 50, SQRD_SIZE_MAX = 320;
+var SQRD_SIZE_KEY = 'safekeepSeedQrSize';
+
+function _sqrdClampSize(pct) {
+    var n = Math.round(Number(pct) * 10) / 10;
+    if (!isFinite(n)) return null;
+    return Math.max(SQRD_SIZE_MIN, Math.min(SQRD_SIZE_MAX, n));
+}
+
+/** The remembered default Size in %, or null. */
+function _sqrdSavedSize() {
+    try {
+        var v = parseFloat(localStorage.getItem(SQRD_SIZE_KEY));
+        if (v >= SQRD_SIZE_MIN && v <= SQRD_SIZE_MAX) return _sqrdClampSize(v);
+    } catch (_) {}
+    return null;
+}
+
+/** The current Size in %: this session's last one, else the default, else 100. */
+function _sqrdSize() {
+    if (sqrd_state.size == null) sqrd_state.size = _sqrdSavedSize() || 100;
+    return sqrd_state.size;
+}
 
 function _sqrdPxPerMm() {
-    if (sqrd_state.pxPerMm) return sqrd_state.pxPerMm;
-    try { var v = parseFloat(localStorage.getItem('skv.sqrd.pxPerMm')); if (v > 1 && v < 20) return (sqrd_state.pxPerMm = v); } catch (_) {}
-    return (sqrd_state.pxPerMm = 96 / 25.4);   // CSS's own guess; the card check corrects it
+    return SQRD_BASE_PX_PER_MM * _sqrdSize() / 100;
 }
 
 function sqrd_open(mode) {
@@ -34622,7 +34559,10 @@ function sqrd_open(mode) {
         ov.innerHTML =
             '<div class="sqrd-bar">' +
                 '<span class="sqrd-bar-title">Light box</span>' +
-                '<label class="sqrd-size">Size <input type="range" id="sqrd-scale" min="2" max="12" step="0.01" oninput="sqrd_setScale(this.value)"></label>' +
+                '<label class="sqrd-size">Size <input type="range" id="sqrd-scale" min="' + SQRD_SIZE_MIN + '" max="' + SQRD_SIZE_MAX + '" step="0.1" oninput="sqrd_setScale(this.value)" aria-label="Size"></label>' +
+                '<label class="sqrd-size"><input type="number" id="sqrd-size-num" min="' + SQRD_SIZE_MIN + '" max="' + SQRD_SIZE_MAX + '" step="0.1" onchange="sqrd_setScale(this.value)" aria-label="Size in percent">%</label>' +
+                '<button type="button" class="skb-btn" id="sqrd-remember-btn" onclick="sqrd_rememberSize()">Remember as Default</button>' +
+                '<label class="sqrd-size skbright-row" title="Screen brightness">&#9728; <input type="range" class="skbright-range" min="10" max="100" step="5" oninput="skbright_set(this.value)" aria-label="Screen brightness" style="width: 7rem;"> <span class="skbright-label"></span></label>' +
                 '<button type="button" class="skb-btn" id="sqrd-card-btn" onclick="sqrd_toggleCard()">Match a bank card</button>' +
                 '<button type="button" class="skb-btn" onclick="sqrd_verify()">Scan to Verify</button>' +
                 '<button type="button" class="skb-btn" onclick="sqrd_close()">Done</button>' +
@@ -34649,8 +34589,8 @@ function sqrd_open(mode) {
     document.body.appendChild(ov);
     document.addEventListener('keydown', _sqrdKey, true);
     window.addEventListener('resize', _sqrdRender);
-    if (mode === 'lightbox') document.getElementById('sqrd-scale').value = _sqrdPxPerMm();
     _sqrdRender();
+    if (mode === 'lightbox' && typeof skbright_refresh === 'function') skbright_refresh();
 }
 
 function sqrd_close() {
@@ -34664,23 +34604,47 @@ function sqrd_close() {
     sqrd_state.mode = null;
 }
 
+// Light box Size keys: + / → / ↑ bigger, − / ← / ↓ smaller, 0.1 % a
+// press, 1 % with Shift. They work wherever the focus is in the light box,
+// slider included (its own arrow-key step is replaced by this one), except
+// while typing digits into the number box.
+var SQRD_SIZE_KEYS = { '+': 1, '=': 1, 'ArrowRight': 1, 'ArrowUp': 1, '-': -1, '_': -1, 'ArrowLeft': -1, 'ArrowDown': -1 };
+
 function _sqrdKey(e) {
     if (e.key === 'Escape') { e.preventDefault(); sqrd_close(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (sqrd_state.mode === 'blocks') {
         if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); sqrd_step(1); }
         if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); sqrd_step(-1); }
-    } else if (sqrd_state.mode === 'lightbox' && (e.key === '+' || e.key === '=' || e.key === '-')) {
+    } else if (sqrd_state.mode === 'lightbox') {
+        if (e.target && e.target.classList && e.target.classList.contains('skbright-range')) return;   // its own arrow keys
+        if (e.key === 'Enter' && e.target && e.target.id === 'sqrd-size-num') { e.preventDefault(); sqrd_setScale(e.target.value); e.target.select(); return; }
+        var dir = SQRD_SIZE_KEYS[e.key];
+        if (e.code === 'NumpadAdd') dir = 1;
+        if (e.code === 'NumpadSubtract') dir = -1;
+        if (!dir) return;
         e.preventDefault();
-        sqrd_setScale(_sqrdPxPerMm() + (e.key === '-' ? -0.01 : 0.01));
+        e.stopPropagation();
+        sqrd_setScale(_sqrdSize() + dir * (e.shiftKey ? 1 : 0.1));
     }
 }
 
 function sqrd_setScale(v) {
-    var n = Math.max(2, Math.min(12, Number(v) || 0));
-    sqrd_state.pxPerMm = n;
-    try { localStorage.setItem('skv.sqrd.pxPerMm', String(n)); } catch (_) {}
-    var r = document.getElementById('sqrd-scale');
-    if (r && Number(r.value) !== n) r.value = n;
+    var n = _sqrdClampSize(v);
+    if (n == null) n = _sqrdSize();
+    sqrd_state.size = n;
+    _sqrdRender();
+}
+
+/* Keep this Size as the light box's default (saved in the vault). */
+function sqrd_rememberSize() {
+    var n = _sqrdSize();
+    try { localStorage.setItem(SQRD_SIZE_KEY, n.toFixed(1)); }
+    catch (_) { showStatus('Couldn’t remember the size.', 'error'); return; }
+    var temp = (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot());
+    showStatus(temp
+        ? 'Size ' + n.toFixed(1) + '% kept until this Temporary Session ends. Open your vault to keep it for good.'
+        : 'Size ' + n.toFixed(1) + '% remembered. The light box opens at this size from now on.', 'success');
     _sqrdRender();
 }
 
@@ -34742,9 +34706,16 @@ function _sqrdRender() {
         card.style.width = (QD.CARD_WIDTH_MM * ppm) + 'px';
         card.style.height = (QD.CARD_HEIGHT_MM * ppm) + 'px';
         document.getElementById('sqrd-card-btn').textContent = sqrd_state.showCard ? 'Hide the card outline' : 'Match a bank card';
+        var size = _sqrdSize(), range = document.getElementById('sqrd-scale'), num = document.getElementById('sqrd-size-num');
+        if (Number(range.value) !== size) range.value = size;
+        if (document.activeElement !== num || Number(num.value) !== size) num.value = size.toFixed(1);
+        var rem = document.getElementById('sqrd-remember-btn'), isDefault = _sqrdSavedSize() === size;
+        rem.textContent = isDefault ? 'Default ✓' : 'Remember as Default';
+        rem.disabled = isDefault;
+        rem.title = isDefault ? 'The light box opens at this size.' : 'Open the light box at ' + size.toFixed(1) + '% from now on.';
         document.getElementById('sqrd-hint').textContent = sqrd_state.showCard
-            ? 'Hold any bank card flat against the outline and move the Size slider until the outline is exactly as wide as the card. The code is then the template’s size.'
-            : 'Turn the screen to full brightness. Lay the printed ' + n + '×' + n + ' template on the screen, line its grid up with this one (fine-tune with the Size slider or the + and − keys), and fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
+            ? 'Hold any bank card flat against the outline and change the Size (slider, number box, or the arrow and + / − keys; hold Shift for bigger steps) until the outline is exactly as wide as the card. The code is then the template’s size. Press Remember as Default so it opens at this size next time.'
+            : 'Turn the screen to full brightness (the ☀ slider above). Lay the printed ' + n + '×' + n + ' template on the screen, line its grid up with this one (fine-tune the Size with the slider, the number box, or the arrow and + / − keys; hold Shift for bigger steps), and fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
     } else {
         var blocks = QD.blocksFor(n, 7), b = blocks[sqrd_state.block];
         var bc = document.getElementById('sqrd-block-canvas');
@@ -36355,11 +36326,78 @@ function rlq_stopPasswordScan(target) {
  * the Web Audio master GainNode AND to the Device Options UI controls
  * (#settings-audio-toggle / #settings-audio-volume).
  */
+// ---- Screen brightness (skbright_*) ----
+// Device Options → Screen Brightness, the ☀ slider in Draw my SeedQR's
+// light box, and the keyboard's brightness keys (no desktop answers them
+// in the kiosk) all go through SafeKeepOS.setBrightness / stepBrightness
+// to safekeep-boot.sh's Brightness Watcher. The level is kept in
+// localStorage `safekeepBrightness` (a Device Options key, so it's saved
+// in the vault and set again at the next start). Without a backlight (an
+// external monitor) the sliders are replaced by a note.
+var SKBRIGHT_KEY = 'safekeepBrightness';
+
+function _skbrightPaint(st) {
+    var ok = !!(st && st.available);
+    document.querySelectorAll('.skbright-row').forEach(function (el) { el.classList.toggle('skbright-off', !ok); });
+    document.querySelectorAll('.skbright-none').forEach(function (el) { el.hidden = !(st && st.available === false); });
+    if (!ok) return;
+    document.querySelectorAll('.skbright-range').forEach(function (r) { if (document.activeElement !== r) r.value = st.percent; });
+    document.querySelectorAll('.skbright-label').forEach(function (l) { l.textContent = st.percent + '%'; });
+}
+
+async function skbright_refresh() {
+    var os = window.SafeKeepOS;
+    if (!os || typeof os.getBrightness !== 'function') { _skbrightPaint(null); return null; }
+    var st = null;
+    try { st = await os.getBrightness(); } catch (_) {}
+    _skbrightPaint(st);
+    return st;
+}
+
+function skbright_set(v) {
+    var n = Math.max(10, Math.min(100, Math.round(Number(v) || 0)));
+    var os = window.SafeKeepOS;
+    if (os && typeof os.setBrightness === 'function') os.setBrightness(n);
+    try { localStorage.setItem(SKBRIGHT_KEY, String(n)); } catch (_) {}
+    document.querySelectorAll('.skbright-range').forEach(function (r) { if (Number(r.value) !== n) r.value = n; });
+    document.querySelectorAll('.skbright-label').forEach(function (l) { l.textContent = n + '%'; });
+}
+
+(function _skbrightInit() {
+    var keyTimer = null;
+    // The keyboard's brightness keys reach the page as BrightnessUp / BrightnessDown.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'BrightnessUp' && e.key !== 'BrightnessDown') return;
+        var os = window.SafeKeepOS;
+        if (!os || typeof os.stepBrightness !== 'function') return;
+        e.preventDefault();
+        os.stepBrightness(e.key === 'BrightnessUp' ? 1 : -1);
+        clearTimeout(keyTimer);
+        keyTimer = setTimeout(function () {
+            skbright_refresh().then(function (st) {
+                if (st && st.available) { try { localStorage.setItem(SKBRIGHT_KEY, String(st.percent)); } catch (_) {} }
+            });
+        }, 600);
+    }, true);
+    // At start: set the remembered level again, then show the real one.
+    function start() {
+        var saved = NaN;
+        try { saved = parseInt(localStorage.getItem(SKBRIGHT_KEY), 10); } catch (_) {}
+        var os = window.SafeKeepOS;
+        if (saved >= 10 && saved <= 100 && os && typeof os.setBrightness === 'function') os.setBrightness(saved);
+        setTimeout(skbright_refresh, 1200);
+    }
+    if (document.readyState === 'complete') setTimeout(start, 1500);
+    else window.addEventListener('load', function () { setTimeout(start, 1500); });
+})();
+
 var _RLQ_APP_SETTINGS_KEYS = [
     'safekeepTheme',         // theme preference
     'safekeepUiScale',       // UI scale
     'safekeepUiAudio',       // Sound: { enabled: bool, volume: 0-1 }
-    'safekeepIdleTimers'     // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
+    'safekeepIdleTimers',    // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
+    'safekeepSeedQrSize',    // Draw my SeedQR light box: remembered Size in % ("104.3")
+    'safekeepBrightness'     // Screen Brightness: % ("70"), set again at start
 ];
 
 /**

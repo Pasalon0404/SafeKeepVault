@@ -12,7 +12,9 @@
  *      overlay closes and clears its canvases, Scan to Verify is the end,
  *      leaving the tool closes it, and the app's Escape shortcut leaves an
  *      open overlay (picker, Draw my SeedQR, COLDCARD import) alone and
- *      goes home through sidebar_goHome.
+ *      goes home through sidebar_goHome. The light box's Size shows as a
+ *      number, moves with + / − and the arrow keys, and Remember as
+ *      Default keeps it in the vault's Device Options.
  *
  * Run:  node test-qr-draw.mjs
  */
@@ -74,7 +76,22 @@ ck('leaving the SeedQR tool closes it', fn('function sqr_cleanup').includes('sqr
 const esc = html.slice(html.indexOf("document.addEventListener('keydown', function(evt) {\n    if (evt.key !== 'Escape') return;"), html.indexOf('}, true);  // useCapture: true — fires BEFORE tool-local Escape handlers'));
 ck('the Escape shortcut leaves open overlays alone', esc.includes("document.querySelector('#skfp-overlay, #sqrd-overlay, #ccb-import-overlay')"));
 ck('…and goes home through sidebar_goHome (welcome when no seed)', esc.includes('sidebar_goHome();'));
-for (const name of ['function _sqrdPxPerMm', 'function sqrd_open', 'function sqrd_close', 'function _sqrdKey', 'function sqrd_setScale', 'function sqrd_toggleCard', 'function _sqrdDrawGrid', 'function _sqrdRender', 'function sqrd_step', 'function sqrd_verify']) {
+const keyFn = fn('function _sqrdKey');
+const keyMap = html.slice(html.indexOf('var SQRD_SIZE_KEYS'), html.indexOf('\n', html.indexOf('var SQRD_SIZE_KEYS')));
+ck('Size keys: + / → / ↑ bigger, − / ← / ↓ smaller', ["'+': 1", "'ArrowRight': 1", "'ArrowUp': 1", "'-': -1", "'ArrowLeft': -1", "'ArrowDown': -1"].every((k) => keyMap.includes(k)) && keyFn.includes('SQRD_SIZE_KEYS[e.key]'), keyMap);
+ck('…0.1 % a press, 1 % with Shift', keyFn.includes('_sqrdSize() + dir * (e.shiftKey ? 1 : 0.1)'));
+ck('the light box has a Size number box and Remember as Default', html.includes('id="sqrd-size-num"') && html.includes('onclick="sqrd_rememberSize()">Remember as Default'));
+ck('Size is a % of 96 px per inch', fn('function _sqrdPxPerMm').includes('SQRD_BASE_PX_PER_MM * _sqrdSize() / 100') && html.includes('var SQRD_BASE_PX_PER_MM = 96 / 25.4;'));
+ck('moving the Size doesn\'t change the default; Remember as Default does', !fn('function sqrd_setScale').includes('localStorage') && fn('function sqrd_rememberSize').includes('localStorage.setItem(SQRD_SIZE_KEY'));
+ck('the light box opens at the remembered Size', fn('function _sqrdSize').includes('_sqrdSavedSize() || 100'));
+{
+    const boot = readFileSync(new URL('../usbbootdrive/safekeep-boot.sh', import.meta.url), 'utf8');
+    const loader = html.slice(html.indexOf('var _skbDsKeys'), html.indexOf('\n', html.indexOf('var _skbDsKeys')));
+    const rlq = html.slice(html.indexOf('var _RLQ_APP_SETTINGS_KEYS'), html.indexOf('];', html.indexOf('var _RLQ_APP_SETTINGS_KEYS')));
+    const allowed = boot.slice(boot.indexOf('ALLOWED = ('), boot.indexOf('\n', boot.indexOf('ALLOWED = (')));
+    ck('safekeepSeedQrSize is kept in the vault (boot loader, settings sync, Settings Watcher)', html.includes("var SQRD_SIZE_KEY = 'safekeepSeedQrSize';") && [loader, rlq, allowed].every((t) => t.includes("'safekeepSeedQrSize'")), allowed);
+}
+for (const name of ['function _sqrdPxPerMm', 'function _sqrdClampSize', 'function _sqrdSavedSize', 'function _sqrdSize', 'function sqrd_rememberSize', 'function sqrd_open', 'function sqrd_close', 'function _sqrdKey', 'function sqrd_setScale', 'function sqrd_toggleCard', 'function _sqrdDrawGrid', 'function _sqrdRender', 'function sqrd_step', 'function sqrd_verify']) {
     let ok = true, err = '';
     try { new Function(fn(name).replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }
     ck(`${name.replace(/^function /, '')} parses`, ok, err);

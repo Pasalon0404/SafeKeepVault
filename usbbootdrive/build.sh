@@ -280,6 +280,8 @@ install -m 755 safekeep-update.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-u
 # Password strength check: setup-vault.sh and the backup watcher refuse a
 # Weak password (PASSPHRASE_STRENGTH_DESIGN.md).
 install -m 755 safekeep-pwcheck.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-pwcheck.py"
+# Screen brightness: the Brightness Watcher runs this to set the backlight.
+install -m 755 safekeep-brightness.sh "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-brightness.sh"
 mkdir -p "$CHROOT_DIR/usr/local/share/safekeep"
 install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-lists.json"
 # The passphrase screens shared by setup-vault and change-passphrase, and

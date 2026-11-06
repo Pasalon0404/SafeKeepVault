@@ -28,7 +28,7 @@
 #  Covered by a quick update:
 #     src/dist/*            (boot.html, manifest.json, …)
 #     safekeep-boot.sh, unlock-vault.sh, setup-vault.sh, safekeep-update.py,
-#     safekeep-pwcheck.py + pwcheck-lists.json, change-passphrase.sh,
+#     safekeep-pwcheck.py + pwcheck-lists.json, safekeep-brightness.sh, change-passphrase.sh,
 #     passphrase-dialogs.sh, safekeep-passphrase.py, quiet-downloads/
 #     safekeep-session.service, config/99-hide-drives.rules
 #
@@ -166,6 +166,7 @@ fi
 mkdir -p "$CHROOT_DIR/usr/local/lib/safekeep"
 install -m 755 safekeep-update.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-update.py"
 install -m 755 safekeep-pwcheck.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-pwcheck.py"
+install -m 755 safekeep-brightness.sh "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-brightness.sh"
 mkdir -p "$CHROOT_DIR/usr/local/share/safekeep"
 install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-lists.json"
 install -m 644 passphrase-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/passphrase-dialogs.sh"
