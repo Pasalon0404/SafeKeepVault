@@ -7507,6 +7507,7 @@
                                 <span style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); letter-spacing: 0.06em;">BRIGHT</span>
                                 <span class="skbright-label" style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); min-width: 3rem; text-align: right; letter-spacing: 0.05em;">80%</span>
                             </div>
+                            <p id="settings-brightness-info" style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.6875rem; margin: 0.6rem 0 0; line-height: 1.5; word-break: break-word;"></p>
                             <p class="skbright-none" hidden style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0; line-height: 1.6;">SafeKeep can&rsquo;t set this screen&rsquo;s brightness. An external monitor has its own buttons for it.</p>
                         </div>
                         <!-- Idle Timers -->
@@ -12105,7 +12106,7 @@ window.addEventListener('DOMContentLoaded', () => {
             _devAnnounce('Brightness ' + window._devBrightness + '% (mock)');
             return true;
         },
-        getBrightness: function () { return Promise.resolve({ available: true, percent: window._devBrightness || 80 }); },
+        getBrightness: function () { return Promise.resolve({ available: true, percent: window._devBrightness || 80, devices: 'intel_backlight raw ' + Math.round((window._devBrightness || 80) * 48.1) + '/4810 (mock)', at: Math.floor(Date.now() / 1000) }); },
 
         // --- Display Sleep bridge (task #198) ---
         // Real backend (shared/boot.js on the live USB) translates this
@@ -36335,11 +36336,22 @@ function rlq_stopPasswordScan(target) {
 // in the vault and set again at the next start). Without a backlight (an
 // external monitor) the sliders are replaced by a note.
 var SKBRIGHT_KEY = 'safekeepBrightness';
+var _skbrightSentAt = 0, _skbrightCheck = null;
 
 function _skbrightPaint(st) {
     var ok = !!(st && st.available);
     document.querySelectorAll('.skbright-row').forEach(function (el) { el.classList.toggle('skbright-off', !ok); });
     document.querySelectorAll('.skbright-none').forEach(function (el) { el.hidden = !(st && st.available === false); });
+    // What the OS found, for a screen that doesn't respond.
+    var info = document.getElementById('settings-brightness-info');
+    if (info) {
+        var t = '';
+        if (st && st.devices) t = 'Backlight: ' + st.devices + '.';
+        if (st && _skbrightSentAt && st.at && st.at * 1000 + 2500 < _skbrightSentAt) t += (t ? ' ' : '') + 'The OS hasn’t carried out the last change.';
+        else if (st && st.at && _skbrightSentAt) t += (t ? ' ' : '') + 'Last change carried out at ' + new Date(st.at * 1000).toLocaleTimeString() + '.';
+        if (!st && _skbrightSentAt) t = 'The OS hasn’t answered.';
+        info.textContent = t;
+    }
     if (!ok) return;
     document.querySelectorAll('.skbright-range').forEach(function (r) { if (document.activeElement !== r) r.value = st.percent; });
     document.querySelectorAll('.skbright-label').forEach(function (l) { l.textContent = st.percent + '%'; });
@@ -36358,6 +36370,9 @@ function skbright_set(v) {
     var n = Math.max(10, Math.min(100, Math.round(Number(v) || 0)));
     var os = window.SafeKeepOS;
     if (os && typeof os.setBrightness === 'function') os.setBrightness(n);
+    _skbrightSentAt = Date.now();
+    clearTimeout(_skbrightCheck);
+    _skbrightCheck = setTimeout(skbright_refresh, 1500);   // show what the OS did
     try { localStorage.setItem(SKBRIGHT_KEY, String(n)); } catch (_) {}
     document.querySelectorAll('.skbright-range').forEach(function (r) { if (Number(r.value) !== n) r.value = n; });
     document.querySelectorAll('.skbright-label').forEach(function (l) { l.textContent = n + '%'; });
@@ -36372,6 +36387,7 @@ function skbright_set(v) {
         if (!os || typeof os.stepBrightness !== 'function') return;
         e.preventDefault();
         os.stepBrightness(e.key === 'BrightnessUp' ? 1 : -1);
+        _skbrightSentAt = Date.now();
         clearTimeout(keyTimer);
         keyTimer = setTimeout(function () {
             skbright_refresh().then(function (st) {

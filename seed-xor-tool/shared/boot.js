@@ -2284,9 +2284,15 @@ const SafeKeepOS = (() => {
       const r = await fetch(BRIGHTNESS_STATUS_URL, { cache: 'no-store' });
       if (!r.ok) return null;
       const j = await r.json();
-      if (!j || j.available !== true) return { available: false };
+      // Diagnostics for Device Options: the backlights found ("name type
+      // value/max, …") and when the OS last acted (unix seconds).
+      const extra = {
+        devices: typeof j?.devices === 'string' ? j.devices.slice(0, 300) : '',
+        at: Number(j?.at) || 0,
+      };
+      if (!j || j.available !== true) return { available: false, ...extra };
       const p = Math.round(Number(j.percent));
-      return Number.isFinite(p) ? { available: true, percent: Math.max(0, Math.min(100, p)) } : { available: false };
+      return Number.isFinite(p) ? { available: true, percent: Math.max(0, Math.min(100, p)), ...extra } : { available: false, ...extra };
     } catch (_) {
       return null;
     }

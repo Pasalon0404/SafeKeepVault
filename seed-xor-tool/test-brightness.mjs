@@ -34,16 +34,18 @@ console.log('\n1. safekeep-brightness.sh');
     const val = (name) => Number(readFileSync(join(bl, name, 'brightness'), 'utf8'));
     const run = (...args) => {
         let code = 0;
-        try { execFileSync('bash', [helper, ...args], { env: { ...process.env, SAFEKEEP_BACKLIGHT_DIR: bl, SAFEKEEP_BRIGHTNESS_STATUS: status }, stdio: 'pipe' }); } catch (e) { code = e.status; }
+        try { execFileSync('bash', [helper, ...args], { env: { ...process.env, SAFEKEEP_BACKLIGHT_DIR: bl, SAFEKEEP_BRIGHTNESS_STATUS: status, SAFEKEEP_BRIGHTNESS_LOG: join(root, 'log') }, stdio: 'pipe' }); } catch (e) { code = e.status; }
         let st = null; try { st = JSON.parse(readFileSync(status, 'utf8')); } catch (_) {}
         return { code, st };
     };
     mkdirSync(bl, { recursive: true });
-    ck('no backlight → { available: false }', JSON.stringify(run('get').st) === '{"available":false}');
+    ck('no backlight → { available: false }', run('get').st?.available === false);
     dev('acpi_video0', 7, 3); dev('intel_backlight', 96000, 48000);
+    writeFileSync(join(bl, 'acpi_video0', 'type'), 'firmware\n'); writeFileSync(join(bl, 'intel_backlight', 'type'), 'raw\n');
     ck('get reads the finest backlight: 50 %', run('get').st?.percent === 50, JSON.stringify(run('get').st));
     let r = run('set', '73');
     ck('set 73 → 73 %, both backlights set', r.st?.available === true && r.st.percent === 73 && val('intel_backlight') === 70080 && val('acpi_video0') === 5, `${JSON.stringify(r.st)} ${val('acpi_video0')}`);
+    ck('the status lists each backlight with its value (for Device Options)', r.st?.devices === 'intel_backlight raw 70080/96000, acpi_video0 firmware 5/7' && r.st.action === 'set' && r.st.at > 1e9, r.st?.devices);
     ck('up rounds to the next 10 %: 80', run('up').st?.percent === 80);
     ck('down, down: 70, 60 (a coarse backlight can\'t stall it)', run('down').st?.percent === 70 && run('down').st?.percent === 60);
     ck('never below 10 %', run('set', '3').st?.percent === 10 && run('down').st?.percent === 10 && val('acpi_video0') >= 1);
@@ -78,6 +80,7 @@ const bridge = read(new URL('./shared/boot.js', import.meta.url));
     ck('the request file passes the firewall', bridge.includes("'BRIGHTNESS_REQUEST',"));
     ck('SafeKeepOS exports setBrightness, stepBrightness, getBrightness', /setBrightness,\s*stepBrightness,\s*getBrightness,/.test(bridge));
     ck('setBrightness sends 10–100 at most every 200 ms, ending with the last', bridge.includes('Math.max(10, Math.min(100, p))') && bridge.includes('200 - (Date.now() - _brightLast)'));
+    ck('Device Options shows the backlights found and whether the OS carried out the last change', html.includes('id="settings-brightness-info"') && html.includes("'Backlight: ' + st.devices") && html.includes('The OS hasn’t carried out the last change.') && bridge.includes("j.devices.slice(0, 300)"));
     ck('getBrightness reads /tmp/safekeep-signals/BRIGHTNESS.json', bridge.includes("'file:///tmp/safekeep-signals/BRIGHTNESS.json'"));
     ck('Device Options has Screen Brightness with a slider', html.includes('id="settings-brightness-section"') && html.includes('id="settings-brightness" class="skbright-range"'));
     ck('…refreshed when Device Options opens', html.includes("if (this.open && typeof skbright_refresh === 'function') skbright_refresh()"));
@@ -87,7 +90,7 @@ const bridge = read(new URL('./shared/boot.js', import.meta.url));
     const rlq = html.slice(html.indexOf('var _RLQ_APP_SETTINGS_KEYS'), html.indexOf('];', html.indexOf('var _RLQ_APP_SETTINGS_KEYS')));
     ck('safekeepBrightness is a Device Options key (boot loader + settings sync)', loader.includes("'safekeepBrightness'") && rlq.includes("'safekeepBrightness'"));
     ck('without a backlight, the sliders give way to a note', html.includes('class="skbright-none" hidden') && html.includes(".skbright-off { display: none !important; }"));
-    ck('the dev build has a pretend backlight', html.includes('getBrightness: function () { return Promise.resolve({ available: true, percent: window._devBrightness || 80 }); }'));
+    ck('the dev build has a pretend backlight', html.includes('getBrightness: function () { return Promise.resolve({ available: true, percent: window._devBrightness || 80,'));
 }
 
 console.log('\n4. SeedQR word boxes');
