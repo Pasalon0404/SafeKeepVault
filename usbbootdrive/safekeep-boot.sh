@@ -1484,7 +1484,7 @@ RELIQUARY_PY
                     mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
                     if python3 -I - "${DS_FILES[0]}" "$DEVICE_SETTINGS_SAVED.tmp" "$DATA_MOUNT/auto-off-minutes.tmp" <<'DSPYEOF'
 import json, sys
-ALLOWED = ('safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers')
+ALLOWED = ('safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize')
 src, dst, auto_off_dst = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(src, 'rb') as f:
     raw = f.read(8193)

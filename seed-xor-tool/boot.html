@@ -30,7 +30,7 @@
       window._skbVaultDeviceSettings = null;
       if (window.location.protocol === 'file:' && window.location.hash !== '#ephemeral=true') {
         try {
-          var _skbDsKeys = ['safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers'];
+          var _skbDsKeys = ['safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize'];
           var _skbDsXhr = new XMLHttpRequest();
           _skbDsXhr.open('GET', 'file:///media/.safekeep-vault/settings/device-settings.json', false);
           _skbDsXhr.send(null);
@@ -382,7 +382,8 @@
     .sqrd-bar .skb-btn { padding: 0.35rem 0.8rem; font-size: 0.8125rem; }
     .sqrd-bar-title { font-weight: 700; margin-right: auto; }
     .sqrd-size { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; }
-    .sqrd-size input { width: 14rem; }
+    .sqrd-size input[type=range] { width: 14rem; }
+    .sqrd-size input[type=number] { width: 5.2rem; padding: 0.2rem 0.35rem; font: inherit; font-variant-numeric: tabular-nums; border-radius: 4px; border: 1px solid #555; background: #222; color: #fff; }
     .sqrd-hint { margin: 0.5rem auto 0; max-width: 60rem; padding: 0 1rem; font-size: 0.85rem; color: #333; text-align: center; line-height: 1.45; }
     .sqrd-stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 1rem; }
     .sqrd-card { position: absolute; border: 2px dashed #f7931a; border-radius: 3.2mm; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
@@ -34599,12 +34600,41 @@ function sqr_cleanup() {
 //                 is, with the dark squares of each row listed.
 // Both end at Scan to Verify. Nothing is printed or written anywhere.
 // ======================================================================
-var sqrd_state = { mode: null, block: 0, pxPerMm: null, showCard: false };
+var sqrd_state = { mode: null, block: 0, size: null, showCard: false };
+
+// The light box's Size is shown as a percentage of CSS's own millimetre
+// (96 px per inch), with one decimal: 100.0 % = 96 / 25.4 px per mm. A
+// screen's right number never changes, so Remember as Default keeps it in
+// localStorage `safekeepSeedQrSize`, one of the Device Options keys the
+// settings sync copies into the vault (the browser forgets localStorage at
+// every boot). In a Temporary Session it lasts until the session ends.
+var SQRD_BASE_PX_PER_MM = 96 / 25.4;
+var SQRD_SIZE_MIN = 50, SQRD_SIZE_MAX = 320;
+var SQRD_SIZE_KEY = 'safekeepSeedQrSize';
+
+function _sqrdClampSize(pct) {
+    var n = Math.round(Number(pct) * 10) / 10;
+    if (!isFinite(n)) return null;
+    return Math.max(SQRD_SIZE_MIN, Math.min(SQRD_SIZE_MAX, n));
+}
+
+/** The remembered default Size in %, or null. */
+function _sqrdSavedSize() {
+    try {
+        var v = parseFloat(localStorage.getItem(SQRD_SIZE_KEY));
+        if (v >= SQRD_SIZE_MIN && v <= SQRD_SIZE_MAX) return _sqrdClampSize(v);
+    } catch (_) {}
+    return null;
+}
+
+/** The current Size in %: this session's last one, else the default, else 100. */
+function _sqrdSize() {
+    if (sqrd_state.size == null) sqrd_state.size = _sqrdSavedSize() || 100;
+    return sqrd_state.size;
+}
 
 function _sqrdPxPerMm() {
-    if (sqrd_state.pxPerMm) return sqrd_state.pxPerMm;
-    try { var v = parseFloat(localStorage.getItem('skv.sqrd.pxPerMm')); if (v > 1 && v < 20) return (sqrd_state.pxPerMm = v); } catch (_) {}
-    return (sqrd_state.pxPerMm = 96 / 25.4);   // CSS's own guess; the card check corrects it
+    return SQRD_BASE_PX_PER_MM * _sqrdSize() / 100;
 }
 
 function sqrd_open(mode) {
@@ -34622,7 +34652,9 @@ function sqrd_open(mode) {
         ov.innerHTML =
             '<div class="sqrd-bar">' +
                 '<span class="sqrd-bar-title">Light box</span>' +
-                '<label class="sqrd-size">Size <input type="range" id="sqrd-scale" min="2" max="12" step="0.01" oninput="sqrd_setScale(this.value)"></label>' +
+                '<label class="sqrd-size">Size <input type="range" id="sqrd-scale" min="' + SQRD_SIZE_MIN + '" max="' + SQRD_SIZE_MAX + '" step="0.1" oninput="sqrd_setScale(this.value)" aria-label="Size"></label>' +
+                '<label class="sqrd-size"><input type="number" id="sqrd-size-num" min="' + SQRD_SIZE_MIN + '" max="' + SQRD_SIZE_MAX + '" step="0.1" onchange="sqrd_setScale(this.value)" aria-label="Size in percent">%</label>' +
+                '<button type="button" class="skb-btn" id="sqrd-remember-btn" onclick="sqrd_rememberSize()">Remember as Default</button>' +
                 '<button type="button" class="skb-btn" id="sqrd-card-btn" onclick="sqrd_toggleCard()">Match a bank card</button>' +
                 '<button type="button" class="skb-btn" onclick="sqrd_verify()">Scan to Verify</button>' +
                 '<button type="button" class="skb-btn" onclick="sqrd_close()">Done</button>' +
@@ -34649,7 +34681,6 @@ function sqrd_open(mode) {
     document.body.appendChild(ov);
     document.addEventListener('keydown', _sqrdKey, true);
     window.addEventListener('resize', _sqrdRender);
-    if (mode === 'lightbox') document.getElementById('sqrd-scale').value = _sqrdPxPerMm();
     _sqrdRender();
 }
 
@@ -34664,23 +34695,46 @@ function sqrd_close() {
     sqrd_state.mode = null;
 }
 
+// Light box Size keys: + / → / ↑ bigger, − / ← / ↓ smaller, 0.1 % a
+// press, 1 % with Shift. They work wherever the focus is in the light box,
+// slider included (its own arrow-key step is replaced by this one), except
+// while typing digits into the number box.
+var SQRD_SIZE_KEYS = { '+': 1, '=': 1, 'ArrowRight': 1, 'ArrowUp': 1, '-': -1, '_': -1, 'ArrowLeft': -1, 'ArrowDown': -1 };
+
 function _sqrdKey(e) {
     if (e.key === 'Escape') { e.preventDefault(); sqrd_close(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (sqrd_state.mode === 'blocks') {
         if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); sqrd_step(1); }
         if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); sqrd_step(-1); }
-    } else if (sqrd_state.mode === 'lightbox' && (e.key === '+' || e.key === '=' || e.key === '-')) {
+    } else if (sqrd_state.mode === 'lightbox') {
+        if (e.key === 'Enter' && e.target && e.target.id === 'sqrd-size-num') { e.preventDefault(); sqrd_setScale(e.target.value); e.target.select(); return; }
+        var dir = SQRD_SIZE_KEYS[e.key];
+        if (e.code === 'NumpadAdd') dir = 1;
+        if (e.code === 'NumpadSubtract') dir = -1;
+        if (!dir) return;
         e.preventDefault();
-        sqrd_setScale(_sqrdPxPerMm() + (e.key === '-' ? -0.01 : 0.01));
+        e.stopPropagation();
+        sqrd_setScale(_sqrdSize() + dir * (e.shiftKey ? 1 : 0.1));
     }
 }
 
 function sqrd_setScale(v) {
-    var n = Math.max(2, Math.min(12, Number(v) || 0));
-    sqrd_state.pxPerMm = n;
-    try { localStorage.setItem('skv.sqrd.pxPerMm', String(n)); } catch (_) {}
-    var r = document.getElementById('sqrd-scale');
-    if (r && Number(r.value) !== n) r.value = n;
+    var n = _sqrdClampSize(v);
+    if (n == null) n = _sqrdSize();
+    sqrd_state.size = n;
+    _sqrdRender();
+}
+
+/* Keep this Size as the light box's default (saved in the vault). */
+function sqrd_rememberSize() {
+    var n = _sqrdSize();
+    try { localStorage.setItem(SQRD_SIZE_KEY, n.toFixed(1)); }
+    catch (_) { showStatus('Couldn’t remember the size.', 'error'); return; }
+    var temp = (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot());
+    showStatus(temp
+        ? 'Size ' + n.toFixed(1) + '% kept until this Temporary Session ends. Open your vault to keep it for good.'
+        : 'Size ' + n.toFixed(1) + '% remembered. The light box opens at this size from now on.', 'success');
     _sqrdRender();
 }
 
@@ -34742,9 +34796,16 @@ function _sqrdRender() {
         card.style.width = (QD.CARD_WIDTH_MM * ppm) + 'px';
         card.style.height = (QD.CARD_HEIGHT_MM * ppm) + 'px';
         document.getElementById('sqrd-card-btn').textContent = sqrd_state.showCard ? 'Hide the card outline' : 'Match a bank card';
+        var size = _sqrdSize(), range = document.getElementById('sqrd-scale'), num = document.getElementById('sqrd-size-num');
+        if (Number(range.value) !== size) range.value = size;
+        if (document.activeElement !== num || Number(num.value) !== size) num.value = size.toFixed(1);
+        var rem = document.getElementById('sqrd-remember-btn'), isDefault = _sqrdSavedSize() === size;
+        rem.textContent = isDefault ? 'Default ✓' : 'Remember as Default';
+        rem.disabled = isDefault;
+        rem.title = isDefault ? 'The light box opens at this size.' : 'Open the light box at ' + size.toFixed(1) + '% from now on.';
         document.getElementById('sqrd-hint').textContent = sqrd_state.showCard
-            ? 'Hold any bank card flat against the outline and move the Size slider until the outline is exactly as wide as the card. The code is then the template’s size.'
-            : 'Turn the screen to full brightness. Lay the printed ' + n + '×' + n + ' template on the screen, line its grid up with this one (fine-tune with the Size slider or the + and − keys), and fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
+            ? 'Hold any bank card flat against the outline and change the Size (slider, number box, or the arrow and + / − keys; hold Shift for bigger steps) until the outline is exactly as wide as the card. The code is then the template’s size. Press Remember as Default so it opens at this size next time.'
+            : 'Turn the screen to full brightness. Lay the printed ' + n + '×' + n + ' template on the screen, line its grid up with this one (fine-tune the Size with the slider, the number box, or the arrow and + / − keys; hold Shift for bigger steps), and fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
     } else {
         var blocks = QD.blocksFor(n, 7), b = blocks[sqrd_state.block];
         var bc = document.getElementById('sqrd-block-canvas');
@@ -36359,7 +36420,8 @@ var _RLQ_APP_SETTINGS_KEYS = [
     'safekeepTheme',         // theme preference
     'safekeepUiScale',       // UI scale
     'safekeepUiAudio',       // Sound: { enabled: bool, volume: 0-1 }
-    'safekeepIdleTimers'     // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
+    'safekeepIdleTimers',    // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
+    'safekeepSeedQrSize'     // Draw my SeedQR light box: remembered Size in % ("104.3")
 ];
 
 /**
