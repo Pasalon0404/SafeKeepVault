@@ -1484,7 +1484,7 @@ RELIQUARY_PY
                     mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
                     if python3 -I - "${DS_FILES[0]}" "$DEVICE_SETTINGS_SAVED.tmp" "$DATA_MOUNT/auto-off-minutes.tmp" <<'DSPYEOF'
 import json, sys
-ALLOWED = ('safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize')
+ALLOWED = ('safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize', 'safekeepBrightness')
 src, dst, auto_off_dst = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(src, 'rb') as f:
     raw = f.read(8193)
@@ -1974,7 +1974,7 @@ SSPYEOF
 
                 # Skip known system trigger/result/sentinel files
                 case "$BASENAME" in
-                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
+                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|BRIGHTNESS_*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
                 esac
 
                 # Check if this is a passphrase file (contains "passphrase" key)
@@ -2407,6 +2407,49 @@ SSPYEOF
     ) &
     DISPLAY_SLEEP_WATCHER_PID=$!
     echo "Display-sleep watcher daemon started (PID $DISPLAY_SLEEP_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
+    # BRIGHTNESS WATCHER — THE SCREEN BRIGHTNESS SLIDERS AND KEYS
+    # -------------------------------------------------------------------
+    # There is no desktop to answer a laptop's brightness keys, so the app
+    # does: Device Options → Screen Brightness, the slider in Draw my
+    # SeedQR's light box, and the brightness keys download
+    #   BRIGHTNESS_REQUEST.json  { "action": "set", "percent": 70 }
+    #                            { "action": "up" | "down" | "get" }
+    # into Chromium's download folder. This runs the root helper
+    # (/usr/local/lib/safekeep/safekeep-brightness.sh), which sets every
+    # backlight in /sys/class/backlight and writes the result to
+    #   $SIGNAL_DIR/BRIGHTNESS.json  { "available": true, "percent": 70 }
+    # for the app to read. Only "action" and a number up to 100 are read
+    # from the request; nothing in it is run. Both kinds of boot.
+    BRIGHTNESS_HELPER="/usr/local/lib/safekeep/safekeep-brightness.sh"
+    rm -f "$CHROMIUM_DOWNLOAD_DIR"/BRIGHTNESS_REQUEST*.json "$SIGNAL_DIR/BRIGHTNESS.json" 2>/dev/null
+    (
+        export SAFEKEEP_BRIGHTNESS_STATUS="$SIGNAL_DIR/BRIGHTNESS.json"
+        [ -f "$BRIGHTNESS_HELPER" ] && bash "$BRIGHTNESS_HELPER" get
+        while true; do
+            if compgen -G "$CHROMIUM_DOWNLOAD_DIR/BRIGHTNESS_REQUEST*.json" > /dev/null; then
+                # Chromium names a download "X (1).json" while X.json still
+                # exists: act on the newest only (a dragged slider sends many).
+                mapfile -t BR_FILES < <(ls -t "$CHROMIUM_DOWNLOAD_DIR"/BRIGHTNESS_REQUEST*.json 2>/dev/null)
+                BR_BODY=$(head -c 256 "${BR_FILES[0]}" 2>/dev/null)
+                rm -f "${BR_FILES[@]}" 2>/dev/null
+                BR_ACTION=$(printf '%s' "$BR_BODY" | grep -o '"action"[[:space:]]*:[[:space:]]*"[a-z]*"' | head -1 | grep -o '"[a-z]*"$' | tr -d '"')
+                BR_PCT=$(printf '%s' "$BR_BODY" | grep -o '"percent"[[:space:]]*:[[:space:]]*[0-9]\{1,3\}' | head -1 | grep -o '[0-9]*$')
+                if [ -f "$BRIGHTNESS_HELPER" ]; then
+                    case "$BR_ACTION" in
+                        set)         [ -n "$BR_PCT" ] && bash "$BRIGHTNESS_HELPER" set "$BR_PCT" ;;
+                        up|down|get) bash "$BRIGHTNESS_HELPER" "$BR_ACTION" ;;
+                    esac
+                else
+                    echo '{"available": false}' > "$SIGNAL_DIR/BRIGHTNESS.json"
+                fi
+            fi
+            sleep 0.25
+        done
+    ) &
+    BRIGHTNESS_WATCHER_PID=$!
+    echo "Brightness watcher daemon started (PID $BRIGHTNESS_WATCHER_PID)"
 
     # -------------------------------------------------------------------
     # RESTORE WATCHER DAEMON — RELIQUARY INSPECT & COMMIT

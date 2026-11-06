@@ -655,6 +655,7 @@ const SafeKeepOS = (() => {
     'RESTORE_CHECK',    // Check a Backup → Restore Watcher (restores nothing)
     'POWER_ACTION',     // dashboard Power Options → safekeep-boot.sh dispatcher
     'DISPLAY_SLEEP',    // Settings idle timer → safekeep-boot.sh display watcher
+    'BRIGHTNESS_REQUEST',  // Screen Brightness → safekeep-boot.sh Brightness Watcher
     'COLDCARD_REQUEST', 'COLDCARD_ACK',   // PSBT Signer ↔ Coldcard Watcher
     'TREZOR_REQUEST', 'TREZOR_ACK',       // PSBT Signer ↔ Trezor Watcher
     'UPDATE_REQUEST', 'UPDATE_ACK',       // Device Options ↔ Update Watcher
@@ -2229,6 +2230,70 @@ const SafeKeepOS = (() => {
 
 
   // =============================================
+  //  SCREEN BRIGHTNESS — Brightness Watcher bridge
+  // =============================================
+  // There is no desktop to answer a laptop's brightness keys. The app asks
+  // safekeep-boot.sh's Brightness Watcher by downloading
+  //   BRIGHTNESS_REQUEST.json  { action: 'set', percent } | { action: 'up'|'down'|'get' }
+  // and the watcher's root helper (safekeep-brightness.sh) sets every
+  // backlight in /sys/class/backlight, then writes
+  //   /tmp/safekeep-signals/BRIGHTNESS.json  { available, percent }
+  // A dragged slider sends many values: they go out at most every 200 ms,
+  // always ending with the last one. Works in a Temporary Session too.
+  const BRIGHTNESS_REQUEST_FILE = 'BRIGHTNESS_REQUEST.json';
+  const BRIGHTNESS_STATUS_URL = 'file:///tmp/safekeep-signals/BRIGHTNESS.json';
+  let _brightLast = 0, _brightTimer = null, _brightPending = null;
+
+  function _brightSend(body) {
+    _brightLast = Date.now();
+    _silentDownload(BRIGHTNESS_REQUEST_FILE, JSON.stringify(body));
+  }
+
+  /** Ask for a brightness, 10–100 (%). */
+  function setBrightness(percent) {
+    const p = Math.round(Number(percent));
+    if (!Number.isFinite(p)) return false;
+    if (!isBootDrive()) return false;
+    _brightPending = { action: 'set', percent: Math.max(10, Math.min(100, p)) };
+    if (_brightTimer) return true;
+    const wait = Math.max(0, 200 - (Date.now() - _brightLast));
+    _brightTimer = setTimeout(() => {
+      _brightTimer = null;
+      const body = _brightPending;
+      _brightPending = null;
+      if (body) _brightSend(body);
+    }, wait);
+    return true;
+  }
+
+  /** One step brighter (+1) or dimmer (-1), as the brightness keys do. */
+  function stepBrightness(dir) {
+    if (!isBootDrive()) return false;
+    _brightSend({ action: dir > 0 ? 'up' : 'down' });
+    return true;
+  }
+
+  /**
+   * The screen's brightness: { available: true, percent } for a built-in
+   * screen, { available: false } when there is no backlight to set (an
+   * external monitor), or null when the OS hasn't answered.
+   */
+  async function getBrightness() {
+    if (!isBootDrive()) return null;
+    try {
+      const r = await fetch(BRIGHTNESS_STATUS_URL, { cache: 'no-store' });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || j.available !== true) return { available: false };
+      const p = Math.round(Number(j.percent));
+      return Number.isFinite(p) ? { available: true, percent: Math.max(0, Math.min(100, p)) } : { available: false };
+    } catch (_) {
+      return null;
+    }
+  }
+
+
+  // =============================================
   //  DISPLAY SLEEP — DPMS timer bridge (Task #16)
   // =============================================
   //
@@ -3195,6 +3260,11 @@ const SafeKeepOS = (() => {
 
     // Coldcard — USB co-signing via the Coldcard Watcher
     saveDeviceSettings,
+
+    // Screen brightness (Brightness Watcher)
+    setBrightness,
+    stepBrightness,
+    getBrightness,
 
     // Saved wallets (Output Descriptor tool → PSBT Signer)
     loadSavedWallets,
