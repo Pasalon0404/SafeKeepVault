@@ -1484,7 +1484,7 @@ RELIQUARY_PY
                     mkdir -p "$VAULT_MOUNT/settings" && chmod 700 "$VAULT_MOUNT/settings"
                     if python3 -I - "${DS_FILES[0]}" "$DEVICE_SETTINGS_SAVED.tmp" "$DATA_MOUNT/auto-off-minutes.tmp" <<'DSPYEOF'
 import json, sys
-ALLOWED = ('safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize', 'safekeepBrightness')
+ALLOWED = ('safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize', 'safekeepBrightness', 'safekeepSeedQrPrint')
 src, dst, auto_off_dst = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(src, 'rb') as f:
     raw = f.read(8193)
@@ -1836,6 +1836,57 @@ SSPYEOF
     echo "Trezor watcher daemon started (PID $TREZOR_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # PRINT WATCHER — PRINT A SEEDQR ON A USB LASER PRINTER
+    # -------------------------------------------------------------------
+    # Same request / RAM result / ack pattern as the Trezor watcher above.
+    # The web app downloads
+    #   PRINT_REQUEST.json  { "action": "detect" | "print", "request_id": ...,
+    #                         print: "modules", "size_mm", "style", "fingerprint" }
+    # into $CHROMIUM_DOWNLOAD_DIR (the encrypted vault's seeds/ normally, RAM
+    # in a temporary session). The helper (/usr/local/lib/safekeep/
+    # safekeep-print.py, run with the Python in /opt/safekeep-hwi, which has
+    # libusb1) deletes it on read, validates it, draws the page in PCL in
+    # memory and writes it to the printer's USB printer interface. There is
+    # still no print system and the kernel's printer drivers stay banned
+    # (safekeep-harden.sh). The RESULT goes to RAM and holds no seed data.
+    PRINT_REQUEST="$CHROMIUM_DOWNLOAD_DIR/PRINT_REQUEST.json"
+    PRINT_RESULT="$SIGNAL_DIR/PRINT_RESULT.json"
+    PRINT_PY="/opt/safekeep-hwi/bin/python3"
+    PRINT_HELPER="/usr/local/lib/safekeep/safekeep-print.py"
+    rm -f "$CHROMIUM_DOWNLOAD_DIR"/PRINT_REQUEST*.json "$CHROMIUM_DOWNLOAD_DIR"/PRINT_ACK*.json "$PRINT_RESULT" 2>/dev/null
+
+    (
+        while true; do
+            if [ -f "$PRINT_REQUEST" ]; then
+                echo "$(date +%T) Print Watcher: request detected"
+                rm -f "$PRINT_RESULT" "$CHROMIUM_DOWNLOAD_DIR"/PRINT_ACK*.json \
+                      "$CHROMIUM_DOWNLOAD_DIR"/PRINT_REQUEST\ \(*\).json 2>/dev/null
+                if [ -x "$PRINT_PY" ] && [ -f "$PRINT_HELPER" ]; then
+                    PYTHONDONTWRITEBYTECODE=1 "$PRINT_PY" "$PRINT_HELPER" "$PRINT_REQUEST" "$PRINT_RESULT" 2>>/tmp/safekeep-print.log
+                    echo "$(date +%T) Print Watcher: helper finished (exit $?)"
+                else
+                    echo '{"ok":false,"status":"not_installed","error":"Printing is not installed on this SafeKeep build."}' > "$PRINT_RESULT"
+                fi
+                rm -f "$PRINT_REQUEST"
+                if [ ! -f "$PRINT_RESULT" ]; then
+                    echo '{"ok":false,"status":"error","error":"The print helper stopped unexpectedly."}' > "$PRINT_RESULT"
+                fi
+                ACK_WAIT=0
+                while [ $ACK_WAIT -lt 60 ]; do
+                    compgen -G "$CHROMIUM_DOWNLOAD_DIR/PRINT_ACK*.json" > /dev/null && break
+                    [ -f "$PRINT_REQUEST" ] && break
+                    sleep 1
+                    ACK_WAIT=$((ACK_WAIT + 1))
+                done
+                rm -f "$CHROMIUM_DOWNLOAD_DIR"/PRINT_ACK*.json "$PRINT_RESULT" 2>/dev/null
+            fi
+            sleep 1
+        done
+    ) &
+    PRINT_WATCHER_PID=$!
+    echo "Print watcher daemon started (PID $PRINT_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # UPDATE WATCHER — INSTALL A SIGNED UPDATE INTO THE SPARE OS SLOT
     # -------------------------------------------------------------------
     # Device Options → Update SafeKeep (UPDATER_DESIGN.md). Same request /
@@ -1974,7 +2025,7 @@ SSPYEOF
 
                 # Skip known system trigger/result/sentinel files
                 case "$BASENAME" in
-                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|BRIGHTNESS_*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
+                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|BRIGHTNESS_*|PRINT_*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
                 esac
 
                 # Check if this is a passphrase file (contains "passphrase" key)

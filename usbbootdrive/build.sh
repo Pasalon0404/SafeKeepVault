@@ -282,6 +282,9 @@ install -m 755 safekeep-update.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-u
 install -m 755 safekeep-pwcheck.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-pwcheck.py"
 # Screen brightness: the Brightness Watcher runs this to set the backlight.
 install -m 755 safekeep-brightness.sh "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-brightness.sh"
+# Printing a SeedQR on a USB laser printer, in PCL, with libusb (no print
+# system; the kernel's printer drivers stay banned). Runs with /opt/safekeep-hwi.
+install -m 755 safekeep-print.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-print.py"
 mkdir -p "$CHROOT_DIR/usr/local/share/safekeep"
 install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-lists.json"
 # The passphrase screens shared by setup-vault and change-passphrase, and
