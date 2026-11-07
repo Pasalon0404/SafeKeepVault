@@ -34877,7 +34877,9 @@ async function sqrp_check() {
     var p = sqrp_state.printers;
     if (!p.length) _sqrpPrinter('No USB printer found. Connect it with a USB cable, switch it on, then press Check Again.', 'warn');
     else if (p.length > 1) _sqrpPrinter('More than one USB printer is connected. Unplug all but the one to use, then press Check Again.', 'warn');
-    else if (p[0].pcl === false) _sqrpPrinter(p[0].name + '. It doesn’t list PCL, the printer language SafeKeep uses, so it may print garbled pages or nothing.', 'warn');
+    // Many printers understand PCL without listing it (the Samsung M2070 is
+    // one), so this is a note to watch the first page, not a warning.
+    else if (p[0].pcl === false) _sqrpPrinter('✓ ' + p[0].name + '. It doesn’t say it speaks PCL, the printer language SafeKeep uses, but many printers do anyway. If the page comes out garbled, this printer can’t be used.', 'ok');
     else _sqrpPrinter('✓ ' + p[0].name + (p[0].pcl ? ', speaks PCL' : ''), 'ok');
     _sqrpRender();
 }
