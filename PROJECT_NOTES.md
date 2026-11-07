@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 6, 2026).**
+> **Start with the "Current state" section below (updated Nov 7, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,52 @@
 
 ---
 
-## Current state (Nov 6, 2026) — v1.62
+## Current state (Nov 7, 2026) — v1.63
+
+**v1.63** (Nov 7) — tested on Dave's flash drive (a 2012 15" Retina
+MacBook Pro) as quick updates from `main` (#106–#109). OS files changed
+(`safekeep-boot.sh`, new `safekeep-brightness.sh` and `safekeep-print.py`),
+so the release needs the full build.
+- **Draw my SeedQR** (SeedQR tool, #106–#108; `shared/qr-draw.js`):
+  *Trace It on the Screen* shows the code full-screen on white at the
+  blank template's real size (85.68 mm for 21×21, 87.88 mm for 25×25) to
+  trace through the paper; the Size shows as a % (100 % = 96 px per inch),
+  moves with + / − and the arrow keys (Shift for 1 %), and *Remember as
+  Default* keeps it (`safekeepSeedQrSize`, a Device Options key). *Copy It
+  Square by Square* goes one 7×7 block at a time with the dark squares of
+  each row listed. Both end at Scan to Verify. (A bank-card measuring step
+  was tried and removed: lining up the template is enough.)
+- **Print my SeedQR on a USB laser printer** (#109): no print system. The
+  printer ban in `safekeep-harden.sh` stays (CUPS, Ghostscript, usblp, lp,
+  parport). `usbbootdrive/safekeep-print.py`, run by the Print Watcher
+  with the Python in `/opt/safekeep-hwi` (libusb1, already there for the
+  Trezor), opens only a USB printer-class interface, draws the code alone
+  in PCL 5 at 600 dpi at the size asked (10–150 mm, exact to the dot),
+  optionally with the seed fingerprint under it, and sends it with a bulk
+  transfer. No job name. The panel warns when printing puts a seed the
+  vault shouldn't hold into the vault (a vault that doesn't keep the seed,
+  or a SeedQR that isn't the vault's seed) and suggests a Temporary
+  Session. Tested on a Samsung Xpress M2070 (doesn't list PCL in its
+  Device ID, prints it fine): 14 mm still scans with a laptop camera.
+  Settings: `safekeepSeedQrPrint`.
+- **Screen Brightness** (#107, #108): Device Options slider (30–100 %) and
+  a ☀ slider in the light box. Software dimming (`xrandr --brightness` on
+  every connected screen) through the Brightness Watcher and
+  `usbbootdrive/safekeep-brightness.sh`, because hardware backlight
+  control differs by machine (it did nothing on Dave's MacBook Pro) and
+  desktop monitors have none. The light box opens at 100 % and asks for
+  the hardware backlight at full (best effort, restored on close); the
+  brightness keys step the hardware backlight (best effort). Saved as
+  `safekeepBrightness`.
+- **SeedQR word entry** (#107): Clear & Enter Different Seed now uses the
+  standard word boxes (`ShareFlow.createWordBoxes`); its own grid never
+  showed its suggestions.
+- Tests: `test-qr-draw.mjs`, `test-brightness.mjs` (runs the real
+  Brightness Watcher block), `test-print.mjs`,
+  `usbbootdrive/tests/test-print-helper.py` (PCL parsed back square by
+  square, a fake printer, the real Print Watcher block).
+
+## Earlier: v1.62 (Nov 6, `v1.62 · build 484 · 503a850`)
 
 **v1.62** (Nov 6) — tested on Dave's flash drive as quick updates from
 `main` (#98–#102, #104); one OS file changed (the Coldcard helper), so
@@ -698,10 +743,11 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.62:** update the website for v1.62 (download page, release
-   notes; docs for the COLDCARD backup restore and import, and the
-   Transfer Drive file picker), and install `SafeKeep-Update-v1.62.tar` on
-   a flash drive from the release itself (it changes the Coldcard helper).
+1. **After v1.63:** update the website for v1.63 (download page, release
+   notes; docs for Draw my SeedQR, printing a SeedQR on a USB laser
+   printer, Screen Brightness), and install `SafeKeep-Update-v1.63.tar`
+   on a flash drive from the release itself (it adds OS helpers). If the
+   v1.62 website update hasn't merged yet, fold it in.
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
