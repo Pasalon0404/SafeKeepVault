@@ -26,8 +26,10 @@ SECURITY MODEL
       detect -> list the USB printers: name and whether they say they
                 understand PCL (from their IEEE 1284 Device ID).
       print  -> print ONE page: the SeedQR given as rows of 0/1, at the size
-                asked (10–150 mm wide), and optionally the seed fingerprint
-                (8 hex digits) under it. No job name or other text is sent.
+                asked (10–150 mm wide), optionally the seed fingerprint
+                (8 hex digits) under it, and optionally a square cutting
+                line around both, with the white space inside it the user
+                chose. No job name or other text is sent.
   * The page is never written to disk: it's built in memory and sent.
   * The result goes to RAM (/tmp/safekeep-signals) and holds no seed data.
   * The printer keeps the page in its own memory until it's overwritten or
@@ -123,6 +125,26 @@ def field_size(data):
     return max(MIN_SIZE_MM, min(MAX_SIZE_MM, float(v)))
 
 
+def field_cut_box(data):
+    v = data.get('cut_box', False)
+    if not isinstance(v, bool):
+        raise Fail('bad_request', 'The cutting line must be on or off.')
+    return v
+
+
+BOX_MARGIN_MIN_MM = 0.5
+BOX_MARGIN_MAX_MM = 30.0
+BOX_MARGIN_DEFAULT_MM = 3.0
+BOX_MAX_MM = 190.0      # the square must fit across A4 and Letter
+
+
+def field_box_margin(data):
+    v = data.get('box_margin_mm', BOX_MARGIN_DEFAULT_MM)
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
+        raise Fail('bad_request', 'The space inside the cutting line is not a number.')
+    return max(BOX_MARGIN_MIN_MM, min(BOX_MARGIN_MAX_MM, float(v)))
+
+
 def field_fingerprint(data):
     v = data.get('fingerprint', '')
     if v in ('', None):
@@ -157,7 +179,7 @@ def _at(x, y):
     return b'\x1b*p%dx%dY' % (int(round(x)), int(round(y)))
 
 
-def layout(n, size_mm, fingerprint):
+def layout(n, size_mm, fingerprint, cut_box=False, box_margin_mm=BOX_MARGIN_DEFAULT_MM):
     """Everything about where things go, in 600-dpi dots. Pure, for tests."""
     # The whole code is exactly the size asked (to the dot). Squares are
     # whole dots, so they differ by at most one dot (0.04 mm): square k runs
@@ -168,7 +190,12 @@ def layout(n, size_mm, fingerprint):
     x0 = max(0, mm(PAGE_CENTRE_X_MM - LOGICAL_LEFT_MM) - side // 2)
     y0 = mm(TOP_MM)
     lay = {'n': n, 'cell': cell, 'side': side, 'bounds': bounds, 'x0': x0, 'y0': y0,
-           'actual_mm': round(side / DOTS_PER_MM, 2), 'fingerprint': None}
+           'actual_mm': round(side / DOTS_PER_MM, 2), 'fingerprint': None, 'box': None}
+    # With a cutting line, the white space inside it is the user's choice
+    # (box_margin_mm): above the code, at its sides, and below the
+    # fingerprint (or the code). The fingerprint sits close under the code,
+    # at most 3 mm below it.
+    margin = mm(max(BOX_MARGIN_MIN_MM, min(BOX_MARGIN_MAX_MM, box_margin_mm))) if cut_box else 0
     if fingerprint:
         below = y0 + side
         for pt in (10.0, 9.0, 8.0, 7.0, 6.0):
@@ -179,8 +206,26 @@ def layout(n, size_mm, fingerprint):
                 continue
             break
         w = _text_width(text, pt)
+        gap = min(margin, mm(3)) if cut_box else mm(5)
         lay['fingerprint'] = {'text': text, 'pt': pt, 'x': x0 + side / 2 - w / 2,
-                              'y': below + mm(5) + pt_to_dots(pt) * 0.75}
+                              'y': below + gap + pt_to_dots(pt) * 0.75}
+    if cut_box:
+        # A square: as wide as it is tall, the code centred across it. If it
+        # wouldn't fit across the paper, the margin shrinks until it does.
+        def square(margin):
+            top = y0 - margin
+            if lay['fingerprint']:
+                bottom = lay['fingerprint']['y'] + pt_to_dots(lay['fingerprint']['pt']) * 0.25 + margin
+            else:
+                bottom = y0 + side + margin
+            return top, int(round(max(bottom - top, side + 2 * margin)))
+        top, size = square(margin)
+        while size > mm(BOX_MAX_MM) and margin > mm(BOX_MARGIN_MIN_MM):
+            margin = max(mm(BOX_MARGIN_MIN_MM), margin - mm(0.5))
+            top, size = square(margin)
+        left = x0 + side // 2 - size // 2
+        lay['box'] = {'x': left, 'y': top, 'size': size, 'line': mm(0.25), 'margin': margin,
+                      'size_mm': round(size / DOTS_PER_MM, 1), 'margin_mm': round(margin / DOTS_PER_MM, 1)}
     return lay
 
 
@@ -202,9 +247,14 @@ def bitmap(modules, lay):
     return rows, row_bytes
 
 
-def build_pcl(modules, size_mm, fingerprint):
+def _rect(x, y, w, h):
+    # PCL rectangular area fill, black (0P), at (x, y), w × h in 1/600 inch.
+    return _at(x, y) + b'\x1b*c%da%db0P' % (int(round(w)), int(round(h)))
+
+
+def build_pcl(modules, size_mm, fingerprint, cut_box=False, box_margin_mm=BOX_MARGIN_DEFAULT_MM):
     n = len(modules)
-    lay = layout(n, size_mm, fingerprint)
+    lay = layout(n, size_mm, fingerprint, cut_box, box_margin_mm)
     rows, row_bytes = bitmap(modules, lay)
     out = bytearray()
     out += b'\x1b%-12345X@PJL ENTER LANGUAGE=PCL\r\n'   # no job name, no other PJL
@@ -224,6 +274,12 @@ def build_pcl(modules, size_mm, fingerprint):
     if lay['fingerprint']:
         f = lay['fingerprint']
         out += _font(f['pt']) + _at(f['x'], f['y']) + f['text'].encode()
+    if lay['box']:
+        b, t = lay['box'], lay['box']['line']
+        out += _rect(b['x'], b['y'], b['size'], t)                  # top
+        out += _rect(b['x'], b['y'] + b['size'] - t, b['size'], t)  # bottom
+        out += _rect(b['x'], b['y'], t, b['size'])                  # left
+        out += _rect(b['x'] + b['size'] - t, b['y'], t, b['size'])  # right
     out += b'\x0c'                      # form feed: print the page
     out += b'\x1bE'
     out += b'\x1b%-12345X'
@@ -349,19 +405,22 @@ def do_print(ctx, data):
     modules = field_modules(data)
     size = field_size(data)
     fp = field_fingerprint(data)
+    cut_box = field_cut_box(data)
+    box_margin = field_box_margin(data)
     printers = find_printers(ctx)
     if not printers:
         raise Fail('no_printer', 'No USB printer found. Connect the printer with a USB cable and switch it on.')
     if len(printers) > 1:
         raise Fail('multiple_printers', 'More than one USB printer is connected. Unplug all but the one to use.')
     info = describe(printers[0])
-    page, lay = build_pcl(modules, size, fp)
+    page, lay = build_pcl(modules, size, fp, cut_box, box_margin)
     modules = None
     try:
         send(printers[0], page)
     finally:
         page = None
-    return {'ok': True, 'status': 'printed', 'printer': info['name'], 'pcl': info['pcl'], 'size_mm': lay['actual_mm']}
+    return {'ok': True, 'status': 'printed', 'printer': info['name'], 'pcl': info['pcl'], 'size_mm': lay['actual_mm'],
+            'box_mm': lay['box']['size_mm'] if lay['box'] else None}
 
 
 def main(argv):
