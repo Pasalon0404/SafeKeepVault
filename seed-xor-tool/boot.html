@@ -6579,7 +6579,7 @@
                         <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg></span>
                         <span><b>Seed XOR shares</b><span>2 to 4 shares that each look like a normal seed</span></span>
                     </button>
-                    <button type="button" class="welcome-option" onclick="showColdcardRecoveryPanel()">
+                    <button type="button" class="welcome-option" id="welcome-opt-coldcard" onclick="showColdcardRecoveryPanel()">
                         <span class="welcome-option-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M9 6h6M10 18h4"/></svg></span>
                         <span><b>COLDCARD backup</b><span>Straight from a COLDCARD over USB, or one of its backup files</span></span>
                     </button>
@@ -34876,9 +34876,13 @@ function sqrp_set(change) {
     _sqrpRender();
 }
 
+// The online demo has no printer to reach: say so, and never print.
+var SKV_DEMO_PRINT_MSG = 'Printing works only on the offline vault: run it from its USB flash drive and connect a laser printer by USB. The demo doesn’t print.';
+
 async function sqrp_check() {
     var os = window.SafeKeepOS;
     sqrp_state.printers = null;
+    if (_skvDemoActive()) { _sqrpPrinter(SKV_DEMO_PRINT_MSG, 'warn'); _sqrpRender(); return; }
     _sqrpPrinter('Looking for a USB printer…', '');
     if (!os || typeof os.printDetect !== 'function') { _sqrpPrinter('Printing isn’t available here.', 'warn'); return; }
     var res = null;
@@ -34930,6 +34934,7 @@ function _sqrpMsg(text, cls) {
 
 async function sqrp_print() {
     var os = window.SafeKeepOS;
+    if (_skvDemoActive()) { _sqrpPrinter(SKV_DEMO_PRINT_MSG, 'warn'); return; }
     if (sqrp_state.busy || !os || typeof os.printSeedQR !== 'function' || !sqr_state.modules) return;
     sqrp_state.busy = true;
     _sqrpRender();
@@ -44620,7 +44625,14 @@ var _ccbBoxes = null;        // 12 word boxes for the backup password
 var _ccbTyped = false;       // COLDCARD Q typed password instead of words
 var _ccbSummary = null;      // ColdcardBackup.summarizeBackup result (holds the words)
 
+// The online demo (shared/demo-mode.js) doesn't offer the COLDCARD backup
+// screens: a real backup could be opened there, and the USB path only
+// reaches the dev mock. _skvDemoOff() hides their buttons; these refuse too.
+var SKV_DEMO_CCB_MSG = 'SafeKeep demo: bringing in a COLDCARD backup works only on the offline vault, run from its USB flash drive. As a rule, never open a real backup on a website.';
+function _skvDemoActive() { return !!(window.SKVDemo && window.SKVDemo.active); }
+
 function showColdcardRecoveryPanel() {
+    if (_skvDemoActive()) { showStatus(SKV_DEMO_CCB_MSG, 'error'); return; }
     ['welcome-buttons', 'restore-panel', 'generate-panel', 'xor-recovery-panel', 'shamir-recovery-panel'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.style.display = 'none';
@@ -44630,6 +44642,18 @@ function showColdcardRecoveryPanel() {
     ccb_reset();
     skui_revealPanel('coldcard-recovery-panel');
 }
+
+(function _skvDemoOff() {
+    function off() {
+        if (!_skvDemoActive()) return;
+        ['welcome-opt-coldcard', 'settings-ccb-section'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) { el.hidden = true; el.style.display = 'none'; }
+        });
+    }
+    if (document.readyState === 'complete') off();
+    else window.addEventListener('load', off);
+})();
 
 function hideColdcardRecoveryPanel() {
     ccb_reset();
@@ -45122,6 +45146,7 @@ function _ccbApplyMode() {
 }
 
 function ccb_openImport() {
+    if (_skvDemoActive()) { showStatus(SKV_DEMO_CCB_MSG, 'error'); return; }
     if (_isEphemeralBoot()) { showStatus('A Temporary Session keeps nothing, so there’s no vault to import into. Unlock your vault first.', 'error'); return; }
     var panel = document.getElementById('coldcard-recovery-panel');
     if (!panel || document.getElementById('ccb-import-overlay')) return;

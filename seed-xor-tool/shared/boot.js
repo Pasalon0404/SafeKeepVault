@@ -2683,7 +2683,7 @@ const SafeKeepOS = (() => {
   async function _coldcardRequest(payload, maxWaitMs) {
     if (!isBootDrive()) {
       return { ok: false, status: 'unavailable',
-               error: 'Coldcard signing only works when SafeKeep is running from its USB stick.' };
+               error: 'Coldcard signing only works when SafeKeep is running from its USB flash drive.' };
     }
     if (_ccInFlight) {
       return { ok: false, status: 'in_progress', error: 'A Coldcard request is already in progress.' };
@@ -2827,7 +2827,7 @@ const SafeKeepOS = (() => {
   async function _trezorRequest(payload, maxWaitMs) {
     if (!isBootDrive()) {
       return { ok: false, status: 'unavailable',
-               error: 'Trezor signing only works when SafeKeep is running from its USB stick.' };
+               error: 'Trezor signing only works when SafeKeep is running from its USB flash drive.' };
     }
     if (_tzInFlight) {
       return { ok: false, status: 'in_progress', error: 'A Trezor request is already in progress.' };
@@ -2947,7 +2947,7 @@ const SafeKeepOS = (() => {
   async function _updateRequest(payload, maxWaitMs, onProgress) {
     if (!isBootDrive()) {
       return { ok: false, status: 'unavailable',
-               error: 'Updates only work when SafeKeep is running from its USB stick.' };
+               error: 'Updates only work when SafeKeep is running from its USB flash drive.' };
     }
     if (_ccTemporarySession()) {
       return { ok: false, status: 'temporary',

@@ -4,7 +4,7 @@
  * The demo build (`npm run build:demo`) is the real app with these
  * safeguards switched on. It is active only when the demo page's <head>
  * sets window.SKV_DEMO = true AND the page is served over http(s). It is
- * never active from the USB stick (file:), and the release build never
+ * never active from the USB flash drive (file:), and the release build never
  * sets the flag (build-offline.mjs refuses to ship one that does).
  *
  * Safeguards:
@@ -155,7 +155,7 @@ export function installDemoUi() {
     banner.innerHTML =
         '<span class="skv-demo-tag">DEMO</span>' +
         'A preview of the SafeKeepVault tools, not a working vault: only the public demo seeds work here. ' +
-        'To use the tools with your own keys, run the vault offline from a USB stick on a laptop or desktop computer. ' +
+        'To use the tools with your own keys, run the vault offline from a USB flash drive on a laptop or desktop computer. ' +
         // The vault link comes first: Chrome lays out <details> as a block,
         // so anything after it wrapped onto a line of its own.
         '<span class="skv-demo-links"><a href="' + REAL_VAULT_URL + '" target="_blank" rel="noopener">Get the offline vault</a> &middot; ' +

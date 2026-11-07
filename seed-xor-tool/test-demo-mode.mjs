@@ -90,6 +90,26 @@ const build = read('build-offline.mjs');
 check('release build refuses a file carrying the demo flag', /if \(DEMO_FLAG_RE\.test\(stripped\)\)/.test(build));
 check('demo build blocks network connections (connect-src none)', /"connect-src 'none'"/.test(build));
 check('demo build removes the unflagged boot.html', /unlinkSync\(bootHtmlPath\)/.test(build));
+const fnOf = (src, name) => { const i = src.indexOf(name); return i < 0 ? '' : src.slice(i, src.indexOf('\n}\n', i)); };
+
+console.log('Off in the demo:');
+check('printing: the printer line says printing works only on the offline vault, and nothing is detected',
+  /async function sqrp_check\(\) \{\n    var os = window\.SafeKeepOS;\n    sqrp_state\.printers = null;\n    if \(_skvDemoActive\(\)\) \{ _sqrpPrinter\(SKV_DEMO_PRINT_MSG, 'warn'\); _sqrpRender\(\); return; \}/.test(boot)
+  && /var SKV_DEMO_PRINT_MSG = 'Printing works only on the offline vault: run it from its USB flash drive and connect a laser printer by USB\. The demo doesn’t print\.';/.test(boot));
+check('printing: Print refuses in the demo (and stays disabled: no printer is ever found)',
+  fnOf(boot, 'async function sqrp_print').includes("if (_skvDemoActive()) { _sqrpPrinter(SKV_DEMO_PRINT_MSG, 'warn'); return; }")
+  && fnOf(boot, 'function _sqrpRender').includes("document.getElementById('sqrp-print').disabled = sqrp_state.busy || !one;"));
+check('COLDCARD backup: the welcome option and the Device Options section are hidden in the demo',
+  /\['welcome-opt-coldcard', 'settings-ccb-section'\]\.forEach/.test(fnOf(boot, '(function _skvDemoOff'))
+  && boot.includes('id="welcome-opt-coldcard" onclick="showColdcardRecoveryPanel()"') && boot.includes('<div id="settings-ccb-section"'));
+check('COLDCARD backup: opening it refuses in the demo (welcome and Device Options)',
+  fnOf(boot, 'function showColdcardRecoveryPanel').includes("if (_skvDemoActive()) { showStatus(SKV_DEMO_CCB_MSG, 'error'); return; }")
+  && fnOf(boot, 'function ccb_openImport').includes("if (_skvDemoActive()) { showStatus(SKV_DEMO_CCB_MSG, 'error'); return; }"));
+check('the demo switch these use is the same one (window.SKVDemo.active)', /function _skvDemoActive\(\) \{ return !!\(window\.SKVDemo && window\.SKVDemo\.active\); \}/.test(boot) && /window\.SKVDemo = Object\.freeze\(\{ active: demoActive,/.test(entry));
+const demoSrc = read('shared/demo-mode.js');
+check('banner says "USB flash drive", never "stick"', demoSrc.includes('run the vault offline from a USB flash drive on a laptop or desktop computer') && !/\bstick\b/i.test(demoSrc));
+check('no "USB stick" in the app\'s messages (boot.js, boot.html)', !/USB stick/.test(read('shared/boot.js')) && !/USB stick/.test(boot.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')));
+
 const pkg = JSON.parse(read('package.json'));
 check('npm run build:demo exists', pkg.scripts['build:demo'] === 'node build-offline.mjs --demo');
 check('no gh-pages deploy script', !pkg.scripts.deploy && !/gh-pages/.test(JSON.stringify(pkg.scripts)));
