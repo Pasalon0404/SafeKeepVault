@@ -2918,11 +2918,12 @@ const SafeKeepOS = (() => {
   /**
    * Print one SeedQR page: the code alone. modules: rows of booleans (21, 25
    * or 29 square); sizeMm: width of the code (10–150); fingerprint: 8 hex
-   * digits or ''. Resolves to { ok, printer, size_mm } or an error.
+   * digits or ''; cutBox: a square cutting line around it all. Resolves to
+   * { ok, printer, size_mm, box_mm } or an error.
    */
-  function printSeedQR({ modules, sizeMm, fingerprint }) {
+  function printSeedQR({ modules, sizeMm, fingerprint, cutBox }) {
     const rows = (modules || []).map((r) => r.map((v) => (v ? '1' : '0')).join(''));
-    return _printRequest({ action: 'print', modules: rows, size_mm: Number(sizeMm), fingerprint: fingerprint || '' }, 150000);
+    return _printRequest({ action: 'print', modules: rows, size_mm: Number(sizeMm), fingerprint: fingerprint || '', cut_box: !!cutBox }, 150000);
   }
 
   // ===================================================================

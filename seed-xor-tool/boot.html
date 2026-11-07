@@ -12129,9 +12129,9 @@ window.addEventListener('DOMContentLoaded', () => {
             return Promise.resolve({ ok: true, status: 'detected', printers: window._devNoPrinter ? [] : [{ name: 'Samsung M2070 Series (mock)', pcl: true }] });
         },
         printSeedQR: function (opts) {
-            window._devLastPrint = { rows: opts.modules.length, sizeMm: opts.sizeMm, fingerprint: opts.fingerprint };
+            window._devLastPrint = { rows: opts.modules.length, sizeMm: opts.sizeMm, fingerprint: opts.fingerprint, cutBox: !!opts.cutBox };
             _devAnnounce('Printed ' + opts.sizeMm + ' mm (mock)');
-            return new Promise(function (r) { setTimeout(function () { r({ ok: true, status: 'printed', printer: 'Samsung M2070 Series (mock)', pcl: true, size_mm: opts.sizeMm }); }, 400); });
+            return new Promise(function (r) { setTimeout(function () { r({ ok: true, status: 'printed', printer: 'Samsung M2070 Series (mock)', pcl: true, size_mm: opts.sizeMm, box_mm: opts.cutBox ? 99.9 : null }); }, 400); });
         },
 
         // --- Display Sleep bridge (task #198) ---
@@ -34623,6 +34623,9 @@ function sqrd_open(mode) {
                     '<p class="sqrp-caption"><button type="button" class="skb-btn" onclick="sqrp_set({ size: \'template\' })" id="sqrp-template-size">Template size</button> Smaller codes are fine to scan; try the smallest your camera reads.</p>' +
                     '<h4>Fingerprint</h4>' +
                     '<label><input type="checkbox" id="sqrp-fp" onchange="sqrp_set({ fingerprint: this.checked })"> <span id="sqrp-fp-label">Print the seed fingerprint under the code</span></label>' +
+                    '<h4>Cutting line</h4>' +
+                    '<label><input type="checkbox" id="sqrp-box" onchange="sqrp_set({ cutBox: this.checked })"> Print a square line around it to cut along</label>' +
+                    '<p class="sqrp-caption" id="sqrp-box-note"></p>' +
                     '<h4>Before you print</h4>' +
                     '<ul class="sqrp-safety">' +
                         '<li>Use your own printer, connected by a USB cable. SafeKeep never prints over a network.</li>' +
@@ -34832,7 +34835,7 @@ function sqrd_verify() {
 // are kept in `safekeepSeedQrPrint` (a Device Options key, so they're saved
 // in the vault).
 var SQRP_KEY = 'safekeepSeedQrPrint';
-var sqrp_state = { size: null, fingerprint: true, printers: null, busy: false };
+var sqrp_state = { size: null, fingerprint: true, cutBox: false, printers: null, busy: false };
 
 function _sqrpTemplateSize() {
     var n = (sqr_state.modules || []).length;
@@ -34845,6 +34848,7 @@ function sqrp_init() {
     if (sqrp_state.size == null) {
         sqrp_state.size = (saved && saved.size >= 10 && saved.size <= 150) ? saved.size : _sqrpTemplateSize();
         if (saved && typeof saved.fingerprint === 'boolean') sqrp_state.fingerprint = saved.fingerprint;
+        if (saved && typeof saved.cutBox === 'boolean') sqrp_state.cutBox = saved.cutBox;
     }
     sqrp_state.printers = null;
     sqrp_state.busy = false;
@@ -34856,6 +34860,7 @@ function sqrp_set(change) {
         if (isFinite(v)) sqrp_state.size = Math.max(10, Math.min(150, Math.round(v * 100) / 100));
     }
     if ('fingerprint' in change) sqrp_state.fingerprint = !!change.fingerprint;
+    if ('cutBox' in change) sqrp_state.cutBox = !!change.cutBox;
     _sqrpRender();
 }
 
@@ -34923,14 +34928,15 @@ async function sqrp_print() {
         res = await os.printSeedQR({
             modules: sqr_state.modules,
             sizeMm: sqrp_state.size,
-            fingerprint: sqrp_state.fingerprint ? (sqr_state.fingerprint || '') : ''
+            fingerprint: sqrp_state.fingerprint ? (sqr_state.fingerprint || '') : '',
+            cutBox: sqrp_state.cutBox
         });
     } catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
     sqrp_state.busy = false;
     if (!document.getElementById('sqrp-msg')) return;
     if (res && res.ok) {
-        try { localStorage.setItem(SQRP_KEY, JSON.stringify({ size: sqrp_state.size, fingerprint: sqrp_state.fingerprint })); } catch (_) {}
-        _sqrpMsg('Sent to ' + res.printer + ' (' + Number(res.size_mm).toFixed(1) + ' mm wide). When the page is out, switch the printer off to clear its memory, then check the printout with Scan to Verify.', 'ok');
+        try { localStorage.setItem(SQRP_KEY, JSON.stringify({ size: sqrp_state.size, fingerprint: sqrp_state.fingerprint, cutBox: sqrp_state.cutBox })); } catch (_) {}
+        _sqrpMsg('Sent to ' + res.printer + ' (' + Number(res.size_mm).toFixed(1) + ' mm wide' + (res.box_mm ? ', in a ' + Number(res.box_mm).toFixed(1) + ' mm square to cut out' : '') + '). When the page is out, switch the printer off to clear its memory, then check the printout with Scan to Verify.', 'ok');
         document.getElementById('sqrp-verify').hidden = false;
     } else {
         _sqrpMsg((res && res.error) || 'The page wasn’t printed.', 'err');
@@ -34949,6 +34955,7 @@ function _sqrpRender() {
     var fpBox = document.getElementById('sqrp-fp');
     fpBox.checked = sqrp_state.fingerprint && !!sqr_state.fingerprint;
     fpBox.disabled = !sqr_state.fingerprint;
+    document.getElementById('sqrp-box').checked = sqrp_state.cutBox;
     document.getElementById('sqrp-fp-label').textContent = sqr_state.fingerprint
         ? 'Print the seed fingerprint under the code (' + sqr_state.fingerprint + ')'
         : 'Print the seed fingerprint under the code (not available for this SeedQR)';
@@ -34969,6 +34976,11 @@ function _sqrpRender() {
     var x0 = 105 - size / 2, y0 = 30, cell = size / n;
     ctx.fillStyle = '#000';
     for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (m[r][c]) ctx.fillRect(x0 + c * cell, y0 + r * cell, cell + 0.3, cell + 0.3);   // overlap: no seams between dark squares
+    // Mirrors safekeep-print.py's layout(): with a cutting line, the margin
+    // is the scanners' quiet zone (4 squares, 2–10 mm) and the fingerprint
+    // sits below it, inside the square.
+    var box = sqrp_state.cutBox, margin = box ? Math.max(2, Math.min(4 * cell, 10)) : 0;
+    var fpBottom = null;
     if (sqrp_state.fingerprint && sqr_state.fingerprint) {
         var fpPt = 10, text = 'Fingerprint ' + sqr_state.fingerprint;
         var widthOf = function (s, pt) { return s.length * 0.6 * pt * 25.4 / 72; };
@@ -34979,7 +34991,20 @@ function _sqrpRender() {
         }
         ctx.font = (fpPt * 25.4 / 72) + 'px ui-monospace, monospace';
         ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-        ctx.fillText(text, 105, y0 + size + 5 + fpPt * 25.4 / 72 * 0.75);
+        var fpBase = y0 + size + (box ? margin : 5) + fpPt * 25.4 / 72 * 0.75;
+        ctx.fillText(text, 105, fpBase);
+        fpBottom = fpBase + fpPt * 25.4 / 72 * 0.25;
+    }
+    var boxNote = document.getElementById('sqrp-box-note');
+    if (box) {
+        var top = y0 - margin;
+        var bottom = fpBottom != null ? fpBottom + Math.max(1.5, margin / 2) : y0 + size + margin;
+        var sq = Math.max(bottom - top, size + 2 * margin);
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 0.25;
+        ctx.strokeRect(105 - sq / 2 + 0.125, top + 0.125, sq - 0.25, sq - 0.25);
+        boxNote.textContent = 'A ' + sq.toFixed(1) + ' mm square, with ' + margin.toFixed(1) + ' mm of white around the code so it still scans.';
+    } else {
+        boxNote.textContent = '';
     }
     document.getElementById('sqrp-caption').textContent = 'Preview on US Letter. The code prints ' + size.toFixed(1) + ' mm wide.';
 }
@@ -36625,7 +36650,7 @@ var _RLQ_APP_SETTINGS_KEYS = [
     'safekeepIdleTimers',    // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
     'safekeepSeedQrSize',    // Draw my SeedQR light box: remembered Size in % ("104.3")
     'safekeepBrightness',    // Screen Brightness: software dimming % ("70"), set again at start
-    'safekeepSeedQrPrint'    // SeedQR printing: { size, fingerprint } last printed with
+    'safekeepSeedQrPrint'    // SeedQR printing: { size, fingerprint, cutBox } last printed with
 ];
 
 /**

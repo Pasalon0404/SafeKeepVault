@@ -93,7 +93,8 @@ def rows01(m):
 # ---- a small PCL reader: raster rows at their position, and text at its position
 def read_pcl(data):
     i, x, y = 0, 0, 0
-    raster, texts, cmds = None, [], []
+    raster, texts, cmds, rects = None, [], [], []
+    cw = ch = 0
     pjl = []
     width = None
     while i < len(data):
@@ -116,6 +117,9 @@ def read_pcl(data):
                 if key == '*pX': x = int(val)
                 elif key == '*pY': y = int(val)
                 elif key == '*rS': width = int(val)
+                elif key == '*cA': cw = int(val)
+                elif key == '*cB': ch = int(val)
+                elif key == '*cP': rects.append((x, y, cw, ch, int(val)))
                 elif key == '*rA': raster = {'x': x, 'y': y, 'rows': [], 'width': width}
                 elif key == '*bW':
                     n = int(val); raster['rows'].append(data[j:j + n]); j += n
@@ -129,7 +133,7 @@ def read_pcl(data):
             j += 1
         texts.append((data[i:j].decode('latin-1'), x, y))
         i = j
-    return {'raster': raster, 'texts': texts, 'cmds': cmds, 'pjl': pjl}
+    return {'raster': raster, 'texts': texts, 'cmds': cmds, 'pjl': pjl, 'rects': rects}
 
 def pixel(r, px, py):
     row = r['rows'][py]
@@ -170,6 +174,34 @@ ck('size limits: 10–150 mm', P.field_size({'size_mm': 3}) == 10 and P.field_si
 lay4 = P.layout(29, 150, '')
 ck('29×29 at 150 mm fits across A4 (and Letter)', P.mm(6.35) + lay4['x0'] + lay4['side'] <= P.mm(210 - 4))
 
+print('\n1b. The cutting line')
+def box_of(d):
+    rs = d['rects']
+    if len(rs) != 4: return None
+    xs = [r[0] for r in rs] + [r[0] + r[2] for r in rs]
+    ys = [r[1] for r in rs] + [r[1] + r[3] for r in rs]
+    return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
+ck('no cutting line unless asked', not read_pcl(P.build_pcl(m, 30, 'ABCDEF01')[0])['rects'])
+for size, fpv in ((14, 'ABCDEF01'), (14, ''), (85.68, '5436D724'), (150, '5436D724')):
+    pg, ly = P.build_pcl(m, size, fpv, True)
+    dd = read_pcl(pg)
+    bx = box_of(dd)
+    rr = dd['raster']
+    side = ly['side']
+    ok_square = bx and bx[2] == bx[3] == ly['box']['size']
+    ok_black = all(r[4] == 0 for r in dd['rects']) and all(min(r[2], r[3]) == P.mm(0.25) for r in dd['rects'])
+    margin = ly['box']['margin']
+    inside = bx and bx[0] + margin <= rr['x'] + 1 and rr['x'] + side <= bx[0] + bx[2] - margin + 1 and bx[1] + margin == rr['y'] and rr['y'] + side + margin <= bx[1] + bx[3]
+    qz = margin >= min(4 * ly['cell'], P.mm(10)) - 1 and margin >= P.mm(2)
+    fpt = [(s2, x2, y2) for (s2, x2, y2) in dd['texts']]
+    fp_in = (not fpv and not fpt) or (fpt and bx and bx[0] < fpt[0][1] and fpt[0][1] + P._text_width(fpt[0][0], ly['fingerprint']['pt']) < bx[0] + bx[2] and rr['y'] + side + margin <= fpt[0][2] < bx[1] + bx[3])
+    page_ok = bx and P.mm(6.35) + bx[0] + bx[2] <= P.mm(210 - 4) and bx[1] > 0
+    ck('%s mm%s: a square %.1f mm line (0.25 mm, black) around code%s, a %.1f mm quiet zone inside, on the page' % (size, ' + fingerprint' if fpv else '', ly['box']['size_mm'], ' and fingerprint' if fpv else '', margin / P.DOTS_PER_MM),
+       ok_square and ok_black and inside and qz and fp_in and page_ok, (bx, ly['box'], fpt))
+B14 = P.layout(21, 14, 'ABCDEF01', True)['bounds']
+pg14 = read_pcl(P.build_pcl(m, 14, 'ABCDEF01', True)[0])
+ck('…and the code itself is unchanged', all(pixel(pg14['raster'], (B14[c] + B14[c + 1]) // 2, (B14[rr2] + B14[rr2 + 1]) // 2) == m[rr2][c] for rr2 in range(21) for c in range(21)))
+
 print('\n2. Requests are checked')
 def bad(d):
     try:
@@ -183,6 +215,7 @@ def bad_f(fn, d):
     except P.Fail:
         return True
 ck('there is no style any more (code only)', not hasattr(P, 'field_style'))
+ck('cut_box must be true or false', P.field_cut_box({}) is False and P.field_cut_box({'cut_box': True}) is True and bad_f(P.field_cut_box, {'cut_box': 'yes'}))
 ck('fingerprint: 8 hex digits or nothing', P.field_fingerprint({'fingerprint': 'abcdef01'}) == 'ABCDEF01' and P.field_fingerprint({}) == '' and bad_f(P.field_fingerprint, {'fingerprint': 'ABC;rm'}))
 ck('size must be a number', bad_f(P.field_size, {'size_mm': '50'}) and bad_f(P.field_size, {'size_mm': True}))
 ck('Device ID parsing', P.parse_device_id(b'\x00\x2bMFG:Samsung;CMD:SPL,PCL6;MDL:M2070 Series;') == {'MFG': 'Samsung', 'CMD': 'SPL,PCL6', 'MDL': 'M2070 Series'})
@@ -227,6 +260,8 @@ Bs = P.layout(21, 60, '')['bounds']
 ok = d['raster'] and all(pixel(d['raster'], (Bs[c] + Bs[c + 1]) // 2, (Bs[rr] + Bs[rr + 1]) // 2) == m[rr][c] for rr in range(21) for c in range(21))
 ck('print: the page reaches the printer, square for square', res.get('ok') and res['status'] == 'printed' and ok, res)
 ck('…only the printer interface was claimed (not the scanner)', claimed.strip() == '0', claimed)
+res_b, sent_b, _, _ = run(dict(req, cut_box=True), [samsung])
+ck('print with the cutting line: four black rules reach the printer, and the result gives the box size', res_b.get('ok') and len(read_pcl(sent_b)['rects']) == 4 and res_b.get('box_mm') and res_b['box_mm'] > 60, res_b)
 ck('…the result names the printer and the real size, and holds no seed data', res['printer'] == 'Samsung M2070 Series' and abs(res['size_mm'] - 60) < 0.05 and 'modules' not in json.dumps(res) and '5436' not in json.dumps(res), res)
 ck('…the request is deleted', not left)
 res, sent, _, _ = run(req, [])
