@@ -135,18 +135,25 @@ it is about to install. Before flashing, check that it equals the release's
    gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign SHA256SUMS
    gh release upload v1.36 SHA256SUMS.asc
    ```
-4. Build the USB image on the build machine with the full
-   `sudo bash build.sh`, not `quick-update.sh`. Use the app from the
-   release, not a local build, so the stick runs exactly the attested
-   bytes:
+4. Build the USB image on the build machine with the full build, not
+   `quick-update.sh`. Use the app from the release, not a local build, so
+   the stick runs exactly the attested bytes:
    - copy the released `boot.html` into `usbbootdrive/src/dist/boot.html`;
-   - check that `sha256sum src/dist/boot.html` matches `SHA256SUMS`.
+   - check that `sha256sum src/dist/boot.html` matches `SHA256SUMS`;
+   - build with the version named, so the build stops at once if the app
+     in `src/dist` isn't that release's (say, a quick update's app left
+     there, which is how v1.64's first image went wrong):
+   ```sh
+   sudo bash build.sh --release 1.36
+   ```
 5. Make the update file from that same build, so people on an earlier
    two-slot release can update in place (`UPDATER_DESIGN.md`):
    ```sh
-   sudo bash make-update.sh        # on the build machine
+   sudo bash make-update.sh --release 1.36    # on the build machine
    ```
-   Check that its `app sha256` matches the `boot.html` line of `SHA256SUMS`.
+   `--release` makes it stop, writing nothing, unless the OS it packs holds
+   that release's app. Check that its `app sha256` matches the `boot.html`
+   line of `SHA256SUMS`.
    Copy `SafeKeep-Update-v1.36.tar` (in the build folder itself) and
    `manifest.json` (in `workspace/update/`) to the Mac, then sign the
    manifest and add the signature to the update file. Check the `.tar` is

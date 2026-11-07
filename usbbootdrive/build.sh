@@ -106,6 +106,51 @@ if [ ! -s src/dist/boot.html ]; then
     exit 1
 fi
 
+# A release build names its version: `sudo bash build.sh --release 1.64`.
+# Then the app in src/dist must be that release's: its build stamp must
+# say v1.64, with no local changes, and not be the online demo. This stops
+# a build that would otherwise quietly use whatever app was left in
+# src/dist (a quick update's, say) when the released boot.html wasn't
+# copied over first (VERIFYING.md, "For the maintainer", step 4).
+# Without --release, the build goes ahead with any app and says which.
+RELEASE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --release) RELEASE="${2:-}"; shift 2 || { echo "ERROR: --release needs a version, e.g. --release 1.64" >&2; exit 1; } ;;
+        --release=*) RELEASE="${1#--release=}"; shift ;;
+        *) echo "ERROR: unknown option $1 (use --release <version> for a release build)" >&2; exit 1 ;;
+    esac
+done
+RELEASE="${RELEASE#v}"
+APP_STAMP=$(grep -o -m1 'v[0-9]\{1,3\}\.[0-9]\{1,3\} · build [0-9]\{1,7\} · [0-9a-f]\{7,40\} · [0-9-]\{10\}[^<"`]\{0,40\}' src/dist/boot.html || true)
+APP_SHA=$(sha256sum src/dist/boot.html | cut -d' ' -f1)
+echo "App in src/dist: ${APP_STAMP:-no build stamp found}"
+echo "  sha256: $APP_SHA"
+if [ -n "$RELEASE" ]; then
+    [[ "$RELEASE" =~ ^[0-9]{1,3}\.[0-9]{1,3}$ ]] || { echo "ERROR: --release needs a version like 1.64, not '$RELEASE'." >&2; exit 1; }
+    WHY=""
+    case "$APP_STAMP" in
+        "") WHY="it has no build stamp" ;;
+        "v$RELEASE · "*) ;;
+        *) WHY="it is ${APP_STAMP%% ·*}, not v$RELEASE" ;;
+    esac
+    case "$APP_STAMP" in *"+ "*) WHY="${WHY:+$WHY; }its stamp has local changes" ;; esac
+    case "$APP_STAMP" in *"demo"*) WHY="${WHY:+$WHY; }it is the online demo" ;; esac
+    if [ -n "$WHY" ]; then
+        echo "" >&2
+        echo "ERROR: src/dist/boot.html isn't the v$RELEASE release app: $WHY." >&2
+        echo "       Copy the released boot.html over first (on the Mac):" >&2
+        echo "         gh release download v$RELEASE -R Pasalon0404/SafeKeepVault --pattern boot.html" >&2
+        echo "         scp boot.html <build machine>:/home/safekeep-build/src/dist/boot.html" >&2
+        echo "       and check sha256sum src/dist/boot.html against the release's SHA256SUMS." >&2
+        exit 1
+    fi
+    echo "  OK: this is the v$RELEASE release app. Check that sha256 against the release's SHA256SUMS."
+else
+    echo "  (Not a release build. For a release: sudo bash build.sh --release <version>)"
+fi
+echo ""
+
 # =====================================================================
 # PHASE 1: HOST DEPENDENCIES
 # =====================================================================

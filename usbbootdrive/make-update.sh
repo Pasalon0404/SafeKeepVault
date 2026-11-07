@@ -22,7 +22,10 @@
 #  The stick (safekeep-update.py) refuses an update without that signature.
 #
 #  Usage (from /home/safekeep-build):
-#     sudo bash make-update.sh
+#     sudo bash make-update.sh                   # any build
+#     sudo bash make-update.sh --release 1.64    # a release: refuses unless
+#                                                # the OS holds the v1.64 app
+#                                                # and makes a release file
 # =====================================================================
 set -euo pipefail
 
@@ -30,6 +33,19 @@ STAGING="workspace/staging/casper"
 die() { echo ""; echo "ERROR: $*" >&2; exit 1; }
 
 [ -f build.sh ] || die "run this from the build folder (the one containing build.sh)."
+
+RELEASE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --release) RELEASE="${2:-}"; shift 2 || die "--release needs a version, e.g. --release 1.64" ;;
+        --release=*) RELEASE="${1#--release=}"; shift ;;
+        *) die "unknown option $1 (use --release <version> for a release)" ;;
+    esac
+done
+RELEASE="${RELEASE#v}"
+if [ -n "$RELEASE" ] && ! [[ "$RELEASE" =~ ^[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    die "--release needs a version like 1.64, not '$RELEASE'."
+fi
 for f in filesystem.squashfs vmlinuz initrd; do
     [ -s "$STAGING/$f" ] || die "$STAGING/$f is missing — run the full build first: sudo bash build.sh"
 done
@@ -52,6 +68,16 @@ esac
 case "$CHROMIUM" in
     UNPINNED*) NOT_RELEASE_WHY="${NOT_RELEASE_WHY:+$NOT_RELEASE_WHY; }Chromium was not pinned (UC_ALLOW_UNPINNED=1)" ;;
 esac
+# --release <version>: the OS must hold that release's app (see build.sh).
+if [ -n "$RELEASE" ]; then
+    case "$STAMP" in *"demo"*) NOT_RELEASE_WHY="${NOT_RELEASE_WHY:+$NOT_RELEASE_WHY; }the app is the online demo" ;; esac
+    [ "$VERSION" = "$RELEASE" ] || NOT_RELEASE_WHY="${NOT_RELEASE_WHY:+$NOT_RELEASE_WHY; }the app inside the OS is v$VERSION, not v$RELEASE"
+    if [ -n "$NOT_RELEASE_WHY" ]; then
+        die "this isn't a v$RELEASE release build: $NOT_RELEASE_WHY.
+       App inside the OS: $STAMP
+       Copy the released boot.html to src/dist/, then rebuild: sudo bash build.sh --release $RELEASE"
+    fi
+fi
 if [ -n "$NOT_RELEASE_WHY" ]; then
     NAME="SafeKeep-Update-v${VERSION}-build${BUILDNO}.tar"; NOT_RELEASE=1
 else
