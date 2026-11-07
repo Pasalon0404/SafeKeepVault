@@ -383,7 +383,6 @@
     .sqrd-bar-title { font-weight: 700; margin-right: auto; }
     .sqrd-size { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; }
     .sqrd-size input[type=range] { width: 14rem; }
-    .skbright-off { display: none !important; }
     .sqrd-size input[type=number] { width: 5.2rem; padding: 0.2rem 0.35rem; font: inherit; font-variant-numeric: tabular-nums; border-radius: 4px; border: 1px solid #555; background: #222; color: #fff; }
     .sqrd-hint { margin: 0.5rem auto 0; max-width: 60rem; padding: 0 1rem; font-size: 0.85rem; color: #333; text-align: center; line-height: 1.45; }
     .sqrd-stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 1rem; }
@@ -7495,17 +7494,15 @@
                         <!-- Screen Brightness (skbright_*) -->
                         <div id="settings-brightness-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Screen Brightness</h4>
-                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 1rem; line-height: 1.6;">The built-in screen&rsquo;s brightness. The keyboard&rsquo;s brightness keys work too.</p>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 1rem; line-height: 1.6;">Dims the picture on any screen; 100% is the screen&rsquo;s own brightness. On many laptops the keyboard&rsquo;s brightness keys also work.</p>
                             <div class="skbright-row" style="flex: 1; min-width: 200px; max-width: 33vw; display: flex; align-items: center; gap: 0.6rem;">
                                 <span style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); letter-spacing: 0.06em;">DIM</span>
-                                <input type="range" id="settings-brightness" class="skbright-range" min="10" max="100" step="5" value="80"
+                                <input type="range" id="settings-brightness" class="skbright-range" min="30" max="100" step="5" value="100"
                                        oninput="skbright_set(this.value)" aria-label="Screen brightness"
                                        style="flex: 1; accent-color: var(--skb-primary); cursor: pointer;">
                                 <span style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); letter-spacing: 0.06em;">BRIGHT</span>
-                                <span class="skbright-label" style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); min-width: 3rem; text-align: right; letter-spacing: 0.05em;">80%</span>
+                                <span class="skbright-label" style="font-family: var(--skb-mono); font-size: 0.6875rem; color: var(--skb-text-muted); min-width: 3rem; text-align: right; letter-spacing: 0.05em;">100%</span>
                             </div>
-                            <p id="settings-brightness-info" style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.6875rem; margin: 0.6rem 0 0; line-height: 1.5; word-break: break-word;"></p>
-                            <p class="skbright-none" hidden style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0; line-height: 1.6;">SafeKeep can&rsquo;t set this screen&rsquo;s brightness. An external monitor has its own buttons for it.</p>
                         </div>
                         <!-- Idle Timers -->
                         <div id="settings-idle-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
@@ -12092,18 +12089,18 @@ window.addEventListener('DOMContentLoaded', () => {
         getPassphraseRating: function () { return Promise.resolve(null); },
 
         // --- Screen brightness (Brightness Watcher) ---
-        // A pretend backlight, so the sliders and keys can be tried here.
         setBrightness: function (pct) {
-            window._devBrightness = Math.max(10, Math.min(100, Math.round(pct)));
+            window._devBrightness = Math.max(30, Math.min(100, Math.round(pct)));
             return true;
         },
         stepBrightness: function (dir) {
-            var now = window._devBrightness || 80;
-            window._devBrightness = Math.max(10, Math.min(100, dir > 0 ? (Math.floor(now / 10) + 1) * 10 : (Math.ceil(now / 10) - 1) * 10));
-            _devAnnounce('Brightness ' + window._devBrightness + '% (mock)');
+            _devAnnounce('Backlight ' + (dir > 0 ? 'up' : 'down') + ' (mock)');
             return true;
         },
-        getBrightness: function () { return Promise.resolve({ available: true, percent: window._devBrightness || 80, devices: 'intel_backlight raw ' + Math.round((window._devBrightness || 80) * 48.1) + '/4810 (mock)', at: Math.floor(Date.now() / 1000) }); },
+        lightboxBacklight: function (on) {
+            window._devLightboxBacklight = !!on;
+            return true;
+        },
 
         // --- Display Sleep bridge (task #198) ---
         // Real backend (shared/boot.js on the live USB) translates this
@@ -34560,7 +34557,7 @@ function sqrd_open(mode) {
                 '<label class="sqrd-size">Size <input type="range" id="sqrd-scale" min="' + SQRD_SIZE_MIN + '" max="' + SQRD_SIZE_MAX + '" step="0.1" oninput="sqrd_setScale(this.value)" aria-label="Size"></label>' +
                 '<label class="sqrd-size"><input type="number" id="sqrd-size-num" min="' + SQRD_SIZE_MIN + '" max="' + SQRD_SIZE_MAX + '" step="0.1" onchange="sqrd_setScale(this.value)" aria-label="Size in percent">%</label>' +
                 '<button type="button" class="skb-btn" id="sqrd-remember-btn" onclick="sqrd_rememberSize()">Remember as Default</button>' +
-                '<label class="sqrd-size skbright-row" title="Screen brightness">&#9728; <input type="range" class="skbright-range" min="10" max="100" step="5" oninput="skbright_set(this.value)" aria-label="Screen brightness" style="width: 7rem;"> <span class="skbright-label"></span></label>' +
+                '<label class="sqrd-size skbright-row" title="Screen brightness">&#9728; <input type="range" class="skbright-range" min="30" max="100" step="5" oninput="skbright_set(this.value)" aria-label="Screen brightness" style="width: 7rem;"> <span class="skbright-label"></span></label>' +
                 '<button type="button" class="skb-btn" onclick="sqrd_verify()">Scan to Verify</button>' +
                 '<button type="button" class="skb-btn" onclick="sqrd_close()">Done</button>' +
             '</div>' +
@@ -34587,10 +34584,11 @@ function sqrd_open(mode) {
     document.addEventListener('keydown', _sqrdKey, true);
     window.addEventListener('resize', _sqrdRender);
     _sqrdRender();
-    if (mode === 'lightbox' && typeof skbright_refresh === 'function') skbright_refresh();
+    if (mode === 'lightbox' && typeof skbright_lightbox === 'function') skbright_lightbox(true);
 }
 
 function sqrd_close() {
+    if (sqrd_state.mode === 'lightbox' && typeof skbright_lightbox === 'function') skbright_lightbox(false);
     var ov = document.getElementById('sqrd-overlay');
     if (ov) {
         ov.querySelectorAll('canvas').forEach(function (c) { c.width = 1; c.height = 1; });   // drop the drawn code
@@ -34701,7 +34699,7 @@ function _sqrdRender() {
         rem.disabled = isDefault;
         rem.title = isDefault ? 'The light box opens at this size.' : 'Open the light box at ' + size.toFixed(1) + '% from now on.';
         document.getElementById('sqrd-hint').textContent =
-            'Turn the screen to full brightness. Lay the printed ' + n + '×' + n + ' template on the screen and change the Size (slider, number box, or the arrow and + / − keys; hold Shift for bigger steps) until its grid lines up with this one. Press Remember as Default so it opens at that size next time. Then fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
+            'The light box opens at full brightness (☀ to dim it). Lay the printed ' + n + '×' + n + ' template on the screen and change the Size (slider, number box, or the arrow and + / − keys; hold Shift for bigger steps) until its grid lines up with this one. Press Remember as Default so it opens at that size next time. Then fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
     } else {
         var blocks = QD.blocksFor(n, 7), b = blocks[sqrd_state.block];
         var bc = document.getElementById('sqrd-block-canvas');
@@ -36313,58 +36311,57 @@ function rlq_stopPasswordScan(target) {
  * (#settings-audio-toggle / #settings-audio-volume).
  */
 // ---- Screen brightness (skbright_*) ----
-// Device Options → Screen Brightness, the ☀ slider in Draw my SeedQR's
-// light box, and the keyboard's brightness keys (no desktop answers them
-// in the kiosk) all go through SafeKeepOS.setBrightness / stepBrightness
-// to safekeep-boot.sh's Brightness Watcher. The level is kept in
-// localStorage `safekeepBrightness` (a Device Options key, so it's saved
-// in the vault and set again at the next start). Without a backlight (an
-// external monitor) the sliders are replaced by a note.
+// Device Options → Screen Brightness and the ☀ slider in Draw my SeedQR's
+// light box dim the picture in software on every screen
+// (SafeKeepOS.setBrightness → the Brightness Watcher's xrandr), so they
+// work on any computer; 100 % is the screen's own brightness. The level is
+// kept in localStorage `safekeepBrightness` (a Device Options key, so it's
+// saved in the vault and set again at the next start).
+// The light box opens at 100 % and also asks for the hardware backlight at
+// full (best effort; not every screen has one). Its slider is for that
+// light box only: closing it puts back the saved level and the backlight.
+// The keyboard's brightness keys step the hardware backlight (best effort).
 var SKBRIGHT_KEY = 'safekeepBrightness';
-var _skbrightSentAt = 0, _skbrightCheck = null;
+var _skbrightLightbox = false;
 
-function _skbrightPaint(st) {
-    var ok = !!(st && st.available);
-    document.querySelectorAll('.skbright-row').forEach(function (el) { el.classList.toggle('skbright-off', !ok); });
-    document.querySelectorAll('.skbright-none').forEach(function (el) { el.hidden = !(st && st.available === false); });
-    // What the OS found, for a screen that doesn't respond.
-    var info = document.getElementById('settings-brightness-info');
-    if (info) {
-        var t = '';
-        if (st && st.devices) t = 'Backlight: ' + st.devices + '.';
-        if (st && _skbrightSentAt && st.at && st.at * 1000 + 2500 < _skbrightSentAt) t += (t ? ' ' : '') + 'The OS hasn’t carried out the last change.';
-        else if (st && st.at && _skbrightSentAt) t += (t ? ' ' : '') + 'Last change carried out at ' + new Date(st.at * 1000).toLocaleTimeString() + '.';
-        if (!st && _skbrightSentAt) t = 'The OS hasn’t answered.';
-        info.textContent = t;
-    }
-    if (!ok) return;
-    document.querySelectorAll('.skbright-range').forEach(function (r) { if (document.activeElement !== r) r.value = st.percent; });
-    document.querySelectorAll('.skbright-label').forEach(function (l) { l.textContent = st.percent + '%'; });
+function _skbrightSaved() {
+    var v = NaN;
+    try { v = parseInt(localStorage.getItem(SKBRIGHT_KEY), 10); } catch (_) {}
+    return (v >= 30 && v <= 100) ? v : 100;
 }
 
-async function skbright_refresh() {
-    var os = window.SafeKeepOS;
-    if (!os || typeof os.getBrightness !== 'function') { _skbrightPaint(null); return null; }
-    var st = null;
-    try { st = await os.getBrightness(); } catch (_) {}
-    _skbrightPaint(st);
-    return st;
-}
-
-function skbright_set(v) {
-    var n = Math.max(10, Math.min(100, Math.round(Number(v) || 0)));
-    var os = window.SafeKeepOS;
-    if (os && typeof os.setBrightness === 'function') os.setBrightness(n);
-    _skbrightSentAt = Date.now();
-    clearTimeout(_skbrightCheck);
-    _skbrightCheck = setTimeout(skbright_refresh, 1500);   // show what the OS did
-    try { localStorage.setItem(SKBRIGHT_KEY, String(n)); } catch (_) {}
+function _skbrightShow(n) {
     document.querySelectorAll('.skbright-range').forEach(function (r) { if (Number(r.value) !== n) r.value = n; });
     document.querySelectorAll('.skbright-label').forEach(function (l) { l.textContent = n + '%'; });
 }
 
+function _skbrightApply(n) {
+    var os = window.SafeKeepOS;
+    if (os && typeof os.setBrightness === 'function') os.setBrightness(n);
+}
+
+/* Device Options opened: show the saved level. */
+function skbright_refresh() { if (!_skbrightLightbox) _skbrightShow(_skbrightSaved()); }
+
+function skbright_set(v) {
+    var n = Math.max(30, Math.min(100, Math.round(Number(v) || 0)));
+    _skbrightApply(n);
+    if (!_skbrightLightbox) { try { localStorage.setItem(SKBRIGHT_KEY, String(n)); } catch (_) {} }
+    _skbrightShow(n);
+}
+
+/* The light box opens (true) at full brightness, or closes (false). */
+function skbright_lightbox(open) {
+    if (_skbrightLightbox === !!open) return;
+    _skbrightLightbox = !!open;
+    var os = window.SafeKeepOS;
+    if (os && typeof os.lightboxBacklight === 'function') os.lightboxBacklight(!!open);
+    var n = open ? 100 : _skbrightSaved();
+    _skbrightApply(n);
+    _skbrightShow(n);
+}
+
 (function _skbrightInit() {
-    var keyTimer = null;
     // The keyboard's brightness keys reach the page as BrightnessUp / BrightnessDown.
     document.addEventListener('keydown', function (e) {
         if (e.key !== 'BrightnessUp' && e.key !== 'BrightnessDown') return;
@@ -36372,21 +36369,12 @@ function skbright_set(v) {
         if (!os || typeof os.stepBrightness !== 'function') return;
         e.preventDefault();
         os.stepBrightness(e.key === 'BrightnessUp' ? 1 : -1);
-        _skbrightSentAt = Date.now();
-        clearTimeout(keyTimer);
-        keyTimer = setTimeout(function () {
-            skbright_refresh().then(function (st) {
-                if (st && st.available) { try { localStorage.setItem(SKBRIGHT_KEY, String(st.percent)); } catch (_) {} }
-            });
-        }, 600);
     }, true);
-    // At start: set the remembered level again, then show the real one.
+    // At start: dim to the saved level again (the screen starts at 100 %).
     function start() {
-        var saved = NaN;
-        try { saved = parseInt(localStorage.getItem(SKBRIGHT_KEY), 10); } catch (_) {}
-        var os = window.SafeKeepOS;
-        if (saved >= 10 && saved <= 100 && os && typeof os.setBrightness === 'function') os.setBrightness(saved);
-        setTimeout(skbright_refresh, 1200);
+        var n = _skbrightSaved();
+        if (n < 100) _skbrightApply(n);
+        _skbrightShow(n);
     }
     if (document.readyState === 'complete') setTimeout(start, 1500);
     else window.addEventListener('load', function () { setTimeout(start, 1500); });
@@ -36398,7 +36386,7 @@ var _RLQ_APP_SETTINGS_KEYS = [
     'safekeepUiAudio',       // Sound: { enabled: bool, volume: 0-1 }
     'safekeepIdleTimers',    // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
     'safekeepSeedQrSize',    // Draw my SeedQR light box: remembered Size in % ("104.3")
-    'safekeepBrightness'     // Screen Brightness: % ("70"), set again at start
+    'safekeepBrightness'     // Screen Brightness: software dimming % ("70"), set again at start
 ];
 
 /**
