@@ -12129,7 +12129,7 @@ window.addEventListener('DOMContentLoaded', () => {
             return Promise.resolve({ ok: true, status: 'detected', printers: window._devNoPrinter ? [] : [{ name: 'Samsung M2070 Series (mock)', pcl: true }] });
         },
         printSeedQR: function (opts) {
-            window._devLastPrint = { rows: opts.modules.length, sizeMm: opts.sizeMm, fingerprint: opts.fingerprint, cutBox: !!opts.cutBox };
+            window._devLastPrint = { rows: opts.modules.length, sizeMm: opts.sizeMm, fingerprint: opts.fingerprint, cutBox: !!opts.cutBox, boxMarginMm: opts.boxMarginMm };
             _devAnnounce('Printed ' + opts.sizeMm + ' mm (mock)');
             return new Promise(function (r) { setTimeout(function () { r({ ok: true, status: 'printed', printer: 'Samsung M2070 Series (mock)', pcl: true, size_mm: opts.sizeMm, box_mm: opts.cutBox ? 99.9 : null }); }, 400); });
         },
@@ -34625,7 +34625,14 @@ function sqrd_open(mode) {
                     '<label><input type="checkbox" id="sqrp-fp" onchange="sqrp_set({ fingerprint: this.checked })"> <span id="sqrp-fp-label">Print the seed fingerprint under the code</span></label>' +
                     '<h4>Cutting line</h4>' +
                     '<label><input type="checkbox" id="sqrp-box" onchange="sqrp_set({ cutBox: this.checked })"> Print a square line around it to cut along</label>' +
-                    '<p class="sqrp-caption" id="sqrp-box-note"></p>' +
+                    '<div id="sqrp-box-controls">' +
+                        '<p class="sqrp-caption" style="margin: 0.5rem 0 0.25rem;">White space inside the line:</p>' +
+                        '<div class="sqrp-size"><input type="range" id="sqrp-box-margin" min="0.5" max="30" step="0.5" oninput="sqrp_set({ boxMargin: this.value })" aria-label="Space inside the cutting line in millimetres">' +
+                            '<input type="number" id="sqrp-box-margin-num" min="0.5" max="30" step="0.5" onchange="sqrp_set({ boxMargin: this.value })" aria-label="Space in millimetres"> mm</div>' +
+                        '<p class="sqrp-caption">Close-up of what you’ll cut out:</p>' +
+                        '<canvas id="sqrp-closeup" class="sqrp-page"></canvas>' +
+                        '<p class="sqrp-caption" id="sqrp-box-note"></p>' +
+                    '</div>' +
                     '<h4>Before you print</h4>' +
                     '<ul class="sqrp-safety">' +
                         '<li>Use your own printer, connected by a USB cable. SafeKeep never prints over a network.</li>' +
@@ -34835,7 +34842,7 @@ function sqrd_verify() {
 // are kept in `safekeepSeedQrPrint` (a Device Options key, so they're saved
 // in the vault).
 var SQRP_KEY = 'safekeepSeedQrPrint';
-var sqrp_state = { size: null, fingerprint: true, cutBox: false, printers: null, busy: false };
+var sqrp_state = { size: null, fingerprint: true, cutBox: false, boxMargin: 3, printers: null, busy: false };
 
 function _sqrpTemplateSize() {
     var n = (sqr_state.modules || []).length;
@@ -34849,6 +34856,7 @@ function sqrp_init() {
         sqrp_state.size = (saved && saved.size >= 10 && saved.size <= 150) ? saved.size : _sqrpTemplateSize();
         if (saved && typeof saved.fingerprint === 'boolean') sqrp_state.fingerprint = saved.fingerprint;
         if (saved && typeof saved.cutBox === 'boolean') sqrp_state.cutBox = saved.cutBox;
+        if (saved && saved.boxMargin >= 0.5 && saved.boxMargin <= 30) sqrp_state.boxMargin = saved.boxMargin;
     }
     sqrp_state.printers = null;
     sqrp_state.busy = false;
@@ -34861,6 +34869,10 @@ function sqrp_set(change) {
     }
     if ('fingerprint' in change) sqrp_state.fingerprint = !!change.fingerprint;
     if ('cutBox' in change) sqrp_state.cutBox = !!change.cutBox;
+    if ('boxMargin' in change) {
+        var bm = Number(change.boxMargin);
+        if (isFinite(bm)) sqrp_state.boxMargin = Math.max(0.5, Math.min(30, Math.round(bm * 2) / 2));
+    }
     _sqrpRender();
 }
 
@@ -34929,13 +34941,14 @@ async function sqrp_print() {
             modules: sqr_state.modules,
             sizeMm: sqrp_state.size,
             fingerprint: sqrp_state.fingerprint ? (sqr_state.fingerprint || '') : '',
-            cutBox: sqrp_state.cutBox
+            cutBox: sqrp_state.cutBox,
+            boxMarginMm: sqrp_state.boxMargin
         });
     } catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
     sqrp_state.busy = false;
     if (!document.getElementById('sqrp-msg')) return;
     if (res && res.ok) {
-        try { localStorage.setItem(SQRP_KEY, JSON.stringify({ size: sqrp_state.size, fingerprint: sqrp_state.fingerprint, cutBox: sqrp_state.cutBox })); } catch (_) {}
+        try { localStorage.setItem(SQRP_KEY, JSON.stringify({ size: sqrp_state.size, fingerprint: sqrp_state.fingerprint, cutBox: sqrp_state.cutBox, boxMargin: sqrp_state.boxMargin })); } catch (_) {}
         _sqrpMsg('Sent to ' + res.printer + ' (' + Number(res.size_mm).toFixed(1) + ' mm wide' + (res.box_mm ? ', in a ' + Number(res.box_mm).toFixed(1) + ' mm square to cut out' : '') + '). When the page is out, switch the printer off to clear its memory, then check the printout with Scan to Verify.', 'ok');
         document.getElementById('sqrp-verify').hidden = false;
     } else {
@@ -34944,7 +34957,56 @@ async function sqrp_print() {
     _sqrpRender();
 }
 
-/* The preview: a US Letter page at 1.6 px per mm, with the code as it will print. */
+/*
+ * Where everything goes on the page, in mm. Mirrors safekeep-print.py's
+ * layout(): the code centred 105 mm from the left, 30 mm down; the
+ * fingerprint under it (5 mm below, or at most 3 mm below inside a cutting
+ * line); the cutting line a square with the chosen white space inside it
+ * (above, at the sides, below the fingerprint), shrunk to fit the paper.
+ */
+function _sqrpLayout(m, size) {
+    var n = m.length, L = { n: n, size: size, cell: size / n, x0: 105 - size / 2, y0: 30, fp: null, box: null };
+    var box = sqrp_state.cutBox, margin = box ? sqrp_state.boxMargin : 0;
+    if (sqrp_state.fingerprint && sqr_state.fingerprint) {
+        var widthOf = function (s, pt) { return s.length * 0.6 * pt * 25.4 / 72; };
+        var pt, text;
+        for (pt = 10; pt >= 6; pt--) {
+            if (widthOf('Fingerprint ' + sqr_state.fingerprint, pt) <= size) { text = 'Fingerprint ' + sqr_state.fingerprint; break; }
+            if (widthOf(sqr_state.fingerprint, pt) <= Math.max(size, widthOf(sqr_state.fingerprint, 6))) { text = sqr_state.fingerprint; break; }
+        }
+        if (pt < 6) { pt = 6; text = sqr_state.fingerprint; }
+        var ptMm = pt * 25.4 / 72;
+        L.fp = { text: text, ptMm: ptMm, base: L.y0 + size + (box ? Math.min(margin, 3) : 5) + ptMm * 0.75 };
+    }
+    if (box) {
+        var square = function (mg) {
+            var bottom = L.fp ? L.fp.base + L.fp.ptMm * 0.25 + mg : L.y0 + size + mg;
+            return Math.max(bottom - (L.y0 - mg), size + 2 * mg);
+        };
+        var sq = square(margin);
+        while (sq > 190 && margin > 0.5) { margin = Math.max(0.5, margin - 0.5); sq = square(margin); }
+        L.box = { x: 105 - sq / 2, y: L.y0 - margin, size: sq, margin: margin };
+    }
+    return L;
+}
+
+function _sqrpDraw(ctx, m, L) {
+    ctx.fillStyle = '#000';
+    for (var r = 0; r < L.n; r++) for (var c = 0; c < L.n; c++) {
+        if (m[r][c]) ctx.fillRect(L.x0 + c * L.cell, L.y0 + r * L.cell, L.cell + Math.min(0.3, L.cell * 0.1), L.cell + Math.min(0.3, L.cell * 0.1));   // overlap: no seams
+    }
+    if (L.fp) {
+        ctx.font = L.fp.ptMm + 'px ui-monospace, monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+        ctx.fillText(L.fp.text, 105, L.fp.base);
+    }
+    if (L.box) {
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 0.25;
+        ctx.strokeRect(L.box.x + 0.125, L.box.y + 0.125, L.box.size - 0.25, L.box.size - 0.25);
+    }
+}
+
+/* The preview: a US Letter page at 1.6 px per mm, and a close-up of the square to cut out. */
 function _sqrpRender() {
     var m = sqr_state.modules, cv = document.getElementById('sqrp-page');
     if (!m || !cv) return;
@@ -34967,42 +35029,34 @@ function _sqrpRender() {
     document.getElementById('sqrp-print').disabled = sqrp_state.busy || !one;
     document.getElementById('sqrp-print').textContent = sqrp_state.busy ? 'Printing…' : 'Print';
 
-    var pxmm = 1.6, dpr = window.devicePixelRatio || 1, W = 216 * pxmm, H = 279 * pxmm;
+    var L = _sqrpLayout(m, size);
+    var dpr = window.devicePixelRatio || 1;
+    // The whole page, US Letter at 1.6 px per mm.
+    var pxmm = 1.6, W = 216 * pxmm, H = 279 * pxmm;
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     var ctx = cv.getContext('2d');
     ctx.setTransform(dpr * pxmm, 0, 0, dpr * pxmm, 0, 0);   // draw in millimetres
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 216, 279);
-    var x0 = 105 - size / 2, y0 = 30, cell = size / n;
-    ctx.fillStyle = '#000';
-    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (m[r][c]) ctx.fillRect(x0 + c * cell, y0 + r * cell, cell + 0.3, cell + 0.3);   // overlap: no seams between dark squares
-    // Mirrors safekeep-print.py's layout(): with a cutting line, the margin
-    // is the scanners' quiet zone (4 squares, 2–10 mm) and the fingerprint
-    // sits below it, inside the square.
-    var box = sqrp_state.cutBox, margin = box ? Math.max(2, Math.min(4 * cell, 10)) : 0;
-    var fpBottom = null;
-    if (sqrp_state.fingerprint && sqr_state.fingerprint) {
-        var fpPt = 10, text = 'Fingerprint ' + sqr_state.fingerprint;
-        var widthOf = function (s, pt) { return s.length * 0.6 * pt * 25.4 / 72; };
-        var fits = false;
-        for (var pt = 10; pt >= 6 && !fits; pt--) {
-            if (widthOf('Fingerprint ' + sqr_state.fingerprint, pt) <= size) { fpPt = pt; text = 'Fingerprint ' + sqr_state.fingerprint; fits = true; }
-            else if (widthOf(sqr_state.fingerprint, pt) <= Math.max(size, widthOf(sqr_state.fingerprint, 6))) { fpPt = pt; text = sqr_state.fingerprint; fits = true; }
-        }
-        ctx.font = (fpPt * 25.4 / 72) + 'px ui-monospace, monospace';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-        var fpBase = y0 + size + (box ? margin : 5) + fpPt * 25.4 / 72 * 0.75;
-        ctx.fillText(text, 105, fpBase);
-        fpBottom = fpBase + fpPt * 25.4 / 72 * 0.25;
-    }
-    var boxNote = document.getElementById('sqrp-box-note');
-    if (box) {
-        var top = y0 - margin;
-        var bottom = fpBottom != null ? fpBottom + Math.max(1.5, margin / 2) : y0 + size + margin;
-        var sq = Math.max(bottom - top, size + 2 * margin);
-        ctx.strokeStyle = '#000'; ctx.lineWidth = 0.25;
-        ctx.strokeRect(105 - sq / 2 + 0.125, top + 0.125, sq - 0.25, sq - 0.25);
-        boxNote.textContent = 'A ' + sq.toFixed(1) + ' mm square, with ' + margin.toFixed(1) + ' mm of white around the code so it still scans.';
+    _sqrpDraw(ctx, m, L);
+    // The close-up: the square to cut out, enlarged to 260 px across.
+    var controls = document.getElementById('sqrp-box-controls'), boxNote = document.getElementById('sqrp-box-note');
+    controls.hidden = !L.box;
+    document.getElementById('sqrp-box-margin').value = sqrp_state.boxMargin;
+    var bmNum = document.getElementById('sqrp-box-margin-num');
+    if (document.activeElement !== bmNum) bmNum.value = sqrp_state.boxMargin;
+    if (L.box) {
+        var cu = document.getElementById('sqrp-closeup'), CW = 260, pad = 4, k = (CW - 2 * pad) / L.box.size;
+        cu.style.width = CW + 'px'; cu.style.height = CW + 'px';
+        cu.width = Math.round(CW * dpr); cu.height = Math.round(CW * dpr);
+        var cx = cu.getContext('2d');
+        cx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (pad - L.box.x * k), dpr * (pad - L.box.y * k));
+        cx.fillStyle = '#fff'; cx.fillRect(L.box.x - pad / k, L.box.y - pad / k, L.box.size + 2 * pad / k, L.box.size + 2 * pad / k);
+        _sqrpDraw(cx, m, L);
+        var thin = L.box.margin < 2 * L.cell;
+        boxNote.textContent = 'A ' + L.box.size.toFixed(1) + ' mm square, with ' + L.box.margin.toFixed(1) + ' mm of white inside the line.' +
+            (L.box.margin < sqrp_state.boxMargin ? ' (Less than you chose, so the square fits on the paper.)' : '') +
+            (thin ? ' That’s less than two squares of the code: some cameras may not read it, so check the printout with Scan to Verify.' : '');
     } else {
         boxNote.textContent = '';
     }
@@ -36650,7 +36704,7 @@ var _RLQ_APP_SETTINGS_KEYS = [
     'safekeepIdleTimers',    // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
     'safekeepSeedQrSize',    // Draw my SeedQR light box: remembered Size in % ("104.3")
     'safekeepBrightness',    // Screen Brightness: software dimming % ("70"), set again at start
-    'safekeepSeedQrPrint'    // SeedQR printing: { size, fingerprint, cutBox } last printed with
+    'safekeepSeedQrPrint'    // SeedQR printing: { size, fingerprint, cutBox, boxMargin } last printed with
 ];
 
 /**

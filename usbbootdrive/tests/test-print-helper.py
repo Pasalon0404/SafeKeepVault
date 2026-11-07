@@ -182,22 +182,25 @@ def box_of(d):
     ys = [r[1] for r in rs] + [r[1] + r[3] for r in rs]
     return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
 ck('no cutting line unless asked', not read_pcl(P.build_pcl(m, 30, 'ABCDEF01')[0])['rects'])
-for size, fpv in ((14, 'ABCDEF01'), (14, ''), (85.68, '5436D724'), (150, '5436D724')):
-    pg, ly = P.build_pcl(m, size, fpv, True)
+for size, fpv, mg in ((14, 'ABCDEF01', 3), (14, '', 1), (85.68, '5436D724', 10), (40, 'ABCDEF01', 0.5)):
+    pg, ly = P.build_pcl(m, size, fpv, True, mg)
     dd = read_pcl(pg)
     bx = box_of(dd)
     rr = dd['raster']
     side = ly['side']
+    margin = ly['box']['margin']
     ok_square = bx and bx[2] == bx[3] == ly['box']['size']
     ok_black = all(r[4] == 0 for r in dd['rects']) and all(min(r[2], r[3]) == P.mm(0.25) for r in dd['rects'])
-    margin = ly['box']['margin']
-    inside = bx and bx[0] + margin <= rr['x'] + 1 and rr['x'] + side <= bx[0] + bx[2] - margin + 1 and bx[1] + margin == rr['y'] and rr['y'] + side + margin <= bx[1] + bx[3]
-    qz = margin >= min(4 * ly['cell'], P.mm(10)) - 1 and margin >= P.mm(2)
+    ok_margin = margin == P.mm(mg)
+    inside = bx and bx[0] + margin <= rr['x'] + 1 and rr['x'] + side <= bx[0] + bx[2] - margin + 1 and bx[1] + margin == rr['y'] and rr['y'] + side + margin <= bx[1] + bx[3] + 1
     fpt = [(s2, x2, y2) for (s2, x2, y2) in dd['texts']]
-    fp_in = (not fpv and not fpt) or (fpt and bx and bx[0] < fpt[0][1] and fpt[0][1] + P._text_width(fpt[0][0], ly['fingerprint']['pt']) < bx[0] + bx[2] and rr['y'] + side + margin <= fpt[0][2] < bx[1] + bx[3])
+    fp_in = (not fpv and not fpt) or (fpt and bx and bx[0] < fpt[0][1] and fpt[0][1] + P._text_width(fpt[0][0], ly['fingerprint']['pt']) < bx[0] + bx[2] and rr['y'] + side < fpt[0][2] <= rr['y'] + side + P.mm(3) + P.pt_to_dots(ly['fingerprint']['pt']) and fpt[0][2] + margin <= bx[1] + bx[3])
     page_ok = bx and P.mm(6.35) + bx[0] + bx[2] <= P.mm(210 - 4) and bx[1] > 0
-    ck('%s mm%s: a square %.1f mm line (0.25 mm, black) around code%s, a %.1f mm quiet zone inside, on the page' % (size, ' + fingerprint' if fpv else '', ly['box']['size_mm'], ' and fingerprint' if fpv else '', margin / P.DOTS_PER_MM),
-       ok_square and ok_black and inside and qz and fp_in and page_ok, (bx, ly['box'], fpt))
+    ck('%s mm%s, %s mm space chosen: a %.1f mm square, 0.25 mm black line, code%s inside with that space, on the page' % (size, ' + fingerprint' if fpv else '', mg, ly['box']['size_mm'], ' and fingerprint' if fpv else ''),
+       ok_square and ok_black and ok_margin and inside and fp_in and page_ok, (bx, ly['box'], fpt))
+big = P.layout(21, 150, '5436D724', True, 30)
+ck('a square too big for the paper: the space shrinks until it fits (%.1f mm square, %.1f mm space)' % (big['box']['size_mm'], big['box']['margin_mm']), big['box']['size'] <= P.mm(190) and big['box']['margin'] < P.mm(30))
+ck('the space is limited to 0.5–30 mm, 3 mm if not given', P.field_box_margin({}) == 3.0 and P.field_box_margin({'box_margin_mm': 0}) == 0.5 and P.field_box_margin({'box_margin_mm': 99}) == 30.0)
 B14 = P.layout(21, 14, 'ABCDEF01', True)['bounds']
 pg14 = read_pcl(P.build_pcl(m, 14, 'ABCDEF01', True)[0])
 ck('…and the code itself is unchanged', all(pixel(pg14['raster'], (B14[c] + B14[c + 1]) // 2, (B14[rr2] + B14[rr2 + 1]) // 2) == m[rr2][c] for rr2 in range(21) for c in range(21)))
@@ -216,6 +219,7 @@ def bad_f(fn, d):
         return True
 ck('there is no style any more (code only)', not hasattr(P, 'field_style'))
 ck('cut_box must be true or false', P.field_cut_box({}) is False and P.field_cut_box({'cut_box': True}) is True and bad_f(P.field_cut_box, {'cut_box': 'yes'}))
+ck('box_margin_mm must be a number', bad_f(P.field_box_margin, {'box_margin_mm': '3'}) and bad_f(P.field_box_margin, {'box_margin_mm': True}))
 ck('fingerprint: 8 hex digits or nothing', P.field_fingerprint({'fingerprint': 'abcdef01'}) == 'ABCDEF01' and P.field_fingerprint({}) == '' and bad_f(P.field_fingerprint, {'fingerprint': 'ABC;rm'}))
 ck('size must be a number', bad_f(P.field_size, {'size_mm': '50'}) and bad_f(P.field_size, {'size_mm': True}))
 ck('Device ID parsing', P.parse_device_id(b'\x00\x2bMFG:Samsung;CMD:SPL,PCL6;MDL:M2070 Series;') == {'MFG': 'Samsung', 'CMD': 'SPL,PCL6', 'MDL': 'M2070 Series'})
@@ -260,7 +264,7 @@ Bs = P.layout(21, 60, '')['bounds']
 ok = d['raster'] and all(pixel(d['raster'], (Bs[c] + Bs[c + 1]) // 2, (Bs[rr] + Bs[rr + 1]) // 2) == m[rr][c] for rr in range(21) for c in range(21))
 ck('print: the page reaches the printer, square for square', res.get('ok') and res['status'] == 'printed' and ok, res)
 ck('…only the printer interface was claimed (not the scanner)', claimed.strip() == '0', claimed)
-res_b, sent_b, _, _ = run(dict(req, cut_box=True), [samsung])
+res_b, sent_b, _, _ = run(dict(req, cut_box=True, box_margin_mm=4), [samsung])
 ck('print with the cutting line: four black rules reach the printer, and the result gives the box size', res_b.get('ok') and len(read_pcl(sent_b)['rects']) == 4 and res_b.get('box_mm') and res_b['box_mm'] > 60, res_b)
 ck('…the result names the printer and the real size, and holds no seed data', res['printer'] == 'Samsung M2070 Series' and abs(res['size_mm'] - 60) < 0.05 and 'modules' not in json.dumps(res) and '5436' not in json.dumps(res), res)
 ck('…the request is deleted', not left)
