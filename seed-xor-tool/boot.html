@@ -387,9 +387,6 @@
     .sqrd-size input[type=number] { width: 5.2rem; padding: 0.2rem 0.35rem; font: inherit; font-variant-numeric: tabular-nums; border-radius: 4px; border: 1px solid #555; background: #222; color: #fff; }
     .sqrd-hint { margin: 0.5rem auto 0; max-width: 60rem; padding: 0 1rem; font-size: 0.85rem; color: #333; text-align: center; line-height: 1.45; }
     .sqrd-stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 1rem; }
-    .sqrd-card { box-sizing: border-box; flex: none; border: 2px dashed #f7931a; border-radius: 3.2mm; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0.75rem 1rem; pointer-events: none; }
-    .sqrd-card[hidden], .sqrd-measuring #sqrd-canvas { display: none; }
-    .sqrd-card span { font-size: 0.875rem; line-height: 1.45; color: #8a4700; }
     .sqrd-progress { font-size: 0.8125rem; color: #ccc; }
     .sqrd-blockview { flex: 1; display: flex; gap: 2rem; align-items: flex-start; justify-content: center; padding: 1.5rem; flex-wrap: wrap; }
     .sqrd-side { max-width: 22rem; }
@@ -34502,13 +34499,13 @@ function sqr_cleanup() {
 // (window.QrDraw, shared/qr-draw.js):
 //   light box   — the code full-screen on white at the template's real
 //                 size; the printed template laid on the screen shows the
-//                 squares to fill in. The scale comes from a bank card held
-//                 to the screen (85.6 mm) or from lining up the template.
+//                 squares to fill in. The Size is set by lining the template
+//                 up with the code, and Remember as Default keeps it.
 //   square by square — one 7×7 block at a time, numbered as the template
 //                 is, with the dark squares of each row listed.
 // Both end at Scan to Verify. Nothing is printed or written anywhere.
 // ======================================================================
-var sqrd_state = { mode: null, block: 0, size: null, showCard: false };
+var sqrd_state = { mode: null, block: 0, size: null };
 
 // The light box's Size is shown as a percentage of CSS's own millimetre
 // (96 px per inch), with one decimal: 100.0 % = 96 / 25.4 px per mm. A
@@ -34550,7 +34547,6 @@ function sqrd_open(mode) {
     if (!m || !m.length || !window.QrDraw) { showStatus('Generate a SeedQR first.', 'error'); return; }
     sqrd_close();
     sqrd_state.mode = mode;
-    sqrd_state.showCard = false;
     sqrd_state.block = 0;
     var ov = document.createElement('div');
     ov.id = 'sqrd-overlay';
@@ -34565,12 +34561,11 @@ function sqrd_open(mode) {
                 '<label class="sqrd-size"><input type="number" id="sqrd-size-num" min="' + SQRD_SIZE_MIN + '" max="' + SQRD_SIZE_MAX + '" step="0.1" onchange="sqrd_setScale(this.value)" aria-label="Size in percent">%</label>' +
                 '<button type="button" class="skb-btn" id="sqrd-remember-btn" onclick="sqrd_rememberSize()">Remember as Default</button>' +
                 '<label class="sqrd-size skbright-row" title="Screen brightness">&#9728; <input type="range" class="skbright-range" min="10" max="100" step="5" oninput="skbright_set(this.value)" aria-label="Screen brightness" style="width: 7rem;"> <span class="skbright-label"></span></label>' +
-                '<button type="button" class="skb-btn" id="sqrd-card-btn" onclick="sqrd_toggleCard()">Measure with a Bank Card</button>' +
                 '<button type="button" class="skb-btn" onclick="sqrd_verify()">Scan to Verify</button>' +
                 '<button type="button" class="skb-btn" onclick="sqrd_close()">Done</button>' +
             '</div>' +
             '<p class="sqrd-hint" id="sqrd-hint"></p>' +
-            '<div class="sqrd-stage"><canvas id="sqrd-canvas"></canvas><div class="sqrd-card" id="sqrd-card" hidden><span>Hold a bank card flat inside this outline.<br>Change the Size until the outline’s edges match the card’s edges.</span></div></div>';
+            '<div class="sqrd-stage"><canvas id="sqrd-canvas"></canvas></div>';
     } else {
         ov.innerHTML =
             '<div class="sqrd-bar">' +
@@ -34650,11 +34645,6 @@ function sqrd_rememberSize() {
     _sqrdRender();
 }
 
-function sqrd_toggleCard() {
-    sqrd_state.showCard = !sqrd_state.showCard;
-    _sqrdRender();
-}
-
 /* Draw `modules` rows r0.. and columns c0.. into ctx, cell px each, with
    thin grid lines and the template's numbers (odd ones) around it. */
 function _sqrdDrawGrid(ctx, modules, r0, c0, rows, cols, cell, pad, labelEvery) {
@@ -34703,16 +34693,6 @@ function _sqrdRender() {
         var ctx = cv.getContext('2d');
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         _sqrdDrawGrid(ctx, m, 0, 0, n, n, cell, pad, 2);
-        // Measuring: the card outline alone, without the code, so it can't
-        // be mistaken for part of the code.
-        var card = document.getElementById('sqrd-card');
-        card.hidden = !sqrd_state.showCard;
-        document.getElementById('sqrd-overlay').classList.toggle('sqrd-measuring', !!sqrd_state.showCard);
-        card.style.width = (QD.CARD_WIDTH_MM * ppm) + 'px';
-        card.style.height = (QD.CARD_HEIGHT_MM * ppm) + 'px';
-        var cardBtn = document.getElementById('sqrd-card-btn');
-        cardBtn.textContent = sqrd_state.showCard ? 'Done Measuring' : 'Measure with a Bank Card';
-        cardBtn.classList.toggle('skb-btn--primary', !!sqrd_state.showCard);
         var size = _sqrdSize(), range = document.getElementById('sqrd-scale'), num = document.getElementById('sqrd-size-num');
         if (Number(range.value) !== size) range.value = size;
         if (document.activeElement !== num || Number(num.value) !== size) num.value = size.toFixed(1);
@@ -34720,9 +34700,8 @@ function _sqrdRender() {
         rem.textContent = isDefault ? 'Default ✓' : 'Remember as Default';
         rem.disabled = isDefault;
         rem.title = isDefault ? 'The light box opens at this size.' : 'Open the light box at ' + size.toFixed(1) + '% from now on.';
-        document.getElementById('sqrd-hint').textContent = sqrd_state.showCard
-            ? 'Measuring the screen, so the code comes out the template’s real size. Hold any bank card (a driver’s licence is the same size) flat on the screen inside the orange outline. Change the Size (slider, number box, or the arrow and + / − keys; hold Shift for bigger steps) until the outline’s edges line up with the card’s. Then press Remember as Default, and Done Measuring to see the code again.'
-            : 'Turn the screen to full brightness (the ☀ slider above). Lay the printed ' + n + '×' + n + ' template on the screen, line its grid up with this one (fine-tune the Size with the slider, the number box, or the arrow and + / − keys; hold Shift for bigger steps), and fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
+        document.getElementById('sqrd-hint').textContent =
+            'Turn the screen to full brightness. Lay the printed ' + n + '×' + n + ' template on the screen and change the Size (slider, number box, or the arrow and + / − keys; hold Shift for bigger steps) until its grid lines up with this one. Press Remember as Default so it opens at that size next time. Then fill in every square that shows dark through the paper. Press lightly, and keep cameras and windows away from the screen.';
     } else {
         var blocks = QD.blocksFor(n, 7), b = blocks[sqrd_state.block];
         var bc = document.getElementById('sqrd-block-canvas');

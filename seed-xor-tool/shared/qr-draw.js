@@ -11,13 +11,10 @@
  *
  * Sizes are those of the blank templates on safekeepbitcoin.com (Print QR),
  * measured from their PDFs (US Letter, printed at 100%): the grid is
- * 85.68 mm wide for 21×21 and 87.88 mm for 25×25. A bank card (ISO/IEC
- * 7810 ID-1) is 85.60 mm wide, which the light box uses to learn the
- * screen's scale. There is no 29×29 template, so 29×29 uses 3.0 mm squares.
+ * 85.68 mm wide for 21×21 and 87.88 mm for 25×25. There is no 29×29
+ * template, so 29×29 uses 3.0 mm squares.
  */
 
-export const CARD_WIDTH_MM = 85.6;
-export const CARD_HEIGHT_MM = 53.98;
 const TEMPLATE_GRID_MM = Object.freeze({ 21: 85.68, 25: 87.88 });
 
 /** Width of the template's grid in millimetres for a code of this size. */
@@ -69,5 +66,5 @@ export function countDark(modules) {
 }
 
 if (typeof window !== 'undefined') {
-    window.QrDraw = Object.freeze({ CARD_WIDTH_MM, CARD_HEIGHT_MM, templateGridMm, blocksFor, rowRuns, countDark });
+    window.QrDraw = Object.freeze({ templateGridMm, blocksFor, rowRuns, countDark });
 }
