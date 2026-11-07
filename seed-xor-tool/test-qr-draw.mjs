@@ -2,8 +2,7 @@
  * test-qr-draw.mjs — Draw my SeedQR (shared/qr-draw.js + boot.html sqrd_*)
  *
  *   1. Template sizes match the blank templates on safekeepbitcoin.com
- *      (measured from their PDFs: 85.68 mm for 21×21, 87.88 mm for 25×25),
- *      and a bank card is 85.60 × 53.98 mm.
+ *      (measured from their PDFs: 85.68 mm for 21×21, 87.88 mm for 25×25).
  *   2. Blocks cover every square exactly once, in reading order.
  *   3. Row lists use the template's 1-based numbers and join runs.
  *   4. A real SeedQR grid (made with the same QR library as the app) gives
@@ -18,7 +17,7 @@
  *
  * Run:  node test-qr-draw.mjs
  */
-import { templateGridMm, blocksFor, rowRuns, countDark, CARD_WIDTH_MM, CARD_HEIGHT_MM } from './shared/qr-draw.js';
+import { templateGridMm, blocksFor, rowRuns, countDark } from './shared/qr-draw.js';
 import { readFileSync } from 'node:fs';
 import QRCode from 'qrcode';
 
@@ -28,7 +27,6 @@ const ck = (name, cond, extra) => { (cond ? pass++ : fail++); console.log(`  [${
 console.log('\n1. Sizes');
 ck('21×21 template grid is 85.68 mm, 25×25 is 87.88 mm', templateGridMm(21) === 85.68 && templateGridMm(25) === 87.88);
 ck('29×29 (no template) uses 3 mm squares', templateGridMm(29) === 87);
-ck('bank card 85.60 × 53.98 mm (ISO/IEC 7810 ID-1)', CARD_WIDTH_MM === 85.6 && CARD_HEIGHT_MM === 53.98);
 
 console.log('\n2. Blocks');
 for (const [n, count] of [[21, 9], [25, 16], [29, 25]]) {
@@ -69,7 +67,7 @@ ck('boot-entry.js loads the module', entry.includes("import './shared/qr-draw.js
 ck('sqr_generate keeps the module grid', fn('async function sqr_generate').includes('sqr_state.modules = modules'));
 ck('two buttons: Trace It on the Screen, Copy It Square by Square', html.includes(`onclick="sqrd_open('lightbox')">Trace It on the Screen`) && html.includes(`onclick="sqrd_open('blocks')">Copy It Square by Square`));
 ck('the light box sizes the code from the template width and the screen scale', fn('function _sqrdRender').includes('QD.templateGridMm(n)') && fn('function _sqrdRender').includes('(gridMm * ppm) / n'));
-ck('the bank card outline uses the card\'s real size', fn('function _sqrdRender').includes('QD.CARD_WIDTH_MM * ppm') && fn('function _sqrdRender').includes('QD.CARD_HEIGHT_MM * ppm'));
+ck('the bank card measuring step is gone (Size and Remember as Default set the scale)', !/sqrd_toggleCard|sqrd-card-btn|showCard|CARD_WIDTH_MM/.test(html));
 ck('closing clears the drawn code', fn('function sqrd_close').includes('c.width = 1; c.height = 1;') && fn('function sqrd_close').includes('ov.remove()'));
 ck('the last block\'s button is Scan to Verify, which opens the Verify tab and the camera', fn('function _sqrdRender').includes("last ? 'Scan to Verify'") && fn('function sqrd_verify').includes("sqr_switchTab('verify')") && fn('function sqrd_verify').includes('sqr_startVerify()'));
 ck('leaving the SeedQR tool closes it', fn('function sqr_cleanup').includes('sqrd_close()'));
@@ -91,7 +89,7 @@ ck('the light box opens at the remembered Size', fn('function _sqrdSize').includ
     const allowed = boot.slice(boot.indexOf('ALLOWED = ('), boot.indexOf('\n', boot.indexOf('ALLOWED = (')));
     ck('safekeepSeedQrSize is kept in the vault (boot loader, settings sync, Settings Watcher)', html.includes("var SQRD_SIZE_KEY = 'safekeepSeedQrSize';") && [loader, rlq, allowed].every((t) => t.includes("'safekeepSeedQrSize'")), allowed);
 }
-for (const name of ['function _sqrdPxPerMm', 'function _sqrdClampSize', 'function _sqrdSavedSize', 'function _sqrdSize', 'function sqrd_rememberSize', 'function sqrd_open', 'function sqrd_close', 'function _sqrdKey', 'function sqrd_setScale', 'function sqrd_toggleCard', 'function _sqrdDrawGrid', 'function _sqrdRender', 'function sqrd_step', 'function sqrd_verify']) {
+for (const name of ['function _sqrdPxPerMm', 'function _sqrdClampSize', 'function _sqrdSavedSize', 'function _sqrdSize', 'function sqrd_rememberSize', 'function sqrd_open', 'function sqrd_close', 'function _sqrdKey', 'function sqrd_setScale', 'function _sqrdDrawGrid', 'function _sqrdRender', 'function sqrd_step', 'function sqrd_verify']) {
     let ok = true, err = '';
     try { new Function(fn(name).replace(/^function/, 'return function')); } catch (e) { ok = false; err = e.message; }
     ck(`${name.replace(/^function /, '')} parses`, ok, err);

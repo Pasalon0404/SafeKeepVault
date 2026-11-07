@@ -2232,16 +2232,18 @@ const SafeKeepOS = (() => {
   // =============================================
   //  SCREEN BRIGHTNESS — Brightness Watcher bridge
   // =============================================
-  // There is no desktop to answer a laptop's brightness keys. The app asks
-  // safekeep-boot.sh's Brightness Watcher by downloading
-  //   BRIGHTNESS_REQUEST.json  { action: 'set', percent } | { action: 'up'|'down'|'get' }
-  // and the watcher's root helper (safekeep-brightness.sh) sets every
-  // backlight in /sys/class/backlight, then writes
-  //   /tmp/safekeep-signals/BRIGHTNESS.json  { available, percent }
+  // The app asks safekeep-boot.sh's Brightness Watcher by downloading
+  //   BRIGHTNESS_REQUEST.json  { action: 'dim', percent }
+  //                            { action: 'full' | 'restore' | 'up' | 'down' }
+  // and the watcher's root helper (safekeep-brightness.sh) acts on each:
+  //   dim      software dimming of every screen, 30–100 %: works on any
+  //            computer, but can only dim (the sliders)
+  //   full / restore   hardware backlight to 100 % for the light box, and
+  //            back afterwards (best effort: not every screen has one)
+  //   up / down        the keyboard's brightness keys (hardware, best effort)
   // A dragged slider sends many values: they go out at most every 200 ms,
   // always ending with the last one. Works in a Temporary Session too.
   const BRIGHTNESS_REQUEST_FILE = 'BRIGHTNESS_REQUEST.json';
-  const BRIGHTNESS_STATUS_URL = 'file:///tmp/safekeep-signals/BRIGHTNESS.json';
   let _brightLast = 0, _brightTimer = null, _brightPending = null;
 
   function _brightSend(body) {
@@ -2249,12 +2251,12 @@ const SafeKeepOS = (() => {
     _silentDownload(BRIGHTNESS_REQUEST_FILE, JSON.stringify(body));
   }
 
-  /** Ask for a brightness, 10–100 (%). */
+  /** Software dimming of every screen, 30–100 (%). */
   function setBrightness(percent) {
     const p = Math.round(Number(percent));
     if (!Number.isFinite(p)) return false;
     if (!isBootDrive()) return false;
-    _brightPending = { action: 'set', percent: Math.max(10, Math.min(100, p)) };
+    _brightPending = { action: 'dim', percent: Math.max(30, Math.min(100, p)) };
     if (_brightTimer) return true;
     const wait = Math.max(0, 200 - (Date.now() - _brightLast));
     _brightTimer = setTimeout(() => {
@@ -2266,30 +2268,18 @@ const SafeKeepOS = (() => {
     return true;
   }
 
-  /** One step brighter (+1) or dimmer (-1), as the brightness keys do. */
+  /** One hardware step brighter (+1) or dimmer (-1): the brightness keys. */
   function stepBrightness(dir) {
     if (!isBootDrive()) return false;
     _brightSend({ action: dir > 0 ? 'up' : 'down' });
     return true;
   }
 
-  /**
-   * The screen's brightness: { available: true, percent } for a built-in
-   * screen, { available: false } when there is no backlight to set (an
-   * external monitor), or null when the OS hasn't answered.
-   */
-  async function getBrightness() {
-    if (!isBootDrive()) return null;
-    try {
-      const r = await fetch(BRIGHTNESS_STATUS_URL, { cache: 'no-store' });
-      if (!r.ok) return null;
-      const j = await r.json();
-      if (!j || j.available !== true) return { available: false };
-      const p = Math.round(Number(j.percent));
-      return Number.isFinite(p) ? { available: true, percent: Math.max(0, Math.min(100, p)) } : { available: false };
-    } catch (_) {
-      return null;
-    }
+  /** The light box: hardware backlight to full (true), or back (false). */
+  function lightboxBacklight(on) {
+    if (!isBootDrive()) return false;
+    _brightSend({ action: on ? 'full' : 'restore' });
+    return true;
   }
 
 
@@ -3264,7 +3254,7 @@ const SafeKeepOS = (() => {
     // Screen brightness (Brightness Watcher)
     setBrightness,
     stepBrightness,
-    getBrightness,
+    lightboxBacklight,
 
     // Saved wallets (Output Descriptor tool → PSBT Signer)
     loadSavedWallets,
