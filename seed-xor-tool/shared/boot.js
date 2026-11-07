@@ -656,6 +656,7 @@ const SafeKeepOS = (() => {
     'POWER_ACTION',     // dashboard Power Options → safekeep-boot.sh dispatcher
     'DISPLAY_SLEEP',    // Settings idle timer → safekeep-boot.sh display watcher
     'BRIGHTNESS_REQUEST',  // Screen Brightness → safekeep-boot.sh Brightness Watcher
+    'PRINT_REQUEST', 'PRINT_ACK',         // SeedQR tool → Print Watcher (USB laser printer)
     'COLDCARD_REQUEST', 'COLDCARD_ACK',   // PSBT Signer ↔ Coldcard Watcher
     'TREZOR_REQUEST', 'TREZOR_ACK',       // PSBT Signer ↔ Trezor Watcher
     'UPDATE_REQUEST', 'UPDATE_ACK',       // Device Options ↔ Update Watcher
@@ -2860,6 +2861,71 @@ const SafeKeepOS = (() => {
   }
 
   // ===================================================================
+  //  PRINT — a SeedQR on a USB laser printer (Print Watcher)
+  // ===================================================================
+  // Same request / RAM result / ack pattern as the Trezor above:
+  //   request : PRINT_REQUEST.json  → Chromium's download folder (the
+  //             encrypted vault normally, RAM in a Temporary Session); the
+  //             helper deletes it as soon as it reads it
+  //   result  : /tmp/safekeep-signals/PRINT_RESULT.json  (RAM; no seed data)
+  //   ack     : PRINT_ACK.json
+  // The helper (safekeep-print.py) draws the page in PCL and sends it to the
+  // printer's USB printer interface: no print system, no driver.
+  const PRINT_REQUEST_FILE = 'PRINT_REQUEST.json';
+  const PRINT_ACK_FILE     = 'PRINT_ACK.json';
+  const PRINT_RESULT_URL   = `file://${COLDCARD_SIGNAL_DIR}/PRINT_RESULT.json`;
+  let _printInFlight = false;
+
+  async function _printRequest(payload, maxWaitMs) {
+    if (!isBootDrive()) {
+      return { ok: false, status: 'unavailable', error: 'Printing only works when SafeKeep is running from its USB flash drive.' };
+    }
+    if (_printInFlight) {
+      return { ok: false, status: 'in_progress', error: 'SafeKeep is already talking to the printer.' };
+    }
+    _printInFlight = true;
+    const requestId = _ccRequestId();
+    try {
+      await _usbAckChain;
+      _rawBlobDownload(PRINT_REQUEST_FILE, JSON.stringify(Object.assign({}, payload, { request_id: requestId })));
+      payload = null;   // holds the SeedQR
+      const deadline = Date.now() + maxWaitMs;
+      await _sleep(600);
+      while (Date.now() < deadline) {
+        try {
+          const resp = await fetch(PRINT_RESULT_URL, { cache: 'no-store' });
+          if (resp.ok) {
+            const result = await resp.json();
+            if (result && result.request_id === requestId) {
+              _usbQueueAck(PRINT_ACK_FILE);
+              return result;
+            }
+          }
+        } catch (e) { /* not written yet */ }
+        await _sleep(400);
+      }
+      return { ok: false, status: 'no_answer', error: 'SafeKeep did not hear back from the printer helper. Check the printer is on and connected by USB, then try again.' };
+    } finally {
+      _printInFlight = false;
+    }
+  }
+
+  /** The USB printers connected: { ok, printers: [{ name, pcl: true|false|null }] }. */
+  function printDetect() {
+    return _printRequest({ action: 'detect' }, 20000);
+  }
+
+  /**
+   * Print one SeedQR page. modules: rows of booleans (21, 25 or 29 square);
+   * sizeMm: width of the code (10–150); style: 'template' | 'plain';
+   * fingerprint: 8 hex digits or ''. Resolves to { ok, printer, size_mm } or an error.
+   */
+  function printSeedQR({ modules, sizeMm, style, fingerprint }) {
+    const rows = (modules || []).map((r) => r.map((v) => (v ? '1' : '0')).join(''));
+    return _printRequest({ action: 'print', modules: rows, size_mm: Number(sizeMm), style, fingerprint: fingerprint || '' }, 150000);
+  }
+
+  // ===================================================================
   //  UPDATE — install a signed SafeKeep update (Update Watcher)
   // ===================================================================
   // Same request / RAM result / ack pattern as the Trezor above:
@@ -3255,6 +3321,10 @@ const SafeKeepOS = (() => {
     setBrightness,
     stepBrightness,
     lightboxBacklight,
+
+    // Printing a SeedQR (Print Watcher)
+    printDetect,
+    printSeedQR,
 
     // Saved wallets (Output Descriptor tool → PSBT Signer)
     loadSavedWallets,

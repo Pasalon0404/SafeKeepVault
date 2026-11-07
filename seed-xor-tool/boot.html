@@ -30,7 +30,7 @@
       window._skbVaultDeviceSettings = null;
       if (window.location.protocol === 'file:' && window.location.hash !== '#ephemeral=true') {
         try {
-          var _skbDsKeys = ['safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize', 'safekeepBrightness'];
+          var _skbDsKeys = ['safekeepTheme', 'safekeepUiScale', 'safekeepUiAudio', 'safekeepIdleTimers', 'safekeepSeedQrSize', 'safekeepBrightness', 'safekeepSeedQrPrint'];
           var _skbDsXhr = new XMLHttpRequest();
           _skbDsXhr.open('GET', 'file:///media/.safekeep-vault/settings/device-settings.json', false);
           _skbDsXhr.send(null);
@@ -376,7 +376,7 @@
     }
 
     /* ---- Draw my SeedQR (light box, square by square) ---- */
-    .sqrd-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .sqrd-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
     .sqrd-overlay { position: fixed; inset: 0; z-index: 10060; display: flex; flex-direction: column; background: #ffffff; color: #111; overflow: auto; }
     .sqrd-bar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; padding: 0.6rem 1rem; background: #111; color: #eee; }
     .sqrd-bar .skb-btn { padding: 0.35rem 0.8rem; font-size: 0.8125rem; }
@@ -393,6 +393,25 @@
     .sqrd-side canvas { border: 1px solid #ccc; }
     .sqrd-rows { margin: 0; padding-left: 0; list-style: none; font-family: var(--skb-mono); font-size: 0.95rem; line-height: 1.7; }
     .sqrd-note { font-size: 0.78rem; color: #555; line-height: 1.45; }
+    .sqrp-view { flex: 1; display: flex; gap: 2rem; align-items: flex-start; justify-content: center; padding: 1.5rem; flex-wrap: wrap; }
+    .sqrp-page { box-shadow: 0 1px 6px rgba(0,0,0,0.25); background: #fff; }
+    .sqrp-side { width: 26rem; max-width: 100%; font-size: 0.875rem; line-height: 1.5; }
+    .sqrp-side h4 { margin: 1.1rem 0 0.4rem; font-size: 0.9rem; }
+    .sqrp-side label { display: flex; align-items: center; gap: 0.45rem; margin: 0.25rem 0; cursor: pointer; }
+    .sqrp-printer { padding: 0.6rem 0.75rem; border: 1px solid #ccc; border-radius: 6px; background: #f6f6f6; display: flex; gap: 0.6rem; align-items: center; justify-content: space-between; }
+    .sqrp-printer.ok { border-color: #2e9e5b; background: #eefaf2; }
+    .sqrp-printer.warn { border-color: #d98a00; background: #fff6e6; }
+    .sqrp-size { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .sqrp-size input[type=range] { flex: 1; min-width: 10rem; }
+    .sqrp-size input[type=number] { width: 5.5rem; padding: 0.2rem 0.35rem; font: inherit; }
+    .sqrp-caption { font-size: 0.78rem; color: #555; margin: 0.35rem 0 0; }
+    .sqrp-safety { margin: 0; padding-left: 1.1rem; font-size: 0.8rem; color: #333; }
+    .sqrp-msg { margin: 0.75rem 0 0; font-size: 0.85rem; }
+    .sqrp-msg.err { color: #b42318; }
+    .sqrp-msg.ok { color: #1a7f45; }
+    .sqrp-side .skb-btn { color: #111; border-color: #999; background: #fff; }
+    .sqrp-side .skb-btn--primary { background: #f7931a; border-color: #f7931a; color: #111; }
+    .sqrp-side .skb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* ---- SafeKeep file picker (Transfer Drive only) ---- */
     .skfp-overlay { position: fixed; inset: 0; z-index: 10050; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 2rem; }
@@ -9127,13 +9146,14 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
 
                     <!-- Draw my SeedQR: copy it onto a blank template without a printer (sqrd_*) -->
                     <div class="skb-card sqrd-card-intro" style="margin-bottom: 0.75rem;">
-                        <h4 style="margin: 0 0 0.35rem; font-size: 0.95rem;">Draw my SeedQR</h4>
-                        <p style="margin: 0 0 0.75rem; font-size: 0.8125rem; color: var(--skb-text-muted); line-height: 1.5;">Copy this code onto a blank template by hand, without a printer. Get the blank 21&times;21 or 25&times;25 template from Print QR at safekeepbitcoin.com (it&rsquo;s empty, so any printer is fine), or print it here with Print Blank Grid. When you&rsquo;re done, Scan to Verify checks your copy.</p>
+                        <h4 style="margin: 0 0 0.35rem; font-size: 0.95rem;">Draw or Print my SeedQR</h4>
+                        <p style="margin: 0 0 0.75rem; font-size: 0.8125rem; color: var(--skb-text-muted); line-height: 1.5;">Copy this code onto a blank template by hand, or print it on a laser printer connected by USB. Get the blank 21&times;21 or 25&times;25 template from Print QR at safekeepbitcoin.com (it&rsquo;s empty, so any printer is fine), or print it here with Print Blank Grid. When you&rsquo;re done, Scan to Verify checks your copy.</p>
                         <div class="sqrd-choices">
                             <button type="button" class="skb-btn skb-btn--primary" onclick="sqrd_open('lightbox')">Trace It on the Screen</button>
                             <button type="button" class="skb-btn" onclick="sqrd_open('blocks')">Copy It Square by Square</button>
+                            <button type="button" class="skb-btn" onclick="sqrd_open('print')">Print It on a USB Printer</button>
                         </div>
-                        <p style="margin: 0.6rem 0 0; font-size: 0.75rem; color: var(--skb-text-muted); line-height: 1.5;"><strong>Trace</strong> shows the code at the template&rsquo;s real size: lay the template on the screen and fill in what shows through. <strong>Square by square</strong> goes one block at a time and lists the dark squares in each row, which also suits punching steel or placing tiles.</p>
+                        <p style="margin: 0.6rem 0 0; font-size: 0.75rem; color: var(--skb-text-muted); line-height: 1.5;"><strong>Trace</strong> shows the code at the template&rsquo;s real size: lay the template on the screen and fill in what shows through. <strong>Square by square</strong> goes one block at a time and lists the dark squares in each row, which also suits punching steel or placing tiles. <strong>Print</strong> sends it to a laser printer connected by USB, on a template or as the code alone, at the size you choose.</p>
                     </div>
 
                     <div style="margin-bottom: 0.75rem;">
@@ -12100,6 +12120,17 @@ window.addEventListener('DOMContentLoaded', () => {
         lightboxBacklight: function (on) {
             window._devLightboxBacklight = !!on;
             return true;
+        },
+
+        // --- Printing a SeedQR (Print Watcher) ---
+        // A pretend USB printer; the last page asked for is kept for checking.
+        printDetect: function () {
+            return Promise.resolve({ ok: true, status: 'detected', printers: window._devNoPrinter ? [] : [{ name: 'Samsung M2070 Series (mock)', pcl: true }] });
+        },
+        printSeedQR: function (opts) {
+            window._devLastPrint = { rows: opts.modules.length, sizeMm: opts.sizeMm, style: opts.style, fingerprint: opts.fingerprint };
+            _devAnnounce('Printed ' + opts.sizeMm + ' mm ' + opts.style + ' (mock)');
+            return new Promise(function (r) { setTimeout(function () { r({ ok: true, status: 'printed', printer: 'Samsung M2070 Series (mock)', pcl: true, size_mm: opts.sizeMm }); }, 400); });
         },
 
         // --- Display Sleep bridge (task #198) ---
@@ -33763,6 +33794,7 @@ var sqr_state = {
     lastGridSize: null,         // module count of the last generated QR (drives the blank print grid)
     currentEntropyBytes: null,  // Uint8Array — entropy of the last generated SeedQR (verify compares this)
     modules: null,              // rows of booleans (dark = true) of the last SeedQR, for Draw my SeedQR
+    fingerprint: null,          // its seed fingerprint (8 hex digits, no passphrase), for Print
     importScanner: null,
     verifyScanner: null
 };
@@ -34236,6 +34268,9 @@ async function sqr_generate() {
             modules.push(mrow);
         }
         sqr_state.modules = modules;
+        // The seed fingerprint (no passphrase), which Print can put under the code.
+        sqr_state.fingerprint = null;
+        try { sqr_state.fingerprint = await _recoveryFingerprint(words.join(' ')); } catch (_) {}
 
         for (var y = 0; y < gridSize; y++) {
             for (var x = 0; x < gridSize; x++) {
@@ -34563,6 +34598,37 @@ function sqrd_open(mode) {
             '</div>' +
             '<p class="sqrd-hint" id="sqrd-hint"></p>' +
             '<div class="sqrd-stage"><canvas id="sqrd-canvas"></canvas></div>';
+    } else if (mode === 'print') {
+        ov.innerHTML =
+            '<div class="sqrd-bar">' +
+                '<span class="sqrd-bar-title">Print</span>' +
+                '<button type="button" class="skb-btn" onclick="sqrd_close()">Done</button>' +
+            '</div>' +
+            '<div class="sqrp-view">' +
+                '<div><canvas id="sqrp-page" class="sqrp-page"></canvas><p class="sqrp-caption" id="sqrp-caption"></p></div>' +
+                '<div class="sqrp-side">' +
+                    '<div class="sqrp-printer" id="sqrp-printer"><span id="sqrp-printer-text">Looking for a USB printer…</span><button type="button" class="skb-btn" onclick="sqrp_check()">Check Again</button></div>' +
+                    '<h4>Style</h4>' +
+                    '<label><input type="radio" name="sqrp-style" value="template" onchange="sqrp_set({ style: this.value })"> On a template: grid lines and row and column numbers</label>' +
+                    '<label><input type="radio" name="sqrp-style" value="plain" onchange="sqrp_set({ style: this.value })"> The code alone</label>' +
+                    '<h4>Size</h4>' +
+                    '<div class="sqrp-size"><input type="range" id="sqrp-size" min="10" max="150" step="0.5" oninput="sqrp_set({ size: this.value })" aria-label="Width of the code in millimetres">' +
+                        '<input type="number" id="sqrp-size-num" min="10" max="150" step="0.5" onchange="sqrp_set({ size: this.value })" aria-label="Width in millimetres"> mm</div>' +
+                    '<p class="sqrp-caption"><button type="button" class="skb-btn" onclick="sqrp_set({ size: \'template\' })" id="sqrp-template-size">Template size</button> Smaller codes are fine to scan; try the smallest your camera reads.</p>' +
+                    '<h4>Fingerprint</h4>' +
+                    '<label><input type="checkbox" id="sqrp-fp" onchange="sqrp_set({ fingerprint: this.checked })"> <span id="sqrp-fp-label">Print the seed fingerprint under the code</span></label>' +
+                    '<h4>Before you print</h4>' +
+                    '<ul class="sqrp-safety">' +
+                        '<li>Use your own printer, connected by a USB cable. SafeKeep never prints over a network.</li>' +
+                        '<li>If the printer is also on Wi-Fi or a network, turn that off or unplug it first.</li>' +
+                        '<li>Stay with the printer and take the page.</li>' +
+                        '<li>Afterwards, switch the printer off: it keeps the page in its memory until then.</li>' +
+                    '</ul>' +
+                    '<p style="margin: 1rem 0 0; display: flex; gap: 0.5rem; flex-wrap: wrap;"><button type="button" class="skb-btn skb-btn--primary" id="sqrp-print" onclick="sqrp_print()" disabled>Print</button>' +
+                        '<button type="button" class="skb-btn" id="sqrp-verify" onclick="sqrd_verify()" hidden>Scan to Verify</button></p>' +
+                    '<p class="sqrp-msg" id="sqrp-msg"></p>' +
+                '</div>' +
+            '</div>';
     } else {
         ov.innerHTML =
             '<div class="sqrd-bar">' +
@@ -34583,8 +34649,10 @@ function sqrd_open(mode) {
     document.body.appendChild(ov);
     document.addEventListener('keydown', _sqrdKey, true);
     window.addEventListener('resize', _sqrdRender);
+    if (mode === 'print') sqrp_init();
     _sqrdRender();
     if (mode === 'lightbox' && typeof skbright_lightbox === 'function') skbright_lightbox(true);
+    if (mode === 'print') sqrp_check();
 }
 
 function sqrd_close() {
@@ -34678,6 +34746,7 @@ function _sqrdRender() {
     var m = sqr_state.modules, QD = window.QrDraw;
     if (!m || !QD || !sqrd_state.mode) return;
     var n = m.length;
+    if (sqrd_state.mode === 'print') { _sqrpRender(); return; }
     if (sqrd_state.mode === 'lightbox') {
         var ppm = _sqrdPxPerMm();
         var gridMm = QD.templateGridMm(n);
@@ -34744,6 +34813,176 @@ function sqrd_verify() {
     sqrd_close();
     sqr_switchTab('verify');
     sqr_startVerify();
+}
+
+// ---- Print my SeedQR (sqrp_*) ----
+// Print It on a USB Printer: SafeKeepOS.printSeedQR → the Print Watcher's
+// helper (usbbootdrive/safekeep-print.py), which draws the page in PCL and
+// sends it over USB. No print system, no driver, never a network printer.
+// The preview mirrors the helper's layout: the code centred 105 mm from the
+// paper's left edge and 30 mm down; on a template, grid lines once a square
+// is 1.5 mm or more and numbers once it is about 2.9 mm or more. The
+// settings last printed with are kept in `safekeepSeedQrPrint` (a Device
+// Options key, so they're saved in the vault).
+var SQRP_KEY = 'safekeepSeedQrPrint';
+var sqrp_state = { size: null, style: 'template', fingerprint: true, printers: null, busy: false };
+
+function _sqrpTemplateSize() {
+    var n = (sqr_state.modules || []).length;
+    return window.QrDraw ? window.QrDraw.templateGridMm(n) : n * 3;
+}
+
+function sqrp_init() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(SQRP_KEY) || 'null'); } catch (_) {}
+    if (sqrp_state.size == null) {
+        sqrp_state.size = (saved && saved.size >= 10 && saved.size <= 150) ? saved.size : _sqrpTemplateSize();
+        if (saved && (saved.style === 'template' || saved.style === 'plain')) sqrp_state.style = saved.style;
+        if (saved && typeof saved.fingerprint === 'boolean') sqrp_state.fingerprint = saved.fingerprint;
+    }
+    sqrp_state.printers = null;
+    sqrp_state.busy = false;
+}
+
+function sqrp_set(change) {
+    if ('size' in change) {
+        var v = change.size === 'template' ? _sqrpTemplateSize() : Number(change.size);
+        if (isFinite(v)) sqrp_state.size = Math.max(10, Math.min(150, Math.round(v * 100) / 100));
+    }
+    if ('style' in change && (change.style === 'template' || change.style === 'plain')) sqrp_state.style = change.style;
+    if ('fingerprint' in change) sqrp_state.fingerprint = !!change.fingerprint;
+    _sqrpRender();
+}
+
+async function sqrp_check() {
+    var os = window.SafeKeepOS;
+    sqrp_state.printers = null;
+    _sqrpPrinter('Looking for a USB printer…', '');
+    if (!os || typeof os.printDetect !== 'function') { _sqrpPrinter('Printing isn’t available here.', 'warn'); return; }
+    var res = null;
+    try { res = await os.printDetect(); } catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
+    if (!document.getElementById('sqrp-printer')) return;   // closed meanwhile
+    if (!res || !res.ok) { _sqrpPrinter((res && res.error) || 'SafeKeep couldn’t look for printers.', 'warn'); return; }
+    sqrp_state.printers = res.printers || [];
+    var p = sqrp_state.printers;
+    if (!p.length) _sqrpPrinter('No USB printer found. Connect it with a USB cable, switch it on, then press Check Again.', 'warn');
+    else if (p.length > 1) _sqrpPrinter('More than one USB printer is connected. Unplug all but the one to use, then press Check Again.', 'warn');
+    else if (p[0].pcl === false) _sqrpPrinter(p[0].name + '. It doesn’t list PCL, the printer language SafeKeep uses, so it may print garbled pages or nothing.', 'warn');
+    else _sqrpPrinter('✓ ' + p[0].name + (p[0].pcl ? ', speaks PCL' : ''), 'ok');
+    _sqrpRender();
+}
+
+function _sqrpPrinter(text, cls) {
+    var box = document.getElementById('sqrp-printer');
+    if (!box) return;
+    box.className = 'sqrp-printer' + (cls ? ' ' + cls : '');
+    document.getElementById('sqrp-printer-text').textContent = text;
+}
+
+function _sqrpMsg(text, cls) {
+    var el = document.getElementById('sqrp-msg');
+    if (!el) return;
+    el.className = 'sqrp-msg' + (cls ? ' ' + cls : '');
+    el.textContent = text;
+}
+
+async function sqrp_print() {
+    var os = window.SafeKeepOS;
+    if (sqrp_state.busy || !os || typeof os.printSeedQR !== 'function' || !sqr_state.modules) return;
+    sqrp_state.busy = true;
+    _sqrpRender();
+    _sqrpMsg('Sending the page to the printer…', '');
+    document.getElementById('sqrp-verify').hidden = true;
+    var res = null;
+    try {
+        res = await os.printSeedQR({
+            modules: sqr_state.modules,
+            sizeMm: sqrp_state.size,
+            style: sqrp_state.style,
+            fingerprint: sqrp_state.fingerprint ? (sqr_state.fingerprint || '') : ''
+        });
+    } catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
+    sqrp_state.busy = false;
+    if (!document.getElementById('sqrp-msg')) return;
+    if (res && res.ok) {
+        try { localStorage.setItem(SQRP_KEY, JSON.stringify({ size: sqrp_state.size, style: sqrp_state.style, fingerprint: sqrp_state.fingerprint })); } catch (_) {}
+        _sqrpMsg('Sent to ' + res.printer + ' (' + Number(res.size_mm).toFixed(1) + ' mm wide). When the page is out, switch the printer off to clear its memory, then check the printout with Scan to Verify.', 'ok');
+        document.getElementById('sqrp-verify').hidden = false;
+    } else {
+        _sqrpMsg((res && res.error) || 'The page wasn’t printed.', 'err');
+    }
+    _sqrpRender();
+}
+
+/* The preview: a US Letter page at 1.6 px per mm, with the code as it will print. */
+function _sqrpRender() {
+    var m = sqr_state.modules, cv = document.getElementById('sqrp-page');
+    if (!m || !cv) return;
+    var n = m.length, size = sqrp_state.size, style = sqrp_state.style;
+    var range = document.getElementById('sqrp-size'), num = document.getElementById('sqrp-size-num');
+    if (Number(range.value) !== size) range.value = size;
+    if (document.activeElement !== num) num.value = size;
+    document.querySelectorAll('input[name="sqrp-style"]').forEach(function (r) { r.checked = r.value === style; });
+    var fpBox = document.getElementById('sqrp-fp');
+    fpBox.checked = sqrp_state.fingerprint && !!sqr_state.fingerprint;
+    fpBox.disabled = !sqr_state.fingerprint;
+    document.getElementById('sqrp-fp-label').textContent = sqr_state.fingerprint
+        ? 'Print the seed fingerprint under the code (' + sqr_state.fingerprint + ')'
+        : 'Print the seed fingerprint under the code (not available for this SeedQR)';
+    document.getElementById('sqrp-template-size').textContent = 'Template size (' + _sqrpTemplateSize().toFixed(2) + ' mm)';
+    var one = sqrp_state.printers && sqrp_state.printers.length === 1;
+    document.getElementById('sqrp-print').disabled = sqrp_state.busy || !one;
+    document.getElementById('sqrp-print').textContent = sqrp_state.busy ? 'Printing…' : 'Print';
+
+    var pxmm = 1.6, dpr = window.devicePixelRatio || 1, W = 216 * pxmm, H = 279 * pxmm;
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr * pxmm, 0, 0, dpr * pxmm, 0, 0);   // draw in millimetres
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 216, 279);
+    var x0 = 105 - size / 2, y0 = 30, cell = size / n;
+    ctx.fillStyle = '#000';
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (m[r][c]) ctx.fillRect(x0 + c * cell, y0 + r * cell, cell + 0.02, cell + 0.02);
+    var grid = style === 'template' && cell >= 1.5;
+    var labelPt = Math.min(9, cell / 25.4 * 72 * 0.55);
+    var labels = style === 'template' && labelPt >= 4.5;
+    if (grid) {
+        ctx.strokeStyle = '#000'; ctx.lineWidth = Math.max(0.085, cell / 24);
+        ctx.beginPath();
+        for (var k = 0; k <= n; k++) {
+            ctx.moveTo(x0 + k * cell, y0); ctx.lineTo(x0 + k * cell, y0 + size);
+            ctx.moveTo(x0, y0 + k * cell); ctx.lineTo(x0 + size, y0 + k * cell);
+        }
+        ctx.stroke();
+    }
+    var labelMm = labelPt * 25.4 / 72;
+    if (labels) {
+        ctx.font = labelMm + 'px ui-monospace, monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (var j = 0; j < n; j++) {
+            var t = String(j + 1), mid = j * cell + cell / 2;
+            ctx.fillText(t, x0 + mid, y0 - cell * 0.6);
+            ctx.fillText(t, x0 + mid, y0 + size + cell * 0.6);
+            ctx.textAlign = 'right'; ctx.fillText(t, x0 - cell * 0.3, y0 + mid);
+            ctx.textAlign = 'left'; ctx.fillText(t, x0 + size + cell * 0.3, y0 + mid);
+            ctx.textAlign = 'center';
+        }
+    }
+    if (sqrp_state.fingerprint && sqr_state.fingerprint) {
+        var fpPt = 10, text = 'Fingerprint ' + sqr_state.fingerprint;
+        var widthOf = function (s, pt) { return s.length * 0.6 * pt * 25.4 / 72; };
+        var fits = false;
+        for (var pt = 10; pt >= 6 && !fits; pt--) {
+            if (widthOf('Fingerprint ' + sqr_state.fingerprint, pt) <= size) { fpPt = pt; text = 'Fingerprint ' + sqr_state.fingerprint; fits = true; }
+            else if (widthOf(sqr_state.fingerprint, pt) <= Math.max(size, widthOf(sqr_state.fingerprint, 6))) { fpPt = pt; text = sqr_state.fingerprint; fits = true; }
+        }
+        ctx.font = (fpPt * 25.4 / 72) + 'px ui-monospace, monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+        ctx.fillText(text, 105, y0 + size + (labels ? cell * 1.6 : 0) + 5 + fpPt * 25.4 / 72 * 0.75);
+    }
+    var note = style === 'template' && !grid ? ' At this size the grid and numbers are left off, so the code scans well.'
+             : style === 'template' && !labels ? ' At this size the numbers are left off.' : '';
+    document.getElementById('sqrp-caption').textContent = 'Preview on US Letter. The code prints ' + size.toFixed(1) + ' mm wide.' + note;
 }
 
 
@@ -36386,7 +36625,8 @@ var _RLQ_APP_SETTINGS_KEYS = [
     'safekeepUiAudio',       // Sound: { enabled: bool, volume: 0-1 }
     'safekeepIdleTimers',    // Idle Timers: { displaySleepMinutes, autoLockMinutes, autoOffMinutes } (task #198)
     'safekeepSeedQrSize',    // Draw my SeedQR light box: remembered Size in % ("104.3")
-    'safekeepBrightness'     // Screen Brightness: software dimming % ("70"), set again at start
+    'safekeepBrightness',    // Screen Brightness: software dimming % ("70"), set again at start
+    'safekeepSeedQrPrint'    // SeedQR printing: { size, style, fingerprint } last printed with
 ];
 
 /**
