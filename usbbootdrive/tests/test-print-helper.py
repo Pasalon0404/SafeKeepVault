@@ -137,7 +137,7 @@ def pixel(r, px, py):
 
 print('\n1. The page')
 m = sample_modules()
-page, lay = P.build_pcl(m, 85.68, 'template', '5436D724')
+page, lay = P.build_pcl(m, 85.68, '5436D724')
 doc = read_pcl(page)
 r = doc['raster']
 ck('PCL job: UEL, PJL ENTER LANGUAGE=PCL only (no job name), reset, form feed, reset, UEL',
@@ -150,33 +150,25 @@ ck('raster is the code\'s exact size', len(r['rows']) == lay['side'] and r['widt
 mid_of = lambda k: (B[k] + B[k + 1]) // 2
 ok = all(pixel(r, mid_of(c), mid_of(rr)) == m[rr][c] for rr in range(21) for c in range(21))
 ck('every square matches the SeedQR (sampled at its centre)', ok)
-t = lay['grid_line']
-light = next((rr, c) for rr in range(8, 13) for c in range(8, 13) if not m[rr][c])
-ck('template: grid lines on light squares (%d dots), and the light squares stay light inside' % t, t >= 2 and pixel(r, B[light[1]], mid_of(light[0])) and pixel(r, mid_of(light[1]), B[light[0]]) and not pixel(r, mid_of(light[1]), mid_of(light[0])) and pixel(r, lay['side'] - 1, 5))
-nums = [s for (s, _, _) in doc['texts'] if re.fullmatch(r'\d+', s)]
-ck('template: row and column numbers 1–21 on four sides', sorted(set(int(s) for s in nums)) == list(range(1, 22)) and len(nums) == 84, len(nums))
+ck('…even at the corners of each square (no grid lines)', all(pixel(r, B[c], B[rr]) == m[rr][c] and pixel(r, B[c + 1] - 1, B[rr + 1] - 1) == m[rr][c] for rr in range(21) for c in range(21)))
 fp = [(s, x, y) for (s, x, y) in doc['texts'] if 'D724' in s]
 ck('fingerprint printed under the code, centred', len(fp) == 1 and fp[0][0] == 'Fingerprint 5436D724' and fp[0][2] > r['y'] + lay['side'] and abs((fp[0][1] + P._text_width(fp[0][0], 10.0) / 2) - (r['x'] + lay['side'] / 2)) < 2, fp)
 ck('code centred on the page line (105 mm), 30 mm down', abs(r['x'] + lay['side'] / 2 - P.mm(105 - 6.35)) <= 1 and r['y'] == P.mm(30))
-ck('no other text on the page', all(re.fullmatch(r'\d+', s) or 'D724' in s for (s, _, _) in doc['texts']))
+ck('no other text on the page (no numbers, no job name)', [s for (s, _, _) in doc['texts']] == ['Fingerprint 5436D724'])
 
-page2, lay2 = P.build_pcl(m, 85.68, 'plain', '')
+page2, lay2 = P.build_pcl(m, 85.68, '')
 d2 = read_pcl(page2)
-ck('plain: no grid lines, no numbers, no fingerprint', lay2['grid_line'] == 0 and lay2['label_pt'] == 0 and not d2['texts'])
-B2 = lay2['bounds']
-ok2 = all(pixel(d2['raster'], B2[c], B2[rr]) == m[rr][c] for rr in range(21) for c in range(21))
-ck('plain: even the square corners match (no lines)', ok2)
+ck('without the fingerprint: no text at all', not d2['texts'])
 
-page3, lay3 = P.build_pcl(m, 20, 'template', 'ABCDEF01')
+page3, lay3 = P.build_pcl(m, 14, 'ABCDEF01')
 d3 = read_pcl(page3)
-ck('20 mm template: squares (under 1.5 mm) too small for lines or numbers, so none', lay3['grid_line'] == 0 and lay3['label_pt'] == 0)
+B3 = lay3['bounds']
+ck('14 mm (the owner\'s laptop camera reads it): every square matches', abs(lay3['actual_mm'] - 14) < 0.05 and all(pixel(d3['raster'], (B3[c] + B3[c + 1]) // 2, (B3[rr] + B3[rr + 1]) // 2) == m[rr][c] for rr in range(21) for c in range(21)))
 fp3 = [s for (s, _, _) in d3['texts']]
 ck('…the fingerprint shrinks or drops the word to fit', fp3 and fp3[0] in ('ABCDEF01', 'Fingerprint ABCDEF01'), fp3)
 ck('size limits: 10–150 mm', P.field_size({'size_mm': 3}) == 10 and P.field_size({'size_mm': 999}) == 150)
-lay4 = P.layout(29, 150, 'template', '')
+lay4 = P.layout(29, 150, '')
 ck('29×29 at 150 mm fits across A4 (and Letter)', P.mm(6.35) + lay4['x0'] + lay4['side'] <= P.mm(210 - 4))
-mid = P.layout(21, 70, 'template', '')
-ck('70 mm template: grid lines and numbers (at least 4.5 pt)', mid['grid_line'] >= 2 and mid['label_pt'] >= 4.5 and mid['label_every'] == 1, mid)
 
 print('\n2. Requests are checked')
 def bad(d):
@@ -190,7 +182,7 @@ def bad_f(fn, d):
         fn(d); return False
     except P.Fail:
         return True
-ck('style must be template or plain', bad_f(P.field_style, {'style': 'x'}) and P.field_style({'style': 'plain'}) == 'plain')
+ck('there is no style any more (code only)', not hasattr(P, 'field_style'))
 ck('fingerprint: 8 hex digits or nothing', P.field_fingerprint({'fingerprint': 'abcdef01'}) == 'ABCDEF01' and P.field_fingerprint({}) == '' and bad_f(P.field_fingerprint, {'fingerprint': 'ABC;rm'}))
 ck('size must be a number', bad_f(P.field_size, {'size_mm': '50'}) and bad_f(P.field_size, {'size_mm': True}))
 ck('Device ID parsing', P.parse_device_id(b'\x00\x2bMFG:Samsung;CMD:SPL,PCL6;MDL:M2070 Series;') == {'MFG': 'Samsung', 'CMD': 'SPL,PCL6', 'MDL': 'M2070 Series'})
@@ -228,10 +220,10 @@ ck('detect: no Device ID → USB name, PCL unknown', res['printers'] == [{'name'
 res, _, _, _ = run({'action': 'detect', 'request_id': RID}, [{'class': 7, 'sub': 1, 'proto': 4}])
 ck('detect: an IPP-over-USB interface is not used', res['printers'] == [], res)
 
-req = {'action': 'print', 'request_id': RID, 'modules': rows01(m), 'size_mm': 60, 'style': 'template', 'fingerprint': '5436d724'}
+req = {'action': 'print', 'request_id': RID, 'modules': rows01(m), 'size_mm': 60, 'fingerprint': '5436d724'}
 res, sent, claimed, left = run(req, [scanner, samsung])
 d = read_pcl(sent)
-Bs = P.layout(21, 60, 'template', '')['bounds']
+Bs = P.layout(21, 60, '')['bounds']
 ok = d['raster'] and all(pixel(d['raster'], (Bs[c] + Bs[c + 1]) // 2, (Bs[rr] + Bs[rr + 1]) // 2) == m[rr][c] for rr in range(21) for c in range(21))
 ck('print: the page reaches the printer, square for square', res.get('ok') and res['status'] == 'printed' and ok, res)
 ck('…only the printer interface was claimed (not the scanner)', claimed.strip() == '0', claimed)
@@ -271,7 +263,7 @@ env = dict(os.environ, PYTHONPATH=pkg, FAKE_USB=json.dumps({'devices': [samsung]
 w = subprocess.Popen(['bash', script], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 try:
     time.sleep(0.5)
-    open(os.path.join(dl, 'PRINT_REQUEST.json'), 'w').write(json.dumps(dict(req, size_mm=30, style='plain')))
+    open(os.path.join(dl, 'PRINT_REQUEST.json'), 'w').write(json.dumps(dict(req, size_mm=30)))
     res_path = os.path.join(sig, 'PRINT_RESULT.json')
     for _ in range(60):
         if os.path.exists(res_path): break

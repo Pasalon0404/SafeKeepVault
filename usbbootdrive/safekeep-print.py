@@ -26,8 +26,7 @@ SECURITY MODEL
       detect -> list the USB printers: name and whether they say they
                 understand PCL (from their IEEE 1284 Device ID).
       print  -> print ONE page: the SeedQR given as rows of 0/1, at the size
-                asked (10–150 mm wide), on a template (grid lines and row and
-                column numbers) or plain, and optionally the seed fingerprint
+                asked (10–150 mm wide), and optionally the seed fingerprint
                 (8 hex digits) under it. No job name or other text is sent.
   * The page is never written to disk: it's built in memory and sent.
   * The result goes to RAM (/tmp/safekeep-signals) and holds no seed data.
@@ -124,13 +123,6 @@ def field_size(data):
     return max(MIN_SIZE_MM, min(MAX_SIZE_MM, float(v)))
 
 
-def field_style(data):
-    v = data.get('style')
-    if v not in ('template', 'plain'):
-        raise Fail('bad_request', 'The print style must be template or plain.')
-    return v
-
-
 def field_fingerprint(data):
     v = data.get('fingerprint', '')
     if v in ('', None):
@@ -165,7 +157,7 @@ def _at(x, y):
     return b'\x1b*p%dx%dY' % (int(round(x)), int(round(y)))
 
 
-def layout(n, size_mm, style, fingerprint):
+def layout(n, size_mm, fingerprint):
     """Everything about where things go, in 600-dpi dots. Pure, for tests."""
     # The whole code is exactly the size asked (to the dot). Squares are
     # whole dots, so they differ by at most one dot (0.04 mm): square k runs
@@ -176,19 +168,9 @@ def layout(n, size_mm, style, fingerprint):
     x0 = max(0, mm(PAGE_CENTRE_X_MM - LOGICAL_LEFT_MM) - side // 2)
     y0 = mm(TOP_MM)
     lay = {'n': n, 'cell': cell, 'side': side, 'bounds': bounds, 'x0': x0, 'y0': y0,
-           'actual_mm': round(side / DOTS_PER_MM, 2), 'grid_line': 0, 'label_pt': 0,
-           'label_every': 0, 'fingerprint': None}
-    if style == 'template':
-        # Grid lines and numbers are for copying by hand; on a small code
-        # they'd only get in the way of scanning it.
-        if cell >= mm(1.5):
-            lay['grid_line'] = max(2, int(cell // 24))
-        label_pt = min(9.0, cell / DPI * 72.0 * 0.55)
-        if label_pt >= 4.5:
-            lay['label_pt'] = round(label_pt, 2)
-            lay['label_every'] = 1 if _text_width('00', label_pt) <= cell * 0.9 else 2
+           'actual_mm': round(side / DOTS_PER_MM, 2), 'fingerprint': None}
     if fingerprint:
-        below = y0 + side + (int(cell * 1.6) if lay['label_pt'] else 0)
+        below = y0 + side
         for pt in (10.0, 9.0, 8.0, 7.0, 6.0):
             for text in ('Fingerprint ' + fingerprint, fingerprint):
                 if _text_width(text, pt) <= max(side, _text_width(fingerprint, 6.0)):
@@ -203,37 +185,26 @@ def layout(n, size_mm, style, fingerprint):
 
 
 def bitmap(modules, lay):
-    """The code as rows of packed bits (1 = black), with the grid if asked."""
-    n, side, b, t = lay['n'], lay['side'], lay['bounds'], lay['grid_line']
+    """The code as rows of packed bits (1 = black)."""
+    n, side, b = lay['n'], lay['side'], lay['bounds']
     row_bytes = (side + 7) // 8
     col_of = [0] * side                    # which square each dot column is in
-    on_line = [False] * side               # dot columns on a vertical grid line
     for k in range(n):
         for x in range(b[k], b[k + 1]):
             col_of[x] = k
-            on_line[x] = bool(t) and (x - b[k] < t or x >= side - t)
-    line_row = bytearray(row_bytes)        # a full black horizontal grid line
-    for x in range(side):
-        line_row[x >> 3] |= 0x80 >> (x & 7)
     rows = []
     for my in range(n):
-        base = bytearray(row_bytes)
+        line = bytearray(row_bytes)
         for x in range(side):
-            if modules[my][col_of[x]] or on_line[x]:
-                base[x >> 3] |= 0x80 >> (x & 7)
-        base = bytes(base)
-        h = b[my + 1] - b[my]
-        for dy in range(h):
-            if t and (dy < t or (my == n - 1 and dy >= h - t)):
-                rows.append(bytes(line_row))
-            else:
-                rows.append(base)
+            if modules[my][col_of[x]]:
+                line[x >> 3] |= 0x80 >> (x & 7)
+        rows.extend([bytes(line)] * (b[my + 1] - b[my]))
     return rows, row_bytes
 
 
-def build_pcl(modules, size_mm, style, fingerprint):
+def build_pcl(modules, size_mm, fingerprint):
     n = len(modules)
-    lay = layout(n, size_mm, style, fingerprint)
+    lay = layout(n, size_mm, fingerprint)
     rows, row_bytes = bitmap(modules, lay)
     out = bytearray()
     out += b'\x1b%-12345X@PJL ENTER LANGUAGE=PCL\r\n'   # no job name, no other PJL
@@ -250,23 +221,6 @@ def build_pcl(modules, size_mm, style, fingerprint):
     for r in rows:
         out += b'\x1b*b%dW' % row_bytes + r
     out += b'\x1b*rC'                   # end raster
-    if lay['label_pt']:
-        pt, cell = lay['label_pt'], lay['cell']
-        out += _font(pt)
-        cap = pt_to_dots(pt) * 0.6
-        for k in range(n):
-            num = k + 1
-            if lay['label_every'] == 2 and num % 2 == 0:
-                continue
-            s = str(num).encode()
-            w = _text_width(s.decode(), pt)
-            cx = lay['x0'] + (lay['bounds'][k] + lay['bounds'][k + 1]) / 2
-            cy = lay['y0'] + (lay['bounds'][k] + lay['bounds'][k + 1]) / 2
-            # column numbers above and below, row numbers left and right
-            out += _at(cx - w / 2, lay['y0'] - cell * 0.35) + s
-            out += _at(cx - w / 2, lay['y0'] + lay['side'] + cell * 0.35 + cap) + s
-            out += _at(lay['x0'] - cell * 0.3 - w, cy + cap / 2) + s
-            out += _at(lay['x0'] + lay['side'] + cell * 0.3, cy + cap / 2) + s
     if lay['fingerprint']:
         f = lay['fingerprint']
         out += _font(f['pt']) + _at(f['x'], f['y']) + f['text'].encode()
@@ -394,7 +348,6 @@ def do_detect(ctx, data):
 def do_print(ctx, data):
     modules = field_modules(data)
     size = field_size(data)
-    style = field_style(data)
     fp = field_fingerprint(data)
     printers = find_printers(ctx)
     if not printers:
@@ -402,7 +355,7 @@ def do_print(ctx, data):
     if len(printers) > 1:
         raise Fail('multiple_printers', 'More than one USB printer is connected. Unplug all but the one to use.')
     info = describe(printers[0])
-    page, lay = build_pcl(modules, size, style, fp)
+    page, lay = build_pcl(modules, size, fp)
     modules = None
     try:
         send(printers[0], page)

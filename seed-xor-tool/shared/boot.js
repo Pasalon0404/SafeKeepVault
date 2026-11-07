@@ -2916,13 +2916,13 @@ const SafeKeepOS = (() => {
   }
 
   /**
-   * Print one SeedQR page. modules: rows of booleans (21, 25 or 29 square);
-   * sizeMm: width of the code (10–150); style: 'template' | 'plain';
-   * fingerprint: 8 hex digits or ''. Resolves to { ok, printer, size_mm } or an error.
+   * Print one SeedQR page: the code alone. modules: rows of booleans (21, 25
+   * or 29 square); sizeMm: width of the code (10–150); fingerprint: 8 hex
+   * digits or ''. Resolves to { ok, printer, size_mm } or an error.
    */
-  function printSeedQR({ modules, sizeMm, style, fingerprint }) {
+  function printSeedQR({ modules, sizeMm, fingerprint }) {
     const rows = (modules || []).map((r) => r.map((v) => (v ? '1' : '0')).join(''));
-    return _printRequest({ action: 'print', modules: rows, size_mm: Number(sizeMm), style, fingerprint: fingerprint || '' }, 150000);
+    return _printRequest({ action: 'print', modules: rows, size_mm: Number(sizeMm), fingerprint: fingerprint || '' }, 150000);
   }
 
   // ===================================================================
