@@ -407,6 +407,7 @@
     .sqrp-caption { font-size: 0.78rem; color: #555; margin: 0.35rem 0 0; }
     .sqrp-safety { margin: 0; padding-left: 1.1rem; font-size: 0.8rem; color: #333; }
     .sqrp-msg { margin: 0.75rem 0 0; font-size: 0.85rem; }
+    .sqrp-vault-note { margin: 1rem 0 0; padding: 0.6rem 0.75rem; border: 1px solid #d98a00; background: #fff6e6; border-radius: 6px; font-size: 0.8rem; line-height: 1.5; }
     .sqrp-msg.err { color: #b42318; }
     .sqrp-msg.ok { color: #1a7f45; }
     .sqrp-side .skb-btn { color: #111; border-color: #999; background: #fff; }
@@ -33795,6 +33796,7 @@ var sqr_state = {
     currentEntropyBytes: null,  // Uint8Array — entropy of the last generated SeedQR (verify compares this)
     modules: null,              // rows of booleans (dark = true) of the last SeedQR, for Draw my SeedQR
     fingerprint: null,          // its seed fingerprint (8 hex digits, no passphrase), for Print
+    isVaultSeed: false,         // true when it's the seed the open vault holds (Print's notice)
     importScanner: null,
     verifyScanner: null
 };
@@ -34271,6 +34273,13 @@ async function sqr_generate() {
         // The seed fingerprint (no passphrase), which Print can put under the code.
         sqr_state.fingerprint = null;
         try { sqr_state.fingerprint = await _recoveryFingerprint(words.join(' ')); } catch (_) {}
+        // Is this the seed the vault itself holds? (Print warns when it isn't.)
+        sqr_state.isVaultSeed = false;
+        try {
+            var sess = window.SeedSession && window.SeedSession.get();
+            var norm = function (t) { return String(t || '').trim().toLowerCase().split(/\s+/).join(' '); };
+            sqr_state.isVaultSeed = !(typeof _vaultVolatile !== 'undefined' && _vaultVolatile) && !!sess && norm(sess.mnemonic) === norm(words.join(' '));
+        } catch (_) {}
 
         for (var y = 0; y < gridSize; y++) {
             for (var x = 0; x < gridSize; x++) {
@@ -34624,6 +34633,7 @@ function sqrd_open(mode) {
                         '<li>Stay with the printer and take the page.</li>' +
                         '<li>Afterwards, switch the printer off: it keeps the page in its memory until then.</li>' +
                     '</ul>' +
+                    '<p class="sqrp-vault-note" id="sqrp-vault-note" hidden></p>' +
                     '<p style="margin: 1rem 0 0; display: flex; gap: 0.5rem; flex-wrap: wrap;"><button type="button" class="skb-btn skb-btn--primary" id="sqrp-print" onclick="sqrp_print()" disabled>Print</button>' +
                         '<button type="button" class="skb-btn" id="sqrp-verify" onclick="sqrd_verify()" hidden>Scan to Verify</button></p>' +
                     '<p class="sqrp-msg" id="sqrp-msg"></p>' +
@@ -34879,6 +34889,24 @@ function _sqrpPrinter(text, cls) {
     document.getElementById('sqrp-printer-text').textContent = text;
 }
 
+/*
+ * To print, the app hands the SeedQR to the OS in a file saved in Chromium's
+ * download folder: the encrypted vault on a normal start (deleted within a
+ * second of being read), memory in a Temporary Session. That only matters
+ * when the vault shouldn't hold this seed: the vault is set not to keep the
+ * seed, or this SeedQR isn't the vault's own seed (typed in, or a temporary
+ * seed). Then the panel says so and suggests a Temporary Session.
+ */
+function _sqrpVaultNotice() {
+    if (typeof _isEphemeralBoot === 'function' && _isEphemeralBoot()) return '';
+    var os = window.SafeKeepOS;
+    var kept = !(os && typeof os.isSeedKept === 'function') || os.isSeedKept() !== false;
+    var why = !kept ? 'This vault is set not to keep the seed. '
+            : !sqr_state.isVaultSeed ? 'This SeedQR isn’t the seed your vault keeps. ' : '';
+    if (!why) return '';
+    return why + 'To reach the printer, SafeKeep briefly saves the SeedQR in the encrypted vault on this flash drive and deletes it within a second, but a trace can stay on the flash drive. To keep it off the flash drive entirely, print from a Temporary Session instead.';
+}
+
 function _sqrpMsg(text, cls) {
     var el = document.getElementById('sqrp-msg');
     if (!el) return;
@@ -34930,6 +34958,9 @@ function _sqrpRender() {
         ? 'Print the seed fingerprint under the code (' + sqr_state.fingerprint + ')'
         : 'Print the seed fingerprint under the code (not available for this SeedQR)';
     document.getElementById('sqrp-template-size').textContent = 'Template size (' + _sqrpTemplateSize().toFixed(2) + ' mm)';
+    var vaultNote = document.getElementById('sqrp-vault-note'), vaultText = _sqrpVaultNotice();
+    vaultNote.textContent = vaultText;
+    vaultNote.hidden = !vaultText;
     var one = sqrp_state.printers && sqrp_state.printers.length === 1;
     document.getElementById('sqrp-print').disabled = sqrp_state.busy || !one;
     document.getElementById('sqrp-print').textContent = sqrp_state.busy ? 'Printing…' : 'Print';
