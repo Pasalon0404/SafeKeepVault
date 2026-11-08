@@ -893,7 +893,7 @@ POLICYEOF
     # one a restored backup brought back: delete it before the probe.
     if [ "$EPHEMERAL_MODE" != "1" ] && [ -f "$VAULT_MOUNT/settings/seed-storage.json" ] \
         && grep -q '"keepSeed": *false' "$VAULT_MOUNT/settings/seed-storage.json" 2>/dev/null; then
-        for _sf in "$VAULT_MOUNT"/seeds/master-seed*.json; do
+        for _sf in "$VAULT_MOUNT"/seeds/master-seed*.json "$VAULT_MOUNT"/seeds/seed-vault*.json; do
             [ -f "$_sf" ] || continue
             shred -u -n 1 -z "$_sf" 2>/dev/null || rm -f "$_sf"
             echo "Seed storage: this flash drive doesn't keep the seed; removed a stored one."
@@ -1625,6 +1625,99 @@ SWPYEOF
     echo "Wallets watcher daemon started (PID $WALLETS_WATCHER_PID)"
 
     # -------------------------------------------------------------------
+    # SEED VAULT WATCHER — MORE SEEDS BESIDE THE MASTER SEED
+    # -------------------------------------------------------------------
+    # Seed Management → Seed Vault keeps other seeds (a family member's
+    # wallet, a second multisig key, an old wallet) in the vault, next to
+    # the master seed, to switch to from the Dashboard. On every change the
+    # app downloads the whole list as SEED_VAULT.json into seeds/. It is
+    # untrusted data and nothing in it is run. It is accepted only if it is
+    # at most 64 KB with at most 20 seeds, each a name of 1-40 printable
+    # characters, 12/15/18/21/24 lowercase words, an 8-hex fingerprint and
+    # an optional date; the app checks the words' checksum. It is written
+    # atomically, mode 600, to
+    #   $VAULT_MOUNT/seeds/seed-vault.json
+    # beside master-seed.json, so Encrypted Backup's seed option, restore and
+    # factory reset cover it. A flash drive set not to keep the seed (Seed
+    # Storage Watcher) keeps no stored seeds either: the request is refused
+    # and the file is removed. An empty list removes the file. Normal boots
+    # only.
+    SEED_VAULT_STORED="$VAULT_MOUNT/seeds/seed-vault.json"
+    rm -f "$CHROMIUM_DOWNLOAD_DIR"/SEED_VAULT*.json 2>/dev/null
+    (
+        while true; do
+            if compgen -G "$CHROMIUM_DOWNLOAD_DIR/SEED_VAULT*.json" > /dev/null; then
+                sleep 1
+                mapfile -t SV_FILES < <(ls -t "$CHROMIUM_DOWNLOAD_DIR"/SEED_VAULT*.json 2>/dev/null)
+                if [ "${#SV_FILES[@]}" -gt 0 ] && [ "$EPHEMERAL_MODE" != "1" ]; then
+                    if [ -f "$VAULT_MOUNT/settings/seed-storage.json" ] \
+                        && grep -q '"keepSeed": *false' "$VAULT_MOUNT/settings/seed-storage.json" 2>/dev/null; then
+                        echo "Seed Vault Watcher: this flash drive doesn't keep seeds; request refused"
+                    elif python3 -I - "${SV_FILES[0]}" "$SEED_VAULT_STORED.tmp" <<'SVPYEOF'
+import json, re, sys
+src, dst = sys.argv[1], sys.argv[2]
+MAX_BYTES, MAX_SEEDS = 65536, 20
+with open(src, 'rb') as f:
+    raw = f.read(MAX_BYTES + 1)
+if len(raw) > MAX_BYTES:
+    sys.exit('file too large')
+data = json.loads(raw.decode('utf-8'))
+seeds = data.get('seeds') if isinstance(data, dict) else None
+if not isinstance(seeds, list) or len(seeds) > MAX_SEEDS:
+    sys.exit('no valid seed list')
+out, names, mnemonics = [], set(), set()
+for e in seeds:
+    if not isinstance(e, dict):
+        sys.exit('bad seed entry')
+    name, words, fp, added = e.get('name'), e.get('mnemonic'), e.get('fingerprint'), e.get('added', '')
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 40 \
+            or re.search(r'[\x00-\x1f\x7f]', name):
+        sys.exit('bad seed name')
+    if not isinstance(words, str) or not re.fullmatch(r'[a-z]{3,8}( [a-z]{3,8}){11,23}', words) \
+            or len(words.split(' ')) not in (12, 15, 18, 21, 24):
+        sys.exit('bad seed words')
+    if not isinstance(fp, str) or not re.fullmatch(r'[0-9A-Fa-f]{8}', fp):
+        sys.exit('bad fingerprint')
+    key = name.strip().lower()
+    if key in names or words in mnemonics:
+        sys.exit('duplicate seed')
+    names.add(key); mnemonics.add(words)
+    out.append({'name': name.strip(), 'mnemonic': words, 'fingerprint': fp.upper(),
+                'added': added[:40] if isinstance(added, str) else ''})
+if not out:
+    print('EMPTY')
+    sys.exit(0)
+with open(dst, 'w', encoding='utf-8') as f:
+    json.dump({'version': 1, 'seeds': out}, f)
+SVPYEOF
+                    then
+                        if [ -f "$SEED_VAULT_STORED.tmp" ]; then
+                            chmod 600 "$SEED_VAULT_STORED.tmp" 2>/dev/null
+                            mv -f "$SEED_VAULT_STORED.tmp" "$SEED_VAULT_STORED" && sync
+                            echo "Seed Vault Watcher: stored seeds saved in vault"
+                        else
+                            if [ -f "$SEED_VAULT_STORED" ]; then
+                                shred -u -n 1 -z "$SEED_VAULT_STORED" 2>/dev/null || rm -f "$SEED_VAULT_STORED"
+                                sync
+                            fi
+                            echo "Seed Vault Watcher: no stored seeds left; file removed"
+                        fi
+                    else
+                        rm -f "$SEED_VAULT_STORED.tmp" 2>/dev/null
+                        echo "Seed Vault Watcher: rejected an invalid seed list"
+                    fi
+                fi
+                for _svf in "${SV_FILES[@]}"; do
+                    shred -u -n 1 -z "$_svf" 2>/dev/null || rm -f "$_svf"
+                done
+            fi
+            sleep 1
+        done
+    ) &
+    SEED_VAULT_WATCHER_PID=$!
+    echo "Seed Vault watcher daemon started (PID $SEED_VAULT_WATCHER_PID)"
+
+    # -------------------------------------------------------------------
     # RECEIVE WATCHER — REMEMBER THE LAST ADDRESS SHOWN, PER WALLET
     # -------------------------------------------------------------------
     # "Show an address" offers the next receive address after the last one
@@ -1708,12 +1801,12 @@ RIPYEOF
         _seed_free() { [ -f "$SEED_STORAGE_FLAG" ] && grep -q '"keepSeed": *false' "$SEED_STORAGE_FLAG" 2>/dev/null; }
         _remove_seed_files() {
             local f removed=0
-            for f in "$SEED_DIR"/master-seed*.json; do
+            for f in "$SEED_DIR"/master-seed*.json "$SEED_DIR"/seed-vault*.json "$SEED_DIR"/SEED_VAULT*.json; do
                 [ -f "$f" ] || continue
                 shred -u -n 1 -z "$f" 2>/dev/null || rm -f "$f"
                 removed=1
             done
-            [ "$removed" = 1 ] && sync && echo "Seed Storage Watcher: removed the master seed from the vault"
+            [ "$removed" = 1 ] && sync && echo "Seed Storage Watcher: removed stored seeds from the vault"
             return 0
         }
         while true; do
@@ -2025,7 +2118,7 @@ SSPYEOF
 
                 # Skip known system trigger/result/sentinel files
                 case "$BASENAME" in
-                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|BRIGHTNESS_*|PRINT_*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
+                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|BRIGHTNESS_*|PRINT_*|SEED_VAULT*|seed-vault*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
                 esac
 
                 # Check if this is a passphrase file (contains "passphrase" key)

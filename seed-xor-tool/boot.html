@@ -376,6 +376,28 @@
     }
 
     /* ---- Draw my SeedQR (light box, square by square) ---- */
+    /* Seed Vault (sv_*): stored seeds beside the master seed */
+    .sv-list { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.75rem 0; }
+    .sv-row { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.65rem 0.8rem; background: var(--skb-bg-input); }
+    .sv-row-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .sv-row-name { font-weight: 700; color: var(--skb-text); }
+    .sv-row-meta { font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text-muted); }
+    .sv-row-inuse { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; color: #000; background: var(--skb-primary); padding: 0.05rem 0.45rem; border-radius: 4px; }
+    .sv-row-btns { margin-left: auto; display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .sv-row-btns .skb-btn, .sv-confirm .skb-btn { padding: 0.3rem 0.7rem; font-size: 0.78rem; }
+    .sv-words { margin-top: 0.6rem; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem 0.8rem; font-family: var(--skb-mono); font-size: 0.85rem; }
+    .sv-words span b { color: var(--skb-text-muted); font-weight: 400; margin-right: 0.3rem; }
+    .sv-confirm { margin-top: 0.55rem; font-size: 0.82rem; color: var(--skb-text); display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .sv-rename { margin-top: 0.55rem; display: flex; gap: 0.5rem; }
+    .sv-rename input, #sv-add-name { flex: 1; padding: 0.4rem 0.55rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text); font: inherit; }
+    .sv-status { font-size: 0.82rem; margin: 0.5rem 0 0; }
+    .sv-status.bad { color: var(--skb-danger); }
+    .sv-status.ok { color: var(--skb-secondary, #3fb950); }
+    #dashv2-switcher { margin-top: 0.6rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); background: var(--skb-bg-card); padding: 0.35rem; max-width: 26rem; }
+    #dashv2-switcher button { display: flex; width: 100%; justify-content: space-between; gap: 0.8rem; text-align: left; padding: 0.45rem 0.6rem; background: none; border: 0; color: var(--skb-text); font: inherit; cursor: pointer; border-radius: 4px; }
+    #dashv2-switcher button:hover, #dashv2-switcher button:focus-visible { background: var(--skb-bg-input); }
+    #dashv2-switcher button[aria-current="true"] { color: var(--skb-primary); font-weight: 700; }
+    #dashv2-switcher .sv-sw-fp { font-family: var(--skb-mono); font-size: 0.78rem; color: var(--skb-text-muted); }
     .sqrd-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
     .sqrd-overlay { position: fixed; inset: 0; z-index: 10060; display: flex; flex-direction: column; background: #ffffff; color: #111; overflow: auto; }
     .sqrd-bar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; padding: 0.6rem 1rem; background: #111; color: #eee; }
@@ -7002,6 +7024,15 @@
                 <button id="amnesia-save-btn" type="button" class="dash-pp-btn" style="margin-top: 0.65rem; border-color: rgba(139, 92, 246, 0.5); color: #8b5cf6; background: rgba(139, 92, 246, 0.1);" onclick="amnesiaSaveToVault()">Save to Vault (Exit Temporary Session)</button>
             </div>
 
+            <!-- Seed Vault banner: a stored seed (not the master) is in use (sv_*) -->
+            <div id="sv-banner" role="status" hidden style="margin: 1.25rem 0 0; padding: 0.85rem 1.1rem; background: rgba(247, 147, 26, 0.08); border: 2px solid rgba(247, 147, 26, 0.5); border-left: 6px solid var(--skb-primary); display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 14rem;">
+                    <div style="font-family: var(--skb-mono); font-size: 0.8rem; font-weight: 900; color: var(--skb-primary); letter-spacing: 0.1em; text-transform: uppercase;">Seed Vault seed in use</div>
+                    <div style="font-size: 0.85rem; color: var(--skb-text); margin-top: 0.25rem;"><span id="sv-banner-name"></span> &middot; <span id="sv-banner-fp" style="font-family: var(--skb-mono);"></span>. Signing, addresses and every tool use this seed until you switch back.</div>
+                </div>
+                <button type="button" class="skb-btn" onclick="sv_backToMaster()">Back to Master Seed</button>
+            </div>
+
             <!-- Temporary Seed Warning Banner (persistent, non-dismissible) —
                  shown when a volatile/temp seed is active from a NORMAL (non-ephemeral)
                  boot. Reminds the user that the encrypted vault is still available but
@@ -7096,8 +7127,10 @@
                                 </div>
                                 <div class="dashv2-row">
                                     <button type="button" class="skb-btn" id="dashv2-pp-btn" aria-expanded="false" onclick="dashv2_togglePassphrase()">Use a passphrase wallet</button>
+                                    <button type="button" class="skb-btn" id="dashv2-switch-btn" hidden aria-expanded="false" aria-controls="dashv2-switcher" onclick="sv_toggleSwitcher()">Seed Vault &#9662;</button>
                                     <button type="button" class="skb-btn" onclick="vaultLock()" title="Lock the vault and switch seed">Lock or switch seed</button>
                                 </div>
+                                <div id="dashv2-switcher" hidden role="menu" aria-label="Seed Vault"></div>
                             </div>
                         </div>
                         <div class="dashv2-health">
@@ -10334,7 +10367,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <!-- Seed Display -->
                 <div class="skb-card" style="margin-bottom: 1rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                        <span style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text);">Master Seed</span>
+                        <span style="font-size: 0.85rem; font-weight: 600; color: var(--skb-text);" id="arm-seed-title">Master Seed</span>
                         <span class="arm-fingerprint" id="arm-fingerprint">--------</span>
                     </div>
                     <!-- Seed Accordion (replaces .privacy-mask blur).
@@ -10575,6 +10608,43 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         onclick="arm_print()">
                     Print PDF
                 </button>
+            </div>
+
+            <!-- Seed Vault: other seeds kept in this vault beside the master seed (sv_*) -->
+            <div class="skb-card arm-no-print" id="sv-card" style="margin-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+                    <h3 style="margin: 0; font-size: 1rem;">Seed Vault</h3>
+                    <span class="sv-row-meta" id="sv-count"></span>
+                </div>
+                <p style="margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--skb-text-muted); line-height: 1.55;">Other seeds kept in this vault, beside your master seed: a family member&rsquo;s wallet, a second multisig key, an old wallet. Switch to one from the Dashboard with <strong>Seed Vault</strong>; signing, addresses and every tool then use it. They&rsquo;re as safe as this vault, and Encrypted Backup&rsquo;s seed option includes them. Keep a written backup of each.</p>
+                <p class="sv-status" id="sv-off" hidden></p>
+                <div class="sv-list" id="sv-list"></div>
+                <div id="sv-main-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button type="button" class="skb-btn" id="sv-add-btn" onclick="sv_openAdd(false)">Add a Seed</button>
+                    <button type="button" class="skb-btn" id="sv-keep-temp-btn" hidden onclick="sv_openAdd(true)">Keep the Temporary Seed Here</button>
+                </div>
+                <div id="sv-add" hidden style="margin-top: 0.85rem; border-top: 1px solid var(--skb-border); padding-top: 0.85rem;">
+                    <label for="sv-add-name" style="display: block; font-size: 0.85rem; margin-bottom: 0.35rem;">Name</label>
+                    <div style="display: flex;"><input type="text" id="sv-add-name" maxlength="40" autocomplete="off" spellcheck="false" placeholder="e.g. Mum&rsquo;s wallet"></div>
+                    <div id="sv-add-words-wrap">
+                        <div style="display: flex; gap: 0; margin: 0.75rem 0; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;">
+                            <button type="button" id="sv-len-12" class="tool-tab-btn active" style="flex: 1;" onclick="sv_setLength(12)">12 Words</button>
+                            <button type="button" id="sv-len-24" class="tool-tab-btn" style="flex: 1;" onclick="sv_setLength(24)">24 Words</button>
+                        </div>
+                        <div id="sv-add-grid"></div>
+                        <button type="button" class="skb-btn" style="width: 100%; margin-bottom: 0.5rem; font-size: 0.8125rem;" onclick="sv_startScan()">Scan a SeedQR</button>
+                        <div id="sv-scan" hidden style="margin-bottom: 0.75rem;">
+                            <div id="sv-qr-reader" style="max-width: 400px; margin: 0 auto 0.5rem; border-radius: 8px; overflow: hidden;"></div>
+                            <button type="button" class="skb-btn" style="width: 100%;" onclick="sv_stopScan()">Cancel Scan</button>
+                        </div>
+                    </div>
+                    <p class="sv-row-meta" id="sv-add-temp-note" hidden>The temporary seed loaded now (<span id="sv-add-temp-fp"></span>) will be kept in the Seed Vault under this name.</p>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.6rem;">
+                        <button type="button" class="skb-btn skb-btn--primary" id="sv-add-save" onclick="sv_saveAdd()">Keep in Seed Vault</button>
+                        <button type="button" class="skb-btn" onclick="sv_closeAdd()">Cancel</button>
+                    </div>
+                </div>
+                <p class="sv-status" id="sv-status"></p>
             </div>
 
             <!-- ===== Cold-storage print document =====================================
@@ -11984,6 +12054,7 @@ window.addEventListener('DOMContentLoaded', () => {
     var _devLastBackup = null;  // dev-mock "last backup" record (in memory)
     var _devReceiveIndex = {};  // dev-mock receive positions (in memory)
     var _devKeepSeed = (devMode !== 'seedfree');  // dev-mock Seed storage setting
+    var _devSeedVault = [];     // dev-mock Seed Vault (in memory)
     var _devTzPairing = null;   // dev-mock Trezor pairing (in memory)
     var _devTzUnlocked = false; // dev-mock Trezor: PIN already entered?
     var _devTzPinShown = false; // dev-mock Trezor: grid showing (reset by detect, like the real one)
@@ -12215,6 +12286,25 @@ window.addEventListener('DOMContentLoaded', () => {
         },
         loadLastBackup: async function () { return _devLastBackup; },
         isSeedKept: function () { return _devKeepSeed; },
+
+        // --- Seed Vault (in memory) ---
+        seedVaultAvailable: function () { return _devKeepSeed && !(typeof _isEphemeralBoot === 'function' && _isEphemeralBoot()); },
+        loadSeedVault: async function () {
+            if (!mockOS.seedVaultAvailable()) return [];
+            return _devSeedVault.map(function (e) { return Object.assign({}, e); });
+        },
+        saveSeedVault: async function (list) {
+            if (!mockOS.seedVaultAvailable()) return { saved: false, error: 'This session can’t keep seeds (dev mock).' };
+            if (!Array.isArray(list) || list.length > 20) return { saved: false, error: 'The seed list is invalid.' };
+            _devSeedVault = list.map(function (e) { return { name: e.name, mnemonic: e.mnemonic, fingerprint: String(e.fingerprint).toUpperCase(), added: e.added || '' }; });
+            await _sleep(150);
+            return { saved: true };
+        },
+        reloadMasterSeed: async function () {
+            if (!_currentSeed) return null;
+            _devSeedSessionSet({ mnemonic: _currentSeed.mnemonic, fingerprint: _currentSeed.fingerprint, wordCount: _currentSeed.wordCount });
+            return Object.assign({}, _currentSeed);
+        },
         setKeepSeed: async function (keep, mnemonic) {
             if (keep === true && !mnemonic) return { ok: false, error: 'Load your seed first.' };
             await _sleep(600);
@@ -12992,7 +13082,10 @@ function dashv2_renderWallet() {
     if (ppChip) ppChip.title = ppOn ? 'A nickname to help you recognize this seed, not part of your recovery words. It comes from the seed words alone, so it stays the same with any passphrase.' : '';
     var fpChip = document.getElementById('dashv2-fp');
     if (fpChip) fpChip.title = ppOn ? 'Fingerprint of this passphrase wallet (seed + passphrase), as your wallet app shows it' : 'Master fingerprint, as your wallet app shows it';
-    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' + (showNick ? ' \u00b7 seed nickname' : '') : (ppName ? 'Passphrase wallet' : (showNick ? 'Your wallet \u00b7 seed nickname' : 'Your wallet')));
+    var svName = (typeof sv_activeName === 'function') ? sv_activeName() : '';
+    set('dashv2-eyebrow', temp ? 'Temporary session \u00b7 RAM only' + (showNick ? ' \u00b7 seed nickname' : '') :
+        (svName ? 'Seed Vault \u00b7 ' + svName + (ppName ? ' \u00b7 passphrase wallet' : '') :
+        (ppName ? 'Passphrase wallet' : (showNick ? 'Your wallet \u00b7 seed nickname' : 'Your wallet'))));
     var dash = document.getElementById('state-dashboard');
     if (dash && ppOn) dash.classList.add('dashv2-pp-open');
     var btn = document.getElementById('dashv2-pp-btn');
@@ -15647,6 +15740,7 @@ function _globalSeedStatusUpdate() {
             dashBadge.classList.remove('dash-fingerprint-badge--passphrase');
         }
     }
+    try { if (typeof sv_syncBanner === 'function') sv_syncBanner(); } catch (_) {}
 }
 
 /**
@@ -15849,9 +15943,9 @@ function dash_clearPassphrase() {
     var dashFP = document.getElementById('dash-fingerprint');
     if (dashFP) dashFP.textContent = baseFP;
 
-    // Restore identity label → "Master Seed Active"
+    // Restore identity label → "Master Seed Active" (or the Seed Vault seed in use)
     var dashLabel = document.getElementById('dash-identity-label');
-    if (dashLabel) dashLabel.textContent = 'Master Seed Active';
+    if (dashLabel) dashLabel.textContent = (typeof sv_activeName === 'function' && sv_activeName()) ? 'Seed Vault: ' + sv_activeName() : 'Master Seed Active';
 
     // Clear passphrase-active state
     if (typeof pp_config !== 'undefined') {
@@ -16789,6 +16883,8 @@ function transitionToDashboard(seedData) {
     // the only caller, so Health stayed blank until another screen was
     // opened and closed.
     try { if (typeof dashv2_render === 'function') dashv2_render(); } catch (_) {}
+    // Seed Vault: the Seed Vault button and the banner.
+    try { if (typeof sv_refreshSwitcher === 'function') sv_refreshSwitcher(); } catch (_) {}
 }
 
 function transitionToWelcome() {
@@ -19128,6 +19224,7 @@ function showState(stateId) {
         // The "Connecting <app>" guide shows only when Connect a wallet app opened this screen.
         if (!(typeof _cn !== 'undefined' && _cn.pending)) { var cg = document.getElementById('arm-connect-guide'); if (cg) cg.hidden = true; }
         arm_init();
+        sv_render();
     } else if (stateId === 'state-designer') {
         wrec_init();
     } else if (stateId === 'state-authenticator') {
@@ -39277,6 +39374,8 @@ function arm_init() {
 
     lockedEl.style.display = 'none';
     contentEl.style.display = 'block';
+    var armTitle = document.getElementById('arm-seed-title');
+    if (armTitle) armTitle.textContent = sv_activeName() ? 'Seed Vault: ' + sv_activeName() : (_vaultVolatile ? 'Temporary Seed' : 'Master Seed');
     // Task #138: when re-entering the Seed Management tool — whether on
     // first load, after a seed switch, or after a tool-grid round-trip —
     // force the QR widget back to a clean closed state. We must reset
@@ -44938,6 +45037,7 @@ function _ccbRenderReview() {
     if (!s) return;
     var esc = _wrecEscape, h = [], imp = _ccbMode === 'import', eph = _isEphemeralBoot();
     var canStore = !eph;   // a Temporary Session keeps nothing
+    var canKeepSeeds = canStore && typeof _svAvailable === 'function' && _svAvailable();
 
     // ---- The wallet in the backup ----
     var vaultWords = s.seedVaultItems.filter(function (e) { return e.kind === 'words' && !e.problem; });
@@ -45004,13 +45104,16 @@ function _ccbRenderReview() {
     // ---- Seed Vault ----
     if (s.seedVaultItems.length) {
         h.push('<div class="ccb-box"><h4>Seed Vault (' + s.seedVaultItems.length + ')</h4>' +
-            '<p>' + (imp ? 'These seeds aren’t imported: SafeKeep keeps one seed per vault. You can view their words here, to write them down or check them.'
-                         : 'You can restore one of these instead of the main wallet (choose it above), or view its words to write them down.') + '</p>' +
+            '<p>' + (imp ? '' : 'You can restore one of these instead of the main wallet (choose it above). ') +
+                (canKeepSeeds ? 'Ticked seeds are kept in this vault’s Seed Vault (Seed Management), so you can switch to them from the Dashboard.'
+                    : (eph ? 'A Temporary Session keeps nothing, so these seeds aren’t kept.' : 'This flash drive is set not to keep seeds, so these seeds aren’t kept.')) +
+                ' You can view their words here, to write them down or check them.</p>' +
             s.seedVaultItems.map(function (e, i) {
                 var head = '<b>' + esc(e.label || 'Unnamed') + '</b><span>' + (e.kind === 'words' ? e.words + ' words · ' : '') + 'fingerprint ' + esc(e.fingerprint || '?') +
                     (e.origin ? ' · ' + esc(e.origin) : '') + '</span>';
                 if (e.problem) return '<div class="ccb-wallet"><span>' + head + '<span style="color: var(--skb-warning, #f59e0b);">' + esc(e.problem) + '</span></span></div>';
-                return '<div class="ccb-wallet"><span style="flex: 1;">' + head +
+                return '<div class="ccb-wallet">' + (canKeepSeeds && e.kind === 'words' && e.mnemonic ? '<input type="checkbox" class="ccb-sv-pick" data-i="' + i + '" checked aria-label="Keep in the Seed Vault">' : '') +
+                    '<span style="flex: 1;">' + head +
                     '<span class="ccb-vault-words" id="ccb-vault-words-' + i + '" hidden></span></span>' +
                     '<button type="button" class="skb-btn" style="padding: 0.3rem 0.7rem; font-size: 0.78rem;" onclick="ccb_toggleVaultWords(' + i + ', this)">Show words</button></div>';
             }).join('') + '</div>');
@@ -45024,7 +45127,7 @@ function _ccbRenderReview() {
     }
     // Ticks survive a redraw (choosing another wallet redraws).
     var ticks = {};
-    document.querySelectorAll('#ccb-review .ccb-ms-pick, #ccb-review .ccb-note-pick').forEach(function (c) { ticks[c.className + c.dataset.i] = c.checked; });
+    document.querySelectorAll('#ccb-review .ccb-ms-pick, #ccb-review .ccb-note-pick, #ccb-review .ccb-sv-pick').forEach(function (c) { ticks[c.className + c.dataset.i] = c.checked; });
     box.innerHTML = h.join('');
     if (prevVal !== null && prevVal !== undefined) {
         var again = document.querySelector('input[name="ccb-seed-pick"][value="' + prevVal + '"]');
@@ -45032,7 +45135,7 @@ function _ccbRenderReview() {
     }
     var rbtn = document.getElementById('ccb-restore-btn'), c2 = _ccbChosenSeed();
     if (rbtn) { rbtn.hidden = !c2; if (c2) rbtn.textContent = 'Restore This Wallet (' + c2.fingerprint + ')'; }
-    document.querySelectorAll('#ccb-review .ccb-ms-pick, #ccb-review .ccb-note-pick').forEach(function (c) { if ((c.className + c.dataset.i) in ticks) c.checked = ticks[c.className + c.dataset.i]; });
+    document.querySelectorAll('#ccb-review .ccb-ms-pick, #ccb-review .ccb-note-pick, #ccb-review .ccb-sv-pick').forEach(function (c) { if ((c.className + c.dataset.i) in ticks) c.checked = ticks[c.className + c.dataset.i]; });
     // Which multisig key belongs to the seed being restored (or to this vault's seed).
     matchFp = _ccbMatchFp();
     document.querySelectorAll('#ccb-review .ccb-ms-mine').forEach(function (el) {
@@ -45106,6 +45209,8 @@ async function ccb_restore() {
         if (btn) { btn.disabled = true; btn.textContent = 'Restoring...'; }
         var picks = _ccbPicked('ccb-ms-pick', s.multisig);
         var notes = _ccbPicked('ccb-note-pick', s.noteItems);
+        // The seed being restored becomes the master seed: don't keep it twice.
+        var svPicks = _ccbPicked('ccb-sv-pick', s.seedVaultItems).filter(function (e) { return e.mnemonic !== chosen.mnemonic; });
         // CIRCUIT BREAKER: ephemeral boot MUST NEVER call SafeKeepOS.
         var result = _isEphemeralBoot()
             ? await _ephemeralCommitSeed(chosen.mnemonic)
@@ -45120,6 +45225,7 @@ async function ccb_restore() {
         if (!_isEphemeralBoot()) {
             note += await _ccbSaveMultisig(picks);
             note += await _ccbSaveNotes(notes);
+            note += await sv_addFromColdcard(svPicks);
         }
         hideColdcardRecoveryPanel();
         showStatus('Restored the COLDCARD backup’s ' + _wrecEscape(chosen.label) + '. Fingerprint: <strong>' + (result.fingerprint || '').toUpperCase() + '</strong>.' + _wrecEscape(note), 'success');
@@ -45178,17 +45284,366 @@ async function ccb_importSelected() {
     if (!s) return;
     var picks = _ccbPicked('ccb-ms-pick', s.multisig);
     var notes = _ccbPicked('ccb-note-pick', s.noteItems);
-    if (!picks.length && !notes.length) { _ccbStatus('bad', 'Tick at least one multisig wallet or note to import.'); return; }
+    var svPicks = _ccbPicked('ccb-sv-pick', s.seedVaultItems);
+    if (!picks.length && !notes.length && !svPicks.length) { _ccbStatus('bad', 'Tick at least one multisig wallet, note or seed to import.'); return; }
     var btn = document.getElementById('ccb-import-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
     try {
-        var msg = (await _ccbSaveMultisig(picks)) + (await _ccbSaveNotes(notes));
+        var msg = (await _ccbSaveMultisig(picks)) + (await _ccbSaveNotes(notes)) + (await sv_addFromColdcard(svPicks));
         hideColdcardRecoveryPanel();
         showStatus('COLDCARD backup imported.' + _wrecEscape(msg), 'success');
     } catch (e) {
         _ccbStatus('bad', 'Import failed: ' + (e && e.message ? e.message : String(e)));
         if (btn) { btn.disabled = false; btn.textContent = 'Import Selected'; }
     }
+}
+
+
+// ---- Seed Vault (sv_*) ----
+// ======================================================================
+// Other seeds kept in the vault beside the master seed (COLDCARD calls
+// this its Seed Vault). Managed in Seed Management (#sv-card); switched to
+// from the Dashboard (the Seed Vault button). Stored by SafeKeepOS.saveSeedVault →
+// the OS Seed Vault Watcher → seeds/seed-vault.json. Off in a Temporary
+// Session and on a flash drive set not to keep the seed.
+//
+// A stored seed in use is a normal session seed labelled
+// "Seed Vault: <name>" (SeedSession), with default: false. Unlike a
+// temporary seed it doesn't lock SafeKeep down: notes, saved wallets and
+// Encrypted Backup belong to the vault, not to a seed. Any applied BIP-39
+// passphrase is cleared on every switch. Back to Master Seed reads
+// master-seed.json again (SafeKeepOS.reloadMasterSeed).
+// ======================================================================
+var SV_PREFIX = 'Seed Vault: ';
+var _svList = [];         // the stored seeds, as last loaded
+var _svBoxes = null;      // word boxes of the Add form
+var _svScanner = null;
+var _svAddTemp = false;   // the Add form keeps the temporary seed loaded now
+var _svOpen = null;       // { i, mode: 'words' | 'delete' | 'rename' } for one row
+
+function sv_activeName() {
+    var sess = window.SeedSession && window.SeedSession.get();
+    var label = sess && sess.label;
+    return (typeof label === 'string' && label.indexOf(SV_PREFIX) === 0) ? label.slice(SV_PREFIX.length) : '';
+}
+
+function _svAvailable() {
+    var os = window.SafeKeepOS;
+    return !!(os && typeof os.seedVaultAvailable === 'function' && os.seedVaultAvailable());
+}
+
+async function _svLoad() {
+    var os = window.SafeKeepOS;
+    _svList = (_svAvailable() && typeof os.loadSeedVault === 'function') ? await os.loadSeedVault() : [];
+    return _svList;
+}
+
+function _svStatus(text, cls) {
+    var el = document.getElementById('sv-status');
+    if (!el) return;
+    el.className = 'sv-status' + (cls ? ' ' + cls : '');
+    el.textContent = text || '';
+}
+
+function _svEsc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+async function _svSave(list, okMsg) {
+    var os = window.SafeKeepOS;
+    var res = await os.saveSeedVault(list);
+    if (!res || !res.saved) { _svStatus((res && res.error) || 'The Seed Vault wasn’t saved.', 'bad'); return false; }
+    _svList = list;
+    if (okMsg) _svStatus(okMsg, 'ok');
+    sv_refreshSwitcher();
+    return true;
+}
+
+/* Seed Management's Seed Vault card. */
+async function sv_render() {
+    var card = document.getElementById('sv-card');
+    if (!card) return;
+    var off = document.getElementById('sv-off');
+    var temp = typeof _isEphemeralBoot === 'function' && _isEphemeralBoot();
+    var os = window.SafeKeepOS;
+    var kept = !(os && typeof os.isSeedKept === 'function') || os.isSeedKept() !== false;
+    var avail = _svAvailable();
+    off.hidden = avail;
+    off.textContent = temp ? 'A Temporary Session has no vault, so the Seed Vault is off.'
+        : (!kept ? 'This flash drive is set not to keep seeds (Device Options → Seed storage), so the Seed Vault is off.' : '');
+    document.getElementById('sv-main-actions').hidden = !avail;
+    if (!avail) { document.getElementById('sv-list').innerHTML = ''; document.getElementById('sv-count').textContent = ''; sv_closeAdd(); return; }
+    await _svLoad();
+    document.getElementById('sv-keep-temp-btn').hidden = !(_vaultVolatile && !temp && window.SeedSession && window.SeedSession.get());
+    document.getElementById('sv-count').textContent = _svList.length + ' of 20';
+    document.getElementById('sv-add-btn').disabled = _svList.length >= 20;
+    var active = sv_activeName();
+    var rows = _svList.map(function (e, i) {
+        var open = _svOpen && _svOpen.i === i ? _svOpen.mode : '';
+        var h = '<div class="sv-row"><div class="sv-row-head"><span class="sv-row-name">' + _svEsc(e.name) + '</span>' +
+            (active === e.name ? '<span class="sv-row-inuse">IN USE</span>' : '') +
+            '<span class="sv-row-meta">' + e.mnemonic.split(' ').length + ' words · ' + _svEsc(e.fingerprint) + (e.added ? ' · added ' + _svEsc(e.added.slice(0, 10)) : '') + '</span>' +
+            '<span class="sv-row-btns">' +
+                (active === e.name ? '' : '<button type="button" class="skb-btn skb-btn--primary" onclick="sv_use(' + i + ')">Use</button>') +
+                '<button type="button" class="skb-btn" onclick="sv_openRow(' + i + ', \'rename\')">Rename</button>' +
+                '<button type="button" class="skb-btn" onclick="sv_openRow(' + i + ', \'' + (open === 'words' ? '' : 'confirm-words') + '\')">' + (open === 'words' ? 'Hide words' : 'Show words') + '</button>' +
+                '<button type="button" class="skb-btn" onclick="sv_openRow(' + i + ', \'delete\')">Delete</button>' +
+            '</span></div>';
+        if (open === 'confirm-words') {
+            h += '<div class="sv-confirm">Show the words of ' + _svEsc(e.name) + '? Make sure nobody and no camera can see the screen. <button type="button" class="skb-btn skb-btn--primary" onclick="sv_openRow(' + i + ', \'words\')">Show</button><button type="button" class="skb-btn" onclick="sv_openRow(-1)">Cancel</button></div>';
+        } else if (open === 'words') {
+            h += '<div class="sv-words">' + e.mnemonic.split(' ').map(function (w, k) { return '<span><b>' + (k + 1) + '</b>' + _svEsc(w) + '</span>'; }).join('') + '</div>';
+        } else if (open === 'delete') {
+            h += '<div class="sv-confirm">Delete ' + _svEsc(e.name) + ' from the Seed Vault? Without a written backup of its words, that wallet is lost. <button type="button" class="skb-btn" style="border-color: var(--skb-danger); color: var(--skb-danger);" onclick="sv_delete(' + i + ')">Delete</button><button type="button" class="skb-btn" onclick="sv_openRow(-1)">Cancel</button></div>';
+        } else if (open === 'rename') {
+            h += '<div class="sv-rename"><input type="text" id="sv-rename-' + i + '" maxlength="40" value="' + _svEsc(e.name) + '" aria-label="New name" onkeydown="if (event.key === \'Enter\') sv_rename(' + i + ')"><button type="button" class="skb-btn skb-btn--primary" onclick="sv_rename(' + i + ')">Save</button><button type="button" class="skb-btn" onclick="sv_openRow(-1)">Cancel</button></div>';
+        }
+        return h + '</div>';
+    });
+    document.getElementById('sv-list').innerHTML = rows.length ? rows.join('') : '<p class="sv-row-meta">No seeds in the Seed Vault yet.</p>';
+    if (_svOpen && _svOpen.mode === 'rename') { var ri = document.getElementById('sv-rename-' + _svOpen.i); if (ri) ri.focus(); }
+}
+
+function sv_openRow(i, mode) {
+    _svOpen = (i >= 0 && mode) ? { i: i, mode: mode } : null;
+    _svStatus('');
+    sv_render();
+}
+
+function _svNameOk(name, exceptIndex) {
+    if (!name) return 'Give the seed a name.';
+    if (name.length > 40) return 'Use a name of at most 40 characters.';
+    if (/[\x00-\x1f\x7f]/.test(name)) return 'The name has characters that can’t be used.';
+    for (var k = 0; k < _svList.length; k++) {
+        if (k !== exceptIndex && _svList[k].name.toLowerCase() === name.toLowerCase()) return 'A seed in the Seed Vault already has that name.';
+    }
+    return '';
+}
+
+async function sv_rename(i) {
+    var e = _svList[i]; if (!e) return;
+    var name = (document.getElementById('sv-rename-' + i).value || '').trim();
+    var bad = _svNameOk(name, i);
+    if (bad) { _svStatus(bad, 'bad'); return; }
+    var wasActive = sv_activeName() === e.name;
+    var list = _svList.map(function (x, k) { return k === i ? Object.assign({}, x, { name: name }) : x; });
+    if (await _svSave(list, 'Renamed to ' + name + '.')) {
+        if (wasActive) {   // keep the session label in step
+            var sess = window.SeedSession.get();
+            window.SeedSession.set(Object.assign({}, sess, { label: SV_PREFIX + name }));
+            var dl = document.getElementById('dash-identity-label'); if (dl && !/passphrase/i.test(dl.textContent)) dl.textContent = SV_PREFIX + name;
+            _globalSeedStatusUpdate();
+            try { dashv2_render(); } catch (_) {}
+        }
+        _svOpen = null; sv_render();
+    }
+}
+
+async function sv_delete(i) {
+    var e = _svList[i]; if (!e) return;
+    if (sv_activeName() === e.name) { _svStatus('This seed is in use. Switch back to the master seed first.', 'bad'); return; }
+    var list = _svList.filter(function (_, k) { return k !== i; });
+    if (await _svSave(list, 'Deleted ' + e.name + ' from the Seed Vault.')) { _svOpen = null; sv_render(); }
+}
+
+/* ---- Add a seed (typed, scanned, or the temporary seed loaded now) ---- */
+function sv_setLength(n) {
+    document.getElementById('sv-len-12').classList.toggle('active', n === 12);
+    document.getElementById('sv-len-24').classList.toggle('active', n === 24);
+    var SF = window.ShareFlow;
+    if (_svBoxes) { _svBoxes.destroy(); _svBoxes = null; }
+    if (SF && SF.createWordBoxes) _svBoxes = SF.createWordBoxes(document.getElementById('sv-add-grid'), { count: n, wordlist: SF.wordlists.bip39, idPrefix: 'sv-add' });
+}
+
+function sv_openAdd(fromTemp) {
+    _svAddTemp = !!fromTemp;
+    _svOpen = null;
+    _svStatus('');
+    document.getElementById('sv-add').hidden = false;
+    document.getElementById('sv-main-actions').hidden = true;
+    document.getElementById('sv-add-name').value = '';
+    document.getElementById('sv-add-words-wrap').hidden = _svAddTemp;
+    document.getElementById('sv-add-temp-note').hidden = !_svAddTemp;
+    if (_svAddTemp) {
+        var sess = window.SeedSession && window.SeedSession.get();
+        document.getElementById('sv-add-temp-fp').textContent = sess ? sess.fingerprint : '';
+    } else {
+        sv_setLength(12);
+    }
+    document.getElementById('sv-add-name').focus();
+}
+
+function sv_closeAdd() {
+    sv_stopScan();
+    if (_svBoxes) { _svBoxes.destroy(); _svBoxes = null; }
+    var add = document.getElementById('sv-add'); if (add) add.hidden = true;
+    var acts = document.getElementById('sv-main-actions'); if (acts) acts.hidden = !_svAvailable();
+    _svAddTemp = false;
+}
+
+async function sv_startScan() {
+    if (!window.SKScanner) { _svStatus('The camera scanner isn’t available.', 'bad'); return; }
+    sv_stopScan();
+    document.getElementById('sv-scan').hidden = false;
+    try {
+        _svScanner = SKScanner.create('sv-qr-reader');
+        await _svScanner.start({ fps: 10 }, function (text, binaryData) {
+            sv_stopScan();
+            var words = (typeof sqr_wordsFromScan === 'function') ? sqr_wordsFromScan(text, binaryData) : null;
+            if (!words || (words.length !== 12 && words.length !== 24)) { _svStatus('That QR code isn’t a SeedQR.', 'bad'); return; }
+            sv_setLength(words.length);
+            _svBoxes.setWords(words);
+            _svStatus('Scanned ' + words.length + ' words.', 'ok');
+        });
+    } catch (err) {
+        sv_stopScan();
+        _svStatus('Camera error: ' + (err && err.message ? err.message : err), 'bad');
+    }
+}
+
+function sv_stopScan() {
+    if (_svScanner) { try { _svScanner.stop(); } catch (_) {} _svScanner = null; }
+    var sc = document.getElementById('sv-scan'); if (sc) sc.hidden = true;
+}
+
+async function sv_saveAdd() {
+    var name = (document.getElementById('sv-add-name').value || '').trim();
+    var bad = _svNameOk(name, -1);
+    if (bad) { _svStatus(bad, 'bad'); return; }
+    var mnemonic = '';
+    if (_svAddTemp) {
+        var sess = window.SeedSession && window.SeedSession.get();
+        mnemonic = sess && sess.mnemonic ? sess.mnemonic : '';
+    } else {
+        var words = _svBoxes ? _svBoxes.getWords() : [];
+        if (!words.length || words.some(function (w) { return !w; })) { _svStatus('Fill in every word.', 'bad'); return; }
+        mnemonic = words.join(' ');
+    }
+    mnemonic = mnemonic.normalize('NFKD').toLowerCase().trim().split(/\s+/).join(' ');
+    var btc = window.BtcMath;
+    if (!mnemonic || !btc || !btc.bip39.validateMnemonic(mnemonic, btc.wordlist)) { _svStatus('Those words aren’t a valid seed: check them against your backup.', 'bad'); return; }
+    if (_svList.some(function (e) { return e.mnemonic === mnemonic; })) { _svStatus('This seed is already in the Seed Vault.', 'bad'); return; }
+    var sess2 = window.SeedSession && window.SeedSession.get();
+    if (sess2 && sess2.mnemonic === mnemonic && !sv_activeName() && !_vaultVolatile) { _svStatus('That’s your master seed: it’s already kept in this vault.', 'bad'); return; }
+    var fp = await _recoveryFingerprint(mnemonic);
+    var btn = document.getElementById('sv-add-save');
+    btn.disabled = true;
+    var list = _svList.concat([{ name: name, mnemonic: mnemonic, fingerprint: fp, added: new Date().toISOString().slice(0, 10) }]);
+    var ok = await _svSave(list, name + ' (' + fp + ') is now in the Seed Vault. Switch to it from the Dashboard.');
+    btn.disabled = false;
+    if (ok) { sv_closeAdd(); sv_render(); }
+}
+
+/* ---- Switching (Dashboard → Seed Vault button) ---- */
+async function sv_refreshSwitcher() {
+    var btn = document.getElementById('dashv2-switch-btn');
+    if (!btn) return;
+    if (!_svAvailable()) { btn.hidden = true; sv_closeSwitcher(); sv_syncBanner(); return; }
+    await _svLoad();
+    btn.hidden = !_svList.length && !sv_activeName();
+    if (btn.hidden) sv_closeSwitcher();
+    sv_syncBanner();
+}
+
+function sv_toggleSwitcher() {
+    var menu = document.getElementById('dashv2-switcher');
+    if (!menu.hidden) { sv_closeSwitcher(); return; }
+    var active = sv_activeName();
+    var isMaster = !active && !_vaultVolatile;
+    var items = ['<button type="button" role="menuitem"' + (isMaster ? ' aria-current="true"' : '') + ' onclick="sv_backToMaster()"><span>Master Seed</span><span class="sv-sw-fp">' + (isMaster ? 'in use' : '') + '</span></button>'];
+    _svList.forEach(function (e, i) {
+        items.push('<button type="button" role="menuitem"' + (active === e.name ? ' aria-current="true"' : '') + ' onclick="sv_use(' + i + ')"><span>' + _svEsc(e.name) + '</span><span class="sv-sw-fp">' + _svEsc(e.fingerprint) + '</span></button>');
+    });
+    menu.innerHTML = items.join('');
+    menu.hidden = false;
+    document.getElementById('dashv2-switch-btn').setAttribute('aria-expanded', 'true');
+}
+
+function sv_closeSwitcher() {
+    var menu = document.getElementById('dashv2-switcher');
+    if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+    var btn = document.getElementById('dashv2-switch-btn'); if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+/* Show the banner while a stored seed is in use. */
+function sv_syncBanner() {
+    var banner = document.getElementById('sv-banner');
+    if (!banner) return;
+    var name = sv_activeName();
+    banner.hidden = !name;
+    banner.style.display = name ? 'flex' : 'none';
+    if (name) {
+        var sess = window.SeedSession.get();
+        document.getElementById('sv-banner-name').textContent = name;
+        document.getElementById('sv-banner-fp').textContent = sess && sess.fingerprint ? sess.fingerprint : '';
+    }
+}
+
+/* Make seed, a session seed object, active and show the Dashboard. */
+function _svActivate(seed, label) {
+    if (typeof dash_clearPassphrase === 'function') { try { dash_clearPassphrase(); } catch (_) {} }
+    var words = seed.mnemonic.trim().split(/\s+/);
+    window.SeedSession.set({ type: 'seed', mnemonic: seed.mnemonic, fingerprint: seed.fingerprint, label: label,
+                             keyFormat: 'slip132', addressType: '84', wordCount: words.length, default: label === 'Master Seed' });
+    if (typeof pp_config !== 'undefined') pp_config._baseFingerprint = seed.fingerprint;
+    if (_vaultVolatile) { _vaultVolatile = false; }   // a stored seed or the master: the vault is in use again
+    sv_closeSwitcher();
+    showState('state-dashboard');
+    transitionToDashboard({ mnemonic: seed.mnemonic, fingerprint: seed.fingerprint, wordCount: words.length, diskVerified: true });
+    document.getElementById('dash-identity-label').textContent = label === 'Master Seed' ? 'Master Seed Active' : label;
+    _globalSeedStatusUpdate();
+    try { _updateVolatileFirewall(); } catch (_) {}
+    try { dashv2_render(); } catch (_) {}
+}
+
+async function sv_use(i) {
+    var e = _svList[i];
+    if (!e) return;
+    _svActivate({ mnemonic: e.mnemonic, fingerprint: e.fingerprint }, SV_PREFIX + e.name);
+    showStatus('Now using ' + _svEsc(e.name) + ' (' + _svEsc(e.fingerprint) + ') from the Seed Vault.', 'success');
+}
+
+async function sv_backToMaster() {
+    sv_closeSwitcher();
+    if (!sv_activeName() && !_vaultVolatile) return;   // already on the master seed
+    var os = window.SafeKeepOS;
+    var master = (os && typeof os.reloadMasterSeed === 'function') ? await os.reloadMasterSeed() : null;
+    if (!master || !master.mnemonic) {
+        showStatus('The master seed couldn’t be read back. Lock and unlock the vault to return to it.', 'error');
+        return;
+    }
+    _svActivate({ mnemonic: master.mnemonic, fingerprint: master.fingerprint }, 'Master Seed');
+    showStatus('Back to the master seed (' + _svEsc(master.fingerprint) + ').', 'success');
+}
+
+/* COLDCARD backup: add the ticked Seed Vault entries to SafeKeep's Seed
+   Vault. A name already used gets " (COLDCARD)"; seeds already kept are
+   skipped. Returns a sentence for the result message. */
+async function sv_addFromColdcard(entries) {
+    if (!entries.length || !_svAvailable()) return '';
+    await _svLoad();
+    var list = _svList.slice(), added = 0, skipped = 0, full = 0;
+    var sess = window.SeedSession && window.SeedSession.get();
+    var master = sess && sess.default && !sv_activeName() && !_vaultVolatile ? sess.mnemonic : '';
+    for (var k = 0; k < entries.length; k++) {
+        var e = entries[k];
+        var mn = String(e.mnemonic || '').normalize('NFKD').toLowerCase().trim().split(/\s+/).join(' ');
+        if (!mn || list.some(function (x) { return x.mnemonic === mn; }) || mn === master) { skipped++; continue; }
+        if (list.length >= 20) { full++; continue; }
+        var base = String(e.label || '').replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 40) || 'COLDCARD seed';
+        var name = base, n = 2;
+        var taken = function (nm) { return list.some(function (x) { return x.name.toLowerCase() === nm.toLowerCase(); }); };
+        if (taken(name)) name = (base.slice(0, 29) + ' (COLDCARD)');
+        while (taken(name)) name = base.slice(0, 33) + ' (' + (n++) + ')';
+        list.push({ name: name, mnemonic: mn, fingerprint: String(e.fingerprint || await _recoveryFingerprint(mn)).toUpperCase(), added: new Date().toISOString().slice(0, 10) });
+        added++;
+    }
+    var tail = (skipped ? ' ' + skipped + ' seed' + (skipped === 1 ? ' was' : 's were') + ' already kept.' : '') +
+               (full ? ' ' + full + ' seed' + (full === 1 ? '' : 's') + ' not kept: the Seed Vault holds at most 20.' : '');
+    if (!added) return tail;
+    var res = await window.SafeKeepOS.saveSeedVault(list);
+    if (!res || !res.saved) return ' The Seed Vault entries weren’t kept: ' + ((res && res.error) || 'the save failed') + '.';
+    _svList = list;
+    sv_refreshSwitcher();
+    return ' ' + added + ' seed' + (added === 1 ? '' : 's') + ' added to the Seed Vault.' + tail;
 }
 
 
