@@ -7,6 +7,7 @@
 
 ## Wording
 - In anything users read (the app, OS dialogs, release notes, the website), call the USB device a "USB flash drive" or "flash drive", never a "stick".
+- Write American English, in spelling and vocabulary: "Mom", not "Mum"; "check a box", not "tick"; "color", "center", "gray", "recognize".
 
 ## Releases
 - Merge features and small changes to `main` without bumping `seed-xor-tool/VERSION`. Builds from `main` are for the owner's own use only.

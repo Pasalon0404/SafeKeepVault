@@ -270,7 +270,7 @@ console.log('\n7. Draw Your Own Words');
     const fewFlips = await draw(w11, 'HTH');
     ck('3 of 7 flips: button stays off', fewFlips.btn === true && /4 more coin flips needed/.test(fewFlips.hint), fewFlips.hint);
     const noTick = await draw(w11, 'HTHHTTH', { tick: false });
-    ck('without the confirmation: button stays off', noTick.btn === true && /Tick the box/.test(noTick.hint), noTick.hint);
+    ck('without the confirmation: button stays off', noTick.btn === true && /Check the box/.test(noTick.hint), noTick.hint);
     const pattern = await draw(['abandon', 'ability', 'able', 'about', ...w11.slice(4)], 'HTHHTTH');
     ck('four neighbouring words are refused, even when confirmed', pattern.btn === true && pattern.gateShown && /pattern/.test(pattern.gateText), pattern.gateText);
     const zeros = await draw(w11, 'TTTTTTT');

@@ -32,8 +32,8 @@ console.log('\n1. The bridge');
 // Run _cleanSeedVault for real.
 const clean = new Function('SEED_VAULT_MAX', 'SEED_VAULT_WORD_COUNTS', bfn('function _cleanSeedVault') + '\nreturn _cleanSeedVault;')(20, [12, 15, 18, 21, 24]);
 const e = (name, mnemonic, fingerprint, added) => ({ name, mnemonic, fingerprint, added });
-const ok = clean([e(' Mum ', '  LEGAL winner thank year wave sausage worth useful legal winner thank yellow ', 'b8688df1', '2026-11-08'), e('Old', B, '73C5DA0A')]);
-ck('a good list: names trimmed, words lower-cased and single-spaced, fingerprints upper-cased', ok && ok[0].name === 'Mum' && ok[0].mnemonic === A && ok[0].fingerprint === 'B8688DF1' && ok[1].added === '', JSON.stringify(ok));
+const ok = clean([e(' Mom ', '  LEGAL winner thank year wave sausage worth useful legal winner thank yellow ', 'b8688df1', '2026-11-08'), e('Old', B, '73C5DA0A')]);
+ck('a good list: names trimmed, words lower-cased and single-spaced, fingerprints upper-cased', ok && ok[0].name === 'Mom' && ok[0].mnemonic === A && ok[0].fingerprint === 'B8688DF1' && ok[1].added === '', JSON.stringify(ok));
 ck('an empty list is allowed (it removes the file)', Array.isArray(clean([])) && clean([]).length === 0);
 const words20 = 'able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress'.split(' ');
 ck('20 seeds: allowed', clean(words20.slice(0, 20).map((w, i) => e('S' + i, Array(12).fill(w).join(' '), '00000000'))) !== null);
@@ -45,7 +45,7 @@ for (const [why, list] of [
     ['11 words', [e('a', A.split(' ').slice(0, 11).join(' '), '00000000')]],
     ['a word with a digit', [e('a', A.replace('legal', 'leg4l'), '00000000')]],
     ['a bad fingerprint', [e('a', A, 'XYZ')]],
-    ['one name twice (any case)', [e('Mum', A, '00000000'), e('MUM', B, '00000000')]],
+    ['one name twice (any case)', [e('Mom', A, '00000000'), e('MOM', B, '00000000')]],
     ['the same words twice', [e('a', A, '00000000'), e('b', A, '00000000')]],
     ['not a list', 'nope'],
 ]) ck(`${why}: refused`, clean(list) === null);
@@ -113,6 +113,8 @@ for (const id of ['sv-banner', 'sv-banner-name', 'sv-banner-fp', 'dashv2-switch-
     if (n !== 1) ck(`#${id} exists once`, false, n);
 }
 ck('every element the code uses exists once', true);
+const visible = html.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->/g, '');
+ck('American English in the app: "Mom\'s wallet", "check" boxes (no "Mum", no "tick")', html.includes('placeholder="e.g. Mom&rsquo;s wallet"') && !/\bMum\b/.test(visible) && !/['>"][^'"<>\n]*\b[Tt]ick(ed)?\b/.test(visible));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

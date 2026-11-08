@@ -67,11 +67,11 @@ w = subprocess.Popen(['bash', script], stdout=subprocess.DEVNULL, stderr=subproc
 try:
     time.sleep(0.5)
     print('\n1. A good list is stored')
-    gone = send([entry('  Mum  ', A, 'b8688df1'), entry('Old wallet', B, '73C5DA0A', '')])
+    gone = send([entry('  Mom  ', A, 'b8688df1'), entry('Old wallet', B, '73C5DA0A', '')])
     s = load()
     ck('the request is removed', gone)
     ck('seeds/seed-vault.json holds both seeds', s is not None and [e['mnemonic'] for e in s] == [A, B], s)
-    ck('…names trimmed, fingerprints upper-cased', s and s[0]['name'] == 'Mum' and s[0]['fingerprint'] == 'B8688DF1', s)
+    ck('…names trimmed, fingerprints upper-cased', s and s[0]['name'] == 'Mom' and s[0]['fingerprint'] == 'B8688DF1', s)
     ck('…mode 600', os.path.exists(stored) and stat.S_IMODE(os.stat(stored).st_mode) == 0o600)
     ck('…no tmp file left', not os.path.exists(stored + '.tmp'))
     good = load()
@@ -92,7 +92,7 @@ try:
         'a word with a digit': [entry('a', A.replace('legal', 'leg4l', 1), '00000000')],
         'a short fingerprint': [entry('a', A, 'ABC')],
         'a fingerprint that isn\'t hex': [entry('a', A, 'ZZZZZZZZ')],
-        'two seeds with one name (any case)': [entry('Mum', A, '00000000'), entry('mum', B, '00000000')],
+        'two seeds with one name (any case)': [entry('Mom', A, '00000000'), entry('mom', B, '00000000')],
         'the same words twice': [entry('a', A, '00000000'), entry('b', A, '00000000')],
         'an entry that isn\'t an object': ['nope'],
     }
@@ -114,7 +114,7 @@ try:
 
     print('\n4. A flash drive set not to keep the seed')
     open(os.path.join(vault, 'settings', 'seed-storage.json'), 'w').write('{"keepSeed": false}')
-    gone = send([entry('Mum', A, 'B8688DF1')])
+    gone = send([entry('Mom', A, 'B8688DF1')])
     ck('the list is refused and the request removed', gone and not os.path.exists(stored))
     os.remove(os.path.join(vault, 'settings', 'seed-storage.json'))
 finally:

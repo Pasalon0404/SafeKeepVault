@@ -10625,7 +10625,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 </div>
                 <div id="sv-add" hidden style="margin-top: 0.85rem; border-top: 1px solid var(--skb-border); padding-top: 0.85rem;">
                     <label for="sv-add-name" style="display: block; font-size: 0.85rem; margin-bottom: 0.35rem;">Name</label>
-                    <div style="display: flex;"><input type="text" id="sv-add-name" maxlength="40" autocomplete="off" spellcheck="false" placeholder="e.g. Mum&rsquo;s wallet"></div>
+                    <div style="display: flex;"><input type="text" id="sv-add-name" maxlength="40" autocomplete="off" spellcheck="false" placeholder="e.g. Mom&rsquo;s wallet"></div>
                     <div id="sv-add-words-wrap">
                         <div style="display: flex; gap: 0; margin: 0.75rem 0; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;">
                             <button type="button" id="sv-len-12" class="tool-tab-btn active" style="flex: 1;" onclick="sv_setLength(12)">12 Words</button>
@@ -23578,7 +23578,7 @@ function psbtCompareAddress(idx) {
     const c = _psbtCompareAddresses(expected, n.address);
     if (c.same) {
         res.className = 'psbt-compare__result is-ok';
-        res.innerHTML = '&#10004; <strong>Identical:</strong> every character matches this destination. Check the amount too, then tick the box below.';
+        res.innerHTML = '&#10004; <strong>Identical:</strong> every character matches this destination. Check the amount too, then check the box below.';
     } else {
         res.className = 'psbt-compare__result is-bad';
         res.innerHTML = '&#10008; <strong>Different address. Don&rsquo;t sign.</strong> The transaction would pay a different address from the one you were given. The differences are highlighted:' +
@@ -23713,7 +23713,7 @@ function _psbtUpdateSignGate() {
         signBtn.style.cursor = 'not-allowed';
         banner.style.display = 'block';
         banner.innerHTML = 'SIGNING BLOCKED &mdash; change address hijack detected. ' +
-            'Tick <strong>Force Sign by Pubkey Match</strong> above to override at your own risk ' +
+            'Check <strong>Force Sign by Pubkey Match</strong> above to override at your own risk ' +
             '(use only if you have manually verified every destination on your coordinator).';
     } else if (hijack && forceSign) {
         // Force-sign override of a hijack: do NOT silently allow.
@@ -23786,7 +23786,7 @@ function _psbtUpdateSignGate() {
         banner.style.display = 'block';
         var remaining = Math.max(0, _psbtVerifyState.total - _psbtVerifyState.verified);
         banner.innerHTML = '&#128274; ' + _psbtVerifyState.verified + ' of ' + _psbtVerifyState.total +
-            ' destinations verified &mdash; tick every box to unlock signing' +
+            ' destinations verified &mdash; check every box to unlock signing' +
             (remaining > 0 ? ' (' + remaining + ' remaining)' : '');
     } else {
         signBtn.disabled = false;
@@ -43475,7 +43475,7 @@ function _eobUpdateWordsMeter() {
     } else if (st.flips < st.flipsNeeded) {
         hint.textContent = (st.flipsNeeded - st.flips) + ' more coin ' + (st.flipsNeeded - st.flips === 1 ? 'flip' : 'flips') + ' needed.';
     } else {
-        hint.textContent = 'Tick the box to confirm you drew the words and flipped a real coin.';
+        hint.textContent = 'Check the box to confirm you drew the words and flipped a real coin.';
     }
 }
 
@@ -45043,7 +45043,7 @@ function _ccbRenderReview() {
     var vaultWords = s.seedVaultItems.filter(function (e) { return e.kind === 'words' && !e.problem; });
     var opts = [], prevVal = null;
     if (imp) {
-        h.push('<div class="ccb-box"><h4>Your seed stays as it is</h4><p>Importing adds the multisig wallets and Secure Notes you tick below to this vault. ' +
+        h.push('<div class="ccb-box"><h4>Your seed stays as it is</h4><p>Importing adds the multisig wallets and Secure Notes you check below to this vault. ' +
             (s.fingerprint ? 'The backup&rsquo;s own wallet (' + esc(s.fingerprint) + ') isn&rsquo;t imported.' : 'The backup&rsquo;s own wallet isn&rsquo;t imported.') + '</p>' +
             s.problems.map(function (p) { return '<p style="color: var(--skb-warning, #f59e0b);">' + esc(p) + '</p>'; }).join('') + '</div>');
     } else if (s.problems.length) {
@@ -45079,7 +45079,7 @@ function _ccbRenderReview() {
     var matchFp = null;
     if (s.multisig.length || s.multisigErrors.length) {
         h.push('<div class="ccb-box" id="ccb-ms-box"><h4>Multisig wallets (' + s.multisig.length + ')</h4>' +
-            (canStore ? '<p>Ticked wallets are saved in Output Descriptor, so the PSBT Signer checks transactions against them.</p>'
+            (canStore ? '<p>Wallets you check are saved in Output Descriptor, so the PSBT Signer checks transactions against them.</p>'
                       : '<p>A Temporary Session keeps nothing, so these aren’t saved.</p>') +
             s.multisig.map(function (w, i) {
                 return '<label class="ccb-wallet">' + (canStore ? '<input type="checkbox" class="ccb-ms-pick" data-i="' + i + '" checked>' : '') +
@@ -45092,7 +45092,7 @@ function _ccbRenderReview() {
     // ---- Secure Notes & Passwords ----
     if (s.noteItems.length) {
         h.push('<div class="ccb-box"><h4>Secure Notes &amp; Passwords (' + s.noteItems.length + ')</h4>' +
-            (canStore ? '<p>Ticked ones are saved as notes in this vault (Notes). A password becomes a note holding its username, password and website.</p>'
+            (canStore ? '<p>Ones you check are saved as notes in this vault (Notes). A password becomes a note holding its username, password and website.</p>'
                       : '<p>A Temporary Session keeps nothing, so these aren’t saved.</p>') +
             s.noteItems.map(function (n, i) {
                 return '<label class="ccb-wallet">' + (canStore ? '<input type="checkbox" class="ccb-note-pick" data-i="' + i + '" checked>' : '') +
@@ -45105,7 +45105,7 @@ function _ccbRenderReview() {
     if (s.seedVaultItems.length) {
         h.push('<div class="ccb-box"><h4>Seed Vault (' + s.seedVaultItems.length + ')</h4>' +
             '<p>' + (imp ? '' : 'You can restore one of these instead of the main wallet (choose it above). ') +
-                (canKeepSeeds ? 'Ticked seeds are kept in this vault’s Seed Vault (Seed Management), so you can switch to them from the Dashboard.'
+                (canKeepSeeds ? 'Seeds you check are kept in this vault’s Seed Vault (Seed Management), so you can switch to them from the Dashboard.'
                     : (eph ? 'A Temporary Session keeps nothing, so these seeds aren’t kept.' : 'This flash drive is set not to keep seeds, so these seeds aren’t kept.')) +
                 ' You can view their words here, to write them down or check them.</p>' +
             s.seedVaultItems.map(function (e, i) {
@@ -45285,7 +45285,7 @@ async function ccb_importSelected() {
     var picks = _ccbPicked('ccb-ms-pick', s.multisig);
     var notes = _ccbPicked('ccb-note-pick', s.noteItems);
     var svPicks = _ccbPicked('ccb-sv-pick', s.seedVaultItems);
-    if (!picks.length && !notes.length && !svPicks.length) { _ccbStatus('bad', 'Tick at least one multisig wallet, note or seed to import.'); return; }
+    if (!picks.length && !notes.length && !svPicks.length) { _ccbStatus('bad', 'Check at least one multisig wallet, note or seed to import.'); return; }
     var btn = document.getElementById('ccb-import-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
     try {
