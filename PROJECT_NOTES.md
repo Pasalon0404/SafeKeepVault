@@ -62,6 +62,18 @@
   a real Mk4. Code `ccsd_*`; test `test-coldcard-seed.mjs`.
 - **Device Options order**: every Coldcard feature together (pair,
   passphrase, seed, Import from a COLDCARD backup), then Trezor.
+- **Connect a wallet app audit** (checked against each app's import code):
+  Sparrow multisig now gets *Hardware Wallet JSON* (`formatMulti`), scanned
+  with Airgapped Hardware Wallet → Passport. Sparrow's multisig keystore
+  import (Passport/Keystone Multisig → `ColdcardMultisig` →
+  `ColdcardSinglesig`) reads the text as a COLDCARD export and finds the
+  `bip48_N` section; the crypto-account of a lone cosigner key, `wsh(key)`,
+  failed for Dave. Sparrow single-sig keeps `ur:crypto-account` (matched
+  by script type in `FileImportPane.getScannedKeystore`). Nunchuk:
+  COLDCARD JSON as animated ur:bytes (libnunchuk `passport.hpp` reads
+  bip84 / bip48_2 and more). Blue Wallet: single-sig descriptor. Specter:
+  `[fp/path]xpub`. Electrum: SLIP-132 key (Zpub for multisig) via the
+  Courier; the signer reconciles Electrum's dummy fingerprints.
 
 ## Current state (Nov 7, 2026) — v1.64
 

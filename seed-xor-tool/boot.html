@@ -13352,15 +13352,23 @@ document.addEventListener('DOMContentLoaded', function () {
    known to read (each one tested with the app), shows the QR code (playing
    it animated where the app needs ur:bytes), and the app's steps with the
    fingerprint and path the app should show. The export itself is Seed
-   Management's own code. */
+   Management's own code. An app can read one format for single-sig and
+   another for multisig (formatMulti): checked against each app's import
+   code (Sparrow QRScanDialog / FileImportPane / ColdcardMultisig,
+   Nunchuk libnunchuk passport.hpp, BlueWallet watch-only import). */
 var _CN_TYPE_NAMES = { '84': 'Native SegWit', '86': 'Taproot', '49': 'Nested SegWit', '44': 'Legacy' };
 var _CN_APPS = {
-    sparrow: { name: 'Sparrow', format: 'bcur', animate: false, multi: true, types: ['84', '86', '49', '44'],
+    // Single-sig: ur:crypto-account (Sparrow picks the account by script
+    // type). Multisig: Hardware Wallet JSON. Sparrow's multisig keystore
+    // import (Passport / Keystone Multisig → ColdcardMultisig) reads the
+    // scanned text as a COLDCARD export and finds its bip48_N section; the
+    // crypto-account form of a lone cosigner key, wsh(key), isn't taken.
+    sparrow: { name: 'Sparrow', format: 'bcur', formatMulti: 'coldcard_json', animate: false, multi: true, types: ['84', '86', '49', '44'],
         steps: function (t, multi) {
             return multi ? [
                 'In Sparrow: <b>File → New Wallet</b>, give it a name.',
                 '<b>Policy Type: Multi Signature</b>, set the number of cosigners, <b>Script Type: ' + _CN_TYPE_NAMES[t] + '</b>.',
-                'On SafeKeep’s keystore tab choose <b>Airgapped Hardware Wallet</b>, pick a device with a <b>Scan…</b> button (Passport or Keystone), click <b>Scan…</b> and scan the QR code.',
+                'On SafeKeep’s keystore tab choose <b>Airgapped Hardware Wallet</b>, then <b>Passport</b>, click <b>Scan…</b> and scan the QR code (Hardware Wallet JSON).',
                 'Add the other cosigners the same way, then <b>Apply</b>.'
             ] : [
                 'In Sparrow: <b>File → New Wallet</b>, give it a name.',
@@ -13419,6 +13427,8 @@ var _CN_APPS = {
         } }
 };
 var _cn = { app: null, pending: false };
+/* The Key Format an app reads, for single-sig or multisig. */
+function _cnFormat(a, multi) { return (multi && a.formatMulti) ? a.formatMulti : a.format; }
 function connect_open() {
     showState('state-connect');
 }
@@ -13469,15 +13479,16 @@ async function connect_go() {
         : '';
     g.hidden = false;
     if (!a.format) { if (typeof skui_revealPanel === 'function') skui_revealPanel(g); return; }
+    var fmt = _cnFormat(a, multi);
     document.getElementById('arm-derivation').value = t;
     document.getElementById('arm-wallet-type').value = multi ? 'multi' : 'single';
-    document.getElementById('arm-key-format').value = a.format;
+    document.getElementById('arm-key-format').value = fmt;
     var keyBox = document.getElementById('arm-xpub');
     if (keyBox) keyBox.textContent = '';   // so the wait below sees the freshly worked-out key
     arm_onConfigChange();
     // Seed Management works the key out after a short delay (and hides its QR
     // while it does): wait until the key box holds this app's format.
-    var want = { key_origin: /^\[[0-9a-f]{8}\//i, bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/, slip132: /^[xyzXYZ]pub/ }[a.format];
+    var want = { key_origin: /^\[[0-9a-f]{8}\//i, bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(|^\[[0-9a-f]{8}\//i, slip132: /^[xyzXYZ]pub/ }[fmt];
     for (var i = 0; i < 60; i++) {
         await new Promise(function (r) { setTimeout(r, 150); });
         var txt = (document.getElementById('arm-xpub') || {}).textContent || '';
