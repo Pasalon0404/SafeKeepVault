@@ -1,6 +1,7 @@
 /**
  * test-bbqr.mjs — BBQr (Coinkite's QR format, which Sparrow and COLDCARD
- * show) in the Output Descriptor tool and the PSBT Signer
+ * show) in the Output Descriptor tool and the PSBT Signer, and UR text
+ * (UR:CRYPTO-OUTPUT/…, UR:BYTES/…) pasted or relayed into Output Descriptor
  *
  * Sparrow showed a 2-of-3 wallet as BBQr ("B$ZU0100…"), and Output
  * Descriptor said it didn't recognize it. This runs SafeKeep's BBQr
@@ -18,6 +19,8 @@
  */
 import { readFileSync } from 'node:fs';
 import { deflateRawSync } from 'node:zlib';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 let pass = 0, fail = 0;
 const ck = (name, cond, extra) => { (cond ? pass++ : fail++); console.log(`  [${cond ? 'PASS' : 'FAIL'}] ${name}${(extra && !cond) ? '  → ' + extra : ''}`); };
@@ -64,8 +67,8 @@ ck('text that isn\'t BBQr is refused', await reject('wsh(sortedmulti(2,...))', /
 ck('damaged hex is refused', await reject('B$HU0100XYZ', /damaged/));
 
 console.log('\n2. Output Descriptor');
-ck('pasted or relayed BBQr is decoded before the usual reading', html.includes("var conv = _descImportConvert(await _descImportUnwrapBbqr(document.getElementById('desc-verify-input').value));"));
-const unwrap = fn('async function _descImportUnwrapBbqr');
+ck('pasted or relayed BBQr is decoded before the usual reading', html.includes("var conv = _descImportConvert(await _descImportUnwrap(document.getElementById('desc-verify-input').value));"));
+const unwrap = fn('async function _descImportUnwrap');
 ck('…anything else passes through unchanged', unwrap.includes("if (!/^B\\$[H2Z][A-Z][0-9A-Z]{4}/.test(t)) return raw;"));
 ck('…a BBQr PSBT is sent to the PSBT Signer instead', unwrap.includes("P: 'a transaction to sign (PSBT): open it in the PSBT Signer'"));
 const cam = fn('function _descvOnQrScanned');
@@ -76,6 +79,28 @@ console.log('\n3. PSBT Signer');
 const ps = fn('async function _psbtHandleBbqrFrame');
 ck('part count and number are base 36', ps.includes('parseInt(text.substring(4, 6), 36)') && ps.includes('parseInt(text.substring(6, 8), 36)') && !ps.includes('parseInt(text.substring(4, 6), 16)'));
 ck('…which matters from part 16 on ("0G" is 16, not 0)', parseInt('0G', 36) === 16 && parseInt('0G', 16) === 0);
+
+console.log('\n4. UR text pasted or relayed (the Courier) into Output Descriptor');
+const { UR, UREncoder, URDecoder } = require('@ngraveio/bc-ur');
+const CBOR = require('cbor-sync');
+globalThis.window = { URDecoder, CBOR };
+globalThis.Buffer = Buffer;
+let seenOutput = null;
+const fromUr = new Function('descv_decodeCryptoOutput', fn('function _descImportFromUrText') + '\nreturn _descImportFromUrText;')((c) => { seenOutput = c; return 'wsh(DECODED)'; });
+const bytesUr = (txt) => UR.fromBuffer(Buffer.from(txt));   // fromBuffer adds the CBOR byte-string wrapper
+const setup = '# Sparrow multisig setup\nPolicy: 2 of 3\nFormat: P2WSH\n' + 'x'.repeat(600);
+ck('UR:BYTES, one part: the text inside', fromUr(new UREncoder(bytesUr(setup), 5000).nextPart().toUpperCase()) === setup);
+const enc = new UREncoder(bytesUr(setup), 60), parts = [];
+for (let i = 0; i < enc.fragmentsLength + 3; i++) parts.push(enc.nextPart());
+ck('UR:BYTES, animated, every part pasted: the text inside', fromUr(parts.join('\n')) === setup);
+const urRej = (t, re) => { try { fromUr(t); return false; } catch (e) { return re.test(e.message); } };
+ck('only part of an animated UR: says how much arrived and what to do', urRej(parts[0], /only part of it arrived \(\d+%\)\. Scan it with Scan QR \/ UR \/ Courier/));
+const outUr = new UR(Buffer.from('d90191d90197a201020280', 'hex'), 'crypto-output');
+ck('UR:CRYPTO-OUTPUT goes to the same decoder the camera uses', fromUr(new UREncoder(outUr, 5000).nextPart().toUpperCase()) === 'wsh(DECODED)' && Buffer.from(seenOutput).toString('hex') === 'd90191d90197a201020280');
+const psbtUr = new UR(CBOR.encode(Buffer.from('70736274ff', 'hex')), 'crypto-psbt');
+ck('UR:CRYPTO-PSBT is pointed to the PSBT Signer', urRej(new UREncoder(psbtUr, 5000).nextPart(), /PSBT Signer/));
+ck('damaged UR text is refused', urRej('ur:crypto-output/notbytewords', /damaged|didn’t check out|only part/));
+ck('the import unwraps UR text as well as BBQr', fn('async function _descImportUnwrap').includes('if (/^ur:/i.test(t)) return _descImportFromUrText(t);'));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

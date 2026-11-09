@@ -80,7 +80,13 @@
   runs first on pasted or Courier-relayed text (`_descImportUnwrapBbqr`),
   and the tool's camera collects animated BBQr parts. The PSBT Signer read
   BBQr part numbers as hex, which broke codes of 16+ parts; now base 36.
-  Test `test-bbqr.mjs`.
+- **UR text in Output Descriptor**: Sparrow's 2-of-3 relayed through the
+  Courier arrived as text `UR:CRYPTO-OUTPUT/…` (811 characters). Only the
+  camera decoded UR; text went straight to the descriptor reader. Now
+  `_descImportUnwrap` sends `UR:` text (one or more parts, any case) to
+  `_descImportFromUrText`, which uses the camera's decoder
+  (`descv_decodeCryptoOutput`) for crypto-output / crypto-account and
+  reads ur:bytes as text. Test `test-bbqr.mjs` (section 4).
 
 ## Current state (Nov 7, 2026) — v1.64
 

@@ -33815,17 +33815,44 @@ function _descImportJsonKey(text) {
 }
 
 /* Main entry: raw Verify input → { ok, error, converted, descriptor, label, notes, expectFirstAddress }. */
-/* A wallet export shown as BBQr (Sparrow can show its descriptor or
-   multisig setup that way): decode it to the text inside, then read that
-   as usual. Anything else passes through unchanged. */
-async function _descImportUnwrapBbqr(raw) {
+/* A wallet export pasted or relayed (The Courier) as QR text: BBQr
+   ("B$…", which Sparrow and COLDCARD can show) or UR ("UR:CRYPTO-OUTPUT/…",
+   "UR:BYTES/…", one or more parts). Decode it to a descriptor or the text
+   inside, then read that as usual. The camera scanner does the same with
+   frames it sees. Anything else passes through unchanged. */
+async function _descImportUnwrap(raw) {
     var t = String(raw || '').trim();
+    if (/^ur:/i.test(t)) return _descImportFromUrText(t);
     if (!/^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(t)) return raw;
     var r = await _bbqrDecode(t);
     if (r.type !== 'U' && r.type !== 'J') {
         throw new Error('This BBQr code holds ' + ({ P: 'a transaction to sign (PSBT): open it in the PSBT Signer', T: 'a signed transaction', B: 'a binary file' }[r.type] || 'something other than text') + ', not a wallet.');
     }
     return new TextDecoder('utf-8', { fatal: false }).decode(r.bytes);
+}
+
+/* UR text (one frame, or several separated by spaces or new lines) →
+   a descriptor (crypto-output / crypto-account) or text (bytes). */
+function _descImportFromUrText(t) {
+    var frames = t.split(/\s+/).filter(Boolean);
+    if (!window.URDecoder) throw new Error('The UR decoder isn’t available.');
+    var dec = new (window.URDecoder)();
+    frames.forEach(function (f) {
+        try { dec.receivePart(f.toLowerCase()); } catch (e) { throw new Error('This UR code is damaged (' + (e && e.message ? e.message : e) + ').'); }
+    });
+    if (!dec.isComplete()) {
+        throw new Error('This UR code is animated and only part of it arrived (' + Math.round(dec.getProgress() * 100) + '%). Scan it with Scan QR / UR / Courier, or show it as a single QR code.');
+    }
+    if (!dec.isSuccess()) throw new Error('This UR code didn’t check out (checksum error). Scan it again.');
+    var ur = dec.resultUR(), type = String(ur.type || '').toLowerCase();
+    if (type === 'crypto-output' || type === 'crypto-account') return descv_decodeCryptoOutput(ur.cbor);
+    if (type === 'bytes') {
+        var raw = window.CBOR.decode(Buffer.from(ur.cbor));
+        var bytes = (raw instanceof Uint8Array || Buffer.isBuffer(raw)) ? raw : ur.cbor;
+        return new TextDecoder('utf-8').decode(new Uint8Array(bytes)).replace(/^\uFEFF/, '').trim();
+    }
+    if (type === 'crypto-psbt') throw new Error('This UR code holds a transaction to sign (PSBT): open it in the PSBT Signer.');
+    throw new Error('This UR code is a “' + type + '”, not a wallet. Show the wallet’s output descriptor (crypto-output) instead.');
 }
 
 function _descImportConvert(raw) {
@@ -33947,7 +33974,7 @@ async function desc_verify() {
 
         // Wallet exports (multisig setup files, BSMS, single keys …) are
         // converted to a descriptor first; a descriptor passes through as is.
-        var conv = _descImportConvert(await _descImportUnwrapBbqr(document.getElementById('desc-verify-input').value));
+        var conv = _descImportConvert(await _descImportUnwrap(document.getElementById('desc-verify-input').value));
         if (!conv.ok) throw new Error(conv.error);
         if (conv.converted) _descShowConverted(conv);
         var rawDesc = conv.descriptor;
