@@ -72,7 +72,7 @@ function makeEnv(seedPhrase) {
         '_descChainNodes', '_descScreenAddresses', '_descRecvWallet', '_descRecvAddressAt', '_descRecvGroups', 'desc_recvReset', 'desc_recvStep', 'desc_recvShow',
         '_descRecvNormalize', '_descRecvResult', 'desc_recvCheck', 'desc_recvStopScan', '_descShowAddrExport', 'desc_arraysEqual',
         '_descImportPrivateCheck', '_descImportKey', '_descImportPath', '_descImportWithChecksum', '_descImportSetup', '_descImportBsms',
-        '_descImportDescriptorList', '_descImportSingleKey', '_descImportFromHex', '_descImportRestoreLines', '_descImportJsonKey', '_descImportConvert', '_descShowConverted', '_descVerifyFromBytes',
+        '_descImportDescriptorList', '_descImportSingleKey', '_descImportFromHex', '_descImportRestoreLines', '_descImportJsonKey', '_descImportUnwrap', '_descImportFromUrText', '_bbqrDecode', '_psbtBase32Decode', '_psbtInflate', '_psbtZlibDecompress', '_descImportConvert', '_descShowConverted', '_descVerifyFromBytes',
         '_descVerifyAddrRows', 'desc_verify', 'desc_useVerified', '_descLoadWatchOnly', '_descSaveResult'].map(extract),
   ].join('\n'), ctx);
   const verify = async (text) => {

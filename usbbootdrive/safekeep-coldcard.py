@@ -27,6 +27,24 @@ SECURITY MODEL
                 the 12-word password on its own screen and the user must
                 confirm there; the 7z (AES-256, still encrypted) is returned
                 to the app in memory. No pairing needed, nothing stored.
+      passphrase -> send a BIP-39 passphrase to the connected Coldcard (the
+                same as Coinkite's `ckcc pass`), so it needn't be typed on
+                its keys. The Coldcard shows its length, can show it, and
+                switches to that passphrase wallet only if the user presses
+                OK there; with its Seed Vault on, it then offers to keep that
+                wallet. Returns the fingerprint before and the new wallet's
+                xpub. The passphrase is never written to the result or log,
+                and the request file is overwritten before it is deleted.
+      seed   -> load a seed (12, 18 or 24 words, sent as their entropy) on
+                the connected Coldcard as a TEMPORARY seed, so it can be
+                kept in its Seed Vault without typing the words on its keys.
+                It is sent as a one-seed plaintext backup over the encrypted
+                link with the "temporary" flag (Coinkite's `ckcc restore -t`
+                of a .txt): the Coldcard asks to restore it as a temporary
+                seed, shows its fingerprint, and with Seed Vault on offers
+                to keep it. Its main seed is never replaced (a Coldcard with
+                no seed is refused). The Coldcard reports nothing when the
+                user answers, so the app checks with "detect" afterwards.
   * The pairing is stored by THIS helper (path in SAFEKEEP_CC_PAIRING: the
     vault's settings folder, or RAM in a temporary session). "sign" trusts
     only that stored pairing — never device identity sent by the browser.
@@ -40,7 +58,7 @@ SECURITY MODEL
   * The result is always written (ok or error) so the app never hangs.
 
 Result JSON: {"ok": true/false, "status": "...", ...}
-  ok statuses   : detected, paired, unpaired, signed, xpub, backup
+  ok statuses   : detected, paired, unpaired, signed, xpub, backup, passphrase, seed_sent
   error statuses: bad_request, not_installed, not_paired, not_connected,
                   multiple_devices, no_seed, wrong_device, mitm_failed,
                   refused, busy, timeout, rejected, error
@@ -67,6 +85,12 @@ PSBT_MAGIC = b'psbt\xff'
 SEVENZ_MAGIC = b"7z\xbc\xaf'\x1c"
 MAX_BACKUP_BYTES = 256 * 1024     # a Coldcard backup is a few KB; its own limit is 128 KiB of text
 XFP_RE = re.compile(r'^[0-9a-f]{8}$')
+# What the Coldcard firmware accepts over USB ('pass'): 1-99 characters,
+# printable ASCII only (space to ~), no tabs or newlines.
+# Seed entropy for 12, 18 or 24 words (what a Coldcard can store).
+ENTROPY_RE = re.compile(r'^(?:[0-9a-f]{32}|[0-9a-f]{48}|[0-9a-f]{64})$')
+AE_SECRET_LEN = 72      # a Coldcard secret: marker byte, entropy, zero padding
+PASSPHRASE_RE = re.compile(r'^[\x20-\x7e]{1,99}$')
 XPUB_RE = re.compile(r'^[xt]pub[1-9A-HJ-NP-Za-km-z]{100,112}$')
 SERIAL_RE = re.compile(r'^[0-9A-Za-z]{1,64}$')
 REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
@@ -100,6 +124,15 @@ def load_request(path):
     except OSError:
         raise Fail('bad_request', 'Could not read the Coldcard request.')
     finally:
+        # It may hold a passphrase: overwrite it before deleting (best effort).
+        try:
+            size = os.path.getsize(path)
+            with open(path, 'r+b') as f:
+                f.write(b'\0' * size)
+                f.flush()
+                os.fsync(f.fileno())
+        except OSError:
+            pass
         try:
             os.remove(path)
         except OSError:
@@ -385,8 +418,115 @@ def do_backup(data):
             'backup_b64': base64.b64encode(backup).decode('ascii')}
 
 
+def field_passphrase(data):
+    pw = data.get('passphrase')
+    if not isinstance(pw, str) or not PASSPHRASE_RE.match(pw):
+        raise Fail('bad_request', 'The Coldcard takes a passphrase of 1 to 99 plain characters: letters, '
+                                  'digits, spaces and the symbols on a US keyboard.')
+    return pw
+
+
+def do_passphrase(data):
+    # Same steps as Coinkite's own `ckcc pass`: check the device is genuine,
+    # send the passphrase, poll until the user has pressed OK (or X).
+    pw = field_passphrase(data)
+    data['passphrase'] = None
+    hid, ColdcardDevice, protocol = load_ckcc()
+    P = protocol.CCProtocolPacker
+    dev = open_single_device(hid, ColdcardDevice)
+    try:
+        xfp_before = xfp_to_str(dev.master_fingerprint)
+        # Check against the paired master key when this is the paired
+        # Coldcard; otherwise against the key it presents.
+        pairing = read_pairing()
+        anchor = pairing['master_xpub'] if pairing and pairing['xfp'] == xfp_before else None
+        try:
+            dev.check_mitm(expected_xpub=anchor)
+        except Exception:
+            raise Fail('mitm_failed', 'The Coldcard failed its authenticity check, so the passphrase was '
+                                      'not sent. Unplug it, check the cable, and try again.')
+        try:
+            dev.send_recv(P.bip39_passphrase(pw), timeout=None)
+            pw = None
+            deadline = time.monotonic() + APPROVAL_TIMEOUT_S
+            while True:
+                time.sleep(POLL_INTERVAL_S)
+                done = dev.send_recv(P.get_passphrase_done(), timeout=None)
+                if done is not None:
+                    break
+                if time.monotonic() > deadline:
+                    raise Fail('timeout', 'No answer from the Coldcard in time. Press X on its screen, '
+                                          'then try again.')
+        except protocol.CCUserRefused:
+            raise Fail('refused', 'You pressed X on the Coldcard. It stays on the wallet it was using.')
+        except protocol.CCBusyError:
+            raise Fail('busy', 'The Coldcard is busy. Finish or cancel what is on its screen, then try again.')
+        except protocol.CCProtoError as e:
+            raise Fail('rejected', 'The Coldcard did not take the passphrase: %s' % str(e)[:200])
+    finally:
+        pw = None
+        dev.close()
+    xpub = done if isinstance(done, str) else (bytes(done).decode('ascii', 'replace') if isinstance(done, (bytes, bytearray)) else '')
+    if not XPUB_RE.match(xpub):
+        raise Fail('error', 'The Coldcard switched wallets but sent back a key SafeKeep could not read. '
+                            'Check the fingerprint on its screen.')
+    return {'ok': True, 'status': 'passphrase', 'xfp_before': xfp_before, 'xpub': xpub}
+
+
+def field_entropy(data):
+    v = data.get('entropy_hex')
+    if not isinstance(v, str) or not ENTROPY_RE.match(v):
+        raise Fail('bad_request', 'The Coldcard can store a seed of 12, 18 or 24 words.')
+    return bytes.fromhex(v)
+
+
+def seed_backup_text(entropy):
+    # A one-seed Coldcard backup, in the firmware's own text format
+    # (backups.render_backup_contents / text_bk_parser): raw_secret is the
+    # marker 0x80 | (bytes/8 - 2), the entropy, zero padding to 72 bytes,
+    # as hex with trailing '0's removed. Nothing else: no settings.
+    secret = bytes([0x80 | (len(entropy) // 8 - 2)]) + entropy
+    secret += b'\0' * (AE_SECRET_LEN - len(secret))
+    raw_secret = binascii.b2a_hex(secret).decode('ascii').rstrip('0')
+    return ('# Coldcard backup file, made by SafeKeep: one seed, to load as a temporary seed.\n'
+            'raw_secret = "%s"\n'
+            'chain = "BTC"\n' % raw_secret).encode('ascii')
+
+
+def do_seed(data):
+    entropy = field_entropy(data)
+    data['entropy_hex'] = None
+    text = seed_backup_text(entropy)
+    entropy = None
+    hid, ColdcardDevice, protocol = load_ckcc()
+    P = protocol.CCProtocolPacker
+    dev = open_single_device(hid, ColdcardDevice)     # refuses a Coldcard with no seed
+    try:
+        xfp_before = xfp_to_str(dev.master_fingerprint)
+        pairing = read_pairing()
+        anchor = pairing['master_xpub'] if pairing and pairing['xfp'] == xfp_before else None
+        try:
+            dev.check_mitm(expected_xpub=anchor)
+        except Exception:
+            raise Fail('mitm_failed', 'The Coldcard failed its authenticity check, so the seed was '
+                                      'not sent. Unplug it, check the cable, and try again.')
+        try:
+            length, sha = dev.upload_file(text)
+            text = None
+            # plaintext=True: no backup password to type; tmp=True: never the main seed.
+            dev.send_recv(P.restore_backup(length, sha, custom_pwd=False, plaintext=True, tmp=True), timeout=None)
+        except protocol.CCBusyError:
+            raise Fail('busy', 'The Coldcard is busy. Finish or cancel what is on its screen, then try again.')
+        except protocol.CCProtoError as e:
+            raise Fail('rejected', 'The Coldcard did not take the seed: %s' % str(e)[:200])
+    finally:
+        text = None
+        dev.close()
+    return {'ok': True, 'status': 'seed_sent', 'xfp_before': xfp_before}
+
+
 ACTIONS = {'detect': do_detect, 'pair': do_pair, 'unpair': do_unpair, 'sign': do_sign, 'xpub': do_xpub,
-           'backup': do_backup}
+           'backup': do_backup, 'passphrase': do_passphrase, 'seed': do_seed}
 
 
 def main(argv):

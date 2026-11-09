@@ -29,6 +29,79 @@
   clashing name gets " (COLDCARD)"). Code: `sv_*` in `boot.html`;
   tests `test-seed-vault.mjs`, `usbbootdrive/tests/test-seed-vault-watcher.py`
   (the real watcher block).
+- **Send a Passphrase to the Coldcard** (Device Options → Coldcard): type
+  a BIP-39 passphrase on the computer (twice) or pick one from the
+  Passphrase Library (read only; the library itself has no Coldcard
+  button, by the owner's choice), and send it over USB: helper action
+  `passphrase` in `safekeep-coldcard.py` (Coinkite's `ckcc pass`:
+  authenticity check, `bip39_passphrase`, poll `get_passphrase_done`).
+  Firmware rules (read in Coinkite's source, `shared/usb.py` / `auth.py` /
+  `seed.py`): encrypted link only, 1–99 printable ASCII; the Coldcard
+  shows the length, `2` shows the passphrase, OK switches; with its Seed
+  Vault on it then offers `1` to keep that wallet. It adds the passphrase
+  to whichever wallet the Coldcard is on. SafeKeep works out the expected
+  fingerprint from its own seed and checks it when the Coldcard was on
+  that seed. The helper overwrites the request before deleting it; the
+  passphrase is never in the result. Optional: also save it in the
+  Passphrase Library. Works on Dave's Mk4. Code `ccpp_*`; tests
+  `test-coldcard-passphrase.mjs`, `usbbootdrive/tests/test-coldcard-helper.py`.
+- **Send a Seed to the Coldcard** (Device Options → Coldcard): a seed from
+  SafeKeep's Seed Vault, or 12/24 words typed or scanned, loaded on the
+  Coldcard as a TEMPORARY seed so it can be kept in its Seed Vault. There
+  is no USB command for "add to Seed Vault": the helper action `seed`
+  sends a one-seed plaintext backup (`raw_secret` + `chain` only, in the
+  firmware's format) with `restore_backup(plaintext=True, tmp=True)`
+  (`ckcc restore -t` of a .txt), so no backup password is typed. Firmware
+  (`auth.RemoteRestoreBackup`, `backups.restore_tmp_from_dict_ll`): asks
+  to restore as a temporary seed, shows its fingerprint, then
+  `set_ephemeral_seed` offers Seed Vault (1). A Coldcard with no seed is
+  refused. 12, 18 or 24 words only (the Coldcard's storage format). The
+  restore reports nothing back, so *Check the Coldcard* runs `detect` and
+  compares fingerprints. Coinkite's library marks the plaintext flag
+  "(dev)"; the firmware path has no dev-only check, but this is untried on
+  a real Mk4. Code `ccsd_*`; test `test-coldcard-seed.mjs`.
+- **Device Options order**: every Coldcard feature together (pair,
+  passphrase, seed, Import from a COLDCARD backup), then Trezor.
+- **Connect a wallet app audit** (checked against each app's import code):
+  Sparrow multisig now gets *Hardware Wallet JSON* (`formatMulti`), scanned
+  with Airgapped Hardware Wallet → Passport. Sparrow's multisig keystore
+  import (Passport/Keystone Multisig → `ColdcardMultisig` →
+  `ColdcardSinglesig`) reads the text as a COLDCARD export and finds the
+  `bip48_N` section; the crypto-account of a lone cosigner key, `wsh(key)`,
+  failed for Dave. Sparrow single-sig keeps `ur:crypto-account` (matched
+  by script type in `FileImportPane.getScannedKeystore`). Nunchuk:
+  COLDCARD JSON as animated ur:bytes (libnunchuk `passport.hpp` reads
+  bip84 / bip48_2 and more). Blue Wallet: single-sig descriptor. Specter:
+  `[fp/path]xpub`. Electrum: SLIP-132 key (Zpub for multisig) via the
+  Courier; the signer reconciles Electrum's dummy fingerprints.
+- **BBQr in Output Descriptor**: Sparrow showed a 2-of-3 as BBQr
+  (`B$ZU0100…`: zlib, Unicode text, 1 part) and the import didn't know it.
+  `_bbqrDecode` (H / 2 / Z, one or many parts, base-36 part numbers) now
+  runs first on pasted or Courier-relayed text (`_descImportUnwrapBbqr`),
+  and the tool's camera collects animated BBQr parts. The PSBT Signer read
+  BBQr part numbers as hex, which broke codes of 16+ parts; now base 36.
+- **UR text in Output Descriptor**: Sparrow's 2-of-3 relayed through the
+  Courier arrived as text `UR:CRYPTO-OUTPUT/…` (811 characters). Only the
+  camera decoded UR; text went straight to the descriptor reader. Now
+  `_descImportUnwrap` sends `UR:` text (one or more parts, any case) to
+  `_descImportFromUrText`, which uses the camera's decoder
+  (`descv_decodeCryptoOutput`) for crypto-output / crypto-account and
+  reads ur:bytes as text. Test `test-bbqr.mjs` (section 4).
+- **Multisig from Seed Vault keys** (Output Descriptor → multisig): each
+  cosigner slot has a *Seed Vault* button (when the Seed Vault is on) that
+  fills in a stored seed's BIP-48 key (`_descLocalKeyOrigin`, no
+  passphrase); the seed in use (Key 1) isn't offered, and picked keys
+  follow the address type. `_descMsCustody` warns at the top of the result
+  when this vault holds M or more of the keys (Key 1 plus any key whose
+  fingerprint is a Seed Vault seed, picked or pasted): this flash drive
+  alone can spend, so it is no safer than single-sig. Save Wallet / Show
+  QR as before. Signing with several Seed Vault keys at once was left out
+  on purpose. Test `test-multisig-seed-vault.mjs`.
+- **Coldcard Seed Vault names**: the firmware names entries "[fingerprint]"
+  (`add_seed_to_vault`), and neither `pass` nor a restore carries a name.
+  It offers Rename (40 characters) for the entry in use, so both Coldcard
+  panels now say how, suggesting the SafeKeep name (Seed Vault name or
+  Passphrase Library nickname).
 
 ## Current state (Nov 7, 2026) — v1.64
 

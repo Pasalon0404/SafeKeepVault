@@ -1389,10 +1389,15 @@ RELIQUARY_PY
     # into Chromium's download folder ($CHROMIUM_DOWNLOAD_DIR: the vault's
     # seeds/ normally, the RAM signal dir in a temporary session):
     #   COLDCARD_REQUEST.json
-    #     { "action": "detect" | "pair" | "unpair" | "sign" | "xpub" | "backup",
-    #       "request_id": ... }
+    #     { "action": "detect" | "pair" | "unpair" | "sign" | "xpub" | "backup"
+    #                 | "passphrase" | "seed", "request_id": ... }
     #   ("backup" returns the Coldcard's own encrypted backup.7z; the user
-    #    sees its password and confirms on the Coldcard.)
+    #    sees its password and confirms on the Coldcard. "passphrase" sends
+    #    a BIP-39 passphrase typed in SafeKeep; the Coldcard switches to that
+    #    wallet only if the user presses OK on it. The helper overwrites the
+    #    request before deleting it and never writes the passphrase out.
+    #    "seed" loads 12/18/24 words on the Coldcard as a temporary seed, to
+    #    keep in its Seed Vault: never its main seed; confirmed on its screen.)
     # The helper (/usr/local/lib/safekeep/safekeep-coldcard.py, run with the
     # pinned ckcc-protocol install in /opt/safekeep-ckcc) treats the request
     # as untrusted data, deletes it on read, validates every field, and only

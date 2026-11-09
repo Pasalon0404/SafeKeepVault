@@ -2898,6 +2898,47 @@ const SafeKeepOS = (() => {
     return r;
   }
 
+  /**
+   * Send a BIP-39 passphrase to the connected Coldcard, so it needn't be
+   * typed on its keys (Coinkite's `ckcc pass`). The Coldcard shows its
+   * length (and the passphrase on request) and switches to that wallet only
+   * if the user presses OK; with its Seed Vault on, it offers to keep it.
+   * Waits up to 11 minutes. No pairing needed.
+   * ok → { xfpBefore, xpub }  (the new wallet's master xpub)
+   */
+  async function coldcardSendPassphrase(passphrase) {
+    if (typeof passphrase !== 'string' || !/^[\x20-\x7e]{1,99}$/.test(passphrase)) {
+      return { ok: false, status: 'bad_request', error: 'The Coldcard takes a passphrase of 1 to 99 plain characters.' };
+    }
+    const r = await _coldcardRequest({ action: 'passphrase', passphrase }, 11 * 60 * 1000);
+    if (r.ok) {
+      r.xfpBefore = String(r.xfp_before || '').toUpperCase();
+      delete r.xfp_before;
+    }
+    return r;
+  }
+
+  /**
+   * Load a seed on the connected Coldcard as a TEMPORARY seed, so it can be
+   * kept in the Coldcard's Seed Vault without typing the words there. Sent
+   * as the seed's entropy (12, 18 or 24 words); the helper wraps it in a
+   * one-seed plaintext backup with the "temporary" flag. The Coldcard asks
+   * to restore it, shows its fingerprint, and (Seed Vault on) offers to
+   * keep it. It reports nothing back when the user answers: check with
+   * coldcardDetect() afterwards. ok → { xfpBefore }
+   */
+  async function coldcardSendSeed(entropyHex) {
+    if (typeof entropyHex !== 'string' || !/^(?:[0-9a-f]{32}|[0-9a-f]{48}|[0-9a-f]{64})$/.test(entropyHex)) {
+      return { ok: false, status: 'bad_request', error: 'The Coldcard can store a seed of 12, 18 or 24 words.' };
+    }
+    const r = await _coldcardRequest({ action: 'seed', entropy_hex: entropyHex }, 60000);
+    if (r.ok) {
+      r.xfpBefore = String(r.xfp_before || '').toUpperCase();
+      delete r.xfp_before;
+    }
+    return r;
+  }
+
   // ===================================================================
   //  TREZOR ONE — USB signing (Trezor Watcher in safekeep-boot.sh)
   // ===================================================================
@@ -3441,6 +3482,8 @@ const SafeKeepOS = (() => {
 
     coldcardGetPairing,
     coldcardDetect,
+    coldcardSendPassphrase,
+    coldcardSendSeed,
     coldcardPair,
     coldcardUnpair,
     coldcardSign,

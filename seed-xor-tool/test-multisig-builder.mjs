@@ -74,7 +74,7 @@ function makeEnv(cosigners, extra = {}) {
     `var desc_state = { mode: 'multi', msM: ${extra.m || 2}, msN: ${cosigners.length + 1}, msAddrType: '84', currentDescriptor: null };`,
     'var _descLocalKeySeq = 0, _descLocalKey = "", _ppFromLibrary = {};',
     ...['desc_checksum', '_base58decode', '_base58checkDecode', '_base58check', '_base58encode', '_sha256sync', '_sha256impl', '_rr', '_descNormalizeXpub',
-        'desc_arraysEqual', '_descLocalKeyOrigin', 'desc_updateLocalKeyStatus', 'desc_generateMulti', 'desc_generate',
+        'desc_arraysEqual', '_descLocalKeyOrigin', 'desc_updateLocalKeyStatus', 'desc_generateMulti', '_descMsCustody', 'desc_generate',
         '_descPassphraseConfirmed', 'desc_onPassphraseInput'].map(extract),
   ].join('\n'), ctx);
   return { ctx, el, statuses, last: () => statuses[statuses.length - 1] || '' };

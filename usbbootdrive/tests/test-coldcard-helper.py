@@ -46,6 +46,16 @@ class CCProtocolPacker:
     @staticmethod
     def get_backup_file():
         return ('bkok',)
+    @staticmethod
+    def bip39_passphrase(pw):
+        return ('pass', pw)
+    @staticmethod
+    def get_passphrase_done():
+        return ('pwok',)
+    @staticmethod
+    def restore_backup(length, file_sha, custom_pwd=False, plaintext=False, tmp=False):
+        assert len(file_sha) == 32
+        return ('rest', length, custom_pwd, plaintext, tmp)
 '''
 
 FAKE_CLIENT = '''
@@ -69,6 +79,7 @@ class ColdcardDevice:
         if CFG.get('mitm_fail'): raise RuntimeError('Possible active MiTM attack')
     def upload_file(self, data, verify=True, blksize=1024):
         log('upload %%d' %% len(data)); self.data = data
+        open(LOG + '.upload', 'wb').write(data)
         return len(data), hashlib.sha256(data).digest()
     def send_recv(self, msg, timeout=Ellipsis, **kw):
         if msg[0] == 'xpub':
@@ -80,6 +91,21 @@ class ColdcardDevice:
             log('sign'); return None
         if msg[0] == 'back':
             log('backup-start'); return None
+        if msg[0] == 'rest':
+            rm = CFG.get('rest', 'ok')
+            if rm == 'busy': raise CCBusyError()
+            if rm == 'proto': raise CCProtoError('Coldcard Error: badlen')
+            log('restore len=%%d custom=%%s plain=%%s tmp=%%s' %% (msg[1], msg[2], msg[3], msg[4])); return None
+        if msg[0] == 'pass':
+            log('pass ' + json.dumps(msg[1])); return None
+        if msg[0] == 'pwok':
+            pm = CFG.get('pass', 'approve')
+            if pm == 'refuse': raise CCUserRefused()
+            if pm == 'busy': raise CCBusyError()
+            if pm == 'proto': raise CCProtoError('Coldcard Error: no seed')
+            if pm == 'hang': return None
+            if pm == 'garbage': return 'not an xpub'
+            return 'xpub' + 'P' * 107
         if msg[0] == 'bkok':
             bm = CFG.get('backup', 'approve')
             if bm == 'refuse': raise CCUserRefused()
@@ -271,6 +297,86 @@ def main():
         check('backup: no Coldcard -> not_connected', r.get('status') == 'not_connected', str(r))
         rc, r, *_ = run(tmp, {'action': 'backup'}, {'devices': 2})
         check('backup: two Coldcards -> multiple_devices', r.get('status') == 'multiple_devices', str(r))
+
+        print('passphrase')
+        PW = ' Savings 2026! ~`{}|'
+        rc, r, log, left = run(tmp, {'action': 'passphrase', 'passphrase': PW})
+        check('passphrase -> the new wallet\'s xpub and the fingerprint before',
+              rc == 0 and r.get('status') == 'passphrase' and r.get('xpub') == 'xpub' + 'P' * 107 and r.get('xfp_before') == PAIRED_XFP and not left, str(r))
+        check('  ...the exact passphrase was sent (spaces and symbols kept)', 'pass ' + json.dumps(PW) in log, str(log))
+        check('  ...after the authenticity check against the PAIRED key (this is the paired Coldcard)',
+              [l.split(' ')[0] for l in log if l and not l.startswith(('open', 'close'))][:2] == ['mitm', 'pass'] and 'mitm ' + PAIRED_XPUB[:8] in log, str(log))
+        check('  ...the passphrase is not in the result', PW.strip() not in json.dumps(r))
+        set_pairing(tmp, xfp=None)
+        rc, r, log, _ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'})
+        check('  ...no pairing needed (authenticity checked against the key it presents)', r.get('status') == 'passphrase' and 'mitm None' in log, str(log))
+        set_pairing(tmp)
+        rc, r, log, _ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'}, {'mitm_fail': True})
+        check('passphrase: authenticity check fails -> mitm_failed, nothing sent', r.get('status') == 'mitm_failed' and not any(l.startswith('pass') for l in log), str(r))
+        for mode, status in (('refuse', 'refused'), ('busy', 'busy'), ('proto', 'rejected'), ('garbage', 'error')):
+            rc, r, log, _ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'}, {'pass': mode})
+            check('passphrase: %s -> %s' % (mode, status), r.get('status') == status and 'xpub' not in r and rc != 0, str(r)[:200])
+        rc, r, *_ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'}, {'pass': 'hang'}, env_extra={'SAFEKEEP_CC_TIMEOUT': '1'})
+        check('passphrase: no answer -> timeout', r.get('status') == 'timeout', str(r))
+        rc, r, *_ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'}, {'devices': 0})
+        check('passphrase: no Coldcard -> not_connected', r.get('status') == 'not_connected', str(r))
+        rc, r, *_ = run(tmp, {'action': 'passphrase', 'passphrase': 'x' * 99})
+        check('passphrase: 99 characters are allowed', r.get('status') == 'passphrase', str(r))
+        for name, pw in (('empty', ''), ('100 characters', 'x' * 100), ('an accented letter', 'café'), ('a tab', 'a\tb'),
+                         ('a new line', 'a\nb'), ('not a string', 123), ('missing', None)):
+            req = {'action': 'passphrase'}
+            if pw is not None: req['passphrase'] = pw
+            rc, r, log, left = run(tmp, req)
+            check('passphrase: %s -> bad_request, device not opened, request gone' % name,
+                  r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log) and not left, str(r))
+
+        print('seed (as a temporary seed)')
+        import re as _re
+        def firmware_decode(text):
+            # The firmware's own steps: text_bk_parser, deserialize_secret, SecretStash.decode.
+            vals = {}
+            for line in text.decode().split('\n'):
+                if not line or line[0] == '#': continue
+                k, v = line.split(' = ', 1); vals[k] = json.loads(v)
+            rs = vals['raw_secret']
+            if len(rs) % 2: rs += '0'
+            raw = bytearray(72); x = bytes.fromhex(rs); raw[:len(x)] = x
+            marker = raw[0]; assert marker & 0x80
+            ll = ((marker & 0x3) + 2) * 8
+            return vals, bytes(raw[1:1 + ll])
+        upload = os.path.join(tmp, 'log.txt.upload')
+        for n_bytes, words in ((16, 12), (24, 18), (32, 24)):
+            ent = bytes(range(1, n_bytes + 1))
+            if os.path.exists(upload): os.remove(upload)
+            rc, r, log, left = run(tmp, {'action': 'seed', 'entropy_hex': ent.hex()})
+            text = open(upload, 'rb').read() if os.path.exists(upload) else b''
+            vals, got = firmware_decode(text) if text else ({}, b'')
+            check('seed, %d words -> seed_sent; the firmware decodes the same entropy back' % words,
+                  rc == 0 and r.get('status') == 'seed_sent' and r.get('xfp_before') == PAIRED_XFP and got == ent and not left, str(r))
+        check('  ...the backup holds only the seed and the chain (no settings, no other keys)', set(vals) == {'raw_secret', 'chain'} and vals['chain'] == 'BTC', str(vals))
+        check('  ...raw_secret is written as the firmware writes it (trailing zeros removed)', not vals['raw_secret'].endswith('0') and vals['raw_secret'].startswith('82'), vals['raw_secret'][:8])
+        ent = bytes(16)   # all zeros: everything after the marker is stripped
+        rc, r, log, _ = run(tmp, {'action': 'seed', 'entropy_hex': ent.hex()})
+        check('  ...an all-zero seed still decodes (only the marker is left)', firmware_decode(open(upload, 'rb').read())[1] == ent)
+        rc, r, log, _ = run(tmp, {'action': 'seed', 'entropy_hex': '11' * 16})
+        steps = [l for l in log if l and not l.startswith(('open', 'close'))]
+        check('  ...authenticity check, upload, then restore as PLAINTEXT and TEMPORARY (never the main seed)',
+              [l.split(' ')[0] for l in steps] == ['mitm', 'upload', 'restore'] and steps[-1].endswith('custom=False plain=True tmp=True'), str(steps))
+        check('  ...the seed is not in the result', '11' * 16 not in json.dumps(r) and 'raw_secret' not in json.dumps(r))
+        rc, r, log, _ = run(tmp, {'action': 'seed', 'entropy_hex': '11' * 16}, {'no_seed': True})
+        check('seed: a Coldcard with no seed of its own -> no_seed, nothing sent', r.get('status') == 'no_seed' and not any(l.startswith('upload') for l in log), str(r))
+        rc, r, log, _ = run(tmp, {'action': 'seed', 'entropy_hex': '11' * 16}, {'mitm_fail': True})
+        check('seed: authenticity check fails -> mitm_failed, nothing uploaded', r.get('status') == 'mitm_failed' and not any(l.startswith('upload') for l in log), str(r))
+        for mode, status in (('busy', 'busy'), ('proto', 'rejected')):
+            rc, r, *_ = run(tmp, {'action': 'seed', 'entropy_hex': '11' * 16}, {'rest': mode})
+            check('seed: %s -> %s' % (mode, status), r.get('status') == status and rc != 0, str(r))
+        for name, v in (('20 bytes (15 words)', '11' * 20), ('28 bytes (21 words)', '11' * 28), ('upper-case hex', 'AB' * 16),
+                        ('not hex', 'zz' * 16), ('words instead of entropy', 'abandon ' * 12), ('missing', None)):
+            req = {'action': 'seed'}
+            if v is not None: req['entropy_hex'] = v
+            rc, r, log, left = run(tmp, req)
+            check('seed: %s -> bad_request, device not opened, request gone' % name,
+                  r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log) and not left, str(r))
 
         print('bad requests (nothing touches the device)')
         bad = [

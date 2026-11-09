@@ -380,6 +380,23 @@
     .sv-list { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.75rem 0; }
     .sv-row { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.65rem 0.8rem; background: var(--skb-bg-input); }
     .sv-row-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .ccpp-panel { margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid var(--skb-border); background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); max-width: 40rem; }
+    .ccpp-panel [hidden], #ccpp-block[hidden], #ccsd-block[hidden], #desc-ms-custody[hidden] { display: none !important; }
+    .ccpp-src { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .ccpp-src label, .ccpp-check { display: flex; gap: 0.4rem; align-items: center; cursor: pointer; }
+    .ccpp-label { display: block; margin: 0.5rem 0 0.25rem; color: var(--skb-text-muted); }
+    .ccpp-row { display: flex; gap: 0.4rem; align-items: center; }
+    .ccpp-row input[type="password"], .ccpp-row input[type="text"], .ccpp-row select { flex: 1; padding: 0.45rem 0.55rem; background: var(--skb-bg); border: 1px solid var(--skb-border); color: var(--skb-text); font: inherit; }
+    .ccpp-check { margin-top: 0.6rem; }
+    .ccpp-count { margin-top: 0.4rem; color: var(--skb-text-muted); font-size: 0.75rem; }
+    .ccpp-msg { margin: 0.35rem 0; min-height: 1.1em; }
+    .ccpp-msg.bad, .ccpp-result.bad { color: var(--skb-danger); }
+    .ccpp-msg.warn { color: var(--skb-warning, #f59e0b); }
+    .ccpp-note { color: var(--skb-text-muted); font-size: 0.75rem; margin: 0.35rem 0 0.75rem; line-height: 1.5; }
+    .ccpp-steps { margin-top: 0.85rem; padding: 0.7rem 0.85rem; border-left: 4px solid var(--skb-primary); background: rgba(247, 147, 26, 0.06); line-height: 1.55; }
+    .ccpp-steps ol { margin: 0.35rem 0 0.35rem 1.2rem; padding: 0; }
+    .ccpp-result { margin-top: 0.85rem; line-height: 1.55; }
+    .ccpp-result.ok { color: var(--skb-secondary, #3fb950); }
     .sv-row-name { font-weight: 700; color: var(--skb-text); }
     .sv-row-meta { font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text-muted); }
     .sv-row-inuse { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; color: #000; background: var(--skb-primary); padding: 0.05rem 0.45rem; border-radius: 4px; }
@@ -7598,6 +7615,105 @@
                                 <button type="button" class="skb-btn" id="settings-coldcard-pair-btn" onclick="ccSettingsStartPair()">Pair Coldcard</button>
                                 <button type="button" class="skb-btn" id="settings-coldcard-forget-btn" style="display: none;" onclick="ccSettingsForget()">Forget Coldcard</button>
                             </div>
+                            <!-- Send a passphrase to the Coldcard (ccpp_*): typed here or from the Passphrase Library, sent over USB -->
+                            <div id="ccpp-block" style="margin-top: 1.1rem;">
+                                <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.6rem; line-height: 1.6;">
+                                    Type a BIP-39 passphrase here instead of on the Coldcard&rsquo;s keys. The Coldcard shows it, and switches to that passphrase wallet only when you press OK. With Seed Vault turned on in the Coldcard, it offers to keep the wallet there, so you never type it again. No pairing needed.
+                                </p>
+                                <button type="button" class="skb-btn" id="ccpp-open-btn" onclick="ccpp_open()">Send a Passphrase to the Coldcard</button>
+                                <div id="ccpp-panel" class="ccpp-panel" hidden>
+                                    <div class="ccpp-src" role="radiogroup" aria-label="Where the passphrase comes from">
+                                        <label><input type="radio" name="ccpp-src" value="type" checked onchange="ccpp_setSource('type')"> Type a passphrase</label>
+                                        <label><input type="radio" name="ccpp-src" value="library" onchange="ccpp_setSource('library')"> Choose from the Passphrase Library</label>
+                                    </div>
+                                    <div id="ccpp-type">
+                                        <label class="ccpp-label" for="ccpp-pass">Passphrase</label>
+                                        <div class="ccpp-row">
+                                            <input type="password" id="ccpp-pass" maxlength="99" autocomplete="off" spellcheck="false" oninput="ccpp_check()">
+                                            <button type="button" class="skb-btn" id="ccpp-eye" aria-pressed="false" onclick="ccpp_toggleShow()">Show</button>
+                                        </div>
+                                        <label class="ccpp-label" for="ccpp-pass2">Type it again</label>
+                                        <div class="ccpp-row"><input type="password" id="ccpp-pass2" maxlength="99" autocomplete="off" spellcheck="false" oninput="ccpp_check()"></div>
+                                        <label class="ccpp-check"><input type="checkbox" id="ccpp-save" onchange="ccpp_check()"> Also save it in the Passphrase Library, as</label>
+                                        <div class="ccpp-row" id="ccpp-nick-row" hidden><input type="text" id="ccpp-nick" maxlength="60" autocomplete="off" placeholder="Nickname, e.g. Savings" oninput="ccpp_check()"></div>
+                                    </div>
+                                    <div id="ccpp-library" hidden>
+                                        <label class="ccpp-label" for="ccpp-lib">Saved passphrase</label>
+                                        <div class="ccpp-row"><select id="ccpp-lib" onchange="ccpp_pickLibrary()"></select></div>
+                                    </div>
+                                    <div class="ccpp-count" id="ccpp-count"></div>
+                                    <div class="ccpp-msg" id="ccpp-msg" role="status"></div>
+                                    <p class="ccpp-note">Start from the Coldcard&rsquo;s main wallet: it adds the passphrase to whichever wallet it is using now. Spaces and capital letters count.</p>
+                                    <div class="ccpp-row" style="gap: 0.5rem;">
+                                        <button type="button" class="skb-btn skb-btn--primary" id="ccpp-send" disabled onclick="ccpp_send()">Send to Coldcard</button>
+                                        <button type="button" class="skb-btn" id="ccpp-cancel" onclick="ccpp_close()">Cancel</button>
+                                    </div>
+                                    <div id="ccpp-steps" class="ccpp-steps" hidden>
+                                        <strong>Now, on the Coldcard:</strong>
+                                        <ol>
+                                            <li>Check the length it shows: <b id="ccpp-len"></b> characters. Press <b>2</b> to see the passphrase itself, and compare it.</li>
+                                            <li>Press <b>OK</b> to switch to that wallet (<b>X</b> cancels).</li>
+                                            <li>If it offers Seed Vault, press <b>1</b> to keep this wallet there, or <b>OK</b> to use it until the Coldcard is turned off.</li>
+                                        </ol>
+                                        <div id="ccpp-expect"></div>
+                                    </div>
+                                    <div id="ccpp-result" class="ccpp-result" role="status" hidden></div>
+                                </div>
+                            </div>
+                            <!-- Send a seed to the Coldcard (ccsd_*): loaded there as a temporary seed, to keep in its Seed Vault -->
+                            <div id="ccsd-block" style="margin-top: 1.1rem;">
+                                <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.6rem; line-height: 1.6;">
+                                    Put a seed on the Coldcard without typing its words there: a seed from SafeKeep&rsquo;s Seed Vault, or words you type or scan. The Coldcard loads it as a temporary seed &mdash; never in place of its own seed &mdash; and, with Seed Vault turned on, offers to keep it.
+                                </p>
+                                <button type="button" class="skb-btn" id="ccsd-open-btn" onclick="ccsd_open()">Send a Seed to the Coldcard</button>
+                                <div id="ccsd-panel" class="ccpp-panel" hidden>
+                                    <div class="ccpp-src" role="radiogroup" aria-label="Which seed">
+                                        <label id="ccsd-src-vault-label"><input type="radio" name="ccsd-src" value="vault" onchange="ccsd_setSource('vault')"> From SafeKeep&rsquo;s Seed Vault</label>
+                                        <label><input type="radio" name="ccsd-src" value="words" onchange="ccsd_setSource('words')"> Type or scan the words</label>
+                                    </div>
+                                    <div id="ccsd-vault" hidden>
+                                        <label class="ccpp-label" for="ccsd-pick">Stored seed</label>
+                                        <div class="ccpp-row"><select id="ccsd-pick" onchange="ccsd_check()"></select></div>
+                                    </div>
+                                    <div id="ccsd-words" hidden>
+                                        <div style="display: flex; gap: 0.4rem; margin: 0.25rem 0 0.6rem;">
+                                            <button type="button" id="ccsd-len-12" class="tool-tab-btn active" style="flex: 1;" onclick="ccsd_setLength(12)">12 Words</button>
+                                            <button type="button" id="ccsd-len-24" class="tool-tab-btn" style="flex: 1;" onclick="ccsd_setLength(24)">24 Words</button>
+                                        </div>
+                                        <div id="ccsd-grid"></div>
+                                        <button type="button" class="skb-btn" style="margin-top: 0.5rem;" onclick="ccsd_startScan()">Scan a SeedQR</button>
+                                        <div id="ccsd-scan" hidden style="margin-top: 0.6rem;">
+                                            <div id="ccsd-qr-reader" style="max-width: 400px; border-radius: 8px; overflow: hidden;"></div>
+                                            <button type="button" class="skb-btn" style="margin-top: 0.4rem;" onclick="ccsd_stopScan()">Stop Scanner</button>
+                                        </div>
+                                    </div>
+                                    <div class="ccpp-msg" id="ccsd-msg" role="status"></div>
+                                    <div id="ccsd-fp" class="ccpp-note"></div>
+                                    <div class="ccpp-row" style="gap: 0.5rem;">
+                                        <button type="button" class="skb-btn skb-btn--primary" id="ccsd-send" disabled onclick="ccsd_send()">Send to Coldcard</button>
+                                        <button type="button" class="skb-btn" id="ccsd-cancel" onclick="ccsd_close()">Cancel</button>
+                                    </div>
+                                    <div id="ccsd-steps" class="ccpp-steps" hidden>
+                                        <strong>Now, on the Coldcard:</strong>
+                                        <ol>
+                                            <li>&ldquo;Restore uploaded backup as a temporary seed?&rdquo; Press <b>OK</b>.</li>
+                                            <li>It shows the seed&rsquo;s fingerprint: check it is <b id="ccsd-step-fp"></b>, then press <b>OK</b> (<b>X</b> cancels).</li>
+                                            <li>If it offers Seed Vault, press <b>1</b> to keep the seed there.</li>
+                                            <li id="ccsd-step-name">The Coldcard names it by its fingerprint. To give it a name, while it is still in use: <b>Seed Vault</b> &rarr; <b id="ccsd-step-fp2"></b> &rarr; <b>Rename</b><span id="ccsd-step-name-sug"></span>.</li>
+                                        </ol>
+                                        <p class="ccpp-note" style="margin: 0.35rem 0;">The Coldcard then uses this seed until you switch back in its Seed Vault menu or turn it off and on.</p>
+                                        <button type="button" class="skb-btn" id="ccsd-verify" onclick="ccsd_verify()">Check the Coldcard</button>
+                                    </div>
+                                    <div id="ccsd-result" class="ccpp-result" role="status" hidden></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="settings-ccb-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Import from a COLDCARD backup</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                Add the multisig wallets and Secure Notes from a COLDCARD backup to this vault: over USB from the COLDCARD, with the Courier, or from a file on the Transfer Drive. Your seed isn&rsquo;t changed. You can also view the words of the backup&rsquo;s Seed Vault entries.
+                            </p>
+                            <button type="button" class="skb-btn" id="settings-ccb-btn" onclick="ccb_openImport()">Import from a COLDCARD Backup</button>
                         </div>
                         <div id="settings-trezor-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Trezor</h4>
@@ -7612,13 +7728,6 @@
                                 <button type="button" class="skb-btn" id="settings-trezor-log-btn" onclick="tzSettingsShowLog()">Show Trezor log</button>
                             </div>
                             <pre id="settings-trezor-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
-                        </div>
-                        <div id="settings-ccb-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
-                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Import from a COLDCARD backup</h4>
-                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
-                                Add the multisig wallets and Secure Notes from a COLDCARD backup to this vault: over USB from the COLDCARD, with the Courier, or from a file on the Transfer Drive. Your seed isn&rsquo;t changed. You can also view the words of the backup&rsquo;s Seed Vault entries.
-                            </p>
-                            <button type="button" class="skb-btn" id="settings-ccb-btn" onclick="ccb_openImport()">Import from a COLDCARD Backup</button>
                         </div>
                         <div id="settings-seed-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Seed storage</h4>
@@ -8884,6 +8993,7 @@
 
             <!-- ======== OUTPUT CARD (shared) ======== -->
             <div id="desc-output" style="display: none;">
+                <div id="desc-ms-custody" class="psbt-alert warning" role="alert" hidden style="margin-bottom: 1rem; line-height: 1.55;"></div>
                 <div class="skb-card">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                         <span style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text);">Output Descriptor</span>
@@ -12411,6 +12521,31 @@ window.addEventListener('DOMContentLoaded', () => {
             if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on.' };
             return _devMockXpub('legal winner thank year wave sausage worth useful legal winner thank yellow', deriv);
         },
+        // Passphrase over USB: the mock "Coldcard" holds the dev seed (so the
+        // expected fingerprint matches) unless window._devColdcardXfp is set.
+        //   window._devColdcard = 'refuse' | 'absent'
+        coldcardSendPassphrase: async function (pw) {
+            await new Promise(function (r) { setTimeout(r, 1500); });
+            if (window._devColdcard === 'refuse') return { ok: false, status: 'refused', error: '[DEV MOCK] You pressed X on the Coldcard. It stays on the wallet it was using.' };
+            if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on (Settings > Hardware On/Off > USB).' };
+            var mn = (_currentSeed && _currentSeed.mnemonic) || 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+            var root = window.BtcMath.HDKey.fromMasterSeed(await window.BtcMath.bip39.mnemonicToSeed(mn, pw));
+            var before = window._devColdcardXfp || await _recoveryFingerprint(mn);
+            return { ok: true, status: 'passphrase', xfpBefore: before, xpub: root.publicExtendedKey };
+        },
+        // Seed over USB (as a temporary seed): afterwards the mock "Coldcard"
+        // reports the sent seed's fingerprint on detect, as if OK was pressed.
+        //   window._devColdcard = 'absent' | 'busy'; window._devCcIgnore = true (as if X was pressed)
+        coldcardSendSeed: async function (entropyHex) {
+            await new Promise(function (r) { setTimeout(r, 900); });
+            if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on (Settings > Hardware On/Off > USB).' };
+            if (window._devColdcard === 'busy') return { ok: false, status: 'busy', error: '[DEV MOCK] The Coldcard is busy. Finish or cancel what is on its screen, then try again.' };
+            var before = window._devColdcardXfp || 'DECAF002';
+            var bytes = new Uint8Array(entropyHex.match(/../g).map(function (h) { return parseInt(h, 16); }));
+            var mn = window.BtcMath.bip39.entropyToMnemonic(bytes, window.BtcMath.wordlist);
+            if (!window._devCcIgnore) window._devColdcardXfp = await _recoveryFingerprint(mn);
+            return { ok: true, status: 'seed_sent', xfpBefore: before };
+        },
         // COLDCARD backup over USB: set window._devColdcardBackupB64 to a
         // backup.7z (base64) to simulate one; otherwise no device.
         coldcardBackup: async function () {
@@ -13219,15 +13354,23 @@ document.addEventListener('DOMContentLoaded', function () {
    known to read (each one tested with the app), shows the QR code (playing
    it animated where the app needs ur:bytes), and the app's steps with the
    fingerprint and path the app should show. The export itself is Seed
-   Management's own code. */
+   Management's own code. An app can read one format for single-sig and
+   another for multisig (formatMulti): checked against each app's import
+   code (Sparrow QRScanDialog / FileImportPane / ColdcardMultisig,
+   Nunchuk libnunchuk passport.hpp, BlueWallet watch-only import). */
 var _CN_TYPE_NAMES = { '84': 'Native SegWit', '86': 'Taproot', '49': 'Nested SegWit', '44': 'Legacy' };
 var _CN_APPS = {
-    sparrow: { name: 'Sparrow', format: 'bcur', animate: false, multi: true, types: ['84', '86', '49', '44'],
+    // Single-sig: ur:crypto-account (Sparrow picks the account by script
+    // type). Multisig: Hardware Wallet JSON. Sparrow's multisig keystore
+    // import (Passport / Keystone Multisig → ColdcardMultisig) reads the
+    // scanned text as a COLDCARD export and finds its bip48_N section; the
+    // crypto-account form of a lone cosigner key, wsh(key), isn't taken.
+    sparrow: { name: 'Sparrow', format: 'bcur', formatMulti: 'coldcard_json', animate: false, multi: true, types: ['84', '86', '49', '44'],
         steps: function (t, multi) {
             return multi ? [
                 'In Sparrow: <b>File → New Wallet</b>, give it a name.',
                 '<b>Policy Type: Multi Signature</b>, set the number of cosigners, <b>Script Type: ' + _CN_TYPE_NAMES[t] + '</b>.',
-                'On SafeKeep’s keystore tab choose <b>Airgapped Hardware Wallet</b>, pick a device with a <b>Scan…</b> button (Passport or Keystone), click <b>Scan…</b> and scan the QR code.',
+                'On SafeKeep’s keystore tab choose <b>Airgapped Hardware Wallet</b>, then <b>Passport</b>, click <b>Scan…</b> and scan the QR code (Hardware Wallet JSON).',
                 'Add the other cosigners the same way, then <b>Apply</b>.'
             ] : [
                 'In Sparrow: <b>File → New Wallet</b>, give it a name.',
@@ -13286,6 +13429,8 @@ var _CN_APPS = {
         } }
 };
 var _cn = { app: null, pending: false };
+/* The Key Format an app reads, for single-sig or multisig. */
+function _cnFormat(a, multi) { return (multi && a.formatMulti) ? a.formatMulti : a.format; }
 function connect_open() {
     showState('state-connect');
 }
@@ -13336,15 +13481,16 @@ async function connect_go() {
         : '';
     g.hidden = false;
     if (!a.format) { if (typeof skui_revealPanel === 'function') skui_revealPanel(g); return; }
+    var fmt = _cnFormat(a, multi);
     document.getElementById('arm-derivation').value = t;
     document.getElementById('arm-wallet-type').value = multi ? 'multi' : 'single';
-    document.getElementById('arm-key-format').value = a.format;
+    document.getElementById('arm-key-format').value = fmt;
     var keyBox = document.getElementById('arm-xpub');
     if (keyBox) keyBox.textContent = '';   // so the wait below sees the freshly worked-out key
     arm_onConfigChange();
     // Seed Management works the key out after a short delay (and hides its QR
     // while it does): wait until the key box holds this app's format.
-    var want = { key_origin: /^\[[0-9a-f]{8}\//i, bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(/, slip132: /^[xyzXYZ]pub/ }[a.format];
+    var want = { key_origin: /^\[[0-9a-f]{8}\//i, bcur: /^UR:CRYPTO-ACCOUNT\//i, coldcard_json: /^\s*\{/, electrum_json: /^\s*\{/, descriptor_text: /^(wpkh|tr|sh|pkh|wsh)\(|^\[[0-9a-f]{8}\//i, slip132: /^[xyzXYZ]pub/ }[fmt];
     for (var i = 0; i < 60; i++) {
         await new Promise(function (r) { setTimeout(r, 150); });
         var txt = (document.getElementById('arm-xpub') || {}).textContent || '';
@@ -20015,18 +20161,18 @@ function _psbtCourierFileName(raw) {
 }
 
 // ---- BBQr Route Handler ----
-// BBQr frame format: B$ + encoding(1) + filetype(1) + totalParts(2hex) + partNum(2hex) + data
+// BBQr frame format: B$ + encoding(1) + filetype(1) + totalParts(2, base 36) + partNum(2, base 36) + data
 async function _psbtHandleBbqrFrame(text) {
     try {
         if (text.length < 8) return; // minimum header length
 
         const encoding = text[2];                           // H=hex, 2=base32, Z=zlib+base32
         const fileType = text[3];                           // P=PSBT, T=txn, etc.
-        const totalParts = parseInt(text.substring(4, 6), 16);
-        const partNum    = parseInt(text.substring(6, 8), 16);
+        const totalParts = parseInt(text.substring(4, 6), 36);   // BBQr: base 36
+        const partNum    = parseInt(text.substring(6, 8), 36);
         const data       = text.substring(8);
 
-        if (isNaN(totalParts) || totalParts < 1 || totalParts > 255) return;
+        if (isNaN(totalParts) || totalParts < 1 || totalParts > 1295) return;
         if (isNaN(partNum) || partNum >= totalParts) return;
 
         // Reset accumulator if total changed (new scan sequence)
@@ -20083,6 +20229,41 @@ async function _psbtHandleBbqrFrame(text) {
 }
 
 // ---- BBQr Helpers ----
+
+/* Decode BBQr text (Coinkite's QR format, as Sparrow and COLDCARD show it):
+   one or more frames "B$" + encoding + file type + total parts + part
+   number (2 characters each, base 36) + data, separated by spaces or new
+   lines. Encodings: H hex, 2 base32, Z raw-deflate then base32.
+   Returns { type, bytes } — or throws with a plain reason. */
+async function _bbqrDecode(text) {
+    var frames = String(text || '').trim().split(/\s+/).filter(Boolean);
+    if (!frames.length || !frames.every(function (f) { return /^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(f); })) {
+        throw new Error('This isn’t BBQr text.');
+    }
+    var enc = frames[0][2], type = frames[0][3], total = parseInt(frames[0].substring(4, 6), 36), parts = {};
+    if (!(total >= 1 && total <= 1295)) throw new Error('This BBQr code has a bad part count.');
+    frames.forEach(function (f) {
+        if (f[2] !== enc || f[3] !== type || parseInt(f.substring(4, 6), 36) !== total) throw new Error('These BBQr parts come from different codes.');
+        var n = parseInt(f.substring(6, 8), 36);
+        if (!(n >= 0 && n < total)) throw new Error('This BBQr code has a bad part number.');
+        parts[n] = f.substring(8);
+    });
+    var have = Object.keys(parts).length;
+    if (have < total) throw new Error('This BBQr code has ' + total + ' parts, and only ' + have + ' arrived. Scan the whole animated code, or show it as a single QR code.');
+    var data = '';
+    for (var i = 0; i < total; i++) data += parts[i];
+    var bytes;
+    if (enc === 'H') {
+        if (!/^[0-9A-Fa-f]*$/.test(data) || data.length % 2) throw new Error('This BBQr code’s hex data is damaged.');
+        bytes = new Uint8Array(data.length / 2);
+        for (var k = 0; k < data.length; k += 2) bytes[k / 2] = parseInt(data.substr(k, 2), 16);
+    } else if (enc === '2') {
+        bytes = _psbtBase32Decode(data);
+    } else {
+        bytes = await _psbtZlibDecompress(_psbtBase32Decode(data));
+    }
+    return { type: type, bytes: bytes };
+}
 
 // RFC 4648 Base32 decoder (used by BBQr '2' and 'Z' encodings)
 function _psbtBase32Decode(str) {
@@ -26928,6 +27109,11 @@ async function ccSettingsRefresh() {
     if (!pairBtn) return;
     if (confirmEl) { confirmEl.style.display = 'none'; confirmEl.textContent = ''; }
     _ccPendingDetect = null;
+    // Send a passphrase: not in the online demo (no USB), nor without the bridge.
+    const ccppBlock = document.getElementById('ccpp-block');
+    if (ccppBlock) ccppBlock.hidden = _skvDemoActive() || !(os && typeof os.coldcardSendPassphrase === 'function');
+    const ccsdBlock = document.getElementById('ccsd-block');
+    if (ccsdBlock) ccsdBlock.hidden = _skvDemoActive() || !(os && typeof os.coldcardSendSeed === 'function');
     if (!os || typeof os.coldcardGetPairing !== 'function') {
         _ccSettingsShowStatus('Coldcard support is not available in this build.', true);
         pairBtn.style.display = 'none'; forgetBtn.style.display = 'none';
@@ -26999,6 +27185,406 @@ async function ccSettingsForget() {
     const r = await os.coldcardUnpair();
     await ccSettingsRefresh();
     if (!r || !r.ok) _ccSettingsShowStatus((r && r.error) || 'Could not forget the Coldcard.', true);
+}
+
+// ===========================================================================
+// SETTINGS → COLDCARD — send a passphrase (ccpp_*)
+// ===========================================================================
+// Typing a BIP-39 passphrase on a Coldcard's keys is slow. Here it's typed
+// on the computer (twice) or picked from the Passphrase Library, and sent
+// over USB (SafeKeepOS.coldcardSendPassphrase → safekeep-coldcard.py
+// "passphrase", the same as Coinkite's `ckcc pass`). The Coldcard shows its
+// length, shows it on request (2), and switches only on OK; with its Seed
+// Vault on it offers to keep the wallet (1). SafeKeep works out the
+// fingerprint the passphrase gives with its own seed, and checks it when
+// the Coldcard was on that seed. The Passphrase Library is only read here
+// (or added to, if asked). Nothing is kept once the panel closes.
+var CCPP_RE = /^[\x20-\x7e]{1,99}$/;
+var _ccpp = { source: 'type', libPass: '', libErr: false, busy: false };
+
+function _ccppEl(id) { return document.getElementById(id); }
+
+/* The passphrase to send, or '' if not ready. */
+function _ccppValue() {
+    return _ccpp.source === 'library' ? _ccpp.libPass : _ccppEl('ccpp-pass').value;
+}
+
+function _ccppMsg(text, cls) {
+    var el = _ccppEl('ccpp-msg');
+    el.className = 'ccpp-msg' + (cls ? ' ' + cls : '');
+    el.textContent = text || '';
+}
+
+/* Why the Coldcard won't take this passphrase, or ''. */
+function _ccppProblem(pw) {
+    if (!pw) return '';
+    if (pw.length > 99) return 'Too long: the Coldcard takes at most 99 characters.';
+    if (!CCPP_RE.test(pw)) {
+        var bad = Array.from(pw).filter(function (c) { return !/[\x20-\x7e]/.test(c); });
+        var shown = bad.slice(0, 5).map(function (c) { return c === '\t' ? 'Tab' : (c === '\n' ? 'a new line' : '“' + c + '”'); }).join(', ');
+        return 'The Coldcard can’t take ' + shown + ': only letters, digits, spaces and the symbols on a US keyboard.';
+    }
+    return '';
+}
+
+function ccpp_open() {
+    if (_skvDemoActive()) { showStatus('SafeKeep demo: sending a passphrase to a Coldcard works only on the offline vault, run from its USB flash drive.', 'error'); return; }
+    _ccppEl('ccpp-panel').hidden = false;
+    _ccppEl('ccpp-open-btn').hidden = true;
+    ccpp_setSource('type');
+    _ccppEl('ccpp-pass').focus();
+}
+
+/* Close and forget everything typed or loaded. */
+function ccpp_close() {
+    if (_ccpp.busy) return;
+    ['ccpp-pass', 'ccpp-pass2', 'ccpp-nick'].forEach(function (id) { _ccppEl(id).value = ''; });
+    _ccppEl('ccpp-save').checked = false;
+    _ccppEl('ccpp-nick-row').hidden = true;
+    _ccppEl('ccpp-lib').innerHTML = '';
+    _ccpp.libPass = ''; _ccpp.libErr = false;
+    ['ccpp-send', 'ccpp-cancel', 'ccpp-pass', 'ccpp-pass2', 'ccpp-lib'].forEach(function (id) { _ccppEl(id).disabled = false; });
+    _ccppEl('ccpp-pass').type = 'password'; _ccppEl('ccpp-pass2').type = 'password';
+    _ccppEl('ccpp-eye').textContent = 'Show'; _ccppEl('ccpp-eye').setAttribute('aria-pressed', 'false');
+    _ccppEl('ccpp-steps').hidden = true;
+    _ccppEl('ccpp-result').hidden = true;
+    _ccppMsg('');
+    _ccppEl('ccpp-count').textContent = '';
+    _ccppEl('ccpp-panel').hidden = true;
+    _ccppEl('ccpp-open-btn').hidden = false;
+}
+
+async function ccpp_setSource(src) {
+    _ccpp.source = src;
+    _ccpp.libPass = ''; _ccpp.libErr = false;
+    document.querySelectorAll('input[name="ccpp-src"]').forEach(function (r) { r.checked = r.value === src; });
+    _ccppEl('ccpp-type').hidden = src !== 'type';
+    _ccppEl('ccpp-library').hidden = src !== 'library';
+    _ccppEl('ccpp-result').hidden = true;
+    if (src === 'library') {
+        var sel = _ccppEl('ccpp-lib'), os = window.SafeKeepOS, list = [];
+        try { list = (os && os.listPassphrases) ? await os.listPassphrases() : []; } catch (_) {}
+        sel.innerHTML = '';
+        var first = document.createElement('option');
+        first.value = ''; first.textContent = list.length ? 'Choose a passphrase…' : 'No passphrases saved in the Passphrase Library';
+        sel.appendChild(first);
+        list.forEach(function (e) { var o = document.createElement('option'); o.value = e.slug; o.textContent = e.nickname; sel.appendChild(o); });
+        sel.disabled = !list.length;
+    }
+    ccpp_check();
+}
+
+async function ccpp_pickLibrary() {
+    var slug = _ccppEl('ccpp-lib').value, os = window.SafeKeepOS;
+    _ccpp.libPass = ''; _ccpp.libErr = false;
+    if (slug && os && os.loadPassphrase) {
+        try { var r = await os.loadPassphrase(slug); if (r && r.found) _ccpp.libPass = r.passphrase || ''; } catch (_) {}
+        _ccpp.libErr = !_ccpp.libPass;
+    }
+    ccpp_check();
+}
+
+function ccpp_toggleShow() {
+    var show = _ccppEl('ccpp-pass').type === 'password';
+    _ccppEl('ccpp-pass').type = show ? 'text' : 'password';
+    _ccppEl('ccpp-pass2').type = show ? 'text' : 'password';
+    _ccppEl('ccpp-eye').textContent = show ? 'Hide' : 'Show';
+    _ccppEl('ccpp-eye').setAttribute('aria-pressed', show ? 'true' : 'false');
+}
+
+/* Check what's entered; enable Send only when it can go. */
+function ccpp_check() {
+    var pw = _ccppValue(), ok = !!pw, msg = '', cls = '';
+    var typed = _ccpp.source === 'type';
+    _ccppEl('ccpp-nick-row').hidden = !(typed && _ccppEl('ccpp-save').checked);
+    _ccppEl('ccpp-count').textContent = pw ? pw.length + ' of 99 characters' : '';
+    var problem = _ccppProblem(pw);
+    if (!typed && _ccpp.libErr) { ok = false; msg = 'That passphrase couldn’t be read from the vault.'; cls = 'bad'; }
+    else if (problem) { ok = false; msg = problem; cls = 'bad'; }
+    else if (typed && pw && _ccppEl('ccpp-pass2').value && _ccppEl('ccpp-pass2').value !== pw) { ok = false; msg = 'The two entries don’t match.'; cls = 'bad'; }
+    else if (typed && pw && _ccppEl('ccpp-pass2').value !== pw) { ok = false; }
+    else if (typed && _ccppEl('ccpp-save').checked && !_ccppEl('ccpp-nick').value.trim()) { ok = false; msg = 'Give it a nickname to save it in the Passphrase Library.'; }
+    else if (pw && pw !== pw.trim()) { msg = 'It starts or ends with a space. That counts: the Coldcard keeps it.'; cls = 'warn'; }
+    _ccppMsg(msg, cls);
+    _ccppEl('ccpp-send').disabled = !ok || _ccpp.busy;
+}
+
+/* Fingerprint of a seed with a passphrase. */
+async function _ccppFingerprint(mnemonic, pw) {
+    var seed = await window.BtcMath.bip39.mnemonicToSeed(mnemonic, pw);
+    var fp = (window.BtcMath.HDKey.fromMasterSeed(seed).fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase();
+    if (seed instanceof Uint8Array) seed.fill(0);
+    return fp;
+}
+
+async function ccpp_send() {
+    var os = window.SafeKeepOS, pw = _ccppValue();
+    if (!os || typeof os.coldcardSendPassphrase !== 'function' || !pw || _ccppProblem(pw) || _ccpp.busy) return;
+    _ccpp.busy = true;
+    ['ccpp-send', 'ccpp-cancel', 'ccpp-pass', 'ccpp-pass2', 'ccpp-lib'].forEach(function (id) { _ccppEl(id).disabled = true; });
+    _ccppEl('ccpp-result').hidden = true;
+
+    // What SafeKeep expects, from the seed it holds (if any).
+    var sess = window.SeedSession && window.SeedSession.get(), base = '', expect = '';
+    if (sess && sess.mnemonic) {
+        try { base = await _recoveryFingerprint(sess.mnemonic); expect = await _ccppFingerprint(sess.mnemonic, pw); } catch (_) { base = expect = ''; }
+    }
+    _ccppEl('ccpp-len').textContent = String(pw.length);
+    _ccppEl('ccpp-expect').textContent = expect
+        ? 'If the Coldcard holds the same seed as SafeKeep (' + base + '), the new wallet’s fingerprint will be ' + expect + '.'
+        : '';
+    _ccppEl('ccpp-steps').hidden = false;
+    _ccppMsg('Sending to the Coldcard… (plugged in, unlocked with its PIN, USB turned on)');
+
+    var r;
+    try { r = await os.coldcardSendPassphrase(pw); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+
+    var res = _ccppEl('ccpp-result'), html = '';
+    if (r && r.ok) {
+        var fp = '';
+        try { fp = (window.BtcMath.HDKey.fromExtendedKey(r.xpub).fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase(); } catch (_) {}
+        if (base && r.xfpBefore === base && expect) {
+            html = fp === expect
+                ? '&#10004; The Coldcard switched to wallet <strong>' + fp + '</strong>, the one SafeKeep worked out for this passphrase on your seed (' + base + ').'
+                : '&#10008; The Coldcard switched to wallet <strong>' + _psbtEscape(fp) + '</strong>, but SafeKeep expected ' + expect + '. Don’t use it: turn the Coldcard off and on to go back to its main wallet, then check the passphrase.';
+            res.className = 'ccpp-result ' + (fp === expect ? 'ok' : 'bad');
+        } else {
+            html = '&#10004; The Coldcard switched to wallet <strong>' + (_psbtEscape(fp) || 'see its screen') + '</strong>' +
+                (r.xfpBefore ? ' (from ' + _psbtEscape(r.xfpBefore) + ')' : '') + '. ' +
+                (base ? 'It wasn’t on the seed SafeKeep holds (' + base + '), so SafeKeep can’t double-check the fingerprint: compare it with your records.'
+                      : 'No seed is loaded in SafeKeep, so it can’t double-check the fingerprint: compare it with your records.');
+            res.className = 'ccpp-result ok';
+        }
+        if (_ccpp.source === 'type' && _ccppEl('ccpp-save').checked && os.savePassphrase) {
+            var nick = _ccppEl('ccpp-nick').value.trim(), sv = null;
+            try { sv = await os.savePassphrase(nick, pw); } catch (_) {}
+            html += (sv && sv.saved) ? ' Saved in the Passphrase Library as “' + _psbtEscape(nick) + '”.' : ' It wasn’t saved in the Passphrase Library.';
+        }
+        var nick = _ccpp.source === 'library' ? ((_ccppEl('ccpp-lib').selectedOptions[0] || {}).textContent || '')
+                 : (_ccppEl('ccpp-save').checked ? _ccppEl('ccpp-nick').value.trim() : '');
+        if (fp) html += ' If you kept it in the Coldcard&rsquo;s Seed Vault, it is listed there as <strong>[' + _psbtEscape(fp) + ']</strong> (the Coldcard names entries by fingerprint). To name it, while it is still in use: Seed Vault &rarr; [' + _psbtEscape(fp) + '] &rarr; Rename' +
+                       (nick ? ', and type <strong>' + _psbtEscape(nick.slice(0, 40)) + '</strong>' : '') + '.';
+        html += ' Keep a written copy of the passphrase: it is needed to recover this wallet anywhere else.';
+    } else {
+        res.className = 'ccpp-result bad';
+        html = _psbtEscape((r && r.error) || 'The passphrase wasn’t sent.');
+    }
+    pw = '';
+    _ccpp.busy = false;
+    var resultHtml = html, resultCls = res.className;
+    if (r && r.ok) {
+        ccpp_close();                 // forget the passphrase
+        ccpp_open();
+    } else {
+        ['ccpp-send', 'ccpp-cancel', 'ccpp-pass', 'ccpp-pass2', 'ccpp-lib'].forEach(function (id) { _ccppEl(id).disabled = false; });
+        ccpp_check();
+    }
+    _ccppEl('ccpp-steps').hidden = true;
+    _ccppMsg('');
+    res.innerHTML = resultHtml;
+    res.className = resultCls;
+    res.hidden = false;
+}
+
+// ===========================================================================
+// SETTINGS → COLDCARD — send a seed (ccsd_*)
+// ===========================================================================
+// Puts a seed on the Coldcard without typing its words there: one from
+// SafeKeep's Seed Vault, or words typed or scanned here. Sent over USB as a
+// one-seed plaintext backup with the "temporary" flag
+// (SafeKeepOS.coldcardSendSeed → safekeep-coldcard.py "seed"): the Coldcard
+// asks to restore it as a temporary seed, shows its fingerprint, and with
+// its Seed Vault on offers to keep it. Its own seed is never replaced. The
+// Coldcard reports nothing when the user answers, so "Check the Coldcard"
+// reads which wallet it is using (coldcardDetect). A Coldcard stores only
+// 12, 18 or 24 words.
+var CCSD_WORD_COUNTS = [12, 18, 24];
+var _ccsd = { source: 'words', boxes: null, scanner: null, list: [], sentFp: '', before: '', busy: false, token: 0 };
+
+function _ccsdEl(id) { return document.getElementById(id); }
+
+function _ccsdMsg(text, cls) {
+    var el = _ccsdEl('ccsd-msg');
+    el.className = 'ccpp-msg' + (cls ? ' ' + cls : '');
+    el.textContent = text || '';
+}
+
+/* The words to send (normalized), or ''. */
+function _ccsdMnemonic() {
+    if (_ccsd.source === 'vault') {
+        var e = _ccsd.list[Number(_ccsdEl('ccsd-pick').value)];
+        return e ? e.mnemonic : '';
+    }
+    var w = _ccsd.boxes ? _ccsd.boxes.getWords() : [];
+    if (!w.length || w.some(function (x) { return !x; })) return '';
+    return w.join(' ').normalize('NFKD').toLowerCase().trim().split(/\s+/).join(' ');
+}
+
+async function ccsd_open() {
+    if (_skvDemoActive()) { showStatus('SafeKeep demo: sending a seed to a Coldcard works only on the offline vault, run from its USB flash drive.', 'error'); return; }
+    _ccsdEl('ccsd-panel').hidden = false;
+    _ccsdEl('ccsd-open-btn').hidden = true;
+    _ccsdEl('ccsd-steps').hidden = true;
+    _ccsdEl('ccsd-result').hidden = true;
+    var avail = typeof _svAvailable === 'function' && _svAvailable();
+    _ccsd.list = [];
+    if (avail) { try { _ccsd.list = await window.SafeKeepOS.loadSeedVault(); } catch (_) { _ccsd.list = []; } }
+    _ccsdEl('ccsd-src-vault-label').hidden = !avail;
+    var sel = _ccsdEl('ccsd-pick');
+    sel.innerHTML = '';
+    var first = document.createElement('option');
+    first.value = ''; first.textContent = _ccsd.list.length ? 'Choose a seed…' : 'No seeds in SafeKeep’s Seed Vault yet';
+    sel.appendChild(first);
+    _ccsd.list.forEach(function (e, i) {
+        var n = e.mnemonic.split(' ').length, ok = CCSD_WORD_COUNTS.indexOf(n) >= 0;
+        var o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = e.name + ' · ' + n + ' words · ' + e.fingerprint + (ok ? '' : ' (the Coldcard can’t store ' + n + ' words)');
+        o.disabled = !ok;
+        sel.appendChild(o);
+    });
+    ccsd_setSource(avail && _ccsd.list.length ? 'vault' : 'words');
+}
+
+function ccsd_close() {
+    if (_ccsd.busy) return;
+    ccsd_stopScan();
+    if (_ccsd.boxes) { _ccsd.boxes.destroy(); _ccsd.boxes = null; }
+    _ccsdEl('ccsd-pick').innerHTML = '';
+    _ccsd.list = []; _ccsd.sentFp = ''; _ccsd.before = '';
+    _ccsdMsg('');
+    _ccsdEl('ccsd-fp').textContent = '';
+    _ccsdEl('ccsd-steps').hidden = true;
+    _ccsdEl('ccsd-result').hidden = true;
+    _ccsdEl('ccsd-panel').hidden = true;
+    _ccsdEl('ccsd-open-btn').hidden = false;
+}
+
+function ccsd_setSource(src) {
+    _ccsd.source = src;
+    document.querySelectorAll('input[name="ccsd-src"]').forEach(function (r) { r.checked = r.value === src; });
+    _ccsdEl('ccsd-vault').hidden = src !== 'vault';
+    _ccsdEl('ccsd-words').hidden = src !== 'words';
+    if (src === 'words' && !_ccsd.boxes) ccsd_setLength(12);
+    if (src !== 'words') ccsd_stopScan();
+    ccsd_check();
+}
+
+function ccsd_setLength(n) {
+    _ccsdEl('ccsd-len-12').classList.toggle('active', n === 12);
+    _ccsdEl('ccsd-len-24').classList.toggle('active', n === 24);
+    var SF = window.ShareFlow;
+    if (_ccsd.boxes) { _ccsd.boxes.destroy(); _ccsd.boxes = null; }
+    if (SF && SF.createWordBoxes) {
+        _ccsd.boxes = SF.createWordBoxes(_ccsdEl('ccsd-grid'), { count: n, wordlist: SF.wordlists.bip39, idPrefix: 'ccsd' });
+        _ccsd.boxes.onChange(function () { ccsd_check(); });
+    }
+    ccsd_check();
+}
+
+async function ccsd_startScan() {
+    if (!window.SKScanner) { _ccsdMsg('The camera scanner isn’t available.', 'bad'); return; }
+    ccsd_stopScan();
+    _ccsdEl('ccsd-scan').hidden = false;
+    try {
+        _ccsd.scanner = SKScanner.create('ccsd-qr-reader');
+        await _ccsd.scanner.start({ fps: 10 }, function (text, binaryData) {
+            ccsd_stopScan();
+            var words = (typeof sqr_wordsFromScan === 'function') ? sqr_wordsFromScan(text, binaryData) : null;
+            if (!words || (words.length !== 12 && words.length !== 24)) { _ccsdMsg('That QR code isn’t a SeedQR.', 'bad'); return; }
+            ccsd_setLength(words.length);
+            _ccsd.boxes.setWords(words);
+            ccsd_check();
+        });
+    } catch (err) {
+        ccsd_stopScan();
+        _ccsdMsg('Camera error: ' + (err && err.message ? err.message : err), 'bad');
+    }
+}
+
+function ccsd_stopScan() {
+    if (_ccsd.scanner) { try { _ccsd.scanner.stop(); } catch (_) {} _ccsd.scanner = null; }
+    var sc = _ccsdEl('ccsd-scan'); if (sc) sc.hidden = true;
+}
+
+/* Is the seed ready to send? Shows its fingerprint. */
+async function ccsd_check() {
+    var token = ++_ccsd.token, mn = _ccsdMnemonic(), btc = window.BtcMath;
+    _ccsdEl('ccsd-send').disabled = true;
+    _ccsdEl('ccsd-fp').textContent = '';
+    if (!mn) { _ccsdMsg(''); return; }
+    var n = mn.split(' ').length;
+    if (CCSD_WORD_COUNTS.indexOf(n) < 0) { _ccsdMsg('The Coldcard can store a seed of 12, 18 or 24 words.', 'bad'); return; }
+    if (!btc || !btc.bip39.validateMnemonic(mn, btc.wordlist)) { _ccsdMsg('Those words aren’t a valid seed: check them against your backup.', 'bad'); return; }
+    var fp = await _recoveryFingerprint(mn);
+    if (token !== _ccsd.token) return;
+    _ccsdMsg('');
+    _ccsdEl('ccsd-fp').textContent = 'Seed fingerprint ' + fp + ' (' + n + ' words). The Coldcard shows the same fingerprint before it loads the seed.';
+    _ccsdEl('ccsd-send').disabled = _ccsd.busy;
+}
+
+async function ccsd_send() {
+    var os = window.SafeKeepOS, mn = _ccsdMnemonic(), btc = window.BtcMath;
+    if (!os || typeof os.coldcardSendSeed !== 'function' || !mn || _ccsd.busy) return;
+    if (!btc.bip39.validateMnemonic(mn, btc.wordlist)) return;
+    _ccsd.busy = true;
+    ['ccsd-send', 'ccsd-cancel', 'ccsd-pick'].forEach(function (id) { _ccsdEl(id).disabled = true; });
+    _ccsdEl('ccsd-result').hidden = true;
+    var fp = await _recoveryFingerprint(mn);
+    var svPick = _ccsd.source === 'vault' ? _ccsd.list[Number(_ccsdEl('ccsd-pick').value)] : null;
+    var nameSug = svPick ? svPick.name : '';
+    var ent = btc.bip39.mnemonicToEntropy(mn, btc.wordlist);
+    var hexEnt = Array.from(ent, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+    if (ent.fill) ent.fill(0);
+    mn = '';
+    _ccsdMsg('Sending to the Coldcard… (plugged in, unlocked with its PIN, USB turned on)');
+    var r;
+    try { r = await os.coldcardSendSeed(hexEnt); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    hexEnt = '';
+    _ccsd.busy = false;
+    _ccsdMsg('');
+    _ccsdEl('ccsd-cancel').disabled = false;
+    _ccsdEl('ccsd-pick').disabled = false;
+    var res = _ccsdEl('ccsd-result');
+    if (r && r.ok) {
+        _ccsd.sentFp = fp; _ccsd.before = r.xfpBefore || '';
+        if (_ccsd.boxes) _ccsd.boxes.clear();       // the words aren't needed any more
+        _ccsdEl('ccsd-pick').value = '';
+        _ccsdEl('ccsd-fp').textContent = '';
+        _ccsdEl('ccsd-step-fp').textContent = fp;
+        _ccsdEl('ccsd-step-fp2').textContent = '[' + fp + ']';
+        _ccsdEl('ccsd-step-name-sug').textContent = nameSug ? ', and type ' + nameSug.slice(0, 40) + ' (its name in SafeKeep)' : ' (up to 40 characters)';
+        _ccsdEl('ccsd-steps').hidden = false;
+        res.hidden = true;
+    } else {
+        res.className = 'ccpp-result bad';
+        res.textContent = (r && r.error) || 'The seed wasn’t sent.';
+        res.hidden = false;
+        ccsd_check();
+    }
+}
+
+/* After answering on the Coldcard: which wallet is it using now? */
+async function ccsd_verify() {
+    var os = window.SafeKeepOS, res = _ccsdEl('ccsd-result'), btn = _ccsdEl('ccsd-verify');
+    if (!os || !_ccsd.sentFp) return;
+    btn.disabled = true;
+    var d;
+    try { d = await os.coldcardDetect(); } catch (e) { d = { ok: false, error: String(e && e.message || e) }; }
+    btn.disabled = false;
+    var html, cls = 'bad';
+    if (!d || !d.ok) html = _psbtEscape((d && d.error) || 'No Coldcard found.');
+    else if (d.xfp === _ccsd.sentFp) {
+        cls = 'ok';
+        html = '&#10004; The Coldcard is now using the seed you sent (<strong>' + _psbtEscape(d.xfp) + '</strong>). If you pressed 1, it is in the Coldcard&rsquo;s Seed Vault: after you switch back or turn it off and on, you&rsquo;ll find it there. Keep a written backup of these words too.';
+    } else if (d.xfp === _ccsd.before) {
+        html = 'The Coldcard is still on its own wallet (' + _psbtEscape(d.xfp) + '), so it hasn&rsquo;t loaded the seed. If it is still asking, answer on its screen, then check again. If you pressed X, send the seed again.';
+    } else {
+        html = 'The Coldcard is using wallet ' + _psbtEscape(d.xfp) + ', not the seed you sent (' + _psbtEscape(_ccsd.sentFp) + '). Check its screen.';
+    }
+    res.className = 'ccpp-result ' + cls;
+    res.innerHTML = html;
+    res.hidden = false;
 }
 
 // ===========================================================================
@@ -30816,6 +31402,7 @@ function desc_updateMsAddrType() {
     if (pathEl) pathEl.textContent = "m/48'/0'/0'/" + suffixMap[addrType];
     document.getElementById('desc-output').style.display = 'none';
     desc_updateLocalKeyStatus();
+    desc_msRefreshSeedVaultKeys();
 }
 
 // =============================================
@@ -30930,6 +31517,7 @@ function desc_renderCosignerInputs(n) {
 
     var container = document.getElementById('desc-ms-cosigners');
     container.innerHTML = '';
+    var svOn = typeof _svAvailable === 'function' && _svAvailable();
 
     // Build Key 2 through N
     for (var i = 2; i <= n; i++) {
@@ -30957,7 +31545,10 @@ function desc_renderCosignerInputs(n) {
                 '<button type="button" class="skb-btn" style="flex: 1; border: 1px dashed var(--skb-border); font-size: 0.8125rem;" onclick="desc_scanCosignerQR(' + i + ')">Scan QR</button>' +
                 '<button type="button" class="skb-btn" style="flex: 1; font-size: 0.8125rem;" id="desc-ms-cc-btn-' + i + '" onclick="desc_importCosignerFromDevice(' + i + ', \'coldcard\')" title="Read this cosigner\'s key from a Coldcard plugged in by USB">Coldcard (USB)</button>' +
                 '<button type="button" class="skb-btn" style="flex: 1; font-size: 0.8125rem;" id="desc-ms-tz-btn-' + i + '" onclick="desc_importCosignerFromDevice(' + i + ', \'trezor\')" title="Read this cosigner\'s key from a Trezor One plugged in by USB">Trezor (USB)</button>' +
+                (svOn ? '<button type="button" class="skb-btn" style="flex: 1; font-size: 0.8125rem;" id="desc-ms-sv-btn-' + i + '" onclick="desc_msPickSeedVault(' + i + ')" title="Use the key of a seed kept in SafeKeep\'s Seed Vault">Seed Vault</button>' : '') +
             '</div>' +
+            '<div id="desc-ms-sv-area-' + i + '" hidden style="margin-top: 0.5rem;"><select id="desc-ms-sv-pick-' + i + '" onchange="desc_msUseSeedVault(' + i + ')" aria-label="Seed from SafeKeep\'s Seed Vault" ' +
+                'style="width: 100%; padding: 0.45rem 0.55rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8125rem;"></select></div>' +
             '<div id="desc-ms-hw-status-' + i + '" role="status" style="display: none; margin-top: 0.5rem; font-size: 0.8125rem; line-height: 1.5;"></div>' +
             '<div id="desc-ms-qr-area-' + i + '" style="display: none; margin-top: 0.75rem;">' +
                 '<div id="desc-ms-qr-reader-' + i + '" style="width: 100%; min-height: 280px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>' +
@@ -31037,6 +31628,101 @@ async function desc_scanCosignerQR(idx) {
         showStatus('Camera failed: ' + err.message, 'error');
         area.style.display = 'none';
     }
+}
+
+// =============================================
+// MULTI-SIG: a cosigner key from SafeKeep's Seed Vault
+// =============================================
+// Fills a cosigner slot with the BIP-48 key of a seed kept in the Seed
+// Vault (the same key origin Key 1 uses). The seed in use (Key 1) isn't
+// offered. A key picked here follows the address type when it changes.
+// If this vault ends up holding enough keys to spend, the result says so
+// (_descMsCustody): a multisig only protects you if its keys are apart.
+var _descMsSv = {};      // slot → { name, fingerprint, origin } picked from the Seed Vault
+var _descMsSvList = [];  // the Seed Vault list shown in the last picker
+
+async function desc_msPickSeedVault(idx) {
+    var area = document.getElementById('desc-ms-sv-area-' + idx), sel = document.getElementById('desc-ms-sv-pick-' + idx);
+    if (!area || !sel) return;
+    if (!area.hidden) { area.hidden = true; return; }
+    var list = [];
+    try { list = await window.SafeKeepOS.loadSeedVault(); } catch (_) { list = []; }
+    var sess = window.SeedSession && window.SeedSession.get();
+    var inUse = sess && sess.mnemonic ? sess.mnemonic : '';
+    sel.innerHTML = '';
+    var first = document.createElement('option');
+    first.value = ''; first.textContent = list.length ? 'Choose a stored seed…' : 'No seeds in SafeKeep’s Seed Vault yet (Seed Management)';
+    sel.appendChild(first);
+    list.forEach(function (e, i) {
+        var o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = e.name + ' · ' + e.fingerprint + (e.mnemonic === inUse ? ' (Key 1: in use)' : '');
+        o.disabled = e.mnemonic === inUse;
+        sel.appendChild(o);
+    });
+    sel.disabled = !list.length;
+    _descMsSvList = list;
+    area.hidden = false;
+}
+
+async function desc_msUseSeedVault(idx) {
+    var sel = document.getElementById('desc-ms-sv-pick-' + idx);
+    var e = _descMsSvList[Number(sel && sel.value)];
+    if (!sel || !sel.value || !e) return;
+    var addrType = desc_state.msAddrType || (document.getElementById('desc-ms-addr-type') || {}).value || '84';
+    try {
+        var k = await _descLocalKeyOrigin(e.mnemonic, '', addrType);
+        document.getElementById('desc-ms-xpub-' + idx).value = k.origin;
+        document.getElementById('desc-ms-fp-' + idx).value = k.fingerprint;
+        _descMsSv[idx] = { name: e.name, fingerprint: k.fingerprint, origin: k.origin };
+        document.getElementById('desc-output').style.display = 'none';
+        document.getElementById('desc-ms-sv-area-' + idx).hidden = true;
+        _descHwStatus(idx, '\u2714 From SafeKeep\u2019s Seed Vault: ' + e.name + ' (fingerprint ' + k.fingerprint.toUpperCase() + '), ' + (_DESC_MS_DERIV[addrType] || '') + '.', 'ok');
+    } catch (err) {
+        _descHwStatus(idx, 'Couldn\u2019t work out that seed\u2019s key: ' + (err && err.message ? err.message : err), 'error');
+    }
+}
+
+/* The address type changed: work out again the keys picked from the Seed Vault. */
+async function desc_msRefreshSeedVaultKeys() {
+    var slots = Object.keys(_descMsSv);
+    if (!slots.length) return;
+    var list = [];
+    try { list = await window.SafeKeepOS.loadSeedVault(); } catch (_) { return; }
+    var addrType = desc_state.msAddrType || '84';
+    for (var j = 0; j < slots.length; j++) {
+        var idx = slots[j], pick = _descMsSv[idx], input = document.getElementById('desc-ms-xpub-' + idx);
+        var e = list.find(function (x) { return x.fingerprint.toLowerCase() === pick.fingerprint.toLowerCase(); });
+        if (!input || input.value.trim() !== pick.origin || !e) { delete _descMsSv[idx]; continue; }   // replaced by hand: leave it
+        var k = await _descLocalKeyOrigin(e.mnemonic, '', addrType);
+        input.value = k.origin;
+        _descMsSv[idx] = { name: pick.name, fingerprint: k.fingerprint, origin: k.origin };
+        _descHwStatus(Number(idx), '\u2714 From SafeKeep\u2019s Seed Vault: ' + pick.name + ' (fingerprint ' + k.fingerprint.toUpperCase() + '), ' + (_DESC_MS_DERIV[addrType] || '') + '.', 'ok');
+    }
+}
+
+/* How many of the wallet's keys this vault holds: Key 1 (the seed in use)
+   and every key whose fingerprint is a seed in the Seed Vault. When that is
+   M or more, this flash drive alone can spend: say so. */
+async function _descMsCustody(keyOrigins, m) {
+    var box = document.getElementById('desc-ms-custody');
+    if (!box) return;
+    var fps = {};
+    try { (await window.SafeKeepOS.loadSeedVault()).forEach(function (e) { fps[e.fingerprint.toLowerCase()] = e.name; }); } catch (_) {}
+    var here = [], n = keyOrigins.length;
+    keyOrigins.forEach(function (k, i) {
+        var fp = (/^\[([0-9a-fA-F]{8})/.exec(k) || [])[1];
+        if (i === 0) here.push('Key 1 (the seed in use)');
+        else if (fp && fps[fp.toLowerCase()]) here.push('Key ' + (i + 1) + ' (' + fps[fp.toLowerCase()] + ')');
+    });
+    if (here.length < m) { box.hidden = true; box.innerHTML = ''; return; }
+    var away = here.length - m + 1;
+    box.innerHTML = '<strong>&#9888; ' + (here.length === n ? 'All ' + n + ' keys of this wallet are in this vault.' : 'This vault holds ' + here.length + ' of the ' + n + ' keys, and ' + m + ' are enough to spend.') + '</strong> ' +
+        'Anyone who unlocks this flash drive can spend from this wallet without any other device, so it is no safer than a single-signature wallet. ' +
+        'Keys here: ' + _wrecEscape(here.join(', ')) + '. ' +
+        'For real savings, keep ' + (away === 1 ? 'at least one of these keys' : 'at least ' + away + ' of these keys') + ' only somewhere else: another device, or a Coldcard (Device Options → Coldcard → Send a Seed), with the seed then removed from SafeKeep’s Seed Vault. ' +
+        'Fine for trying multisig out or for a test wallet.';
+    box.hidden = false;
 }
 
 // =============================================
@@ -31152,6 +31838,8 @@ async function desc_generate() {
             throw new Error('Type the passphrase again in the box under it first. A typo would give you the descriptor of a different, empty wallet.');
         }
 
+        var custodyBox = document.getElementById('desc-ms-custody');
+        if (custodyBox) { custodyBox.hidden = true; custodyBox.innerHTML = ''; }
         if (desc_state.mode === 'single') {
             // ===== SINGLE-SIG PATH =====
             await desc_generateSingle(bip39, wordlist, HDKey, btcSigner);
@@ -31515,6 +32203,8 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
     document.getElementById('desc-output').style.display = 'block';
     document.getElementById('desc-qr-wrap').style.display = 'none';
     document.getElementById('desc-qr-toggle-btn').textContent = 'Show QR';
+
+    await _descMsCustody(keyOrigins, m);
 
     var addrTypeLabels = { '84': 'P2WSH', '49': 'P2SH-P2WSH', '44': 'P2SH' };
     showStatus(m + '-of-' + n + ' ' + (addrTypeLabels[addrType] || 'P2WSH') + ' multisig descriptor generated. Local fingerprint: ' + fingerprint.toUpperCase(), 'success');
@@ -32295,6 +32985,7 @@ var _descvQrScanner = null;
 var _descvUrDecoder = null;
 var _descvScanProcessing = false;
 var _descvCourier = null;    // Courier file transfer (a wallet export sent as a file)
+var _descvBbqr = {};         // BBQr frames by part number (Sparrow / COLDCARD animated codes)
 
 async function descv_scanQR() {
     if (!window.jsQR) { showStatus('QR scanner library not available.', 'error'); return; }
@@ -32304,6 +32995,7 @@ async function descv_scanQR() {
     _descvScanProcessing = false;
     _descvUrDecoder = new (window.URDecoder)();
     _descvCourier = (window.QRParser && window.QRParser.createCourierCollector) ? window.QRParser.createCourierCollector() : null;
+    _descvBbqr = {};
     var statusEl = document.getElementById('descv-scan-status');
     if (statusEl) statusEl.textContent = 'Awaiting QR code...';
 
@@ -32340,6 +33032,27 @@ function _descvOnQrScanned(text, binaryData) {
     // Route 1: UR-encoded QR (single-frame or animated)
     if (trimmed.toUpperCase().startsWith('UR:')) {
         _descvHandleUrFrame(trimmed);
+        return;
+    }
+
+    // Route 1b: BBQr (B$…): collect every part, then read it like pasted text.
+    if (/^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(trimmed)) {
+        var head = trimmed.substring(2, 6), total = parseInt(trimmed.substring(4, 6), 36), part = parseInt(trimmed.substring(6, 8), 36);
+        if (_descvBbqr.head !== head) _descvBbqr = { head: head, parts: {} };   // a new code: start again
+        _descvBbqr.parts[part] = trimmed;
+        var have = Object.keys(_descvBbqr.parts).length;
+        var st = document.getElementById('descv-scan-status');
+        if (st) st.textContent = 'Scanning BBQr… ' + have + ' / ' + total + ' parts';
+        if (have < total) return;
+        _descvScanProcessing = true;
+        descv_stopQR();
+        var all = [];
+        for (var i = 0; i < total; i++) all.push(_descvBbqr.parts[i]);
+        _descvBbqr = {};
+        var inp = document.getElementById('desc-verify-input');
+        if (inp) inp.value = all.join('\n');
+        showStatus('Wallet scanned from a BBQr code — verifying...', 'success');
+        desc_verify();
         return;
     }
 
@@ -33216,6 +33929,46 @@ function _descImportJsonKey(text) {
 }
 
 /* Main entry: raw Verify input → { ok, error, converted, descriptor, label, notes, expectFirstAddress }. */
+/* A wallet export pasted or relayed (The Courier) as QR text: BBQr
+   ("B$…", which Sparrow and COLDCARD can show) or UR ("UR:CRYPTO-OUTPUT/…",
+   "UR:BYTES/…", one or more parts). Decode it to a descriptor or the text
+   inside, then read that as usual. The camera scanner does the same with
+   frames it sees. Anything else passes through unchanged. */
+async function _descImportUnwrap(raw) {
+    var t = String(raw || '').trim();
+    if (/^ur:/i.test(t)) return _descImportFromUrText(t);
+    if (!/^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(t)) return raw;
+    var r = await _bbqrDecode(t);
+    if (r.type !== 'U' && r.type !== 'J') {
+        throw new Error('This BBQr code holds ' + ({ P: 'a transaction to sign (PSBT): open it in the PSBT Signer', T: 'a signed transaction', B: 'a binary file' }[r.type] || 'something other than text') + ', not a wallet.');
+    }
+    return new TextDecoder('utf-8', { fatal: false }).decode(r.bytes);
+}
+
+/* UR text (one frame, or several separated by spaces or new lines) →
+   a descriptor (crypto-output / crypto-account) or text (bytes). */
+function _descImportFromUrText(t) {
+    var frames = t.split(/\s+/).filter(Boolean);
+    if (!window.URDecoder) throw new Error('The UR decoder isn’t available.');
+    var dec = new (window.URDecoder)();
+    frames.forEach(function (f) {
+        try { dec.receivePart(f.toLowerCase()); } catch (e) { throw new Error('This UR code is damaged (' + (e && e.message ? e.message : e) + ').'); }
+    });
+    if (!dec.isComplete()) {
+        throw new Error('This UR code is animated and only part of it arrived (' + Math.round(dec.getProgress() * 100) + '%). Scan it with Scan QR / UR / Courier, or show it as a single QR code.');
+    }
+    if (!dec.isSuccess()) throw new Error('This UR code didn’t check out (checksum error). Scan it again.');
+    var ur = dec.resultUR(), type = String(ur.type || '').toLowerCase();
+    if (type === 'crypto-output' || type === 'crypto-account') return descv_decodeCryptoOutput(ur.cbor);
+    if (type === 'bytes') {
+        var raw = window.CBOR.decode(Buffer.from(ur.cbor));
+        var bytes = (raw instanceof Uint8Array || Buffer.isBuffer(raw)) ? raw : ur.cbor;
+        return new TextDecoder('utf-8').decode(new Uint8Array(bytes)).replace(/^\uFEFF/, '').trim();
+    }
+    if (type === 'crypto-psbt') throw new Error('This UR code holds a transaction to sign (PSBT): open it in the PSBT Signer.');
+    throw new Error('This UR code is a “' + type + '”, not a wallet. Show the wallet’s output descriptor (crypto-output) instead.');
+}
+
 function _descImportConvert(raw) {
     var text = String(raw || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n')
         .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().replace(/^bitcoin:(\/\/)?/i, '');
@@ -33335,7 +34088,7 @@ async function desc_verify() {
 
         // Wallet exports (multisig setup files, BSMS, single keys …) are
         // converted to a descriptor first; a descriptor passes through as is.
-        var conv = _descImportConvert(document.getElementById('desc-verify-input').value);
+        var conv = _descImportConvert(await _descImportUnwrap(document.getElementById('desc-verify-input').value));
         if (!conv.ok) throw new Error(conv.error);
         if (conv.converted) _descShowConverted(conv);
         var rawDesc = conv.descriptor;
