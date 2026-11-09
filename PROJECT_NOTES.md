@@ -43,8 +43,25 @@
   fingerprint from its own seed and checks it when the Coldcard was on
   that seed. The helper overwrites the request before deleting it; the
   passphrase is never in the result. Optional: also save it in the
-  Passphrase Library. Not yet tried on a real Mk4. Code `ccpp_*`; tests
+  Passphrase Library. Works on Dave's Mk4. Code `ccpp_*`; tests
   `test-coldcard-passphrase.mjs`, `usbbootdrive/tests/test-coldcard-helper.py`.
+- **Send a Seed to the Coldcard** (Device Options → Coldcard): a seed from
+  SafeKeep's Seed Vault, or 12/24 words typed or scanned, loaded on the
+  Coldcard as a TEMPORARY seed so it can be kept in its Seed Vault. There
+  is no USB command for "add to Seed Vault": the helper action `seed`
+  sends a one-seed plaintext backup (`raw_secret` + `chain` only, in the
+  firmware's format) with `restore_backup(plaintext=True, tmp=True)`
+  (`ckcc restore -t` of a .txt), so no backup password is typed. Firmware
+  (`auth.RemoteRestoreBackup`, `backups.restore_tmp_from_dict_ll`): asks
+  to restore as a temporary seed, shows its fingerprint, then
+  `set_ephemeral_seed` offers Seed Vault (1). A Coldcard with no seed is
+  refused. 12, 18 or 24 words only (the Coldcard's storage format). The
+  restore reports nothing back, so *Check the Coldcard* runs `detect` and
+  compares fingerprints. Coinkite's library marks the plaintext flag
+  "(dev)"; the firmware path has no dev-only check, but this is untried on
+  a real Mk4. Code `ccsd_*`; test `test-coldcard-seed.mjs`.
+- **Device Options order**: every Coldcard feature together (pair,
+  passphrase, seed, Import from a COLDCARD backup), then Trezor.
 
 ## Current state (Nov 7, 2026) — v1.64
 

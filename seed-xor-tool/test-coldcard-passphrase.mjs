@@ -51,7 +51,7 @@ console.log('\n3. Bridge, OS and panel');
 ck('coldcardSendPassphrase is exported and waits up to 11 minutes', /coldcardDetect,\s*coldcardSendPassphrase,/.test(bridge) && bridge.includes("_coldcardRequest({ action: 'passphrase', passphrase }, 11 * 60 * 1000)"));
 ck('the helper overwrites the request before deleting it', helper.includes("f.write(b'\\0' * size)") && helper.includes('os.fsync(f.fileno())'));
 ck('the helper checks authenticity first, against the paired key when it is the paired Coldcard', helper.includes("anchor = pairing['master_xpub'] if pairing and pairing['xfp'] == xfp_before else None") && helper.indexOf('dev.check_mitm(expected_xpub=anchor)') < helper.indexOf('P.bip39_passphrase(pw)'));
-ck('the Coldcard Watcher documents the action', boot.includes('| "passphrase", "request_id": ... }'));
+ck('the Coldcard Watcher documents the action', boot.includes('| "passphrase" | "seed", "request_id": ... }'));
 ck('the panel sits in Device Options → Coldcard', html.indexOf('id="ccpp-block"') > html.indexOf('id="settings-coldcard-section"') && html.indexOf('id="ccpp-block"') < html.indexOf('id="settings-trezor-section"'));
 ck('the Passphrase Library has no Coldcard button (it stays general): one Send button, in Device Options', (html.match(/onclick="ccpp_(send|open)\(\)"/g) || []).length === 2 && html.indexOf('onclick="ccpp_open()"') > html.indexOf('id="ccpp-block"'));
 ck('two sources: typed (twice) or the Passphrase Library (read only)', html.includes('value="type" checked onchange="ccpp_setSource(\'type\')"> Type a passphrase') && html.includes("Choose from the Passphrase Library") && html.includes('id="ccpp-pass2"') && fn('async function ccpp_setSource').includes('os.listPassphrases()') && fn('async function ccpp_pickLibrary').includes('os.loadPassphrase(slug)'));
@@ -63,7 +63,7 @@ ck('start from the main wallet, and keep a written copy', html.includes('Start f
 ck('closing forgets the passphrase', fn('function ccpp_close').includes("['ccpp-pass', 'ccpp-pass2', 'ccpp-nick'].forEach(function (id) { _ccppEl(id).value = ''; });") && fn('function ccpp_close').includes("_ccpp.libPass = ''"));
 ck('…and a successful send closes and reopens the panel empty', fn('async function ccpp_send').includes('ccpp_close();                 // forget the passphrase'));
 ck('not in the online demo', fn('function ccpp_open').includes('if (_skvDemoActive())') && fn('async function ccSettingsRefresh').includes('ccppBlock.hidden = _skvDemoActive()'));
-ck('hidden rows stay hidden (a flex row would override [hidden])', html.includes('.ccpp-panel [hidden], #ccpp-block[hidden] { display: none !important; }'));
+ck('hidden rows stay hidden (a flex row would override [hidden])', html.includes('.ccpp-panel [hidden], #ccpp-block[hidden], #ccsd-block[hidden] { display: none !important; }'));
 ck('the dev build has a pretend Coldcard for it', html.includes('coldcardSendPassphrase: async function (pw)'));
 ck('American English: "check", no "tick"', !/\b[Tt]ick/.test(html.slice(html.indexOf('id="ccpp-block"'), html.indexOf('id="settings-trezor-section"'))));
 
