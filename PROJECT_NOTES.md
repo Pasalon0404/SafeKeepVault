@@ -9,6 +9,27 @@
 
 ---
 
+## Since v1.64 (on the branch, not released)
+
+- **Seed Vault**: other seeds kept beside the master seed (a family
+  member's wallet, a second multisig key, an old wallet), at most 20.
+  Managed in Seed Management (card `#sv-card`: Add a Seed by words or
+  SeedQR scan, Keep the Temporary Seed Here, Rename, Show words, Delete);
+  switched to from the Dashboard's *Seed Vault ▾* button. A stored seed
+  in use is the session seed labelled `Seed Vault: <name>` (not
+  `default`), with a banner and *Back to Master Seed*
+  (`SafeKeepOS.reloadMasterSeed`). Switching clears any applied
+  passphrase. Notes, saved wallets and Encrypted Backup stay allowed:
+  they belong to the vault. Stored by the Seed Vault Watcher as
+  `seeds/seed-vault.json` (mode 600; the app downloads `SEED_VAULT.json`),
+  so Encrypted Backup's seed option, restore and factory reset cover it.
+  Off in a Temporary Session and on a flash drive that doesn't keep the
+  seed (the Seed Storage Watcher and the boot cleanup delete it). COLDCARD
+  backups: ticked Seed Vault entries are kept on import and restore (a
+  clashing name gets " (COLDCARD)"). Code: `sv_*` in `boot.html`;
+  tests `test-seed-vault.mjs`, `usbbootdrive/tests/test-seed-vault-watcher.py`
+  (the real watcher block).
+
 ## Current state (Nov 7, 2026) — v1.64
 
 **v1.64** (Nov 7) — tested on Dave's flash drive as quick updates from

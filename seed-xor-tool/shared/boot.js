@@ -2521,6 +2521,103 @@ const SafeKeepOS = (() => {
     return { saved: false, error: 'The vault didn’t confirm the save. Try again.' };
   }
 
+  // ---- Seed Vault: other seeds kept beside the master seed ----
+  // Seed Management → Seed Vault. The whole list is downloaded as
+  // SEED_VAULT.json; safekeep-boot.sh's Seed Vault Watcher checks it and
+  // stores it as seeds/seed-vault.json (mode 600), beside master-seed.json.
+  // Not in a Temporary Session (no vault), and not on a flash drive set not
+  // to keep the seed (the OS refuses and deletes it).
+  const SEED_VAULT_FILE = 'SEED_VAULT.json';
+  const SEED_VAULT_URL  = `${MASTER_SEED_URL.replace(MASTER_SEED_FILE, '')}seed-vault.json`;
+  const SEED_VAULT_MAX  = 20;
+  const SEED_VAULT_WORD_COUNTS = [12, 15, 18, 21, 24];
+  let _seedVaultMem = [];
+
+  /** A clean copy of a seed list, or null if any entry is invalid. */
+  function _cleanSeedVault(list) {
+    if (!Array.isArray(list) || list.length > SEED_VAULT_MAX) return null;
+    const out = [], names = new Set(), words = new Set();
+    for (const e of list) {
+      if (!e || typeof e !== 'object') return null;
+      const name = typeof e.name === 'string' ? e.name.trim() : '';
+      const mnemonic = typeof e.mnemonic === 'string' ? e.mnemonic.normalize('NFKD').toLowerCase().trim().split(/\s+/).join(' ') : '';
+      const fp = typeof e.fingerprint === 'string' ? e.fingerprint.toUpperCase() : '';
+      if (!name || name.length > 40 || /[\x00-\x1f\x7f]/.test(name)) return null;
+      if (!/^[a-z]{3,8}( [a-z]{3,8})*$/.test(mnemonic) || !SEED_VAULT_WORD_COUNTS.includes(mnemonic.split(' ').length)) return null;
+      if (!/^[0-9A-F]{8}$/.test(fp)) return null;
+      if (names.has(name.toLowerCase()) || words.has(mnemonic)) return null;
+      names.add(name.toLowerCase()); words.add(mnemonic);
+      out.push({ name, mnemonic, fingerprint: fp, added: typeof e.added === 'string' ? e.added.slice(0, 40) : '' });
+    }
+    return out;
+  }
+
+  /** Whether this session can keep stored seeds (a vault that keeps seeds). */
+  function seedVaultAvailable() {
+    if (_ccTemporarySession()) return false;
+    return _keepSeed !== false;
+  }
+
+  /** The stored seeds: [{ name, mnemonic, fingerprint, added }]. */
+  async function loadSeedVault() {
+    if (!seedVaultAvailable()) return [];
+    if (!isBootDrive()) return _seedVaultMem.map(e => Object.assign({}, e));
+    try {
+      const resp = await fetch(SEED_VAULT_URL, { cache: 'no-store' });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      return _cleanSeedVault(data && data.seeds) || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /**
+   * Replace the stored list. Waits until the Seed Vault Watcher has stored
+   * it (an empty list removes the file). @returns {Promise<{saved, error?}>}
+   */
+  async function saveSeedVault(list) {
+    const clean = _cleanSeedVault(list);
+    if (!clean) return { saved: false, error: 'The seed list is invalid (at most ' + SEED_VAULT_MAX + ' seeds, each with its own name and words).' };
+    if (_ccTemporarySession()) return { saved: false, error: 'A Temporary Session has no vault to keep seeds in.' };
+    if (_keepSeed === false) return { saved: false, error: 'This flash drive is set not to keep seeds (Device Options → Seed storage).' };
+    if (!isBootDrive()) { _seedVaultMem = clean; return { saved: true }; }
+    if (!(await _isVaultMounted())) return { saved: false, error: 'The encrypted vault is not mounted, so the seeds can’t be saved.' };
+    const payload = JSON.stringify({ version: 1, saved_at: new Date().toISOString(), seeds: clean });
+    if (!_silentDownload(SEED_VAULT_FILE, payload)) return { saved: false, error: 'The save was blocked.' };
+    const want = JSON.stringify(clean.map(e => [e.name, e.mnemonic]));
+    for (let i = 0; i < 16; i++) {
+      await _sleep(500);
+      const got = await loadSeedVault();
+      if (JSON.stringify(got.map(e => [e.name, e.mnemonic])) === want) return { saved: true };
+    }
+    return { saved: false, error: 'The vault didn’t confirm the save. Try again.' };
+  }
+
+  /**
+   * Back to the master seed after using a stored one: read master-seed.json
+   * again and make it the session seed. Returns the seed data or null.
+   */
+  async function reloadMasterSeed() {
+    if (!isBootDrive() || _ccTemporarySession() || _keepSeed === false) return null;
+    try {
+      const resp = await fetch(MASTER_SEED_URL, { cache: 'no-store' });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (!data || !data.mnemonic || data.wiped === WIPED_MARKER) return null;
+      const words = data.mnemonic.trim().split(/\s+/);
+      window.SeedSession?.set({
+        type: data.type || 'seed', mnemonic: data.mnemonic, fingerprint: data.fingerprint || '',
+        label: data.label || 'Master Seed', keyFormat: data.keyFormat || 'slip132',
+        addressType: data.addressType || '84', wordCount: words.length, default: true
+      });
+      _masterFingerprint = data.fingerprint || null;
+      return Object.assign({ wordCount: words.length }, data);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ---- Receive positions: the last address "Show an address" showed, per
   // wallet. Stored by the Receive Watcher in settings/receive-index.json.
   const RECEIVE_INDEX_URL = `file://${VAULT_ROOT}/settings/receive-index.json`;
@@ -3328,6 +3425,12 @@ const SafeKeepOS = (() => {
     // Printing a SeedQR (Print Watcher)
     printDetect,
     printSeedQR,
+
+    // Seed Vault (Seed Management → Seed Vault; Dashboard → Switch seed)
+    seedVaultAvailable,
+    loadSeedVault,
+    saveSeedVault,
+    reloadMasterSeed,
 
     // Saved wallets (Output Descriptor tool → PSBT Signer)
     loadSavedWallets,
