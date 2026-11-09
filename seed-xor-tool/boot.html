@@ -380,6 +380,23 @@
     .sv-list { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.75rem 0; }
     .sv-row { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.65rem 0.8rem; background: var(--skb-bg-input); }
     .sv-row-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .ccpp-panel { margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid var(--skb-border); background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); max-width: 40rem; }
+    .ccpp-panel [hidden], #ccpp-block[hidden] { display: none !important; }
+    .ccpp-src { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .ccpp-src label, .ccpp-check { display: flex; gap: 0.4rem; align-items: center; cursor: pointer; }
+    .ccpp-label { display: block; margin: 0.5rem 0 0.25rem; color: var(--skb-text-muted); }
+    .ccpp-row { display: flex; gap: 0.4rem; align-items: center; }
+    .ccpp-row input[type="password"], .ccpp-row input[type="text"], .ccpp-row select { flex: 1; padding: 0.45rem 0.55rem; background: var(--skb-bg); border: 1px solid var(--skb-border); color: var(--skb-text); font: inherit; }
+    .ccpp-check { margin-top: 0.6rem; }
+    .ccpp-count { margin-top: 0.4rem; color: var(--skb-text-muted); font-size: 0.75rem; }
+    .ccpp-msg { margin: 0.35rem 0; min-height: 1.1em; }
+    .ccpp-msg.bad, .ccpp-result.bad { color: var(--skb-danger); }
+    .ccpp-msg.warn { color: var(--skb-warning, #f59e0b); }
+    .ccpp-note { color: var(--skb-text-muted); font-size: 0.75rem; margin: 0.35rem 0 0.75rem; line-height: 1.5; }
+    .ccpp-steps { margin-top: 0.85rem; padding: 0.7rem 0.85rem; border-left: 4px solid var(--skb-primary); background: rgba(247, 147, 26, 0.06); line-height: 1.55; }
+    .ccpp-steps ol { margin: 0.35rem 0 0.35rem 1.2rem; padding: 0; }
+    .ccpp-result { margin-top: 0.85rem; line-height: 1.55; }
+    .ccpp-result.ok { color: var(--skb-secondary, #3fb950); }
     .sv-row-name { font-weight: 700; color: var(--skb-text); }
     .sv-row-meta { font-family: var(--skb-mono); font-size: 0.75rem; color: var(--skb-text-muted); }
     .sv-row-inuse { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; color: #000; background: var(--skb-primary); padding: 0.05rem 0.45rem; border-radius: 4px; }
@@ -7598,6 +7615,51 @@
                                 <button type="button" class="skb-btn" id="settings-coldcard-pair-btn" onclick="ccSettingsStartPair()">Pair Coldcard</button>
                                 <button type="button" class="skb-btn" id="settings-coldcard-forget-btn" style="display: none;" onclick="ccSettingsForget()">Forget Coldcard</button>
                             </div>
+                            <!-- Send a passphrase to the Coldcard (ccpp_*): typed here or from the Passphrase Library, sent over USB -->
+                            <div id="ccpp-block" style="margin-top: 1.1rem;">
+                                <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.6rem; line-height: 1.6;">
+                                    Type a BIP-39 passphrase here instead of on the Coldcard&rsquo;s keys. The Coldcard shows it, and switches to that passphrase wallet only when you press OK. With Seed Vault turned on in the Coldcard, it offers to keep the wallet there, so you never type it again. No pairing needed.
+                                </p>
+                                <button type="button" class="skb-btn" id="ccpp-open-btn" onclick="ccpp_open()">Send a Passphrase to the Coldcard</button>
+                                <div id="ccpp-panel" class="ccpp-panel" hidden>
+                                    <div class="ccpp-src" role="radiogroup" aria-label="Where the passphrase comes from">
+                                        <label><input type="radio" name="ccpp-src" value="type" checked onchange="ccpp_setSource('type')"> Type a passphrase</label>
+                                        <label><input type="radio" name="ccpp-src" value="library" onchange="ccpp_setSource('library')"> Choose from the Passphrase Library</label>
+                                    </div>
+                                    <div id="ccpp-type">
+                                        <label class="ccpp-label" for="ccpp-pass">Passphrase</label>
+                                        <div class="ccpp-row">
+                                            <input type="password" id="ccpp-pass" maxlength="99" autocomplete="off" spellcheck="false" oninput="ccpp_check()">
+                                            <button type="button" class="skb-btn" id="ccpp-eye" aria-pressed="false" onclick="ccpp_toggleShow()">Show</button>
+                                        </div>
+                                        <label class="ccpp-label" for="ccpp-pass2">Type it again</label>
+                                        <div class="ccpp-row"><input type="password" id="ccpp-pass2" maxlength="99" autocomplete="off" spellcheck="false" oninput="ccpp_check()"></div>
+                                        <label class="ccpp-check"><input type="checkbox" id="ccpp-save" onchange="ccpp_check()"> Also save it in the Passphrase Library, as</label>
+                                        <div class="ccpp-row" id="ccpp-nick-row" hidden><input type="text" id="ccpp-nick" maxlength="60" autocomplete="off" placeholder="Nickname, e.g. Savings" oninput="ccpp_check()"></div>
+                                    </div>
+                                    <div id="ccpp-library" hidden>
+                                        <label class="ccpp-label" for="ccpp-lib">Saved passphrase</label>
+                                        <div class="ccpp-row"><select id="ccpp-lib" onchange="ccpp_pickLibrary()"></select></div>
+                                    </div>
+                                    <div class="ccpp-count" id="ccpp-count"></div>
+                                    <div class="ccpp-msg" id="ccpp-msg" role="status"></div>
+                                    <p class="ccpp-note">Start from the Coldcard&rsquo;s main wallet: it adds the passphrase to whichever wallet it is using now. Spaces and capital letters count.</p>
+                                    <div class="ccpp-row" style="gap: 0.5rem;">
+                                        <button type="button" class="skb-btn skb-btn--primary" id="ccpp-send" disabled onclick="ccpp_send()">Send to Coldcard</button>
+                                        <button type="button" class="skb-btn" id="ccpp-cancel" onclick="ccpp_close()">Cancel</button>
+                                    </div>
+                                    <div id="ccpp-steps" class="ccpp-steps" hidden>
+                                        <strong>Now, on the Coldcard:</strong>
+                                        <ol>
+                                            <li>Check the length it shows: <b id="ccpp-len"></b> characters. Press <b>2</b> to see the passphrase itself, and compare it.</li>
+                                            <li>Press <b>OK</b> to switch to that wallet (<b>X</b> cancels).</li>
+                                            <li>If it offers Seed Vault, press <b>1</b> to keep this wallet there, or <b>OK</b> to use it until the Coldcard is turned off.</li>
+                                        </ol>
+                                        <div id="ccpp-expect"></div>
+                                    </div>
+                                    <div id="ccpp-result" class="ccpp-result" role="status" hidden></div>
+                                </div>
+                            </div>
                         </div>
                         <div id="settings-trezor-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Trezor</h4>
@@ -12410,6 +12472,18 @@ window.addEventListener('DOMContentLoaded', () => {
             await new Promise(function (r) { setTimeout(r, 600); });
             if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on.' };
             return _devMockXpub('legal winner thank year wave sausage worth useful legal winner thank yellow', deriv);
+        },
+        // Passphrase over USB: the mock "Coldcard" holds the dev seed (so the
+        // expected fingerprint matches) unless window._devColdcardXfp is set.
+        //   window._devColdcard = 'refuse' | 'absent'
+        coldcardSendPassphrase: async function (pw) {
+            await new Promise(function (r) { setTimeout(r, 1500); });
+            if (window._devColdcard === 'refuse') return { ok: false, status: 'refused', error: '[DEV MOCK] You pressed X on the Coldcard. It stays on the wallet it was using.' };
+            if (window._devColdcard === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Coldcard found. Plug it in, unlock it with your PIN, and make sure USB is turned on (Settings > Hardware On/Off > USB).' };
+            var mn = (_currentSeed && _currentSeed.mnemonic) || 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+            var root = window.BtcMath.HDKey.fromMasterSeed(await window.BtcMath.bip39.mnemonicToSeed(mn, pw));
+            var before = window._devColdcardXfp || await _recoveryFingerprint(mn);
+            return { ok: true, status: 'passphrase', xfpBefore: before, xpub: root.publicExtendedKey };
         },
         // COLDCARD backup over USB: set window._devColdcardBackupB64 to a
         // backup.7z (base64) to simulate one; otherwise no device.
@@ -26928,6 +27002,9 @@ async function ccSettingsRefresh() {
     if (!pairBtn) return;
     if (confirmEl) { confirmEl.style.display = 'none'; confirmEl.textContent = ''; }
     _ccPendingDetect = null;
+    // Send a passphrase: not in the online demo (no USB), nor without the bridge.
+    const ccppBlock = document.getElementById('ccpp-block');
+    if (ccppBlock) ccppBlock.hidden = _skvDemoActive() || !(os && typeof os.coldcardSendPassphrase === 'function');
     if (!os || typeof os.coldcardGetPairing !== 'function') {
         _ccSettingsShowStatus('Coldcard support is not available in this build.', true);
         pairBtn.style.display = 'none'; forgetBtn.style.display = 'none';
@@ -26999,6 +27076,201 @@ async function ccSettingsForget() {
     const r = await os.coldcardUnpair();
     await ccSettingsRefresh();
     if (!r || !r.ok) _ccSettingsShowStatus((r && r.error) || 'Could not forget the Coldcard.', true);
+}
+
+// ===========================================================================
+// SETTINGS → COLDCARD — send a passphrase (ccpp_*)
+// ===========================================================================
+// Typing a BIP-39 passphrase on a Coldcard's keys is slow. Here it's typed
+// on the computer (twice) or picked from the Passphrase Library, and sent
+// over USB (SafeKeepOS.coldcardSendPassphrase → safekeep-coldcard.py
+// "passphrase", the same as Coinkite's `ckcc pass`). The Coldcard shows its
+// length, shows it on request (2), and switches only on OK; with its Seed
+// Vault on it offers to keep the wallet (1). SafeKeep works out the
+// fingerprint the passphrase gives with its own seed, and checks it when
+// the Coldcard was on that seed. The Passphrase Library is only read here
+// (or added to, if asked). Nothing is kept once the panel closes.
+var CCPP_RE = /^[\x20-\x7e]{1,99}$/;
+var _ccpp = { source: 'type', libPass: '', libErr: false, busy: false };
+
+function _ccppEl(id) { return document.getElementById(id); }
+
+/* The passphrase to send, or '' if not ready. */
+function _ccppValue() {
+    return _ccpp.source === 'library' ? _ccpp.libPass : _ccppEl('ccpp-pass').value;
+}
+
+function _ccppMsg(text, cls) {
+    var el = _ccppEl('ccpp-msg');
+    el.className = 'ccpp-msg' + (cls ? ' ' + cls : '');
+    el.textContent = text || '';
+}
+
+/* Why the Coldcard won't take this passphrase, or ''. */
+function _ccppProblem(pw) {
+    if (!pw) return '';
+    if (pw.length > 99) return 'Too long: the Coldcard takes at most 99 characters.';
+    if (!CCPP_RE.test(pw)) {
+        var bad = Array.from(pw).filter(function (c) { return !/[\x20-\x7e]/.test(c); });
+        var shown = bad.slice(0, 5).map(function (c) { return c === '\t' ? 'Tab' : (c === '\n' ? 'a new line' : '“' + c + '”'); }).join(', ');
+        return 'The Coldcard can’t take ' + shown + ': only letters, digits, spaces and the symbols on a US keyboard.';
+    }
+    return '';
+}
+
+function ccpp_open() {
+    if (_skvDemoActive()) { showStatus('SafeKeep demo: sending a passphrase to a Coldcard works only on the offline vault, run from its USB flash drive.', 'error'); return; }
+    _ccppEl('ccpp-panel').hidden = false;
+    _ccppEl('ccpp-open-btn').hidden = true;
+    ccpp_setSource('type');
+    _ccppEl('ccpp-pass').focus();
+}
+
+/* Close and forget everything typed or loaded. */
+function ccpp_close() {
+    if (_ccpp.busy) return;
+    ['ccpp-pass', 'ccpp-pass2', 'ccpp-nick'].forEach(function (id) { _ccppEl(id).value = ''; });
+    _ccppEl('ccpp-save').checked = false;
+    _ccppEl('ccpp-nick-row').hidden = true;
+    _ccppEl('ccpp-lib').innerHTML = '';
+    _ccpp.libPass = ''; _ccpp.libErr = false;
+    ['ccpp-send', 'ccpp-cancel', 'ccpp-pass', 'ccpp-pass2', 'ccpp-lib'].forEach(function (id) { _ccppEl(id).disabled = false; });
+    _ccppEl('ccpp-pass').type = 'password'; _ccppEl('ccpp-pass2').type = 'password';
+    _ccppEl('ccpp-eye').textContent = 'Show'; _ccppEl('ccpp-eye').setAttribute('aria-pressed', 'false');
+    _ccppEl('ccpp-steps').hidden = true;
+    _ccppEl('ccpp-result').hidden = true;
+    _ccppMsg('');
+    _ccppEl('ccpp-count').textContent = '';
+    _ccppEl('ccpp-panel').hidden = true;
+    _ccppEl('ccpp-open-btn').hidden = false;
+}
+
+async function ccpp_setSource(src) {
+    _ccpp.source = src;
+    _ccpp.libPass = ''; _ccpp.libErr = false;
+    document.querySelectorAll('input[name="ccpp-src"]').forEach(function (r) { r.checked = r.value === src; });
+    _ccppEl('ccpp-type').hidden = src !== 'type';
+    _ccppEl('ccpp-library').hidden = src !== 'library';
+    _ccppEl('ccpp-result').hidden = true;
+    if (src === 'library') {
+        var sel = _ccppEl('ccpp-lib'), os = window.SafeKeepOS, list = [];
+        try { list = (os && os.listPassphrases) ? await os.listPassphrases() : []; } catch (_) {}
+        sel.innerHTML = '';
+        var first = document.createElement('option');
+        first.value = ''; first.textContent = list.length ? 'Choose a passphrase…' : 'No passphrases saved in the Passphrase Library';
+        sel.appendChild(first);
+        list.forEach(function (e) { var o = document.createElement('option'); o.value = e.slug; o.textContent = e.nickname; sel.appendChild(o); });
+        sel.disabled = !list.length;
+    }
+    ccpp_check();
+}
+
+async function ccpp_pickLibrary() {
+    var slug = _ccppEl('ccpp-lib').value, os = window.SafeKeepOS;
+    _ccpp.libPass = ''; _ccpp.libErr = false;
+    if (slug && os && os.loadPassphrase) {
+        try { var r = await os.loadPassphrase(slug); if (r && r.found) _ccpp.libPass = r.passphrase || ''; } catch (_) {}
+        _ccpp.libErr = !_ccpp.libPass;
+    }
+    ccpp_check();
+}
+
+function ccpp_toggleShow() {
+    var show = _ccppEl('ccpp-pass').type === 'password';
+    _ccppEl('ccpp-pass').type = show ? 'text' : 'password';
+    _ccppEl('ccpp-pass2').type = show ? 'text' : 'password';
+    _ccppEl('ccpp-eye').textContent = show ? 'Hide' : 'Show';
+    _ccppEl('ccpp-eye').setAttribute('aria-pressed', show ? 'true' : 'false');
+}
+
+/* Check what's entered; enable Send only when it can go. */
+function ccpp_check() {
+    var pw = _ccppValue(), ok = !!pw, msg = '', cls = '';
+    var typed = _ccpp.source === 'type';
+    _ccppEl('ccpp-nick-row').hidden = !(typed && _ccppEl('ccpp-save').checked);
+    _ccppEl('ccpp-count').textContent = pw ? pw.length + ' of 99 characters' : '';
+    var problem = _ccppProblem(pw);
+    if (!typed && _ccpp.libErr) { ok = false; msg = 'That passphrase couldn’t be read from the vault.'; cls = 'bad'; }
+    else if (problem) { ok = false; msg = problem; cls = 'bad'; }
+    else if (typed && pw && _ccppEl('ccpp-pass2').value && _ccppEl('ccpp-pass2').value !== pw) { ok = false; msg = 'The two entries don’t match.'; cls = 'bad'; }
+    else if (typed && pw && _ccppEl('ccpp-pass2').value !== pw) { ok = false; }
+    else if (typed && _ccppEl('ccpp-save').checked && !_ccppEl('ccpp-nick').value.trim()) { ok = false; msg = 'Give it a nickname to save it in the Passphrase Library.'; }
+    else if (pw && pw !== pw.trim()) { msg = 'It starts or ends with a space. That counts: the Coldcard keeps it.'; cls = 'warn'; }
+    _ccppMsg(msg, cls);
+    _ccppEl('ccpp-send').disabled = !ok || _ccpp.busy;
+}
+
+/* Fingerprint of a seed with a passphrase. */
+async function _ccppFingerprint(mnemonic, pw) {
+    var seed = await window.BtcMath.bip39.mnemonicToSeed(mnemonic, pw);
+    var fp = (window.BtcMath.HDKey.fromMasterSeed(seed).fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase();
+    if (seed instanceof Uint8Array) seed.fill(0);
+    return fp;
+}
+
+async function ccpp_send() {
+    var os = window.SafeKeepOS, pw = _ccppValue();
+    if (!os || typeof os.coldcardSendPassphrase !== 'function' || !pw || _ccppProblem(pw) || _ccpp.busy) return;
+    _ccpp.busy = true;
+    ['ccpp-send', 'ccpp-cancel', 'ccpp-pass', 'ccpp-pass2', 'ccpp-lib'].forEach(function (id) { _ccppEl(id).disabled = true; });
+    _ccppEl('ccpp-result').hidden = true;
+
+    // What SafeKeep expects, from the seed it holds (if any).
+    var sess = window.SeedSession && window.SeedSession.get(), base = '', expect = '';
+    if (sess && sess.mnemonic) {
+        try { base = await _recoveryFingerprint(sess.mnemonic); expect = await _ccppFingerprint(sess.mnemonic, pw); } catch (_) { base = expect = ''; }
+    }
+    _ccppEl('ccpp-len').textContent = String(pw.length);
+    _ccppEl('ccpp-expect').textContent = expect
+        ? 'If the Coldcard holds the same seed as SafeKeep (' + base + '), the new wallet’s fingerprint will be ' + expect + '.'
+        : '';
+    _ccppEl('ccpp-steps').hidden = false;
+    _ccppMsg('Sending to the Coldcard… (plugged in, unlocked with its PIN, USB turned on)');
+
+    var r;
+    try { r = await os.coldcardSendPassphrase(pw); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+
+    var res = _ccppEl('ccpp-result'), html = '';
+    if (r && r.ok) {
+        var fp = '';
+        try { fp = (window.BtcMath.HDKey.fromExtendedKey(r.xpub).fingerprint >>> 0).toString(16).padStart(8, '0').toUpperCase(); } catch (_) {}
+        if (base && r.xfpBefore === base && expect) {
+            html = fp === expect
+                ? '&#10004; The Coldcard switched to wallet <strong>' + fp + '</strong>, the one SafeKeep worked out for this passphrase on your seed (' + base + ').'
+                : '&#10008; The Coldcard switched to wallet <strong>' + _psbtEscape(fp) + '</strong>, but SafeKeep expected ' + expect + '. Don’t use it: turn the Coldcard off and on to go back to its main wallet, then check the passphrase.';
+            res.className = 'ccpp-result ' + (fp === expect ? 'ok' : 'bad');
+        } else {
+            html = '&#10004; The Coldcard switched to wallet <strong>' + (_psbtEscape(fp) || 'see its screen') + '</strong>' +
+                (r.xfpBefore ? ' (from ' + _psbtEscape(r.xfpBefore) + ')' : '') + '. ' +
+                (base ? 'It wasn’t on the seed SafeKeep holds (' + base + '), so SafeKeep can’t double-check the fingerprint: compare it with your records.'
+                      : 'No seed is loaded in SafeKeep, so it can’t double-check the fingerprint: compare it with your records.');
+            res.className = 'ccpp-result ok';
+        }
+        if (_ccpp.source === 'type' && _ccppEl('ccpp-save').checked && os.savePassphrase) {
+            var nick = _ccppEl('ccpp-nick').value.trim(), sv = null;
+            try { sv = await os.savePassphrase(nick, pw); } catch (_) {}
+            html += (sv && sv.saved) ? ' Saved in the Passphrase Library as “' + _psbtEscape(nick) + '”.' : ' It wasn’t saved in the Passphrase Library.';
+        }
+        html += ' Keep a written copy of the passphrase: it is needed to recover this wallet anywhere else.';
+    } else {
+        res.className = 'ccpp-result bad';
+        html = _psbtEscape((r && r.error) || 'The passphrase wasn’t sent.');
+    }
+    pw = '';
+    _ccpp.busy = false;
+    var resultHtml = html, resultCls = res.className;
+    if (r && r.ok) {
+        ccpp_close();                 // forget the passphrase
+        ccpp_open();
+    } else {
+        ['ccpp-send', 'ccpp-cancel', 'ccpp-pass', 'ccpp-pass2', 'ccpp-lib'].forEach(function (id) { _ccppEl(id).disabled = false; });
+        ccpp_check();
+    }
+    _ccppEl('ccpp-steps').hidden = true;
+    _ccppMsg('');
+    res.innerHTML = resultHtml;
+    res.className = resultCls;
+    res.hidden = false;
 }
 
 // ===========================================================================

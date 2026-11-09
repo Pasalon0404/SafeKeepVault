@@ -46,6 +46,12 @@ class CCProtocolPacker:
     @staticmethod
     def get_backup_file():
         return ('bkok',)
+    @staticmethod
+    def bip39_passphrase(pw):
+        return ('pass', pw)
+    @staticmethod
+    def get_passphrase_done():
+        return ('pwok',)
 '''
 
 FAKE_CLIENT = '''
@@ -80,6 +86,16 @@ class ColdcardDevice:
             log('sign'); return None
         if msg[0] == 'back':
             log('backup-start'); return None
+        if msg[0] == 'pass':
+            log('pass ' + json.dumps(msg[1])); return None
+        if msg[0] == 'pwok':
+            pm = CFG.get('pass', 'approve')
+            if pm == 'refuse': raise CCUserRefused()
+            if pm == 'busy': raise CCBusyError()
+            if pm == 'proto': raise CCProtoError('Coldcard Error: no seed')
+            if pm == 'hang': return None
+            if pm == 'garbage': return 'not an xpub'
+            return 'xpub' + 'P' * 107
         if msg[0] == 'bkok':
             bm = CFG.get('backup', 'approve')
             if bm == 'refuse': raise CCUserRefused()
@@ -271,6 +287,38 @@ def main():
         check('backup: no Coldcard -> not_connected', r.get('status') == 'not_connected', str(r))
         rc, r, *_ = run(tmp, {'action': 'backup'}, {'devices': 2})
         check('backup: two Coldcards -> multiple_devices', r.get('status') == 'multiple_devices', str(r))
+
+        print('passphrase')
+        PW = ' Savings 2026! ~`{}|'
+        rc, r, log, left = run(tmp, {'action': 'passphrase', 'passphrase': PW})
+        check('passphrase -> the new wallet\'s xpub and the fingerprint before',
+              rc == 0 and r.get('status') == 'passphrase' and r.get('xpub') == 'xpub' + 'P' * 107 and r.get('xfp_before') == PAIRED_XFP and not left, str(r))
+        check('  ...the exact passphrase was sent (spaces and symbols kept)', 'pass ' + json.dumps(PW) in log, str(log))
+        check('  ...after the authenticity check against the PAIRED key (this is the paired Coldcard)',
+              [l.split(' ')[0] for l in log if l and not l.startswith(('open', 'close'))][:2] == ['mitm', 'pass'] and 'mitm ' + PAIRED_XPUB[:8] in log, str(log))
+        check('  ...the passphrase is not in the result', PW.strip() not in json.dumps(r))
+        set_pairing(tmp, xfp=None)
+        rc, r, log, _ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'})
+        check('  ...no pairing needed (authenticity checked against the key it presents)', r.get('status') == 'passphrase' and 'mitm None' in log, str(log))
+        set_pairing(tmp)
+        rc, r, log, _ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'}, {'mitm_fail': True})
+        check('passphrase: authenticity check fails -> mitm_failed, nothing sent', r.get('status') == 'mitm_failed' and not any(l.startswith('pass') for l in log), str(r))
+        for mode, status in (('refuse', 'refused'), ('busy', 'busy'), ('proto', 'rejected'), ('garbage', 'error')):
+            rc, r, log, _ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'}, {'pass': mode})
+            check('passphrase: %s -> %s' % (mode, status), r.get('status') == status and 'xpub' not in r and rc != 0, str(r)[:200])
+        rc, r, *_ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'}, {'pass': 'hang'}, env_extra={'SAFEKEEP_CC_TIMEOUT': '1'})
+        check('passphrase: no answer -> timeout', r.get('status') == 'timeout', str(r))
+        rc, r, *_ = run(tmp, {'action': 'passphrase', 'passphrase': 'abc'}, {'devices': 0})
+        check('passphrase: no Coldcard -> not_connected', r.get('status') == 'not_connected', str(r))
+        rc, r, *_ = run(tmp, {'action': 'passphrase', 'passphrase': 'x' * 99})
+        check('passphrase: 99 characters are allowed', r.get('status') == 'passphrase', str(r))
+        for name, pw in (('empty', ''), ('100 characters', 'x' * 100), ('an accented letter', 'café'), ('a tab', 'a\tb'),
+                         ('a new line', 'a\nb'), ('not a string', 123), ('missing', None)):
+            req = {'action': 'passphrase'}
+            if pw is not None: req['passphrase'] = pw
+            rc, r, log, left = run(tmp, req)
+            check('passphrase: %s -> bad_request, device not opened, request gone' % name,
+                  r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log) and not left, str(r))
 
         print('bad requests (nothing touches the device)')
         bad = [

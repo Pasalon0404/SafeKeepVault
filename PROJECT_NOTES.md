@@ -29,6 +29,22 @@
   clashing name gets " (COLDCARD)"). Code: `sv_*` in `boot.html`;
   tests `test-seed-vault.mjs`, `usbbootdrive/tests/test-seed-vault-watcher.py`
   (the real watcher block).
+- **Send a Passphrase to the Coldcard** (Device Options → Coldcard): type
+  a BIP-39 passphrase on the computer (twice) or pick one from the
+  Passphrase Library (read only; the library itself has no Coldcard
+  button, by the owner's choice), and send it over USB: helper action
+  `passphrase` in `safekeep-coldcard.py` (Coinkite's `ckcc pass`:
+  authenticity check, `bip39_passphrase`, poll `get_passphrase_done`).
+  Firmware rules (read in Coinkite's source, `shared/usb.py` / `auth.py` /
+  `seed.py`): encrypted link only, 1–99 printable ASCII; the Coldcard
+  shows the length, `2` shows the passphrase, OK switches; with its Seed
+  Vault on it then offers `1` to keep that wallet. It adds the passphrase
+  to whichever wallet the Coldcard is on. SafeKeep works out the expected
+  fingerprint from its own seed and checks it when the Coldcard was on
+  that seed. The helper overwrites the request before deleting it; the
+  passphrase is never in the result. Optional: also save it in the
+  Passphrase Library. Not yet tried on a real Mk4. Code `ccpp_*`; tests
+  `test-coldcard-passphrase.mjs`, `usbbootdrive/tests/test-coldcard-helper.py`.
 
 ## Current state (Nov 7, 2026) — v1.64
 
