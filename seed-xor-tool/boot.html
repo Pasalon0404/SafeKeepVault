@@ -20159,18 +20159,18 @@ function _psbtCourierFileName(raw) {
 }
 
 // ---- BBQr Route Handler ----
-// BBQr frame format: B$ + encoding(1) + filetype(1) + totalParts(2hex) + partNum(2hex) + data
+// BBQr frame format: B$ + encoding(1) + filetype(1) + totalParts(2, base 36) + partNum(2, base 36) + data
 async function _psbtHandleBbqrFrame(text) {
     try {
         if (text.length < 8) return; // minimum header length
 
         const encoding = text[2];                           // H=hex, 2=base32, Z=zlib+base32
         const fileType = text[3];                           // P=PSBT, T=txn, etc.
-        const totalParts = parseInt(text.substring(4, 6), 16);
-        const partNum    = parseInt(text.substring(6, 8), 16);
+        const totalParts = parseInt(text.substring(4, 6), 36);   // BBQr: base 36
+        const partNum    = parseInt(text.substring(6, 8), 36);
         const data       = text.substring(8);
 
-        if (isNaN(totalParts) || totalParts < 1 || totalParts > 255) return;
+        if (isNaN(totalParts) || totalParts < 1 || totalParts > 1295) return;
         if (isNaN(partNum) || partNum >= totalParts) return;
 
         // Reset accumulator if total changed (new scan sequence)
@@ -20227,6 +20227,41 @@ async function _psbtHandleBbqrFrame(text) {
 }
 
 // ---- BBQr Helpers ----
+
+/* Decode BBQr text (Coinkite's QR format, as Sparrow and COLDCARD show it):
+   one or more frames "B$" + encoding + file type + total parts + part
+   number (2 characters each, base 36) + data, separated by spaces or new
+   lines. Encodings: H hex, 2 base32, Z raw-deflate then base32.
+   Returns { type, bytes } — or throws with a plain reason. */
+async function _bbqrDecode(text) {
+    var frames = String(text || '').trim().split(/\s+/).filter(Boolean);
+    if (!frames.length || !frames.every(function (f) { return /^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(f); })) {
+        throw new Error('This isn’t BBQr text.');
+    }
+    var enc = frames[0][2], type = frames[0][3], total = parseInt(frames[0].substring(4, 6), 36), parts = {};
+    if (!(total >= 1 && total <= 1295)) throw new Error('This BBQr code has a bad part count.');
+    frames.forEach(function (f) {
+        if (f[2] !== enc || f[3] !== type || parseInt(f.substring(4, 6), 36) !== total) throw new Error('These BBQr parts come from different codes.');
+        var n = parseInt(f.substring(6, 8), 36);
+        if (!(n >= 0 && n < total)) throw new Error('This BBQr code has a bad part number.');
+        parts[n] = f.substring(8);
+    });
+    var have = Object.keys(parts).length;
+    if (have < total) throw new Error('This BBQr code has ' + total + ' parts, and only ' + have + ' arrived. Scan the whole animated code, or show it as a single QR code.');
+    var data = '';
+    for (var i = 0; i < total; i++) data += parts[i];
+    var bytes;
+    if (enc === 'H') {
+        if (!/^[0-9A-Fa-f]*$/.test(data) || data.length % 2) throw new Error('This BBQr code’s hex data is damaged.');
+        bytes = new Uint8Array(data.length / 2);
+        for (var k = 0; k < data.length; k += 2) bytes[k / 2] = parseInt(data.substr(k, 2), 16);
+    } else if (enc === '2') {
+        bytes = _psbtBase32Decode(data);
+    } else {
+        bytes = await _psbtZlibDecompress(_psbtBase32Decode(data));
+    }
+    return { type: type, bytes: bytes };
+}
 
 // RFC 4648 Base32 decoder (used by BBQr '2' and 'Z' encodings)
 function _psbtBase32Decode(str) {
@@ -32836,6 +32871,7 @@ var _descvQrScanner = null;
 var _descvUrDecoder = null;
 var _descvScanProcessing = false;
 var _descvCourier = null;    // Courier file transfer (a wallet export sent as a file)
+var _descvBbqr = {};         // BBQr frames by part number (Sparrow / COLDCARD animated codes)
 
 async function descv_scanQR() {
     if (!window.jsQR) { showStatus('QR scanner library not available.', 'error'); return; }
@@ -32845,6 +32881,7 @@ async function descv_scanQR() {
     _descvScanProcessing = false;
     _descvUrDecoder = new (window.URDecoder)();
     _descvCourier = (window.QRParser && window.QRParser.createCourierCollector) ? window.QRParser.createCourierCollector() : null;
+    _descvBbqr = {};
     var statusEl = document.getElementById('descv-scan-status');
     if (statusEl) statusEl.textContent = 'Awaiting QR code...';
 
@@ -32881,6 +32918,27 @@ function _descvOnQrScanned(text, binaryData) {
     // Route 1: UR-encoded QR (single-frame or animated)
     if (trimmed.toUpperCase().startsWith('UR:')) {
         _descvHandleUrFrame(trimmed);
+        return;
+    }
+
+    // Route 1b: BBQr (B$…): collect every part, then read it like pasted text.
+    if (/^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(trimmed)) {
+        var head = trimmed.substring(2, 6), total = parseInt(trimmed.substring(4, 6), 36), part = parseInt(trimmed.substring(6, 8), 36);
+        if (_descvBbqr.head !== head) _descvBbqr = { head: head, parts: {} };   // a new code: start again
+        _descvBbqr.parts[part] = trimmed;
+        var have = Object.keys(_descvBbqr.parts).length;
+        var st = document.getElementById('descv-scan-status');
+        if (st) st.textContent = 'Scanning BBQr… ' + have + ' / ' + total + ' parts';
+        if (have < total) return;
+        _descvScanProcessing = true;
+        descv_stopQR();
+        var all = [];
+        for (var i = 0; i < total; i++) all.push(_descvBbqr.parts[i]);
+        _descvBbqr = {};
+        var inp = document.getElementById('desc-verify-input');
+        if (inp) inp.value = all.join('\n');
+        showStatus('Wallet scanned from a BBQr code — verifying...', 'success');
+        desc_verify();
         return;
     }
 
@@ -33757,6 +33815,19 @@ function _descImportJsonKey(text) {
 }
 
 /* Main entry: raw Verify input → { ok, error, converted, descriptor, label, notes, expectFirstAddress }. */
+/* A wallet export shown as BBQr (Sparrow can show its descriptor or
+   multisig setup that way): decode it to the text inside, then read that
+   as usual. Anything else passes through unchanged. */
+async function _descImportUnwrapBbqr(raw) {
+    var t = String(raw || '').trim();
+    if (!/^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(t)) return raw;
+    var r = await _bbqrDecode(t);
+    if (r.type !== 'U' && r.type !== 'J') {
+        throw new Error('This BBQr code holds ' + ({ P: 'a transaction to sign (PSBT): open it in the PSBT Signer', T: 'a signed transaction', B: 'a binary file' }[r.type] || 'something other than text') + ', not a wallet.');
+    }
+    return new TextDecoder('utf-8', { fatal: false }).decode(r.bytes);
+}
+
 function _descImportConvert(raw) {
     var text = String(raw || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n')
         .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().replace(/^bitcoin:(\/\/)?/i, '');
@@ -33876,7 +33947,7 @@ async function desc_verify() {
 
         // Wallet exports (multisig setup files, BSMS, single keys …) are
         // converted to a descriptor first; a descriptor passes through as is.
-        var conv = _descImportConvert(document.getElementById('desc-verify-input').value);
+        var conv = _descImportConvert(await _descImportUnwrapBbqr(document.getElementById('desc-verify-input').value));
         if (!conv.ok) throw new Error(conv.error);
         if (conv.converted) _descShowConverted(conv);
         var rawDesc = conv.descriptor;

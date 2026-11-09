@@ -74,6 +74,13 @@
   bip84 / bip48_2 and more). Blue Wallet: single-sig descriptor. Specter:
   `[fp/path]xpub`. Electrum: SLIP-132 key (Zpub for multisig) via the
   Courier; the signer reconciles Electrum's dummy fingerprints.
+- **BBQr in Output Descriptor**: Sparrow showed a 2-of-3 as BBQr
+  (`B$ZU0100…`: zlib, Unicode text, 1 part) and the import didn't know it.
+  `_bbqrDecode` (H / 2 / Z, one or many parts, base-36 part numbers) now
+  runs first on pasted or Courier-relayed text (`_descImportUnwrapBbqr`),
+  and the tool's camera collects animated BBQr parts. The PSBT Signer read
+  BBQr part numbers as hex, which broke codes of 16+ parts; now base 36.
+  Test `test-bbqr.mjs`.
 
 ## Current state (Nov 7, 2026) — v1.64
 
