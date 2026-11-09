@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 7, 2026).**
+> **Start with the "Current state" section below (updated Nov 9, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,12 @@
 
 ---
 
-## Since v1.64 (on the branch, not released)
+## Current state (Nov 9, 2026) — v1.65
+
+**v1.65** (Nov 9) — tested on Dave's flash drive and his COLDCARD Mk4 as
+quick updates from the branch (#115, #116). OS files changed
+(`safekeep-boot.sh`: the Seed Vault Watcher; `safekeep-coldcard.py`: the
+`passphrase` and `seed` actions), so the release needs the full build.
 
 - **Seed Vault**: other seeds kept beside the master seed (a family
   member's wallet, a second multisig key, an old wallet), at most 20.
@@ -103,7 +108,7 @@
   panels now say how, suggesting the SafeKeep name (Seed Vault name or
   Passphrase Library nickname).
 
-## Current state (Nov 7, 2026) — v1.64
+## Earlier: v1.64 (Nov 7, `v1.64 · build 510 · a880b0f`)
 
 **v1.64** (Nov 7) — tested on Dave's flash drive as quick updates from
 the branch (#111, #112). One OS file changed (`safekeep-print.py`), so
@@ -858,11 +863,13 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.64:** update the website for v1.64 (download page, release
-   notes; docs for the cutting line when printing a SeedQR), and install
-   `SafeKeep-Update-v1.64.tar` on a flash drive from the release itself
-   (it changes the print helper). If the v1.63 website update hasn't
-   merged yet, fold it in.
+1. **After v1.65:** update the website for v1.65 (download page, release
+   notes; docs for the Seed Vault, sending a passphrase or a seed to a
+   COLDCARD, multisig from Seed Vault keys, and BBQr / UR wallet imports),
+   and install `SafeKeep-Update-v1.65.tar` on a flash drive from the
+   release itself (it adds the Seed Vault Watcher and changes the COLDCARD
+   helper). If the v1.63 or v1.64 website updates haven't merged yet, fold
+   them in.
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
