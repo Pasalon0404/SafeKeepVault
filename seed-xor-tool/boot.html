@@ -381,7 +381,7 @@
     .sv-row { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.65rem 0.8rem; background: var(--skb-bg-input); }
     .sv-row-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
     .ccpp-panel { margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid var(--skb-border); background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); max-width: 40rem; }
-    .ccpp-panel [hidden], #ccpp-block[hidden], #ccsd-block[hidden] { display: none !important; }
+    .ccpp-panel [hidden], #ccpp-block[hidden], #ccsd-block[hidden], #desc-ms-custody[hidden] { display: none !important; }
     .ccpp-src { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
     .ccpp-src label, .ccpp-check { display: flex; gap: 0.4rem; align-items: center; cursor: pointer; }
     .ccpp-label { display: block; margin: 0.5rem 0 0.25rem; color: var(--skb-text-muted); }
@@ -7699,6 +7699,7 @@
                                             <li>&ldquo;Restore uploaded backup as a temporary seed?&rdquo; Press <b>OK</b>.</li>
                                             <li>It shows the seed&rsquo;s fingerprint: check it is <b id="ccsd-step-fp"></b>, then press <b>OK</b> (<b>X</b> cancels).</li>
                                             <li>If it offers Seed Vault, press <b>1</b> to keep the seed there.</li>
+                                            <li id="ccsd-step-name">The Coldcard names it by its fingerprint. To give it a name, while it is still in use: <b>Seed Vault</b> &rarr; <b id="ccsd-step-fp2"></b> &rarr; <b>Rename</b><span id="ccsd-step-name-sug"></span>.</li>
                                         </ol>
                                         <p class="ccpp-note" style="margin: 0.35rem 0;">The Coldcard then uses this seed until you switch back in its Seed Vault menu or turn it off and on.</p>
                                         <button type="button" class="skb-btn" id="ccsd-verify" onclick="ccsd_verify()">Check the Coldcard</button>
@@ -8992,6 +8993,7 @@
 
             <!-- ======== OUTPUT CARD (shared) ======== -->
             <div id="desc-output" style="display: none;">
+                <div id="desc-ms-custody" class="psbt-alert warning" role="alert" hidden style="margin-bottom: 1rem; line-height: 1.55;"></div>
                 <div class="skb-card">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                         <span style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text);">Output Descriptor</span>
@@ -27358,6 +27360,10 @@ async function ccpp_send() {
             try { sv = await os.savePassphrase(nick, pw); } catch (_) {}
             html += (sv && sv.saved) ? ' Saved in the Passphrase Library as “' + _psbtEscape(nick) + '”.' : ' It wasn’t saved in the Passphrase Library.';
         }
+        var nick = _ccpp.source === 'library' ? ((_ccppEl('ccpp-lib').selectedOptions[0] || {}).textContent || '')
+                 : (_ccppEl('ccpp-save').checked ? _ccppEl('ccpp-nick').value.trim() : '');
+        if (fp) html += ' If you kept it in the Coldcard&rsquo;s Seed Vault, it is listed there as <strong>[' + _psbtEscape(fp) + ']</strong> (the Coldcard names entries by fingerprint). To name it, while it is still in use: Seed Vault &rarr; [' + _psbtEscape(fp) + '] &rarr; Rename' +
+                       (nick ? ', and type <strong>' + _psbtEscape(nick.slice(0, 40)) + '</strong>' : '') + '.';
         html += ' Keep a written copy of the passphrase: it is needed to recover this wallet anywhere else.';
     } else {
         res.className = 'ccpp-result bad';
@@ -27525,6 +27531,8 @@ async function ccsd_send() {
     ['ccsd-send', 'ccsd-cancel', 'ccsd-pick'].forEach(function (id) { _ccsdEl(id).disabled = true; });
     _ccsdEl('ccsd-result').hidden = true;
     var fp = await _recoveryFingerprint(mn);
+    var svPick = _ccsd.source === 'vault' ? _ccsd.list[Number(_ccsdEl('ccsd-pick').value)] : null;
+    var nameSug = svPick ? svPick.name : '';
     var ent = btc.bip39.mnemonicToEntropy(mn, btc.wordlist);
     var hexEnt = Array.from(ent, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
     if (ent.fill) ent.fill(0);
@@ -27544,6 +27552,8 @@ async function ccsd_send() {
         _ccsdEl('ccsd-pick').value = '';
         _ccsdEl('ccsd-fp').textContent = '';
         _ccsdEl('ccsd-step-fp').textContent = fp;
+        _ccsdEl('ccsd-step-fp2').textContent = '[' + fp + ']';
+        _ccsdEl('ccsd-step-name-sug').textContent = nameSug ? ', and type ' + nameSug.slice(0, 40) + ' (its name in SafeKeep)' : ' (up to 40 characters)';
         _ccsdEl('ccsd-steps').hidden = false;
         res.hidden = true;
     } else {
@@ -31392,6 +31402,7 @@ function desc_updateMsAddrType() {
     if (pathEl) pathEl.textContent = "m/48'/0'/0'/" + suffixMap[addrType];
     document.getElementById('desc-output').style.display = 'none';
     desc_updateLocalKeyStatus();
+    desc_msRefreshSeedVaultKeys();
 }
 
 // =============================================
@@ -31506,6 +31517,7 @@ function desc_renderCosignerInputs(n) {
 
     var container = document.getElementById('desc-ms-cosigners');
     container.innerHTML = '';
+    var svOn = typeof _svAvailable === 'function' && _svAvailable();
 
     // Build Key 2 through N
     for (var i = 2; i <= n; i++) {
@@ -31533,7 +31545,10 @@ function desc_renderCosignerInputs(n) {
                 '<button type="button" class="skb-btn" style="flex: 1; border: 1px dashed var(--skb-border); font-size: 0.8125rem;" onclick="desc_scanCosignerQR(' + i + ')">Scan QR</button>' +
                 '<button type="button" class="skb-btn" style="flex: 1; font-size: 0.8125rem;" id="desc-ms-cc-btn-' + i + '" onclick="desc_importCosignerFromDevice(' + i + ', \'coldcard\')" title="Read this cosigner\'s key from a Coldcard plugged in by USB">Coldcard (USB)</button>' +
                 '<button type="button" class="skb-btn" style="flex: 1; font-size: 0.8125rem;" id="desc-ms-tz-btn-' + i + '" onclick="desc_importCosignerFromDevice(' + i + ', \'trezor\')" title="Read this cosigner\'s key from a Trezor One plugged in by USB">Trezor (USB)</button>' +
+                (svOn ? '<button type="button" class="skb-btn" style="flex: 1; font-size: 0.8125rem;" id="desc-ms-sv-btn-' + i + '" onclick="desc_msPickSeedVault(' + i + ')" title="Use the key of a seed kept in SafeKeep\'s Seed Vault">Seed Vault</button>' : '') +
             '</div>' +
+            '<div id="desc-ms-sv-area-' + i + '" hidden style="margin-top: 0.5rem;"><select id="desc-ms-sv-pick-' + i + '" onchange="desc_msUseSeedVault(' + i + ')" aria-label="Seed from SafeKeep\'s Seed Vault" ' +
+                'style="width: 100%; padding: 0.45rem 0.55rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8125rem;"></select></div>' +
             '<div id="desc-ms-hw-status-' + i + '" role="status" style="display: none; margin-top: 0.5rem; font-size: 0.8125rem; line-height: 1.5;"></div>' +
             '<div id="desc-ms-qr-area-' + i + '" style="display: none; margin-top: 0.75rem;">' +
                 '<div id="desc-ms-qr-reader-' + i + '" style="width: 100%; min-height: 280px; border-radius: var(--skb-radius-sm); overflow: hidden;"></div>' +
@@ -31613,6 +31628,101 @@ async function desc_scanCosignerQR(idx) {
         showStatus('Camera failed: ' + err.message, 'error');
         area.style.display = 'none';
     }
+}
+
+// =============================================
+// MULTI-SIG: a cosigner key from SafeKeep's Seed Vault
+// =============================================
+// Fills a cosigner slot with the BIP-48 key of a seed kept in the Seed
+// Vault (the same key origin Key 1 uses). The seed in use (Key 1) isn't
+// offered. A key picked here follows the address type when it changes.
+// If this vault ends up holding enough keys to spend, the result says so
+// (_descMsCustody): a multisig only protects you if its keys are apart.
+var _descMsSv = {};      // slot → { name, fingerprint, origin } picked from the Seed Vault
+var _descMsSvList = [];  // the Seed Vault list shown in the last picker
+
+async function desc_msPickSeedVault(idx) {
+    var area = document.getElementById('desc-ms-sv-area-' + idx), sel = document.getElementById('desc-ms-sv-pick-' + idx);
+    if (!area || !sel) return;
+    if (!area.hidden) { area.hidden = true; return; }
+    var list = [];
+    try { list = await window.SafeKeepOS.loadSeedVault(); } catch (_) { list = []; }
+    var sess = window.SeedSession && window.SeedSession.get();
+    var inUse = sess && sess.mnemonic ? sess.mnemonic : '';
+    sel.innerHTML = '';
+    var first = document.createElement('option');
+    first.value = ''; first.textContent = list.length ? 'Choose a stored seed…' : 'No seeds in SafeKeep’s Seed Vault yet (Seed Management)';
+    sel.appendChild(first);
+    list.forEach(function (e, i) {
+        var o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = e.name + ' · ' + e.fingerprint + (e.mnemonic === inUse ? ' (Key 1: in use)' : '');
+        o.disabled = e.mnemonic === inUse;
+        sel.appendChild(o);
+    });
+    sel.disabled = !list.length;
+    _descMsSvList = list;
+    area.hidden = false;
+}
+
+async function desc_msUseSeedVault(idx) {
+    var sel = document.getElementById('desc-ms-sv-pick-' + idx);
+    var e = _descMsSvList[Number(sel && sel.value)];
+    if (!sel || !sel.value || !e) return;
+    var addrType = desc_state.msAddrType || (document.getElementById('desc-ms-addr-type') || {}).value || '84';
+    try {
+        var k = await _descLocalKeyOrigin(e.mnemonic, '', addrType);
+        document.getElementById('desc-ms-xpub-' + idx).value = k.origin;
+        document.getElementById('desc-ms-fp-' + idx).value = k.fingerprint;
+        _descMsSv[idx] = { name: e.name, fingerprint: k.fingerprint, origin: k.origin };
+        document.getElementById('desc-output').style.display = 'none';
+        document.getElementById('desc-ms-sv-area-' + idx).hidden = true;
+        _descHwStatus(idx, '\u2714 From SafeKeep\u2019s Seed Vault: ' + e.name + ' (fingerprint ' + k.fingerprint.toUpperCase() + '), ' + (_DESC_MS_DERIV[addrType] || '') + '.', 'ok');
+    } catch (err) {
+        _descHwStatus(idx, 'Couldn\u2019t work out that seed\u2019s key: ' + (err && err.message ? err.message : err), 'error');
+    }
+}
+
+/* The address type changed: work out again the keys picked from the Seed Vault. */
+async function desc_msRefreshSeedVaultKeys() {
+    var slots = Object.keys(_descMsSv);
+    if (!slots.length) return;
+    var list = [];
+    try { list = await window.SafeKeepOS.loadSeedVault(); } catch (_) { return; }
+    var addrType = desc_state.msAddrType || '84';
+    for (var j = 0; j < slots.length; j++) {
+        var idx = slots[j], pick = _descMsSv[idx], input = document.getElementById('desc-ms-xpub-' + idx);
+        var e = list.find(function (x) { return x.fingerprint.toLowerCase() === pick.fingerprint.toLowerCase(); });
+        if (!input || input.value.trim() !== pick.origin || !e) { delete _descMsSv[idx]; continue; }   // replaced by hand: leave it
+        var k = await _descLocalKeyOrigin(e.mnemonic, '', addrType);
+        input.value = k.origin;
+        _descMsSv[idx] = { name: pick.name, fingerprint: k.fingerprint, origin: k.origin };
+        _descHwStatus(Number(idx), '\u2714 From SafeKeep\u2019s Seed Vault: ' + pick.name + ' (fingerprint ' + k.fingerprint.toUpperCase() + '), ' + (_DESC_MS_DERIV[addrType] || '') + '.', 'ok');
+    }
+}
+
+/* How many of the wallet's keys this vault holds: Key 1 (the seed in use)
+   and every key whose fingerprint is a seed in the Seed Vault. When that is
+   M or more, this flash drive alone can spend: say so. */
+async function _descMsCustody(keyOrigins, m) {
+    var box = document.getElementById('desc-ms-custody');
+    if (!box) return;
+    var fps = {};
+    try { (await window.SafeKeepOS.loadSeedVault()).forEach(function (e) { fps[e.fingerprint.toLowerCase()] = e.name; }); } catch (_) {}
+    var here = [], n = keyOrigins.length;
+    keyOrigins.forEach(function (k, i) {
+        var fp = (/^\[([0-9a-fA-F]{8})/.exec(k) || [])[1];
+        if (i === 0) here.push('Key 1 (the seed in use)');
+        else if (fp && fps[fp.toLowerCase()]) here.push('Key ' + (i + 1) + ' (' + fps[fp.toLowerCase()] + ')');
+    });
+    if (here.length < m) { box.hidden = true; box.innerHTML = ''; return; }
+    var away = here.length - m + 1;
+    box.innerHTML = '<strong>&#9888; ' + (here.length === n ? 'All ' + n + ' keys of this wallet are in this vault.' : 'This vault holds ' + here.length + ' of the ' + n + ' keys, and ' + m + ' are enough to spend.') + '</strong> ' +
+        'Anyone who unlocks this flash drive can spend from this wallet without any other device, so it is no safer than a single-signature wallet. ' +
+        'Keys here: ' + _wrecEscape(here.join(', ')) + '. ' +
+        'For real savings, keep ' + (away === 1 ? 'at least one of these keys' : 'at least ' + away + ' of these keys') + ' only somewhere else: another device, or a Coldcard (Device Options → Coldcard → Send a Seed), with the seed then removed from SafeKeep’s Seed Vault. ' +
+        'Fine for trying multisig out or for a test wallet.';
+    box.hidden = false;
 }
 
 // =============================================
@@ -31728,6 +31838,8 @@ async function desc_generate() {
             throw new Error('Type the passphrase again in the box under it first. A typo would give you the descriptor of a different, empty wallet.');
         }
 
+        var custodyBox = document.getElementById('desc-ms-custody');
+        if (custodyBox) { custodyBox.hidden = true; custodyBox.innerHTML = ''; }
         if (desc_state.mode === 'single') {
             // ===== SINGLE-SIG PATH =====
             await desc_generateSingle(bip39, wordlist, HDKey, btcSigner);
@@ -32091,6 +32203,8 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
     document.getElementById('desc-output').style.display = 'block';
     document.getElementById('desc-qr-wrap').style.display = 'none';
     document.getElementById('desc-qr-toggle-btn').textContent = 'Show QR';
+
+    await _descMsCustody(keyOrigins, m);
 
     var addrTypeLabels = { '84': 'P2WSH', '49': 'P2SH-P2WSH', '44': 'P2SH' };
     showStatus(m + '-of-' + n + ' ' + (addrTypeLabels[addrType] || 'P2WSH') + ' multisig descriptor generated. Local fingerprint: ' + fingerprint.toUpperCase(), 'success');

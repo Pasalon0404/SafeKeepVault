@@ -87,6 +87,21 @@
   `_descImportFromUrText`, which uses the camera's decoder
   (`descv_decodeCryptoOutput`) for crypto-output / crypto-account and
   reads ur:bytes as text. Test `test-bbqr.mjs` (section 4).
+- **Multisig from Seed Vault keys** (Output Descriptor → multisig): each
+  cosigner slot has a *Seed Vault* button (when the Seed Vault is on) that
+  fills in a stored seed's BIP-48 key (`_descLocalKeyOrigin`, no
+  passphrase); the seed in use (Key 1) isn't offered, and picked keys
+  follow the address type. `_descMsCustody` warns at the top of the result
+  when this vault holds M or more of the keys (Key 1 plus any key whose
+  fingerprint is a Seed Vault seed, picked or pasted): this flash drive
+  alone can spend, so it is no safer than single-sig. Save Wallet / Show
+  QR as before. Signing with several Seed Vault keys at once was left out
+  on purpose. Test `test-multisig-seed-vault.mjs`.
+- **Coldcard Seed Vault names**: the firmware names entries "[fingerprint]"
+  (`add_seed_to_vault`), and neither `pass` nor a restore carries a name.
+  It offers Rename (40 characters) for the entry in use, so both Coldcard
+  panels now say how, suggesting the SafeKeep name (Seed Vault name or
+  Passphrase Library nickname).
 
 ## Current state (Nov 7, 2026) — v1.64
 
