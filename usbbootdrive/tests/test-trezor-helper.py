@@ -37,8 +37,13 @@ class DeviceAlreadyUnlockedError(HWWError): pass
 
 FAKE_PSBT = '''
 import base64, json, os
+class _Origin:
+    def __init__(self, fp): self.fingerprint = bytes.fromhex(fp)
 class _In:
-    def __init__(self, prev): self.non_witness_utxo = object() if prev else None
+    def __init__(self, prev):
+        self.non_witness_utxo = object() if prev else None
+        fps = json.loads(os.environ.get('FAKE_TZ', '{}')).get('psbt_fps', [])
+        self.hd_keypaths = {bytes([i]) * 33: _Origin(fp) for i, fp in enumerate(fps)}
 class PSBT:
     def deserialize(self, s):
         self.data = base64.b64decode(s, validate=True)
@@ -102,9 +107,10 @@ class _Inner:
 
 class TrezorClient:
     def __init__(self, path, password=None, **kw):
-        assert password == '', 'helper must use the standard wallet (empty passphrase)'
+        assert isinstance(password, str), 'helper must always give a passphrase (empty = standard wallet)'
+        self.password = password
         self.transport = get_path_transport(path, set(), set(), '127.0.0.1:21324')
-        log('open ' + path)
+        log('open ' + path + (' passphrase=' + json.dumps(password) if password else ''))
         self.client = _Inner()
     def _prepare_device(self):
         log('init')                           # = Initialize: cancels a pending PIN request
@@ -120,6 +126,8 @@ class TrezorClient:
         log('getxpub ' + path)
         if path.startswith('m/48h/'):
             return _Key('00000000', CFG.get('ms_xpub', 'xpub' + 'M' * 107), CFG.get('ms_depth', 4))
+        if self.password and CFG.get('passphrase'):
+            return _Key(CFG.get('pp_xfp', 'feedface'), 'xpub' + 'P' * 107, 1)   # the passphrase wallet
         return _Key(CFG.get('xfp', '%s'), CFG.get('xpub', '%s'), 1)
     def prompt_pin(self):
         self._prepare_device()
@@ -131,7 +139,7 @@ class TrezorClient:
         return pin == '%s'
     def sign_tx(self, tx):
         self._prepare_device()
-        log('sign')
+        log('sign' + (' with-passphrase' if self.password else ''))
         mode = CFG.get('sign', 'approve')
         if mode == 'cancel': raise ActionCanceledError('sign_tx canceled')
         if mode == 'busy': raise DeviceBusyError('busy')
@@ -378,6 +386,34 @@ def main():
         check('  ...with passphrase hint when passphrase protection is on', 'passphrase' in r.get('error', ''), str(r))
         rc, r, log, *_ = run(tmp, good, {'xpub': OTHER_XPUB})
         check('same fingerprint, different key -> wrong_device', r.get('status') == 'wrong_device' and 'sign' not in log, str(r))
+
+        print('passphrase')
+        PW = ' Savings 2026! é'
+        rc, r, log, left, *_ = run(tmp, dict(good, passphrase=PW), {'passphrase': True, 'pp_xfp': 'feedface', 'psbt_fps': ['feedface', '11111111']})
+        opens = [l for l in log if l.startswith('open')]
+        check('passphrase: signs with the passphrase wallet, reports its fingerprint', r.get('status') == 'signed' and r.get('passphrase_xfp') == 'feedface' and r.get('xfp') == PAIRED_XFP and not left, str(r)[:200])
+        check('  ...pairing checked on the standard wallet first, then a new session with the passphrase', len(opens) == 2 and 'passphrase=' not in opens[0] and 'passphrase=' in opens[1], str(opens))
+        import unicodedata as _u
+        check('  ...the passphrase is sent NFKD-normalized, spaces kept', json.dumps(_u.normalize('NFKD', PW)) in opens[1], opens[1])
+        check('  ...signed in the passphrase session', 'sign with-passphrase' in log, str(log))
+        check('  ...the passphrase is not in the result', 'Savings' not in json.dumps(r))
+        rc, r, log, *_ = run(tmp, dict(good, passphrase='wrong'), {'passphrase': True, 'pp_xfp': 'feedface', 'psbt_fps': ['22222222', '11111111']})
+        check('wrong passphrase (its wallet isn\'t one of the transaction\'s keys) -> wrong_passphrase, nothing signed', r.get('status') == 'wrong_passphrase' and not any(l.startswith('sign') for l in log) and 'FEEDFACE' in r.get('error', '') and '22222222' in r.get('error', ''), str(r))
+        rc, r, log, *_ = run(tmp, dict(good, passphrase='abc'), {'passphrase': False, 'psbt_fps': ['feedface']})
+        check('passphrase protection off -> passphrase_off, no passphrase session, nothing signed', r.get('status') == 'passphrase_off' and not any('passphrase=' in l for l in log) and not any(l.startswith('sign') for l in log), str(r))
+        rc, r, log, *_ = run(tmp, dict(good, passphrase='abc'), {'passphrase': True, 'xfp': 'deadbeef', 'psbt_fps': ['feedface']})
+        check('not the paired Trezor -> wrong_device before the passphrase is sent', r.get('status') == 'wrong_device' and not any('passphrase=' in l for l in log), str(r))
+        rc, r, log, *_ = run(tmp, dict(good, passphrase='abc'), {'passphrase': True, 'no_prev': True, 'psbt_fps': ['feedface']})
+        check('missing previous transaction -> refused before the device is opened', r.get('status') == 'missing_prev_tx' and not any(l.startswith('open') for l in log), str(r))
+        rc, r, log, *_ = run(tmp, dict(good, passphrase=''), {'passphrase': True})
+        check('empty passphrase = the standard wallet, as before (one session)', r.get('status') == 'signed' and 'passphrase_xfp' not in r and len([l for l in log if l.startswith('open')]) == 1, str(r)[:150])
+        rc, r, log, *_ = run(tmp, dict(good, passphrase='abc'), {'passphrase': True, 'pp_xfp': 'feedface'})
+        check('a transaction that names no key fingerprints: signs (the Trezor decides)', r.get('status') == 'signed' and r.get('passphrase_xfp') == 'feedface', str(r)[:150])
+        for name, pw in (('51 bytes', 'x' * 51), ('a new line', 'a\nb'), ('a tab', 'a\tb'), ('not a string', 7)):
+            rc, r, log, left, *_ = run(tmp, dict(good, passphrase=pw), {'passphrase': True})
+            check('passphrase %s -> bad_request, device not opened, request gone' % name, r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log) and not left, str(r))
+        rc, r, *_ = run(tmp, dict(good, passphrase='x' * 50), {'passphrase': True, 'psbt_fps': ['feedface']})
+        check('50 bytes: allowed', r.get('status') == 'signed', str(r)[:120])
 
         print('bad requests (nothing touches the device)')
         bad = [

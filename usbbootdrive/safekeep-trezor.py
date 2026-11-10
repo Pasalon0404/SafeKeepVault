@@ -32,6 +32,15 @@ SECURITY MODEL
                     (expected_xfp + expected_xpub) and SAVE the pairing.
       unpair     -> delete the saved pairing.
       sign       -> send a PSBT to the PAIRED Trezor and return the result.
+                    With an optional "passphrase", the Trezor's passphrase
+                    wallet signs: the pairing is checked on the standard
+                    wallet first, then the passphrase wallet is opened (the
+                    Trezor One takes its passphrase from the computer) and
+                    must be one of the keys the PSBT's inputs name, or
+                    nothing is sent. Refused if passphrase protection is off
+                    (the Trezor would quietly use its standard wallet). The
+                    passphrase is never logged or written to the result, and
+                    the request file is overwritten before it is deleted.
       xpub       -> read the unlocked Trezor's fingerprint and its multisig
                     account key at ONE of the three BIP-48 paths
                     (m/48'/0'/0'/0', /1' or /2'), for building a multisig
@@ -55,7 +64,8 @@ Result JSON: {"ok": true/false, "status": "...", ...}
   error statuses: bad_request, not_installed, not_paired, not_connected,
                   multiple_devices, unsupported_model, no_seed, locked,
                   wrong_pin, wrong_device, outdated_firmware, refused, busy,
-                  timeout, rejected, missing_prev_tx, error
+                  timeout, rejected, missing_prev_tx, passphrase_off,
+                  wrong_passphrase, error
   Every result echoes the request's "request_id" (if valid) so the app can
   ignore stale results.
 """
@@ -67,6 +77,7 @@ import re
 import sys
 import threading
 import time
+import unicodedata
 
 # Trezor One: modern firmware talks WebUSB as 1209:53c1; very old firmware
 # used HID as 534c:0001. 1209:53c0 (bootloader mode) is left out on purpose:
@@ -84,6 +95,7 @@ XPUB_RE = re.compile(r'^[xt]pub[1-9A-HJ-NP-Za-km-z]{100,112}$')
 PATH_RE = re.compile(r'^(webusb|hid):[A-Za-z0-9:._/-]{1,128}$')
 PIN_POS_RE = re.compile(r'^[1-9]{1,9}$')
 REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+PASSPHRASE_MAX_BYTES = 50   # the Trezor One's limit
 DEFAULT_PAIRING = '/media/.safekeep-vault/settings/trezor-pairing.json'
 # The only paths "xpub" will read: BIP-48 multisig accounts (mainnet, account 0)
 # for P2SH (0'), P2SH-P2WSH (1') and P2WSH (2').
@@ -124,6 +136,15 @@ def load_request(path):
     except OSError:
         raise Fail('bad_request', 'Could not read the Trezor request.')
     finally:
+        # It may hold a passphrase or PIN positions: overwrite it before deleting (best effort).
+        try:
+            size = os.path.getsize(path)
+            with open(path, 'r+b') as f:
+                f.write(b'\0' * size)
+                f.flush()
+                os.fsync(f.fileno())
+        except OSError:
+            pass
         try:
             os.remove(path)
         except OSError:
@@ -194,6 +215,37 @@ def field_psbt(data):
 
 # ---------------------------------------------------------------- pairing
 
+def field_passphrase(data):
+    """'' for the standard wallet, or the passphrase (NFKD, as BIP-39 asks)."""
+    v = data.get('passphrase')
+    if v is None or v == '':
+        return ''
+    if not isinstance(v, str):
+        raise Fail('bad_request', 'The passphrase has the wrong format.')
+    v = unicodedata.normalize('NFKD', v)
+    if re.search(r'[\x00-\x1f\x7f]', v):
+        raise Fail('bad_request', 'The passphrase has characters a Trezor can\'t take (tabs, new lines).')
+    if len(v.encode('utf-8')) > PASSPHRASE_MAX_BYTES:
+        raise Fail('bad_request', 'A Trezor One takes a passphrase of at most %d bytes.' % PASSPHRASE_MAX_BYTES)
+    return v
+
+
+def psbt_fingerprints(tx):
+    """The key fingerprints the PSBT's inputs name (lower-case hex)."""
+    fps = set()
+    for inp in getattr(tx, 'inputs', []) or []:
+        for origin in (getattr(inp, 'hd_keypaths', None) or {}).values():
+            fp = getattr(origin, 'fingerprint', b'')
+            if isinstance(fp, (bytes, bytearray)) and len(fp) == 4:
+                fps.add(binascii.hexlify(bytes(fp)).decode('ascii'))
+        for entry in (getattr(inp, 'tap_bip32_paths', None) or {}).values():
+            origin = entry[1] if isinstance(entry, (tuple, list)) and len(entry) == 2 else None
+            fp = getattr(origin, 'fingerprint', b'')
+            if isinstance(fp, (bytes, bytearray)) and len(fp) == 4:
+                fps.add(binascii.hexlify(bytes(fp)).decode('ascii'))
+    return fps
+
+
 def pairing_path():
     return os.environ.get('SAFEKEEP_TZ_PAIRING') or DEFAULT_PAIRING
 
@@ -263,9 +315,10 @@ class Hwi:
                 paths.append(p)
         return paths
 
-    def client(self, path):
+    def client(self, path, passphrase=''):
         # password '' = the standard wallet (no passphrase); matches HWI's default.
-        return self.tz.TrezorClient(path, password='')
+        # A Trezor One asks the computer for the passphrase; HWI answers with it.
+        return self.tz.TrezorClient(path, password=passphrase)
 
 
 def translate(hwi, e):
@@ -282,7 +335,7 @@ def translate(hwi, e):
     if isinstance(e, E.DeviceConnectionError):
         return Fail('not_connected', MSG_NOT_CONNECTED)
     if isinstance(e, E.NoPasswordError):
-        return Fail('error', 'This Trezor asked for a passphrase, which SafeKeep does not support yet.')
+        return Fail('error', 'This Trezor asked for a passphrase SafeKeep didn\'t send. Sign again and give it in the passphrase box.')
     if isinstance(e, E.BadArgumentError) and 'find device by path' in str(e):
         return Fail('not_connected', MSG_GONE)
     if isinstance(e, E.BadArgumentError) and 'Previous transaction' in str(e):
@@ -428,32 +481,56 @@ def do_unpair(hwi, data):
 
 def do_sign(hwi, data):
     psbt_b64 = field_psbt(data)
+    passphrase = field_passphrase(data)
+    data['passphrase'] = None
     pairing = read_pairing()
     if pairing is None:
         raise Fail('not_paired', 'No Trezor is paired with SafeKeep yet. Pair it first.')
+    tx = hwi.PSBT()
+    try:
+        tx.deserialize(psbt_b64)
+    except Exception:
+        raise Fail('bad_request', 'The transaction could not be read.')
+    # The Trezor insists on the FULL previous transaction for every input
+    # (it checks the amounts itself). Check before anything reaches the
+    # device, so it is never left waiting for data SafeKeep cannot give.
+    missing = [i + 1 for i, inp in enumerate(tx.inputs) if not inp.non_witness_utxo]
+    if missing:
+        raise Fail('missing_prev_tx', MSG_MISSING_PREV_TX)
+
+    # 1. The pairing is always checked on the Trezor's standard wallet.
     client, path, info = open_unlocked(hwi)
     try:
         got_xfp, got_xpub = identity(client)
         if got_xfp != pairing['xfp']:
-            hint = (' If you use a passphrase on this Trezor, note that SafeKeep only supports the '
-                    'standard wallet (no passphrase).') if info['passphrase_protection'] else ''
+            hint = (' If this Trezor has passphrase protection on, SafeKeep pairs it by its standard '
+                    'wallet (no passphrase); a passphrase is given when signing.') if info['passphrase_protection'] else ''
             raise Fail('wrong_device', 'This Trezor (fingerprint %s) is not the one paired with SafeKeep '
                                        '(%s). Nothing was sent to it.%s'
                        % (got_xfp.upper(), pairing['xfp'].upper(), hint))
         if got_xpub != pairing['id_xpub']:
             raise Fail('wrong_device', 'This Trezor has the paired fingerprint (%s) but a different key, '
                                        'so it is not the paired device. Nothing was sent to it.' % got_xfp.upper())
-        tx = hwi.PSBT()
-        try:
-            tx.deserialize(psbt_b64)
-        except Exception:
-            raise Fail('bad_request', 'The transaction could not be read.')
-        # The Trezor insists on the FULL previous transaction for every input
-        # (it checks the amounts itself). Check before anything reaches the
-        # device, so it is never left waiting for data SafeKeep cannot give.
-        missing = [i + 1 for i, inp in enumerate(tx.inputs) if not inp.non_witness_utxo]
-        if missing:
-            raise Fail('missing_prev_tx', MSG_MISSING_PREV_TX)
+        if passphrase and not info['passphrase_protection']:
+            raise Fail('passphrase_off', 'Passphrase protection is off on this Trezor, so it would ignore the '
+                                         'passphrase and sign with its standard wallet. Turn it on with Trezor '
+                                         'Suite on another computer, or sign without a passphrase. Nothing was sent.')
+        if passphrase:
+            client.close()
+            client = None
+            # 2. A fresh session with the passphrase: the Trezor asks for it, HWI answers.
+            client = hwi.client(path, passphrase)
+            passphrase = None
+            check_trezor_one(client)
+            sign_xfp, _ = identity(client)
+            needed = psbt_fingerprints(tx)
+            if needed and sign_xfp not in needed:
+                raise Fail('wrong_passphrase', 'This passphrase opens the Trezor\'s wallet %s, but this transaction '
+                                               'needs %s. Check the passphrase (capitals and spaces count). '
+                                               'Nothing was sent to sign.'
+                           % (sign_xfp.upper(), ', '.join(sorted(x.upper() for x in needed))))
+        else:
+            sign_xfp = got_xfp
         try:
             signed = client.sign_tx(tx).serialize()   # never finalizes, never broadcasts
         except BaseException:
@@ -464,15 +541,20 @@ def do_sign(hwi, data):
                 pass
             raise
     finally:
-        client.close()
+        passphrase = None
+        if client is not None:
+            client.close()
     try:
         out = base64.b64decode(signed, validate=True)
     except (binascii.Error, ValueError, TypeError):
         raise Fail('error', 'The Trezor returned something that is not a PSBT.')
     if not out.startswith(PSBT_MAGIC):
         raise Fail('error', 'The Trezor returned something that is not a PSBT.')
-    return {'ok': True, 'status': 'signed', 'xfp': got_xfp, 'changed': signed != psbt_b64,
-            'psbt_b64': base64.b64encode(out).decode('ascii')}
+    result = {'ok': True, 'status': 'signed', 'xfp': got_xfp, 'changed': signed != psbt_b64,
+              'psbt_b64': base64.b64encode(out).decode('ascii')}
+    if sign_xfp != got_xfp:
+        result['passphrase_xfp'] = sign_xfp
+    return result
 
 
 def do_xpub(hwi, data):

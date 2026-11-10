@@ -12505,9 +12505,17 @@ window.addEventListener('DOMContentLoaded', () => {
             return { ok: true, status: 'paired', xfp: _devTzPairing.xfp };
         },
         trezorUnpair: async function () { _devTzPairing = null; return { ok: true, status: 'unpaired' }; },
-        trezorSign: async function (bytes) {
-            console.log('[DEV MOCK] trezorSign() — mode:', window._devTrezor || 'nochange');
+        // With a passphrase: window._devTrezorPpXfp = the passphrase wallet's
+        // (window._devTrezorPpOff = true: passphrase protection is off)
+        // fingerprint the mock reports (else it pretends the passphrase is wrong).
+        trezorSign: async function (bytes, passphrase) {
+            console.log('[DEV MOCK] trezorSign() — mode:', window._devTrezor || 'nochange', passphrase ? '(with passphrase)' : '');
             await new Promise(function (r) { setTimeout(r, 2000); });
+            if (passphrase) {
+                if (window._devTrezorPpOff) return { ok: false, status: 'passphrase_off', error: '[DEV MOCK] Passphrase protection is off on this Trezor, so it would ignore the passphrase and sign with its standard wallet. Nothing was sent.' };
+                if (!window._devTrezorPpXfp) return { ok: false, status: 'wrong_passphrase', error: '[DEV MOCK] This passphrase opens the Trezor\u2019s wallet FEEDFACE, but this transaction needs another key. Check the passphrase. Nothing was sent to sign.' };
+                return { ok: true, status: 'signed', psbtBytes: bytes, changed: false, passphraseXfp: window._devTrezorPpXfp };
+            }
             if (window._devTrezor === 'refuse') return { ok: false, status: 'refused', error: '[DEV MOCK] You declined on the Trezor. Nothing was signed.' };
             if (window._devTrezor === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Trezor found.' };
             // A mock cannot produce a real signature: return the PSBT unchanged.
@@ -19562,6 +19570,7 @@ function psbtResetToIngest() {
     _psbtWipeTempSeed();
     psbtCompareStopScan();
     _psbtCosignMessage = null;
+    _psbtTzPpReset();
     if (_psbtCosignConfirm) { const cf = _psbtCosignConfirm; _psbtCosignConfirm = null; cf.resolve(false); }
     var _cosignCard = document.getElementById('psbt-cosign-card');
     if (_cosignCard) { _cosignCard.style.display = 'none'; _cosignCard.textContent = ''; }
@@ -25379,6 +25388,7 @@ async function psbtDoSign() {
         _psbtSignedBytes = _psbtLoadedBytes;
         _psbtRawTxHex = null;
         _psbtCosignMessage = null;
+        _psbtTzPpReset();
         _psbtShowExport(0, false);
         const statusEl = document.getElementById('psbt-export-status');
         if (statusEl) {
@@ -26469,6 +26479,102 @@ function _psbtEl(tag, attrs, text) {
     return el;
 }
 
+// ---- Trezor passphrase (the Trezor's passphrase wallet signs) ----
+// The Trezor One takes its passphrase from the computer. Typed twice, or
+// from the Passphrase Library, or the one applied on the Dashboard. The
+// helper checks the pairing on the standard wallet first, then that the
+// passphrase wallet is one of this transaction's keys. Kept only until the
+// Trezor has signed or a new transaction is loaded.
+let _psbtTzPp = { on: false, value: '', confirm: '', trusted: '', show: false, note: '' };
+
+function _psbtTzPpReset() { _psbtTzPp = { on: false, value: '', confirm: '', trusted: '', show: false, note: '' }; }
+
+/* The passphrase to send to the Trezor, '' for none, or null if not ready (unconfirmed). */
+function _psbtTzPpValue() {
+    const p = _psbtTzPp;
+    if (!p.on) return '';
+    if (!p.value) return null;
+    if (p.trusted === p.value || p.confirm === p.value) return p.value;
+    return null;
+}
+
+function _psbtTzPpProblem() {
+    const p = _psbtTzPp;
+    if (!p.on) return '';
+    if (!p.value) return 'Type the Trezor’s passphrase, or choose one from the Passphrase Library.';
+    if (/[\x00-\x1f\x7f]/.test(p.value)) return 'A Trezor can’t take tabs or new lines in a passphrase.';
+    if (new TextEncoder().encode(p.value.normalize('NFKD')).length > 50) return 'A Trezor One takes a passphrase of at most 50 bytes.';
+    if (p.trusted !== p.value && p.confirm !== p.value) return p.confirm ? 'The two entries don’t match yet. Capitals and spaces count.' : 'Type the passphrase again in the second box.';
+    return '';
+}
+
+/* The passphrase box, shown under the Trezor button. */
+async function _psbtTzPpRender(card, offerLabel) {
+    const p = _psbtTzPp, os = window.SafeKeepOS;
+    // The passphrase applied on the Dashboard (same seed as the Trezor) fills it in once.
+    if (!p.on && !p.value && !p.note) {
+        let applied = '';
+        try { applied = (os && typeof os.getPassphrase === 'function') ? (os.getPassphrase() || '') : ''; } catch (_) {}
+        if (applied) { p.value = applied; p.trusted = applied; p.note = 'Filled in with the passphrase applied on the Dashboard.'; }
+    }
+    const box = _psbtEl('div', { class: 'psbt-tz-pp', id: 'psbt-tz-pp', style: 'margin-top: 0.75rem; padding: 0.65rem 0.8rem; border: 1px solid var(--skb-border); font-size: 0.8125rem;' });
+    const cb = _psbtEl('input', { type: 'checkbox', id: 'psbt-tz-pp-on' });
+    cb.checked = p.on;
+    cb.onchange = function () { _psbtTzPp.on = cb.checked; _psbtUpdateCosignCard(); };
+    const lab = _psbtEl('label', { for: 'psbt-tz-pp-on', style: 'display: flex; gap: 0.45rem; align-items: center; cursor: pointer;' });
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(offerLabel || 'Use a passphrase on the Trezor (its passphrase wallet signs)'));
+    box.appendChild(lab);
+    if (p.on) {
+        const mk = (id, val, ph, onIn) => {
+            const i = _psbtEl('input', { type: p.show ? 'text' : 'password', id: id, autocomplete: 'off', spellcheck: 'false', placeholder: ph,
+                style: 'flex: 1; padding: 0.4rem 0.55rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text); font-family: var(--skb-mono); font-size: 0.8125rem;' });
+            i.value = val; i.oninput = function () { onIn(i.value); };
+            return i;
+        };
+        const row1 = _psbtEl('div', { style: 'display: flex; gap: 0.4rem; margin-top: 0.5rem;' });
+        row1.appendChild(mk('psbt-tz-pp-input', p.value, 'The Trezor’s passphrase', function (v) { _psbtTzPp.value = v; if (_psbtTzPp.trusted !== v) _psbtTzPp.note = ''; _psbtTzPpRefreshNote(); }));
+        const eye = _psbtEl('button', { type: 'button', class: 'skb-btn', id: 'psbt-tz-pp-eye', style: 'font-size: 0.75rem;' }, p.show ? 'Hide' : 'Show');
+        eye.onclick = function () { _psbtTzPp.show = !_psbtTzPp.show; _psbtUpdateCosignCard(); };
+        row1.appendChild(eye);
+        box.appendChild(row1);
+        if (p.trusted !== p.value || !p.value) {
+            const row2 = _psbtEl('div', { style: 'display: flex; gap: 0.4rem; margin-top: 0.4rem;' });
+            row2.appendChild(mk('psbt-tz-pp-confirm', p.confirm, 'Type it again', function (v) { _psbtTzPp.confirm = v; _psbtTzPpRefreshNote(); }));
+            box.appendChild(row2);
+        }
+        // From the Passphrase Library (read only).
+        let list = [];
+        try { list = (os && typeof os.listPassphrases === 'function') ? await os.listPassphrases() : []; } catch (_) {}
+        if (list.length) {
+            const sel = _psbtEl('select', { id: 'psbt-tz-pp-lib', style: 'margin-top: 0.4rem; width: 100%; padding: 0.35rem 0.5rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text); font-size: 0.8125rem;' });
+            sel.appendChild(_psbtEl('option', { value: '' }, 'Or choose from the Passphrase Library…'));
+            list.forEach(e => sel.appendChild(_psbtEl('option', { value: e.slug }, e.nickname)));
+            sel.onchange = async function () {
+                if (!sel.value) return;
+                let r = null;
+                try { r = await os.loadPassphrase(sel.value); } catch (_) {}
+                if (r && r.found) { _psbtTzPp.value = r.passphrase || ''; _psbtTzPp.trusted = _psbtTzPp.value; _psbtTzPp.confirm = ''; _psbtTzPp.note = 'From the Passphrase Library: ' + (r.nickname || '') + '.'; }
+                _psbtUpdateCosignCard();
+            };
+            box.appendChild(sel);
+        }
+        box.appendChild(_psbtEl('div', { id: 'psbt-tz-pp-note', style: 'margin-top: 0.4rem; line-height: 1.5;' }));
+        box.appendChild(_psbtEl('div', { style: 'margin-top: 0.3rem; color: var(--skb-text-dim); line-height: 1.5;' },
+            'SafeKeep checks the Trezor first by its standard wallet, then opens the passphrase wallet and signs only if it is one of this transaction’s keys. Passphrase protection must be on in the Trezor’s settings.'));
+    }
+    card.appendChild(box);
+    _psbtTzPpRefreshNote();
+}
+
+function _psbtTzPpRefreshNote() {
+    const el = document.getElementById('psbt-tz-pp-note');
+    if (!el) return;
+    const problem = _psbtTzPpProblem();
+    el.textContent = problem || _psbtTzPp.note || '';
+    el.style.color = problem ? 'var(--skb-warning, #f59e0b)' : 'var(--skb-text-muted)';
+}
+
 async function _psbtUpdateCosignCard() {
     const card = document.getElementById('psbt-cosign-card');
     if (!card) return;
@@ -26555,6 +26661,7 @@ async function _psbtUpdateCosignCard() {
             if (tb) { tb.disabled = true; tb.style.opacity = '0.45'; tb.style.cursor = 'not-allowed'; }
             card.appendChild(_psbtEl('div', { class: 'psbt-alert warning', style: 'margin-top: 0.6rem;', id: 'psbt-trezor-prevtx-note' }, _PSBT_TREZOR_PREVTX_NOTE));
         }
+        if (tzOk) await _psbtTzPpRender(card);
         card.appendChild(_psbtEl('p', { style: 'font-size: 0.8125rem; color: var(--skb-text-dim); margin: 0.5rem 0 0;' },
             'Plug in one device at a time. After it signs, unplug it and plug in the next one.'));
         return;
@@ -26567,12 +26674,17 @@ async function _psbtUpdateCosignCard() {
         }, _psbtCosignBusy === 'coldcard' ? 'Waiting for Coldcard…' : 'Sign with Coldcard (' + pairing.xfp + ')'));
     }
     const tzCosigner = tzPairing ? st.cosigners.find(c => c.fp === tzPairing.xfp) : null;
-    const tzBlocked = !!(tzCosigner && !tzCosigner.signed && !_psbtHasPrevTxs(_psbtSignedBytes));
-    if (tzCosigner && !tzCosigner.signed) {
+    // Unsigned keys SafeKeep can't name: one may be the paired Trezor's passphrase wallet.
+    const unknownUnsigned = st.cosigners.filter(c => !c.signed && !(pairing && c.fp === pairing.xfp) && !(tzPairing && c.fp === tzPairing.xfp) && !(vaultFp && c.fp === vaultFp));
+    const tzPpOffer = !!(tzPairing && !(tzCosigner && !tzCosigner.signed) && unknownUnsigned.length);
+    const tzShow = !!((tzCosigner && !tzCosigner.signed) || (tzPpOffer && _psbtTzPp.on));
+    const tzBlocked = !!(tzShow && !_psbtHasPrevTxs(_psbtSignedBytes));
+    if (tzShow) {
         actions.appendChild(_psbtEl('button', {
             type: 'button', class: 'skb-btn skb-btn--primary', id: 'psbt-cosign-trezor-btn',
             onclick: psbtCosignTrezor
-        }, _psbtCosignBusy === 'trezor' ? 'Waiting for Trezor…' : 'Sign with Trezor (' + tzPairing.xfp + ')'));
+        }, _psbtCosignBusy === 'trezor' ? 'Waiting for Trezor…'
+            : (_psbtTzPp.on ? 'Sign with Trezor (passphrase wallet)' : 'Sign with Trezor (' + tzPairing.xfp + ')')));
     }
     actions.appendChild(_psbtEl('button', {
         type: 'button', class: 'skb-btn', id: 'psbt-cosign-seed-btn', onclick: psbtCosignAnotherSeed
@@ -26583,13 +26695,16 @@ async function _psbtUpdateCosignCard() {
         const tb = document.getElementById('psbt-cosign-trezor-btn');
         if (tb) { tb.disabled = true; tb.style.opacity = '0.45'; tb.style.cursor = 'not-allowed'; }
         card.appendChild(_psbtEl('div', { class: 'psbt-alert warning', style: 'margin-top: 0.6rem;', id: 'psbt-trezor-prevtx-note' }, _PSBT_TREZOR_PREVTX_NOTE));
+    } else if (tzShow || tzPpOffer) {
+        await _psbtTzPpRender(card, tzPpOffer && !(tzCosigner && !tzCosigner.signed)
+            ? 'Sign with the paired Trezor’s passphrase wallet (it may be one of the keys above)' : null);
     }
 
     const hints = [];
     if (pairing && !ccCosigner) {
         hints.push('Your paired Coldcard (' + pairing.xfp + ') is not one of this wallet\'s keys.');
     }
-    if (tzPairing && !tzCosigner) {
+    if (tzPairing && !tzCosigner && !tzPpOffer) {
         hints.push('Your paired Trezor (' + tzPairing.xfp + ') is not one of this wallet\'s keys.');
     }
     if (!pairing && !tzPairing && os && typeof os.isBootDrive === 'function' && os.isBootDrive()) {
@@ -27785,6 +27900,12 @@ async function psbtCosignTrezor() {
     const os = window.SafeKeepOS;
     if (_psbtCosignBusy || !_psbtSignedBytes || !os || typeof os.trezorSign !== 'function') return;
     const before = _psbtMultisigStatus(_psbtSignedBytes);
+    const tzPassphrase = _psbtTzPpValue();
+    if (tzPassphrase === null || _psbtTzPpProblem()) {
+        _psbtCosignMessage = { kind: 'error', text: _psbtTzPpProblem() || 'Confirm the Trezor’s passphrase first.' };
+        await _psbtUpdateCosignCard();
+        return;
+    }
     _psbtCosignBusy = 'trezor';
     _psbtCosignMessage = { kind: 'info', text: 'Looking for the Trezor…' };
     await _psbtUpdateCosignCard();
@@ -27816,7 +27937,7 @@ async function psbtCosignTrezor() {
               'A Trezor One may not show outputs that go back to your own wallet, so check the amount carefully. SafeKeep is waiting…' };
     await _psbtUpdateCosignCard();
     let r;
-    try { r = await os.trezorSign(_psbtSignedBytes); }
+    try { r = await os.trezorSign(_psbtSignedBytes, tzPassphrase); }
     catch (e) { r = { ok: false, error: 'Unexpected error: ' + (e && e.message ? e.message : e) }; }
     _psbtCosignBusy = false;
 
@@ -27825,9 +27946,11 @@ async function psbtCosignTrezor() {
         if (after && before && after.signed > before.signed) {
             _psbtSignedBytes = r.psbtBytes;
             _psbtRawTxHex = null;
+            const ppNote = r.passphraseXfp ? ' (its passphrase wallet ' + r.passphraseXfp + ')' : '';
             _psbtCosignMessage = { kind: 'success', text: after.complete
-                ? 'The Trezor signed. All required signatures are present — scan the QR code below with Sparrow to broadcast.'
-                : 'The Trezor signed. More signatures are still needed.' };
+                ? 'The Trezor signed' + ppNote + '. All required signatures are present — scan the QR code below with Sparrow to broadcast.'
+                : 'The Trezor signed' + ppNote + '. More signatures are still needed.' };
+            _psbtTzPpReset();   // forget the passphrase once it has signed
             const statusEl = document.getElementById('psbt-export-status');
             if (statusEl && after.complete) {
                 statusEl.textContent = '';

@@ -3190,11 +3190,17 @@ const SafeKeepOS = (() => {
    * Ask the paired, unlocked Trezor to sign. The user approves on the Trezor.
    * ok → { psbtBytes: Uint8Array, changed }  (helper gives up after 10 minutes)
    */
-  async function trezorSign(psbtBytes) {
+  async function trezorSign(psbtBytes, passphrase) {
     if (!(psbtBytes instanceof Uint8Array) || psbtBytes.length < 5) {
       return { ok: false, status: 'bad_request', error: 'No transaction to send to the Trezor.' };
     }
-    const r = _tzUpper(await _trezorRequest({ action: 'sign', psbt_b64: _ccToBase64(psbtBytes) }, 11 * 60 * 1000));
+    // A passphrase makes the Trezor's passphrase wallet sign; the helper
+    // checks the pairing on the standard wallet first, and that the
+    // passphrase wallet is one of the keys the transaction needs.
+    const req = { action: 'sign', psbt_b64: _ccToBase64(psbtBytes) };
+    if (typeof passphrase === 'string' && passphrase !== '') req.passphrase = passphrase;
+    const r = _tzUpper(await _trezorRequest(req, 11 * 60 * 1000));
+    if (r.ok && r.passphrase_xfp) { r.passphraseXfp = String(r.passphrase_xfp).toUpperCase(); delete r.passphrase_xfp; }
     if (r.ok && r.psbt_b64) {
       try { r.psbtBytes = _ccFromBase64(r.psbt_b64); }
       catch (e) { return { ok: false, status: 'error', error: 'The Trezor result could not be read.' }; }

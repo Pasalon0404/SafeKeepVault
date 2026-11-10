@@ -9,6 +9,24 @@
 
 ---
 
+## Since v1.65 (on the branch, not released)
+
+- **Trezor passphrase wallets** (PSBT Signer → co-signing card): a
+  *Use a passphrase on the Trezor* box under the Trezor button (typed
+  twice, from the Passphrase Library, or the passphrase applied on the
+  Dashboard). In a normal session it is also offered when the paired
+  Trezor isn't one of the wallet's keys but some unsigned keys are
+  unnamed. Helper `safekeep-trezor.py` `sign` takes an optional
+  `passphrase` (NFKD, at most 50 bytes, no control characters): the
+  pairing is checked on the standard wallet first, then a fresh session
+  with the passphrase (HWI's `TrezorClient(password=…)`; a Trezor One asks
+  the computer) must be one of the fingerprints the PSBT's inputs name,
+  or nothing is sent (`wrong_passphrase`). Refused if passphrase
+  protection is off (`passphrase_off`). The request is overwritten before
+  deletion. Trezor signing is multisig-only (as before); single-sig Trezor
+  signing doesn't exist yet. Not yet tried on a real Trezor One. Tests
+  `test-trezor-passphrase.mjs`, `usbbootdrive/tests/test-trezor-helper.py`.
+
 ## Current state (Nov 9, 2026) — v1.65
 
 **v1.65** (Nov 9) — tested on Dave's flash drive and his COLDCARD Mk4 as
