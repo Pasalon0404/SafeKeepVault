@@ -26377,19 +26377,22 @@ let _psbtCosignConfirm = null;   // { text, yesLabel, resolve } — hardware mod
 async function _psbtHwConfirmAndPair(kind, d) {
     const os = window.SafeKeepOS;
     const name = kind === 'trezor' ? 'Trezor' : 'Coldcard';
-    const st = _psbtMultisigStatus(_psbtSignedBytes);
+    const st = _psbtSigningStatus(_psbtSignedBytes);
     const xfp = String((d && d.xfp) || '').toUpperCase();
     const c = st ? st.cosigners.find(x => x.fp === xfp) : null;
-    if (!c) return { ok: false, status: 'wrong_device',
+    // With a passphrase it is the Trezor's passphrase wallet that must be one of
+    // the keys; its standard wallet (this fingerprint) needn't be. The helper checks.
+    const viaPassphrase = kind === 'trezor' && _psbtTzPp.on;
+    if (!c && !viaPassphrase) return { ok: false, status: 'wrong_device',
         error: 'This ' + name + ' (' + xfp + ') is not one of this transaction\'s keys. Nothing was signed.' };
-    if (c.signed) return { ok: false, status: 'already_signed',
+    if (c && c.signed && !viaPassphrase) return { ok: false, status: 'already_signed',
         error: 'This ' + name + ' (' + xfp + ') has already signed this transaction. Plug in a different device.' };
     let current = null;
     try { current = kind === 'trezor' ? await os.trezorGetPairing() : await os.coldcardGetPairing(); } catch (_) {}
     if (current && current.xfp === xfp) return { ok: true };
     const yes = await new Promise(function (resolve) {
         _psbtCosignConfirm = { resolve: resolve, yesLabel: 'Use this ' + name,
-            text: 'Found a ' + name + ' with fingerprint ' + xfp + ', one of this transaction\'s keys. ' +
+            text: 'Found a ' + name + ' with fingerprint ' + xfp + (c ? ', one of this transaction\'s keys. ' : ' (its standard wallet; its passphrase wallet will be checked against this transaction\'s keys). ') +
                   'Use it to sign? It will be remembered only until this temporary session ends.' };
         _psbtCosignMessage = null;
         _psbtUpdateCosignCard();
@@ -26445,6 +26448,44 @@ function _psbtMultisigStatus(bytes) {
     const signed = minSigs === Infinity ? 0 : minSigs;
     return { required, signed, complete: signed >= required,
              cosigners: Array.from(cos, ([fp, s]) => ({ fp, signed: s })) };
+}
+
+/**
+ * Single-signature signing status of a PSBT, or null if it isn't one.
+ * Every input must spend one key (no multisig script) and name that key's
+ * origin (bip32Derivation, or tapBip32Derivation for Taproot). Same shape
+ * as _psbtMultisigStatus, as a 1-of-1: { required: 1, signed: 0|1,
+ * complete, single: true, cosigners: [{ fp, signed }] }. "signed" means
+ * every input is signed; a key counts as signed if all its inputs are.
+ */
+function _psbtSingleSigStatus(bytes) {
+    const btcLib = window.BtcMath?.btcSigner;
+    if (!btcLib || !bytes) return null;
+    let tx;
+    try { tx = btcLib.Transaction.fromPSBT(bytes, { network: PSBT_NETWORK }); } catch (e) { return null; }
+    if (!tx.inputs.length) return null;
+    const cos = new Map();
+    let allSigned = true;
+    for (const inp of tx.inputs) {
+        const ws = inp.witnessScript;
+        if (ws && ws.length && ws[ws.length - 1] === 0xae) return null;                 // a multisig input
+        if (inp.redeemScript && inp.redeemScript.length && inp.redeemScript[inp.redeemScript.length - 1] === 0xae) return null;
+        const entries = _psbtGetDerivEntries(inp.bip32Derivation).concat(_psbtGetDerivEntries(inp.tapBip32Derivation));
+        const fps = Array.from(new Set(entries.map(d => ((d.fingerprint >>> 0).toString(16)).toUpperCase().padStart(8, '0'))));
+        if (fps.length !== 1) return null;                                                 // no key named, or more than one
+        const finalized = (inp.finalScriptWitness && inp.finalScriptWitness.length) || (inp.finalScriptSig && inp.finalScriptSig.length);
+        const signed = !!finalized || !!inp.tapKeySig || _psbtPartialSigPubkeys(inp.partialSig).length > 0;
+        if (!signed) allSigned = false;
+        cos.set(fps[0], (cos.has(fps[0]) ? cos.get(fps[0]) : true) && signed);
+    }
+    const signed = allSigned ? 1 : 0;
+    return { required: 1, signed, complete: !!allSigned, single: true,
+             cosigners: Array.from(cos, ([fp, s]) => ({ fp, signed: s })) };
+}
+
+/** Multisig status, or for a single-signature spend its 1-of-1 status. */
+function _psbtSigningStatus(bytes) {
+    return _psbtMultisigStatus(bytes) || _psbtSingleSigStatus(bytes);
 }
 
 /** True if every input carries its full previous transaction (the Trezor needs these). */
@@ -26578,17 +26619,22 @@ function _psbtTzPpRefreshNote() {
 async function _psbtUpdateCosignCard() {
     const card = document.getElementById('psbt-cosign-card');
     if (!card) return;
-    const st = _psbtMultisigStatus(_psbtSignedBytes);
+    const st = _psbtSigningStatus(_psbtSignedBytes);
     if (!st) {
         if (_psbtHwMode) {
             card.textContent = '';
             card.style.display = '';
             card.appendChild(_psbtEl('div', { class: 'psbt-card-title' }, 'Hardware signing'));
             card.appendChild(_psbtEl('div', { class: 'psbt-alert warning' },
-                'Hardware signing here supports multisig (m-of-n) transactions, and this one is not. ' +
+                'SafeKeep can’t tell which key signs this transaction: its inputs don’t name their keys the usual way (or mix kinds of inputs). ' +
                 'Sign it in your wallet software with the hardware wallet instead.'));
             return;
         }
+        card.style.display = 'none'; card.textContent = ''; return;
+    }
+    // A single-signature spend SafeKeep signed itself needs no card (as before);
+    // it shows when a hardware wallet must sign, or has just signed.
+    if (st.single && st.complete && !_psbtHwMode && !(_psbtCosignMessage && _psbtCosignMessage.kind === 'success')) {
         card.style.display = 'none'; card.textContent = ''; return;
     }
 
@@ -26600,8 +26646,9 @@ async function _psbtUpdateCosignCard() {
 
     card.textContent = '';
     card.style.display = '';
-    card.appendChild(_psbtEl('div', { class: 'psbt-card-title' },
-        'Signatures: ' + Math.min(st.signed, st.required) + ' of ' + st.required));
+    card.appendChild(_psbtEl('div', { class: 'psbt-card-title' }, st.single
+        ? (st.complete ? 'Signed (single signature)' : 'Signature: not yet signed (single signature)')
+        : 'Signatures: ' + Math.min(st.signed, st.required) + ' of ' + st.required));
 
     const list = _psbtEl('div', { style: 'display: flex; flex-direction: column; gap: 0.3rem; font-family: var(--skb-mono); font-size: 0.8125rem; margin-bottom: 0.75rem;' });
     st.cosigners.forEach(c => {
@@ -26716,7 +26763,7 @@ async function _psbtUpdateCosignCard() {
 async function psbtCosignColdcard() {
     const os = window.SafeKeepOS;
     if (_psbtCosignBusy || !_psbtSignedBytes || !os || typeof os.coldcardSign !== 'function') return;
-    const before = _psbtMultisigStatus(_psbtSignedBytes);
+    const before = _psbtSigningStatus(_psbtSignedBytes);
     _psbtCosignBusy = 'coldcard';
     if (_psbtHwMode) {
         _psbtCosignMessage = { kind: 'info', text: 'Looking for the Coldcard… (plugged in, unlocked with its PIN, USB turned on)' };
@@ -26740,7 +26787,7 @@ async function psbtCosignColdcard() {
     _psbtCosignBusy = false;
 
     if (r && r.ok && r.psbtBytes) {
-        const after = _psbtMultisigStatus(r.psbtBytes);
+        const after = _psbtSigningStatus(r.psbtBytes);
         if (after && before && after.signed > before.signed) {
             _psbtSignedBytes = r.psbtBytes;
             _psbtRawTxHex = null;
@@ -27899,7 +27946,7 @@ async function tzEnsureUnlocked(onStatus) {
 async function psbtCosignTrezor() {
     const os = window.SafeKeepOS;
     if (_psbtCosignBusy || !_psbtSignedBytes || !os || typeof os.trezorSign !== 'function') return;
-    const before = _psbtMultisigStatus(_psbtSignedBytes);
+    const before = _psbtSigningStatus(_psbtSignedBytes);
     const tzPassphrase = _psbtTzPpValue();
     if (tzPassphrase === null || _psbtTzPpProblem()) {
         _psbtCosignMessage = { kind: 'error', text: _psbtTzPpProblem() || 'Confirm the Trezor’s passphrase first.' };
@@ -27942,7 +27989,7 @@ async function psbtCosignTrezor() {
     _psbtCosignBusy = false;
 
     if (r && r.ok && r.psbtBytes) {
-        const after = _psbtMultisigStatus(r.psbtBytes);
+        const after = _psbtSigningStatus(r.psbtBytes);
         if (after && before && after.signed > before.signed) {
             _psbtSignedBytes = r.psbtBytes;
             _psbtRawTxHex = null;

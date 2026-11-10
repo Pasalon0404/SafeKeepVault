@@ -23,9 +23,18 @@
   the computer) must be one of the fingerprints the PSBT's inputs name,
   or nothing is sent (`wrong_passphrase`). Refused if passphrase
   protection is off (`passphrase_off`). The request is overwritten before
-  deletion. Trezor signing is multisig-only (as before); single-sig Trezor
-  signing doesn't exist yet. Not yet tried on a real Trezor One. Tests
+  deletion. Not yet tried on a real Trezor One. Tests
   `test-trezor-passphrase.mjs`, `usbbootdrive/tests/test-trezor-helper.py`.
+- **Hardware signing for single-sig** (PSBT Signer → co-signing card): the
+  card used to need an m-of-n multisig (`_psbtMultisigStatus`). Now
+  `_psbtSigningStatus` falls back to `_psbtSingleSigStatus` (every input
+  one key with a named origin, BIP-32 or Taproot; a 1-of-1), so the
+  Trezor (with or without a passphrase) and the Coldcard can sign
+  single-sig transactions too, in a normal or a Temporary Session. The
+  helpers never had a multisig limit. A single-sig spend SafeKeep signed
+  itself still shows no card. In hardware-only mode with a Trezor
+  passphrase, the Trezor's standard fingerprint needn't be a key: the
+  helper checks the passphrase wallet.
 
 ## Current state (Nov 9, 2026) — v1.65
 
