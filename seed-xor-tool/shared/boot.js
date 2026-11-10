@@ -3045,7 +3045,7 @@ const SafeKeepOS = (() => {
               lastSeq = Number(q.seq);
               let answer = null;
               try { answer = typeof onQuestion === 'function' ? await onQuestion(q) : null; } catch (e) { answer = { cancel: true }; }
-              if (q.need === 'pin' || q.need === 'word') {
+              if (q.need === 'pin' || q.need === 'word' || q.need === 'matrix') {
                 const body = Object.assign({}, answer || { cancel: true }, { request_id: requestId, seq: q.seq });
                 _rawBlobDownload(TREZOR_REPLY_FILE, JSON.stringify(body));
                 answer = null;
@@ -3079,9 +3079,11 @@ const SafeKeepOS = (() => {
    * Trezor asks for a new PIN and for each word (in a scrambled order, with
    * decoys) through onQuestion. ok → { xfp }
    */
-  async function trezorRecover(wordCount, passphraseProtection, onQuestion) {
+  // method: 'advanced' (the blank grid; default) or 'words' (typed or
+  // clicked words; only offered for a seed in SafeKeep's Seed Vault).
+  async function trezorRecover(wordCount, passphraseProtection, onQuestion, method) {
     return _tzUpper(await _trezorDialogRequest({ action: 'recover', word_count: Number(wordCount),
-      passphrase_protection: !!passphraseProtection }, 46 * 60 * 1000, onQuestion));
+      passphrase_protection: !!passphraseProtection, method: method === 'words' ? 'words' : 'advanced' }, 46 * 60 * 1000, onQuestion));
   }
 
   // ===================================================================

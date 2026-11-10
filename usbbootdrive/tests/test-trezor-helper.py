@@ -66,6 +66,10 @@ FAKE_TZMSG = '''
 class RecoveryDeviceType:
     ScrambledWords = 0
     Matrix = 1
+class SafetyCheckLevel:
+    Strict = 0
+    PromptAlways = 1
+    PromptTemporarily = 2
 '''
 
 # A Trezor One's settings / wipe / recovery, asking through client.ui like trezorlib does.
@@ -78,11 +82,16 @@ def press():   # the person presses the button on the Trezor a moment later
 LOG = os.environ['FAKE_TZ_LOG']
 def log(x):
     with open(LOG, 'a') as f: f.write(x + '\\n')
-def apply_settings(client, use_passphrase=None, **kw):
+SAFETY = {'level': 0}   # Strict, like a Trezor One after it starts
+def apply_settings(client, use_passphrase=None, safety_checks=None, **kw):
     if CFG.get('apply_pin'):
         log('apply-pin ' + str(client.ui.get_pin(1)))
     client.ui.button_request(None); press()
     if CFG.get('apply') == 'decline': raise TrezorFailure('ActionCancelled: Action cancelled by user')
+    if safety_checks is not None:
+        log('apply safety_checks=%s step=%s' % (safety_checks, getattr(client.ui, 'step', '')))
+        SAFETY['level'] = safety_checks
+        return
     log('apply use_passphrase=%s' % use_passphrase)
     client.features.passphrase_protection = use_passphrase
 def wipe(client):
@@ -93,11 +102,29 @@ def wipe(client):
 def recover(client, word_count=24, passphrase_protection=False, pin_protection=True, label=None,
             input_callback=None, type=0, **kw):
     log('recover words=%d pp=%s pin=%s type=%s' % (word_count, passphrase_protection, pin_protection, type))
+    # The firmware's rule (legacy/firmware/recovery.c):
+    if word_count < 24 and type == 0 and SAFETY['level'] == 0:
+        raise TrezorFailure('DataError: Advanced recovery must be used.')
     a = client.ui.get_pin(2); b = client.ui.get_pin(3)
     log('new-pin %s %s' % (a, b))
-    for i in range(word_count + CFG.get('decoys', 0)):
-        w = input_callback(0)
-        log('word ' + w)
+    if type == 1:
+        # Advanced recovery: 4 steps per word (3 grids of 9, then up to 6
+        # words); backspace undoes a step, or at a word's first step the
+        # whole previous word, as the firmware does.
+        i = 0
+        while True:
+            d = input_callback(2 if i % 4 == 3 else 1)
+            log('matrix %s at %d' % ('back' if d == '\x08' else d, i))
+            if d == '\x08':
+                i = (i - 4 if i > 0 else 0) if i % 4 == 0 else i - 1
+                continue
+            if i % 4 == 3 and i // 4 + 1 == word_count:
+                break
+            i += 1
+    else:
+        for i in range(word_count + CFG.get('decoys', 0)):
+            w = input_callback(0)
+            log('word ' + w)
     if CFG.get('recover') == 'badwords': raise TrezorFailure('ProcessError: Invalid mnemonic, are words in correct order?')
     client.init_device()
 '''
@@ -251,7 +278,7 @@ def run_dialog(tmp, request, cfg=None, answer=None, env_extra=None, temporary=Tr
                 q = None
             if q and q.get('seq', 0) > last:
                 last = q['seq']; seen.append(q)
-                if q['need'] in ('pin', 'word') and answer:
+                if q['need'] in ('pin', 'word', 'matrix') and answer:
                     r = answer(q)
                     if r is not None:
                         body = dict({'request_id': q['request_id'], 'seq': q['seq']}, **r) if 'raw' not in r else r['raw']
@@ -542,18 +569,19 @@ def main():
                 if q['need'] == 'word': return {'word': next(it)}
             return a
         set_pairing(tmp)
-        rc, r, log, left, out, seen, rleft, dleft = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': True, 'request_id': 'r1'},
+        rc, r, log, left, out, seen, rleft, dleft = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': True, 'request_id': 'r1', 'method': 'words'},
                                                              {'no_seed': True, 'decoys': 2}, answer=app_answers(WORDS))
         check('recover: done, reports the new fingerprint', r.get('status') == 'recovered' and r.get('xfp') == PAIRED_XFP and r.get('passphrase_protection') is True, str(r))
-        check('  ...scrambled-words method, 12 words, PIN on, passphrase protection as asked', 'recover words=12 pp=True pin=True type=0' in log, str(log))
+        check('  ...words method, 12 words, PIN on, passphrase protection as asked', 'recover words=12 pp=True pin=True type=0' in log, str(log))
+        check('  ...12 words: the safety checks were relaxed first (until the Trezor restarts), confirmed on its screen', 'apply safety_checks=2 step=safety_checks' in log and log.index('apply safety_checks=2 step=safety_checks') < log.index('recover words=12 pp=True pin=True type=0') and any(q['need'] == 'button' and q.get('step') == 'safety_checks' for q in seen) and r.get('safety_checks_relaxed') is True and r.get('method') == 'words', str(log))
         check('  ...new PIN asked twice on the grid (new_first, new_second)', [q.get('kind') for q in seen if q['need'] == 'pin'] == ['new_first', 'new_second'] and 'new-pin 1597 1597' in log, str(seen))
         check('  ...every word the Trezor asked for (decoys too) passed on, in order', [l[5:] for l in log if l.startswith('word ')] == WORDS, str(log))
         check('  ...the words are not in the result', not any(w in json.dumps(r) for w in ('sausage', 'yellow')))
         check('  ...no answers or dialog left behind, pairing removed', not rleft and not dleft and read_pairing(tmp) is None, str(rleft))
-        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r2'},
+        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r2', 'method': 'words'},
                                                     {'no_seed': True}, answer=app_answers(WORDS), temporary=False)
         check('a normal session works too (the words pass briefly through the encrypted vault, like Seed Vault seeds)', r.get('status') == 'recovered', str(r))
-        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r3'}, {}, answer=app_answers(WORDS))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r3', 'method': 'words'}, {}, answer=app_answers(WORDS))
         check('a Trezor that has a seed -> initialized (wipe first)', r.get('status') == 'initialized' and not any(l.startswith('recover') for l in log), str(r))
         def cancel_at_3():
             n = {'w': 0}
@@ -562,12 +590,12 @@ def main():
                 n['w'] += 1
                 return {'cancel': True} if n['w'] == 3 else {'word': 'abandon'}
             return a
-        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r4'}, {'no_seed': True}, answer=cancel_at_3())
+        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r4', 'method': 'words'}, {'no_seed': True}, answer=cancel_at_3())
         check('cancel at word 3 -> refused, no more words asked', r.get('status') == 'refused' and len([q for q in seen if q['need'] == 'word']) == 3, str(r))
-        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r5'}, {'no_seed': True},
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r5', 'method': 'words'}, {'no_seed': True},
                                     answer=lambda q: {'positions': '1'} if q['need'] == 'pin' else {'word': 'Abandon'})
         check('a word that isn\'t lower-case letters -> stopped (refused), not sent', r.get('status') == 'refused' and not any(l.startswith('word ') for l in log), str(r))
-        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r6'}, {'no_seed': True, 'recover': 'badwords'}, answer=app_answers(WORDS))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r6', 'method': 'words'}, {'no_seed': True, 'recover': 'badwords'}, answer=app_answers(WORDS))
         check('words that don\'t form a valid seed -> rejected, with what to do', r.get('status') == 'rejected' and 'valid seed' in r.get('error', ''), str(r))
         rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 13, 'passphrase_protection': False, 'request_id': 'r7'}, {'no_seed': True})
         check('13 words -> bad_request, device not opened', r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log), str(r))
@@ -577,9 +605,55 @@ def main():
                 stale['n'] += 1
                 return {'raw': {'request_id': 'someone-else', 'seq': q['seq'], 'positions': '999'}} if stale['n'] == 1 else {'positions': '22'}
             return {'word': 'abandon'}
-        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r8'}, {'no_seed': True},
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r8', 'method': 'words'}, {'no_seed': True},
                                     answer=stale_then_real, env_extra={'SAFEKEEP_TZ_STEP_TIMEOUT': '2'})
         check('an answer for another request is ignored (then the question times out)', r.get('status') == 'timeout' and 'new-pin 999' not in ' '.join(log), str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 24, 'passphrase_protection': False, 'request_id': 'r10', 'method': 'words'}, {'no_seed': True},
+                                    answer=lambda q: {'positions': '1'} if q['need'] == 'pin' else {'word': 'abandon'})
+        check('words method with 24 words: the safety checks are left alone', r.get('status') == 'recovered' and not any(l.startswith('apply') for l in log) and r.get('safety_checks_relaxed') is False, str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r11', 'method': 'words'}, {'no_seed': True, 'apply': 'decline'},
+                                    answer=app_answers(WORDS))
+        check('declining the safety-check change on the Trezor -> refused, recovery not started', r.get('status') == 'refused' and not any(l.startswith('recover') for l in log), str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r12', 'method': 'words'}, {'no_seed': True, 'recover': 'badwords'},
+                                    answer=app_answers(WORDS))
+        check('a failure after relaxing says to unplug the Trezor (back to Strict)', r.get('status') == 'rejected' and 'Unplug the Trezor and plug it back in' in r.get('error', ''), str(r))
+
+        print('recover: advanced (the grid)')
+        clicks = {'n': 0}
+        def grid(q):
+            if q['need'] == 'pin': return {'positions': '1597'}
+            clicks['n'] += 1
+            if clicks['n'] in (3, 6): return {'position': 'back'}   # one step back mid-word; then at a word's start
+            return {'position': str(1 + clicks['n'] % 9)}
+        set_pairing(tmp)
+        rc, r, log, left, out, seen, rleft, dleft = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'a1'},
+                                                             {'no_seed': True}, answer=grid)
+        mq = [q for q in seen if q['need'] == 'matrix']
+        check('no method given: advanced recovery (the grid), done, reports the fingerprint', r.get('status') == 'recovered' and 'recover words=12 pp=False pin=True type=1' in log and r.get('method') == 'advanced' and r.get('xfp') == PAIRED_XFP, str(r))
+        check('  ...the safety checks are left alone, no words asked', not any(l.startswith('apply') for l in log) and not any(q['need'] == 'word' for q in seen) and r.get('safety_checks_relaxed') is False, str(log))
+        check('  ...each question names the word and step (1 of 12, step 0, grid of 9)', mq[0].get('word') == 1 and mq[0].get('level') == 0 and mq[0].get('layout') == 9 and mq[0].get('of') == 12, str(mq[:2]))
+        check('  ...a word\'s 4th step is the grid of 6 (words)', all((q['layout'] == 6) == (q['level'] == 3) for q in mq), str([(q['word'], q['level'], q['layout']) for q in mq[:10]]))
+        steps = [(q['word'], q['level']) for q in mq]
+        check('  ...Back undoes a step; at a word\'s first step, the previous whole word, as the Trezor does', steps[:8] == [(1, 0), (1, 1), (1, 2), (1, 1), (1, 2), (1, 3), (1, 2), (1, 3)], str(steps[:10]))
+        check('  ...the helper\'s count matches the Trezor\'s all the way to the last word', steps[-1] == (12, 3) and all('at %d' % ((w - 1) * 4 + l) in ' '.join(x for x in log if x.startswith('matrix')) for w, l in steps), str(steps[-3:]))
+        check('  ...only positions passed on (1-9 or a backspace)', all(l.split()[1] in list('123456789') + ['back'] for l in log if l.startswith('matrix')))
+        check('  ...no answers or dialog left behind, pairing removed', not rleft and not dleft and read_pairing(tmp) is None, str(rleft))
+        bk = {'n': 0}
+        def back_at_start(q):
+            if q['need'] == 'pin': return {'positions': '1'}
+            bk['n'] += 1
+            return {'position': 'back'} if bk['n'] in (5, 6) else {'position': '5'}
+        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'a2'}, {'no_seed': True}, answer=back_at_start)
+        st = [(q['word'], q['level']) for q in seen if q['need'] == 'matrix']
+        check('  ...Back at word 2\'s first step goes back to the start of word 1', st[4:7] == [(2, 0), (1, 0), (1, 0)] and r.get('status') == 'recovered', str(st[:8]))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'a3'}, {'no_seed': True},
+                                    answer=lambda q: {'positions': '1'} if q['need'] == 'pin' else {'position': '0'})
+        check('a position that isn\'t 1-9 -> stopped (refused), not sent', r.get('status') == 'refused' and not any(l.startswith('matrix') for l in log), str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'a4'}, {'no_seed': True},
+                                    answer=lambda q: {'positions': '1'} if q['need'] == 'pin' else {'cancel': True})
+        check('cancel on the grid -> refused', r.get('status') == 'refused', str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'a5', 'method': 'type'}, {'no_seed': True})
+        check('an unknown method -> bad_request, device not opened', r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log), str(r))
         rc, r, *_ = run(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r9'}, {'no_seed': True}, env_extra={'SAFEKEEP_TZ_TEMPORARY': '1'})
         check('no dialog channel -> error (nothing hangs)', r.get('status') == 'error' and 'dialog' in r.get('error', ''), str(r))
 

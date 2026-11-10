@@ -48,25 +48,35 @@ SECURITY MODEL
                     Trezor whose fingerprint the user confirmed
                     ("expected_xfp"); the Trezor asks for confirmation on its
                     own screen. The pairing is removed.
-      recover    -> set a wiped Trezor up from recovery words. Each word
-                    reaches this helper as a reply file in the download
-                    folder: RAM in a Temporary Session, the encrypted vault
-                    otherwise (where Seed Vault seeds are stored anyway);
-                    read once, overwritten and deleted. A Trezor One asks for the
-                    words in a scrambled order, mixed with decoys, and shows
-                    on its own screen which one to type; it also asks for a
-                    new PIN on its scrambled grid. Each question goes to the
-                    app through the dialog channel below.
+      recover    -> set a wiped Trezor up from recovery words; it also asks
+                    for a new PIN on its scrambled grid. Two methods
+                    ("method"):
+                    "advanced" (default): the Trezor shows a grid of letter
+                      ranges, then words, on its own screen; the app shows it
+                      blank and only the position clicked comes back, so the
+                      computer never learns the words. 4 steps per word.
+                    "words": the Trezor asks for the words in a scrambled
+                      order, mixed with decoys, typed on the computer. With
+                      12 or 18 words the Trezor allows this only once its
+                      safety checks are relaxed (it asks on its screen; back
+                      to Strict when it restarts). The app offers this only
+                      for a seed SafeKeep already holds (its Seed Vault).
+                    Each answer reaches this helper as a reply file in the
+                    download folder: RAM in a Temporary Session, the
+                    encrypted vault otherwise; read once, overwritten and
+                    deleted. Each question goes to the app through the
+                    dialog channel below.
       xpub       -> read the unlocked Trezor's fingerprint and its multisig
                     account key at ONE of the three BIP-48 paths
                     (m/48'/0'/0'/0', /1' or /2'), for building a multisig
                     descriptor. Read-only, no pairing needed, nothing stored.
   * DIALOG CHANNEL (passphrase_setting, wipe, recover): while the Trezor
     waits, each question is written to SAFEKEEP_TZ_DIALOG (RAM) as
-      { request_id, seq, need: "button" | "pin" | "word", kind, ... }
-    and, for "pin" and "word", the answer is read from a
+      { request_id, seq, need: "button" | "pin" | "word" | "matrix", kind, step, ... }
+    ("matrix" also has layout 9 | 6, word (1-based), level 0-3, of), and,
+    for "pin", "word" and "matrix", the answer is read from a
     TREZOR_REPLY*.json in SAFEKEEP_TZ_REPLY_DIR (the download folder) as
-      { request_id, seq, positions | word | cancel }
+      { request_id, seq, positions | word | position ("1"-"9" | "back") | cancel }
     It must name this request and question; it is read once, overwritten
     and deleted. Words are checked to be lower-case letters (the Trezor
     checks them against its word list); positions are digits 1-9.
@@ -123,6 +133,8 @@ PIN_POS_RE = re.compile(r'^[1-9]{1,9}$')
 REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 PASSPHRASE_MAX_BYTES = 50   # the Trezor One's limit
 WORD_RE = re.compile(r'^[a-z]{3,8}$')
+MATRIX_POS_RE = re.compile(r'^[1-9]$')
+RECOVER_METHODS = ('advanced', 'words')
 DIALOG_STEP_TIMEOUT_S = int(os.environ.get('SAFEKEEP_TZ_STEP_TIMEOUT', '600'))
 RECOVER_TIMEOUT_S = int(os.environ.get('SAFEKEEP_TZ_RECOVER_TIMEOUT', '2700'))
 DEFAULT_PAIRING = '/media/.safekeep-vault/settings/trezor-pairing.json'
@@ -784,43 +796,100 @@ def do_recover(hwi, data):
     if words not in (12, 18, 24):
         raise Fail('bad_request', 'The Trezor can recover a seed of 12, 18 or 24 words.')
     use_pp = field_bool(data, 'passphrase_protection')
+    method = data.get('method', 'advanced')
+    if method not in RECOVER_METHODS:
+        raise Fail('bad_request', 'Request field method must be "advanced" or "words".')
     client, dialog = open_dialog_client(hwi, data, 'recover')
+    relaxed = False
     try:
         f = check_trezor_one_any(client)
         if f['initialized']:
             raise Fail('initialized', 'This Trezor already has a seed. Erase it first (Wipe), then recover.')
 
+        if method == 'words' and words < 24:
+            # A Trezor One with its safety checks on Strict (the default)
+            # refuses the words method for 12 or 18 words ("Advanced recovery
+            # must be used"): the computer sees each word, and so few words
+            # in a scrambled order could be tried in every order. Relaxed
+            # until the Trezor restarts (the firmware keeps this in memory
+            # only), after a confirmation on its own screen. The app offers
+            # this only for a seed SafeKeep already holds (its Seed Vault).
+            client.client.ui.step = 'safety_checks'
+            try:
+                hwi.tzdevice.apply_settings(client.client, safety_checks=hwi.tzmsg.SafetyCheckLevel.PromptTemporarily)
+            except hwi.tzexc.Cancelled:
+                raise Fail('refused', 'Canceled. Nothing was changed on the Trezor.')
+            except hwi.tzexc.TrezorFailure as e:
+                if 'cancel' in str(e).lower():
+                    raise Fail('refused', 'You declined on the Trezor. Nothing was changed.')
+                raise
+            relaxed = True
+            client.client.ui.step = 'recover'
+
+        pos = {'i': 0}   # mirrors the Trezor's own count: 4 steps per word
+
         def word(kind):
-            if int(kind or 0) != 0:   # only the scrambled-words method is used
+            k = int(kind or 0)
+            if method == 'words':
+                if k != 0:
+                    raise hwi.tzexc.Cancelled()
+                r = dialog.ask('word', step='recover')
+                if r.get('cancel'):
+                    raise hwi.tzexc.Cancelled()
+                w = r.get('word')
+                if not isinstance(w, str) or not WORD_RE.match(w):
+                    raise hwi.tzexc.Cancelled()
+                return w
+            # Advanced recovery: the Trezor shows a grid of letter ranges (or,
+            # at the last step of a word, up to six words); the app shows the
+            # same grid blank and sends back only the position clicked.
+            if k not in (1, 2):
                 raise hwi.tzexc.Cancelled()
-            r = dialog.ask('word', step='recover')
+            i = pos['i']
+            if k == 2 and i % 4 != 3:   # the Trezor says it is a word's last step
+                i = (i // 4) * 4 + 3
+            r = dialog.ask('matrix', layout=6 if k == 2 else 9, word=i // 4 + 1, level=i % 4, of=words, step='recover')
             if r.get('cancel'):
                 raise hwi.tzexc.Cancelled()
-            w = r.get('word')
-            if not isinstance(w, str) or not WORD_RE.match(w):
+            p = r.get('position')
+            if p == 'back':
+                pos['i'] = (i - 4 if i >= 4 else 0) if i % 4 == 0 else i - 1
+                return '\x08'
+            if not isinstance(p, str) or not MATRIX_POS_RE.match(p):
                 raise hwi.tzexc.Cancelled()
-            return w
+            pos['i'] = i + 1
+            return p
 
+        rtype = hwi.tzmsg.RecoveryDeviceType.Matrix if method == 'advanced' else hwi.tzmsg.RecoveryDeviceType.ScrambledWords
         try:
             hwi.tzdevice.recover(client.client, word_count=words, passphrase_protection=use_pp, pin_protection=True,
-                                 label=None, input_callback=word, type=hwi.tzmsg.RecoveryDeviceType.ScrambledWords)
+                                 label=None, input_callback=word, type=rtype)
         except hwi.tzexc.Cancelled:
             raise Fail('refused', 'Recovery canceled. The Trezor has no seed: start the recovery again.')
         except hwi.tzexc.TrezorFailure as e:
             text = str(e).lower()
             if 'cancel' in text:
                 raise Fail('refused', 'Recovery canceled. The Trezor has no seed: start the recovery again.')
+            if 'advanced recovery' in text:
+                raise Fail('refused', 'The Trezor wants advanced recovery for a seed of fewer than 24 words. '
+                                      'Choose Advanced recovery and start again.')
             if 'checksum' in text or 'invalid' in text or 'mnemonic' in text:
                 raise Fail('rejected', 'The Trezor did not accept those words (they don\'t form a valid seed). '
                                        'Check them against your backup and start again.')
             raise
         client.client.init_device()
         xfp, _ = identity(client)
+    except Fail as e:
+        if relaxed:
+            e.message += ' Unplug the Trezor and plug it back in to put its safety checks back to Strict.'
+            e.args = (e.message,)
+        raise
     finally:
         dialog.close()
         client.close()
     forget_pairing()
-    return {'ok': True, 'status': 'recovered', 'xfp': xfp, 'passphrase_protection': use_pp}
+    return {'ok': True, 'status': 'recovered', 'xfp': xfp, 'passphrase_protection': use_pp,
+            'method': method, 'safety_checks_relaxed': relaxed}
 
 
 def check_trezor_one_any(client):

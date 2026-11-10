@@ -40,12 +40,19 @@
   Dashboard): *Passphrase Protection* (on/off), *Erase This Trezor*
   (checkbox + type ERASE; only the Trezor whose fingerprint was read after
   unlocking), *Recover from Words* (any session; the Trezor must have no
-  seed; 12/18/24 words, optional passphrase protection; new PIN). Words are
-  typed, or taken from a Seed Vault seed: its words are shown numbered and
-  the user clicks the one the Trezor asks for (decoys are typed). Outside a
-  Temporary Session each reply file sits briefly in the encrypted vault's
-  download folder, as Seed Vault seeds do; the panel says so and suggests a
-  Temporary Session for words from paper.
+  seed; 12/18/24 words, optional passphrase protection; new PIN). Default
+  method "advanced" (trezorlib `RecoveryDeviceType.Matrix`): per word the
+  Trezor shows 3 grids of letter ranges, then up to 6 words (2 columns);
+  the app shows a blank number-pad grid and only the position (or "back")
+  goes back, as a `matrix` dialog question (layout 9/6, word, level 0-3).
+  Words from paper always use it. For a Seed Vault seed there is also
+  "Quicker" (method "words", scrambled words + decoys): the seed's words are
+  shown numbered to click, decoys typed. The Trezor One refuses the words
+  method for 12/18 words while its safety checks are Strict ("Advanced
+  recovery must be used", legacy/firmware/recovery.c), so the helper first
+  sets `safety_checks=PromptTemporarily` (confirmed on the Trezor; kept in
+  its RAM only, Strict again after a restart) and the app says to unplug it
+  afterwards.
   Helper actions `passphrase_setting`, `wipe`, `recover` use trezorlib's
   `apply_settings` / `wipe` / `recover` (ScrambledWords) with a `DialogUI`:
   each question (`button`, `pin` new_first/new_second/current, `word`)
