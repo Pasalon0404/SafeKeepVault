@@ -1867,8 +1867,10 @@ SSPYEOF
     # Dialog (passphrase_setting / wipe / recover): while the Trezor waits,
     # the helper writes its question to $SIGNAL_DIR/TREZOR_DIALOG.json (RAM)
     # and reads the answer from TREZOR_REPLY*.json in the download folder
-    # (overwritten, then deleted). "recover" runs only in a Temporary Session
-    # (SAFEKEEP_TZ_TEMPORARY=1), so recovery words stay in RAM.
+    # (overwritten, then deleted). For "recover" those answers are recovery
+    # words: in RAM in a Temporary Session, briefly in the encrypted vault
+    # otherwise (where Seed Vault seeds are stored too). SAFEKEEP_TZ_TEMPORARY
+    # tells the helper which.
     # into $CHROMIUM_DOWNLOAD_DIR. The helper
     # (/usr/local/lib/safekeep/safekeep-trezor.py, run with the pinned HWI
     # install in /opt/safekeep-hwi) treats it as untrusted data, deletes it

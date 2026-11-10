@@ -15,7 +15,7 @@
  *      "passphrase" for Passphrase Library files.
  *   3. The panel: where it lives (Device Options, and Trezor Tools on the
  *      welcome screen in a Temporary Session), erase confirmations,
- *      recovery only in a Temporary Session, the PIN grid's ask mode.
+ *      recovery in any session (words typed, or picked from the Seed Vault), the PIN grid's ask mode.
  *   4. The new functions parse.
  *
  * Run:  node test-trezor-tools.mjs
@@ -77,7 +77,7 @@ const w = boot.slice(boot.indexOf('# TREZOR WATCHER'), boot.indexOf('TREZOR_WATC
 ck('the watcher gives the helper the dialog file (RAM), the reply folder and the Temporary Session flag', w.includes('SAFEKEEP_TZ_DIALOG="$TREZOR_DIALOG"') && w.includes('SAFEKEEP_TZ_REPLY_DIR="$CHROMIUM_DOWNLOAD_DIR"') && w.includes('SAFEKEEP_TZ_TEMPORARY="$TREZOR_TEMPORARY"') && w.includes('TREZOR_DIALOG="$SIGNAL_DIR/TREZOR_DIALOG.json"') && w.includes('if [ "$EPHEMERAL_MODE" = "1" ]; then TREZOR_TEMPORARY=1; else TREZOR_TEMPORARY=0; fi'));
 ck('…and shreds any answers left over afterwards', w.includes('shred -u -n 1 -z "$_tzr"'));
 ck('the file router skips COLDCARD_* and TREZOR_* (their requests may carry a "passphrase" that must never become a Passphrase Library file)', /SEED_STORAGE\*\|COLDCARD_\*\|TREZOR_\*\|/.test(boot));
-ck('the helper: recovery only in a Temporary Session, wipe only the confirmed Trezor', helper.includes("if os.environ.get('SAFEKEEP_TZ_TEMPORARY') != '1':") && helper.includes("if want is None or got_xfp != want:"));
+ck('the helper: recovery in any session, wipe only the confirmed Trezor', !helper.includes("not_temporary") && helper.includes("if want is None or got_xfp != want:"));
 
 console.log('\n3. The panel');
 ck('in Device Options → Trezor: Passphrase Protection, Erase This Trezor, Recover from Words', html.indexOf('id="tzx-block"') > html.indexOf('id="settings-trezor-section"') && ['onclick="tzx_passphrase()">Passphrase Protection', 'onclick="tzx_openWipe()">Erase This Trezor', 'onclick="tzx_openRecover()">Recover from Words'].every((t) => html.includes(t)));
@@ -87,17 +87,22 @@ ck('the PIN grid opens above that overlay', /\.tz-pin-overlay \{[\s\S]{0,140}z-i
 const wipe = fn('function tzx_openWipe');
 ck('erase: a warning, "I have the recovery words", and typing ERASE before the button works', wipe.includes('Erasing removes the seed, PIN and settings from the Trezor.') && wipe.includes('id="tzx-wipe-have"') && fn('function tzx_wipeCheck').includes("=== 'ERASE'"));
 ck('…the fingerprint comes from the unlocked Trezor, and goes to the helper', fn('async function tzx_wipe').includes('tzEnsureUnlocked') && fn('async function tzx_wipe').includes('os.trezorWipe(xfp, _tzxOnQuestion)'));
-ck('recover: only in a Temporary Session, says why otherwise', fn('function tzx_openRecover').includes("if (!(typeof _isEphemeralBoot === 'function' && _isEphemeralBoot()))") && fn('function tzx_openRecover').includes('Recovery runs only in a <strong>Temporary Session</strong>'));
-ck('…explains the scrambled order and the decoy words', fn('function tzx_openRecover').includes('also asks for a few words that aren’t in your seed (decoys'));
+const rec = fn('async function tzx_openRecover');
+ck('recover: in any session; a normal session says each word passes briefly through the encrypted vault, and suggests a Temporary Session for words from paper', !rec.includes('Recovery runs only in') && rec.includes('Each word passes briefly through this vault on the flash drive (encrypted, then erased)') && rec.includes('For words from a paper backup, a Temporary Session keeps them in memory only.'));
+ck('…explains the scrambled order and the decoy words', rec.includes('also asks for a few words that aren’t in the seed (decoys'));
+ck('…words typed, or from SafeKeep\'s Seed Vault (only when it is on; 12, 18 or 24 words)', rec.includes('value="type" checked onchange="tzx_recSource()"> Type the words') && rec.includes('From SafeKeep’s Seed Vault') && rec.includes("typeof _svAvailable === 'function' && _svAvailable()") && rec.includes('[12, 18, 24].indexOf(e.mnemonic.split'));
+ck('…a picked seed sets the word count, and shows its words numbered to click (a decoy is typed)', fn('async function tzx_recover').includes('n = _tzx.recWords.length;') && fn('function _tzxAskWord').includes('onclick="tzx_pickChip(\' + i + \')"><b>\' + (i + 1) + \'</b> ') && fn('function tzx_pickChip').includes('input.value = words[i];') && rec.includes('A decoy is shown on the Trezor’s screen: type it.'));
+ck('…the picked words are forgotten when recovery ends or the panel closes', (fn('async function tzx_recover').match(/_tzx\.recWords = null;/g) || []).length >= 2 && fn('function tzx_close').includes('_tzx.recWords = null; _tzx.svList = [];'));
 ck('…one word at a time, from the recovery word list, cleared after each', fn('function tzx_wordNext').includes("bip.indexOf(w) < 0") && fn('function tzx_wordNext').includes('_tzx.boxes.clear()') && fn('function _tzxAskWord').includes("idPrefix: 'tzxw'") && fn('function _tzxAskWord').includes("getElementById('tzxw-word-0')"));
 ck('the Trezor\'s questions: confirm on its screen, PIN on the blank grid, a word', fn('function _tzxOnQuestion').includes("q.need === 'button'") && fn('function _tzxOnQuestion').includes('_tzPinAsk(q.kind)') && fn('function _tzxOnQuestion').includes('_tzxAskWord()'));
 ck('the PIN grid\'s ask mode hands the positions back instead of sending them', fn('async function _tzPinSubmit').includes('if (_tzPin.ask) {') && fn('function _tzPinAsk').includes("ask: true") && fn('function _tzPinAsk').includes("'Choose a new PIN'"));
 ck('not in the online demo', fn('async function tzSettingsRefresh').includes('tzxBlock.hidden = _skvDemoActive()') && fn('function tzx_openWipe').includes('_skvDemoActive()') && fn('function tzx_openRecover').includes('_skvDemoActive()'));
+ck('the dev build\'s pretend Trezor recovers in any session', !html.includes("status: 'not_temporary'"));
 ck('the dev build has a pretend Trezor for all three', ['trezorSetPassphraseProtection: async function (enable, onQuestion)', 'trezorWipe: async function (xfp, onQuestion)', 'trezorRecover: async function (n, pp, onQuestion)'].every((t) => html.includes(t)));
 ck('American English: no "tick" in the new text', !/\b[Tt]ick/.test(html.slice(html.indexOf('id="tzx-block"'), html.indexOf('id="tzx-block"') + 2000)));
 
 console.log('\n4. Parsing');
-for (const name of ['function _tzxOnQuestion', 'async function tzx_passphrase', 'async function tzx_passphraseSet', 'function tzx_openWipe', 'function tzx_wipeCheck', 'async function tzx_wipe', 'function tzx_openRecover', 'function _tzxAskWord', 'function tzx_wordNext', 'function tzx_wordCancel', 'async function tzx_recover', 'function tzx_openTools', 'function tzx_closeTools', 'function _tzPinAsk', 'function _tzPinTexts', 'async function _tzPinSubmit']) {
+for (const name of ['function _tzxOnQuestion', 'async function tzx_passphrase', 'async function tzx_passphraseSet', 'function tzx_openWipe', 'function tzx_wipeCheck', 'async function tzx_wipe', 'async function tzx_openRecover', 'function tzx_recSource', 'function tzx_pickChip', 'function _tzxAskWord', 'function tzx_wordNext', 'function tzx_wordCancel', 'async function tzx_recover', 'function tzx_openTools', 'function tzx_closeTools', 'function _tzPinAsk', 'function _tzPinTexts', 'async function _tzPinSubmit']) {
   let ok = true, err = '';
   try { new Function(fn(name).replace(/^async function/, 'return async function').replace(/^function/, 'return function')); } catch (x) { ok = false; err = x.message; }
   ck(`${name.replace(/^(async )?function /, '')} parses`, ok, err);

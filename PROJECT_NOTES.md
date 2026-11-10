@@ -39,8 +39,13 @@
   *Trezor Tools* on the welcome screen in a Temporary Session, which has no
   Dashboard): *Passphrase Protection* (on/off), *Erase This Trezor*
   (checkbox + type ERASE; only the Trezor whose fingerprint was read after
-  unlocking), *Recover from Words* (Temporary Session only; the Trezor must
-  have no seed; 12/18/24 words, optional passphrase protection; new PIN).
+  unlocking), *Recover from Words* (any session; the Trezor must have no
+  seed; 12/18/24 words, optional passphrase protection; new PIN). Words are
+  typed, or taken from a Seed Vault seed: its words are shown numbered and
+  the user clicks the one the Trezor asks for (decoys are typed). Outside a
+  Temporary Session each reply file sits briefly in the encrypted vault's
+  download folder, as Seed Vault seeds do; the panel says so and suggests a
+  Temporary Session for words from paper.
   Helper actions `passphrase_setting`, `wipe`, `recover` use trezorlib's
   `apply_settings` / `wipe` / `recover` (ScrambledWords) with a `DialogUI`:
   each question (`button`, `pin` new_first/new_second/current, `word`)

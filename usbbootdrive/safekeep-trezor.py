@@ -48,9 +48,11 @@ SECURITY MODEL
                     Trezor whose fingerprint the user confirmed
                     ("expected_xfp"); the Trezor asks for confirmation on its
                     own screen. The pairing is removed.
-      recover    -> set a wiped Trezor up from recovery words. TEMPORARY
-                    SESSIONS ONLY (SAFEKEEP_TZ_TEMPORARY=1), so the words
-                    never touch the flash drive. A Trezor One asks for the
+      recover    -> set a wiped Trezor up from recovery words. Each word
+                    reaches this helper as a reply file in the download
+                    folder: RAM in a Temporary Session, the encrypted vault
+                    otherwise (where Seed Vault seeds are stored anyway);
+                    read once, overwritten and deleted. A Trezor One asks for the
                     words in a scrambled order, mixed with decoys, and shows
                     on its own screen which one to type; it also asks for a
                     new PIN on its scrambled grid. Each question goes to the
@@ -88,7 +90,7 @@ Result JSON: {"ok": true/false, "status": "...", ...}
                   multiple_devices, unsupported_model, no_seed, locked,
                   wrong_pin, wrong_device, outdated_firmware, refused, busy,
                   timeout, rejected, missing_prev_tx, passphrase_off,
-                  wrong_passphrase, initialized, not_temporary, error
+                  wrong_passphrase, initialized, error
   ok statuses (also): passphrase_setting, wiped, recovered
   Every result echoes the request's "request_id" (if valid) so the app can
   ignore stale results.
@@ -778,9 +780,6 @@ def do_wipe(hwi, data):
 
 
 def do_recover(hwi, data):
-    if os.environ.get('SAFEKEEP_TZ_TEMPORARY') != '1':
-        raise Fail('not_temporary', 'Recovery words are typed into SafeKeep, so this runs only in a Temporary '
-                                    'Session (the words never touch the flash drive). Restart SafeKeep in a Temporary Session.')
     words = data.get('word_count')
     if words not in (12, 18, 24):
         raise Fail('bad_request', 'The Trezor can recover a seed of 12, 18 or 24 words.')

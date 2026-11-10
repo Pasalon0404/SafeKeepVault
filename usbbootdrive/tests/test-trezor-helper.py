@@ -552,7 +552,7 @@ def main():
         check('  ...no answers or dialog left behind, pairing removed', not rleft and not dleft and read_pairing(tmp) is None, str(rleft))
         rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r2'},
                                                     {'no_seed': True}, answer=app_answers(WORDS), temporary=False)
-        check('not a Temporary Session -> not_temporary, device not opened', r.get('status') == 'not_temporary' and not any(l.startswith('open') for l in log), str(r))
+        check('a normal session works too (the words pass briefly through the encrypted vault, like Seed Vault seeds)', r.get('status') == 'recovered', str(r))
         rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r3'}, {}, answer=app_answers(WORDS))
         check('a Trezor that has a seed -> initialized (wipe first)', r.get('status') == 'initialized' and not any(l.startswith('recover') for l in log), str(r))
         def cancel_at_3():

@@ -381,6 +381,10 @@
     .sv-row { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.65rem 0.8rem; background: var(--skb-bg-input); }
     .sv-row-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
     .ccpp-panel { margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid var(--skb-border); background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); max-width: 40rem; }
+    .tzx-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.35rem 0 0.5rem; }
+    .tzx-chip { font-family: var(--skb-mono); font-size: 0.78rem; padding: 0.25rem 0.5rem; background: var(--skb-bg); border: 1px solid var(--skb-border); color: var(--skb-text); cursor: pointer; }
+    .tzx-chip b { color: var(--skb-primary); margin-right: 0.2rem; }
+    .tzx-chip:hover, .tzx-chip:focus-visible { border-color: var(--skb-primary); }
     .ccpp-panel [hidden], #ccpp-block[hidden], #ccsd-block[hidden], #desc-ms-custody[hidden], #tzx-block[hidden] { display: none !important; }
     .ccpp-src { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
     .ccpp-src label, .ccpp-check { display: flex; gap: 0.4rem; align-items: center; cursor: pointer; }
@@ -12540,7 +12544,6 @@ window.addEventListener('DOMContentLoaded', () => {
         },
         trezorRecover: async function (n, pp, onQuestion) {
             var st = window._devTzState = window._devTzState || {};
-            if (devMode !== 'ephemeral') return { ok: false, status: 'not_temporary', error: '[DEV MOCK] Recovery runs only in a Temporary Session.' };
             if (!st.wiped) return { ok: false, status: 'initialized', error: '[DEV MOCK] This Trezor already has a seed. Erase it first (Wipe), then recover.' };
             var seq = 0, a;
             a = await onQuestion({ need: 'pin', kind: 'new_first', seq: ++seq }); if (!a || a.cancel) return { ok: false, status: 'refused', error: '[DEV MOCK] Recovery canceled. The Trezor has no seed: start the recovery again.' };
@@ -27437,6 +27440,7 @@ function _tzxBusy(on) {
 }
 function tzx_close() {
     if (_tzx.busy) return;
+    _tzx.recWords = null; _tzx.svList = [];
     if (_tzx.boxes) { _tzx.boxes.destroy(); _tzx.boxes = null; }
     _tzxPanel('');
 }
@@ -27548,31 +27552,59 @@ async function tzx_wipe() {
     try { r = await os.trezorWipe(xfp, _tzxOnQuestion); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
     _tzxBusy(false);
     if (r && r.ok) {
-        _tzxMsg('✔ The Trezor ' + (xfp ? '(' + xfp + ') ' : '') + 'is erased. Set it up again with Recover from Words (in a Temporary Session), or with Trezor Suite.', 'ok');
+        _tzxMsg('✔ The Trezor ' + (xfp ? '(' + xfp + ') ' : '') + 'is erased. Set it up again with Recover from Words, or with Trezor Suite.', 'ok');
         try { await tzSettingsRefresh(); } catch (_) {}
     } else { _tzxMsg((r && r.error) || 'Nothing was erased.', 'bad'); tzx_wipeCheck(); }
 }
 
 /* ---- Recover from words ---- */
-function tzx_openRecover() {
+async function tzx_openRecover() {
     if (_tzx.busy) return;
     if (_skvDemoActive()) { showStatus('SafeKeep demo: Trezor tools work only on the offline vault, run from its USB flash drive.', 'error'); return; }
-    if (!(typeof _isEphemeralBoot === 'function' && _isEphemeralBoot())) {
-        _tzxPanel('<p style="margin: 0;">Recovery runs only in a <strong>Temporary Session</strong>: you type your recovery words into SafeKeep, and in a Temporary Session they stay in memory and never touch the flash drive. Restart SafeKeep, choose Temporary Session, then open Device Options → Trezor → Recover from Words.</p>' +
-            '<div class="ccpp-row" style="margin-top: 0.6rem;"><button type="button" class="skb-btn" onclick="tzx_close()">Close</button></div>');
-        return;
+    var temp = typeof _isEphemeralBoot === 'function' && _isEphemeralBoot();
+    // Seeds from SafeKeep's Seed Vault (a Trezor takes 12, 18 or 24 words).
+    _tzx.svList = [];
+    if (typeof _svAvailable === 'function' && _svAvailable()) {
+        try { _tzx.svList = (await window.SafeKeepOS.loadSeedVault()).filter(function (e) { return [12, 18, 24].indexOf(e.mnemonic.split(' ').length) >= 0; }); } catch (_) { _tzx.svList = []; }
     }
-    _tzxPanel('<p style="margin: 0 0 0.5rem;">Sets up a Trezor that has <strong>no seed</strong> (erase it first) from your recovery words. The Trezor shows on its own screen which word to type next, in a scrambled order, and also asks for a few words that aren’t in your seed (decoys, so nobody watching the computer learns your words): type every word it asks for, exactly as shown. It then has a new PIN.</p>' +
-        '<div class="ccpp-src" role="radiogroup" aria-label="Number of words">' +
-            [12, 18, 24].map(function (n) { return '<label><input type="radio" name="tzx-words" value="' + n + '"' + (n === 24 ? ' checked' : '') + '> ' + n + ' words</label>'; }).join('') + '</div>' +
+    var sv = _tzx.svList;
+    _tzxPanel('<p style="margin: 0 0 0.5rem;">Sets up a Trezor that has <strong>no seed</strong> (erase it first) from recovery words. The Trezor shows on its own screen which word to give next, in a scrambled order, and also asks for a few words that aren’t in the seed (decoys, so nobody watching the computer learns the words): give every word it asks for, exactly as shown. It then has a new PIN.</p>' +
+        (temp ? '<p class="ccpp-note" style="margin: 0 0 0.5rem;">Temporary Session: the words stay in memory.</p>'
+              : '<p class="ccpp-note" style="margin: 0 0 0.5rem;">Each word passes briefly through this vault on the flash drive (encrypted, then erased), as Seed Vault seeds are stored there. For words from a paper backup, a Temporary Session keeps them in memory only.</p>') +
+        '<div class="ccpp-src" role="radiogroup" aria-label="Where the words come from">' +
+            '<label><input type="radio" name="tzx-src" value="type" checked onchange="tzx_recSource()"> Type the words</label>' +
+            (sv.length ? '<label><input type="radio" name="tzx-src" value="vault" onchange="tzx_recSource()"> From SafeKeep’s Seed Vault</label>' : '') + '</div>' +
+        '<div id="tzx-rec-type"><div class="ccpp-src" role="radiogroup" aria-label="Number of words">' +
+            [12, 18, 24].map(function (n) { return '<label><input type="radio" name="tzx-words" value="' + n + '"' + (n === 24 ? ' checked' : '') + '> ' + n + ' words</label>'; }).join('') + '</div></div>' +
+        (sv.length ? '<div id="tzx-rec-vault" hidden><label class="ccpp-label" for="tzx-rec-pick">Seed</label><div class="ccpp-row"><select id="tzx-rec-pick">' +
+            '<option value="">Choose a seed…</option>' + sv.map(function (e, i) { return '<option value="' + i + '">' + _psbtEscape(e.name) + ' · ' + e.mnemonic.split(' ').length + ' words · ' + _psbtEscape(e.fingerprint) + '</option>'; }).join('') +
+            '</select></div><p class="ccpp-note">Its words are shown numbered when the Trezor asks: click the number the Trezor shows. A decoy is shown on the Trezor’s screen: type it.</p></div>' : '') +
         '<label class="ccpp-check"><input type="checkbox" id="tzx-rec-pp"> Turn on passphrase protection too</label>' +
         '<div class="ccpp-row" style="gap: 0.5rem; margin-top: 0.6rem;"><button type="button" class="skb-btn skb-btn--primary" id="tzx-rec-go" onclick="tzx_recover()">Start Recovery</button>' +
         '<button type="button" class="skb-btn" id="tzx-rec-cancel" onclick="tzx_close()">Cancel</button></div>' +
-        '<div id="tzx-word" hidden style="margin-top: 0.75rem;"><label class="ccpp-label" for="tzx-word-grid">Type the word the Trezor’s screen asks for</label><div id="tzx-word-grid"></div>' +
+        '<div id="tzx-word" hidden style="margin-top: 0.75rem;"><label class="ccpp-label" for="tzxw-word-0">Give the word the Trezor’s screen asks for</label>' +
+            '<div id="tzx-word-chips" class="tzx-chips" hidden></div><div id="tzx-word-grid"></div>' +
             '<div class="ccpp-row" style="gap: 0.5rem; margin-top: 0.5rem;"><button type="button" class="skb-btn skb-btn--primary" id="tzx-word-next" onclick="tzx_wordNext()">Next</button>' +
             '<button type="button" class="skb-btn" onclick="tzx_wordCancel()">Cancel Recovery</button></div>' +
             '<div class="ccpp-note" id="tzx-word-count"></div></div>' +
         '<div class="ccpp-msg" id="tzx-msg"></div>');
+}
+
+function tzx_recSource() {
+    var v = (document.querySelector('input[name="tzx-src"]:checked') || {}).value;
+    document.getElementById('tzx-rec-type').hidden = v === 'vault';
+    var vb = document.getElementById('tzx-rec-vault'); if (vb) vb.hidden = v !== 'vault';
+}
+
+/* Click a numbered word of the chosen Seed Vault seed: it fills the box. */
+function tzx_pickChip(i) {
+    var words = _tzx.recWords || [];
+    var input = document.getElementById('tzxw-word-0');
+    if (!input || !words[i]) return;
+    input.value = words[i];
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    _tzxMsg('Word ' + (i + 1) + ' filled in. Check it is the word the Trezor asks for, then Next.');
 }
 
 function _tzxAskWord() {
@@ -27582,7 +27614,10 @@ function _tzxAskWord() {
     var SF = window.ShareFlow;
     if (_tzx.boxes) { _tzx.boxes.destroy(); _tzx.boxes = null; }
     if (SF && SF.createWordBoxes) _tzx.boxes = SF.createWordBoxes(document.getElementById('tzx-word-grid'), { count: 1, wordlist: SF.wordlists.bip39, idPrefix: 'tzxw' });
-    document.getElementById('tzx-word-count').textContent = 'Words typed so far: ' + _tzx.typed + '. The Trezor decides the order and when it is done.';
+    document.getElementById('tzx-word-count').textContent = 'Words given so far: ' + _tzx.typed + '. The Trezor decides the order and when it is done.';
+    var chips = document.getElementById('tzx-word-chips'), words = _tzx.recWords || [];
+    chips.hidden = !words.length;
+    chips.innerHTML = words.map(function (w, i) { return '<button type="button" class="tzx-chip" onclick="tzx_pickChip(' + i + ')"><b>' + (i + 1) + '</b> ' + _psbtEscape(w) + '</button>'; }).join('');
     _tzxMsg('Type the word the Trezor shows, then Next.');
     setTimeout(function () { var i = document.getElementById('tzxw-word-0'); if (i) { i.focus(); i.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); tzx_wordNext(); } }; } }, 50);
     return new Promise(function (resolve) { _tzx.wordResolve = resolve; });
@@ -27609,18 +27644,27 @@ async function tzx_recover() {
     var os = window.SafeKeepOS;
     if (_tzx.busy || !os || typeof os.trezorRecover !== 'function') return;
     var n = Number((document.querySelector('input[name="tzx-words"]:checked') || {}).value || 24);
+    _tzx.recWords = null;
+    if ((document.querySelector('input[name="tzx-src"]:checked') || {}).value === 'vault') {
+        var e = (_tzx.svList || [])[Number((document.getElementById('tzx-rec-pick') || {}).value)];
+        if (!e || !document.getElementById('tzx-rec-pick').value) { _tzxMsg('Choose a seed from SafeKeep’s Seed Vault.', 'bad'); return; }
+        _tzx.recWords = e.mnemonic.split(' ');
+        n = _tzx.recWords.length;
+    }
     var pp = document.getElementById('tzx-rec-pp').checked;
     _tzxBusy(true); _tzx.typed = 0;
     ['tzx-rec-go', 'tzx-rec-cancel'].forEach(function (id) { document.getElementById(id).disabled = true; });
-    document.querySelectorAll('input[name="tzx-words"], #tzx-rec-pp').forEach(function (i) { i.disabled = true; });
+    document.querySelectorAll('input[name="tzx-words"], input[name="tzx-src"], #tzx-rec-pick, #tzx-rec-pp').forEach(function (i) { i.disabled = true; });
     _tzxMsg('Starting recovery on the Trezor… (plugged in by USB)');
     var r;
     try { r = await os.trezorRecover(n, pp, _tzxOnQuestion); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
     _tzxBusy(false);
     if (_tzx.boxes) { _tzx.boxes.destroy(); _tzx.boxes = null; }
+    _tzx.recWords = null;
+    var chipsEl = document.getElementById('tzx-word-chips'); if (chipsEl) chipsEl.innerHTML = '';
     var wb = document.getElementById('tzx-word'); if (wb) wb.hidden = true;
     ['tzx-rec-go', 'tzx-rec-cancel'].forEach(function (id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-    document.querySelectorAll('input[name="tzx-words"], #tzx-rec-pp').forEach(function (i) { i.disabled = false; });
+    document.querySelectorAll('input[name="tzx-words"], input[name="tzx-src"], #tzx-rec-pick, #tzx-rec-pp').forEach(function (i) { i.disabled = false; });
     if (r && r.ok) {
         _tzxMsg('✔ Recovered. The Trezor’s fingerprint is ' + (r.xfp || '?') + (r.passphrase_protection ? ', with passphrase protection on' : '') +
             '. Check it matches your wallet, then pair it again (Pair Trezor above).', 'ok');
