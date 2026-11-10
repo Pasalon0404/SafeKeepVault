@@ -41,10 +41,33 @@ SECURITY MODEL
                     (the Trezor would quietly use its standard wallet). The
                     passphrase is never logged or written to the result, and
                     the request file is overwritten before it is deleted.
+      passphrase_setting -> turn the Trezor's passphrase protection on or
+                    off ("enable"). The Trezor asks for confirmation on its
+                    own screen.
+      wipe       -> erase the Trezor (its seed, PIN and settings). Only the
+                    Trezor whose fingerprint the user confirmed
+                    ("expected_xfp"); the Trezor asks for confirmation on its
+                    own screen. The pairing is removed.
+      recover    -> set a wiped Trezor up from recovery words. TEMPORARY
+                    SESSIONS ONLY (SAFEKEEP_TZ_TEMPORARY=1), so the words
+                    never touch the flash drive. A Trezor One asks for the
+                    words in a scrambled order, mixed with decoys, and shows
+                    on its own screen which one to type; it also asks for a
+                    new PIN on its scrambled grid. Each question goes to the
+                    app through the dialog channel below.
       xpub       -> read the unlocked Trezor's fingerprint and its multisig
                     account key at ONE of the three BIP-48 paths
                     (m/48'/0'/0'/0', /1' or /2'), for building a multisig
                     descriptor. Read-only, no pairing needed, nothing stored.
+  * DIALOG CHANNEL (passphrase_setting, wipe, recover): while the Trezor
+    waits, each question is written to SAFEKEEP_TZ_DIALOG (RAM) as
+      { request_id, seq, need: "button" | "pin" | "word", kind, ... }
+    and, for "pin" and "word", the answer is read from a
+    TREZOR_REPLY*.json in SAFEKEEP_TZ_REPLY_DIR (the download folder) as
+      { request_id, seq, positions | word | cancel }
+    It must name this request and question; it is read once, overwritten
+    and deleted. Words are checked to be lower-case letters (the Trezor
+    checks them against its word list); positions are digits 1-9.
   * The pairing is stored by THIS helper (path in SAFEKEEP_TZ_PAIRING: the
     vault's settings folder, or RAM in a temporary session). "sign" trusts
     only that stored pairing — never device identity sent by the browser.
@@ -65,7 +88,8 @@ Result JSON: {"ok": true/false, "status": "...", ...}
                   multiple_devices, unsupported_model, no_seed, locked,
                   wrong_pin, wrong_device, outdated_firmware, refused, busy,
                   timeout, rejected, missing_prev_tx, passphrase_off,
-                  wrong_passphrase, error
+                  wrong_passphrase, initialized, not_temporary, error
+  ok statuses (also): passphrase_setting, wiped, recovered
   Every result echoes the request's "request_id" (if valid) so the app can
   ignore stale results.
 """
@@ -96,6 +120,9 @@ PATH_RE = re.compile(r'^(webusb|hid):[A-Za-z0-9:._/-]{1,128}$')
 PIN_POS_RE = re.compile(r'^[1-9]{1,9}$')
 REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 PASSPHRASE_MAX_BYTES = 50   # the Trezor One's limit
+WORD_RE = re.compile(r'^[a-z]{3,8}$')
+DIALOG_STEP_TIMEOUT_S = int(os.environ.get('SAFEKEEP_TZ_STEP_TIMEOUT', '600'))
+RECOVER_TIMEOUT_S = int(os.environ.get('SAFEKEEP_TZ_RECOVER_TIMEOUT', '2700'))
 DEFAULT_PAIRING = '/media/.safekeep-vault/settings/trezor-pairing.json'
 # The only paths "xpub" will read: BIP-48 multisig accounts (mainnet, account 0)
 # for P2SH (0'), P2SH-P2WSH (1') and P2WSH (2').
@@ -285,9 +312,12 @@ class Hwi:
             from hwilib.psbt import PSBT
             from hwilib.devices import trezor as tz
             from hwilib.devices.trezorlib import exceptions as tzexc
+            from hwilib.devices.trezorlib import device as tzdevice
+            from hwilib.devices.trezorlib import messages as tzmsg
         except ImportError:
             raise Fail('not_installed', 'Trezor support is not installed on this SafeKeep build.')
         self.errors, self.PSBT, self.tz, self.tzexc = errors, PSBT, tz, tzexc
+        self.tzdevice, self.tzmsg = tzdevice, tzmsg
 
         # No network: never probe for the Trezor simulator over UDP, and make
         # HWI's open-by-path look only at real Trezor One USB devices.
@@ -574,6 +604,237 @@ def do_xpub(hwi, data):
             'passphrase_protection': info['passphrase_protection']}
 
 
+# ---------------------------------------------------------------- dialog
+
+class Dialog:
+    """Questions to the app while the Trezor waits (see DIALOG CHANNEL above)."""
+
+    def __init__(self, request_id):
+        self.request_id = request_id
+        self.seq = 0
+        self.path = os.environ.get('SAFEKEEP_TZ_DIALOG') or ''
+        self.reply_dir = os.environ.get('SAFEKEEP_TZ_REPLY_DIR') or ''
+        if not self.path or not self.reply_dir or not request_id:
+            raise Fail('error', 'This SafeKeep build cannot ask questions for the Trezor (no dialog channel).')
+
+    def _write(self, obj):
+        tmp = self.path + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(obj, f)
+        os.replace(tmp, self.path)
+
+    def say(self, need, **info):
+        """Tell the app what the Trezor is waiting for; returns the question number."""
+        self.seq += 1
+        self._write(dict({'request_id': self.request_id, 'seq': self.seq, 'need': need}, **info))
+        return self.seq
+
+    def _take_reply(self, seq):
+        try:
+            names = sorted(n for n in os.listdir(self.reply_dir) if n.startswith('TREZOR_REPLY') and n.endswith('.json'))
+        except OSError:
+            return None
+        for n in names:
+            p = os.path.join(self.reply_dir, n)
+            try:
+                with open(p, 'rb') as f:
+                    raw = f.read(4097)
+                with open(p, 'r+b') as f:      # it may hold a word or PIN positions
+                    f.write(b'\0' * len(raw))
+                    f.flush()
+                    os.fsync(f.fileno())
+            except OSError:
+                raw = b''
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+            try:
+                r = json.loads(raw.decode('utf-8')) if len(raw) <= 4096 else None
+            except Exception:
+                r = None
+            if isinstance(r, dict) and r.get('request_id') == self.request_id and r.get('seq') == seq:
+                return r
+        return None
+
+    def ask(self, need, **info):
+        seq = self.say(need, **info)
+        deadline = time.monotonic() + DIALOG_STEP_TIMEOUT_S
+        while time.monotonic() < deadline:
+            r = self._take_reply(seq)
+            if r is not None:
+                return r
+            time.sleep(0.25)
+        raise Fail('timeout', 'No answer in SafeKeep in time. The Trezor may still be waiting: unplug it to stop.')
+
+    def close(self):
+        for p in (self.path, self.path + '.tmp'):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
+class DialogUI:
+    """trezorlib's UI: PIN grids and on-device confirmations go to the app."""
+    PIN_KINDS = {1: 'current', 2: 'new_first', 3: 'new_second', 4: 'wipe_code_first', 5: 'wipe_code_second'}
+
+    def __init__(self, dialog, cancelled_exc, step=''):
+        self.dialog, self.Cancelled, self.step = dialog, cancelled_exc, step
+
+    def button_request(self, br):
+        self.dialog.say('button', step=self.step)
+
+    def get_pin(self, code=None):
+        kind = self.PIN_KINDS.get(int(code or 1), 'current')
+        r = self.dialog.ask('pin', kind=kind, step=self.step)
+        if r.get('cancel'):
+            raise self.Cancelled()
+        pos = r.get('positions')
+        if not isinstance(pos, str) or not PIN_POS_RE.match(pos):
+            raise self.Cancelled()
+        return pos
+
+    def get_passphrase(self, available_on_device=False):
+        return ''   # these steps never open a passphrase wallet
+
+
+def open_dialog_client(hwi, data, step):
+    """An unlocked-or-new Trezor One with the dialog UI, and the dialog."""
+    dialog = Dialog(data.get('request_id') if isinstance(data.get('request_id'), str) else '')
+    path = single_path(hwi)
+    client = hwi.client(path)
+    client.client.ui = DialogUI(dialog, hwi.tzexc.Cancelled, step)
+    return client, dialog
+
+
+def forget_pairing():
+    try:
+        os.remove(pairing_path())
+    except OSError:
+        pass
+
+
+def field_bool(data, key):
+    v = data.get(key)
+    if not isinstance(v, bool):
+        raise Fail('bad_request', 'Request field %s must be true or false.' % key)
+    return v
+
+
+def do_passphrase_setting(hwi, data):
+    enable = field_bool(data, 'enable')
+    client, dialog = open_dialog_client(hwi, data, 'passphrase_setting')
+    try:
+        info = check_trezor_one(client)
+        if info['locked']:
+            raise Fail('locked', MSG_LOCKED)
+        if info['passphrase_protection'] == enable:
+            return {'ok': True, 'status': 'passphrase_setting', 'passphrase_protection': enable, 'changed': False}
+        try:
+            hwi.tzdevice.apply_settings(client.client, use_passphrase=enable)
+        except hwi.tzexc.Cancelled:
+            raise Fail('refused', 'Canceled. The setting is unchanged.')
+        except hwi.tzexc.TrezorFailure as e:
+            if 'cancel' in str(e).lower():
+                raise Fail('refused', 'You declined on the Trezor. The setting is unchanged.')
+            raise
+        now = bool(client.client.features.passphrase_protection)
+    finally:
+        dialog.close()
+        client.close()
+    return {'ok': True, 'status': 'passphrase_setting', 'passphrase_protection': now, 'changed': now == enable}
+
+
+def do_wipe(hwi, data):
+    want = data.get('expected_xfp')
+    if want is not None:
+        want = field_xfp(data)
+    client, dialog = open_dialog_client(hwi, data, 'wipe')
+    try:
+        f = check_trezor_one_any(client)
+        if f['initialized']:
+            if f['locked']:
+                raise Fail('locked', MSG_LOCKED)
+            got_xfp, _ = identity(client)
+            if want is None or got_xfp != want:
+                raise Fail('wrong_device', 'This Trezor (fingerprint %s) is not the one you confirmed. Nothing was erased.'
+                           % got_xfp.upper())
+        try:
+            hwi.tzdevice.wipe(client.client)
+        except hwi.tzexc.Cancelled:
+            raise Fail('refused', 'Canceled. Nothing was erased.')
+        except hwi.tzexc.TrezorFailure as e:
+            if 'cancel' in str(e).lower():
+                raise Fail('refused', 'You declined on the Trezor. Nothing was erased.')
+            raise
+    finally:
+        dialog.close()
+        client.close()
+    pairing = read_pairing()
+    if pairing is not None and (want is None or pairing['xfp'] == want):
+        forget_pairing()
+    return {'ok': True, 'status': 'wiped'}
+
+
+def do_recover(hwi, data):
+    if os.environ.get('SAFEKEEP_TZ_TEMPORARY') != '1':
+        raise Fail('not_temporary', 'Recovery words are typed into SafeKeep, so this runs only in a Temporary '
+                                    'Session (the words never touch the flash drive). Restart SafeKeep in a Temporary Session.')
+    words = data.get('word_count')
+    if words not in (12, 18, 24):
+        raise Fail('bad_request', 'The Trezor can recover a seed of 12, 18 or 24 words.')
+    use_pp = field_bool(data, 'passphrase_protection')
+    client, dialog = open_dialog_client(hwi, data, 'recover')
+    try:
+        f = check_trezor_one_any(client)
+        if f['initialized']:
+            raise Fail('initialized', 'This Trezor already has a seed. Erase it first (Wipe), then recover.')
+
+        def word(kind):
+            if int(kind or 0) != 0:   # only the scrambled-words method is used
+                raise hwi.tzexc.Cancelled()
+            r = dialog.ask('word', step='recover')
+            if r.get('cancel'):
+                raise hwi.tzexc.Cancelled()
+            w = r.get('word')
+            if not isinstance(w, str) or not WORD_RE.match(w):
+                raise hwi.tzexc.Cancelled()
+            return w
+
+        try:
+            hwi.tzdevice.recover(client.client, word_count=words, passphrase_protection=use_pp, pin_protection=True,
+                                 label=None, input_callback=word, type=hwi.tzmsg.RecoveryDeviceType.ScrambledWords)
+        except hwi.tzexc.Cancelled:
+            raise Fail('refused', 'Recovery canceled. The Trezor has no seed: start the recovery again.')
+        except hwi.tzexc.TrezorFailure as e:
+            text = str(e).lower()
+            if 'cancel' in text:
+                raise Fail('refused', 'Recovery canceled. The Trezor has no seed: start the recovery again.')
+            if 'checksum' in text or 'invalid' in text or 'mnemonic' in text:
+                raise Fail('rejected', 'The Trezor did not accept those words (they don\'t form a valid seed). '
+                                       'Check them against your backup and start again.')
+            raise
+        client.client.init_device()
+        xfp, _ = identity(client)
+    finally:
+        dialog.close()
+        client.close()
+    forget_pairing()
+    return {'ok': True, 'status': 'recovered', 'xfp': xfp, 'passphrase_protection': use_pp}
+
+
+def check_trezor_one_any(client):
+    """Like check_trezor_one, but a Trezor with no seed is fine (wipe / recover)."""
+    client._prepare_device()
+    f = client.client.features
+    if 'trezor' not in (f.vendor or '').lower():
+        raise Fail('unsupported_model', 'The connected device is not a Trezor.')
+    if f.model != '1':
+        raise Fail('unsupported_model', 'Only the Trezor One is supported for now.')
+    return {'initialized': bool(f.initialized), 'locked': bool(f.pin_protection and not f.unlocked)}
+
+
 ACTIONS = {
     'detect': (do_detect, SHORT_TIMEOUT_S),
     'prompt_pin': (do_prompt_pin, SHORT_TIMEOUT_S),
@@ -582,6 +843,9 @@ ACTIONS = {
     'unpair': (do_unpair, SHORT_TIMEOUT_S),
     'sign': (do_sign, SIGN_TIMEOUT_S),
     'xpub': (do_xpub, SHORT_TIMEOUT_S),
+    'passphrase_setting': (do_passphrase_setting, SIGN_TIMEOUT_S),
+    'wipe': (do_wipe, SIGN_TIMEOUT_S),
+    'recover': (do_recover, RECOVER_TIMEOUT_S),
 }
 
 

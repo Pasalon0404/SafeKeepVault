@@ -63,7 +63,7 @@ ck('start from the main wallet, and keep a written copy', html.includes('Start f
 ck('closing forgets the passphrase', fn('function ccpp_close').includes("['ccpp-pass', 'ccpp-pass2', 'ccpp-nick'].forEach(function (id) { _ccppEl(id).value = ''; });") && fn('function ccpp_close').includes("_ccpp.libPass = ''"));
 ck('…and a successful send closes and reopens the panel empty', fn('async function ccpp_send').includes('ccpp_close();                 // forget the passphrase'));
 ck('not in the online demo', fn('function ccpp_open').includes('if (_skvDemoActive())') && fn('async function ccSettingsRefresh').includes('ccppBlock.hidden = _skvDemoActive()'));
-ck('hidden rows stay hidden (a flex row would override [hidden])', html.includes('.ccpp-panel [hidden], #ccpp-block[hidden], #ccsd-block[hidden], #desc-ms-custody[hidden] { display: none !important; }'));
+ck('hidden rows stay hidden (a flex row would override [hidden])', /\.ccpp-panel \[hidden\], #ccpp-block\[hidden\], #ccsd-block\[hidden\][^{]*\{ display: none !important; \}/.test(html));
 ck('the dev build has a pretend Coldcard for it', html.includes('coldcardSendPassphrase: async function (pw)'));
 ck('American English: "check", no "tick"', !/\b[Tt]ick/.test(html.slice(html.indexOf('id="ccpp-block"'), html.indexOf('id="settings-trezor-section"'))));
 

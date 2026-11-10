@@ -381,7 +381,7 @@
     .sv-row { border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); padding: 0.65rem 0.8rem; background: var(--skb-bg-input); }
     .sv-row-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
     .ccpp-panel { margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid var(--skb-border); background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); max-width: 40rem; }
-    .ccpp-panel [hidden], #ccpp-block[hidden], #ccsd-block[hidden], #desc-ms-custody[hidden] { display: none !important; }
+    .ccpp-panel [hidden], #ccpp-block[hidden], #ccsd-block[hidden], #desc-ms-custody[hidden], #tzx-block[hidden] { display: none !important; }
     .ccpp-src { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
     .ccpp-src label, .ccpp-check { display: flex; gap: 0.4rem; align-items: center; cursor: pointer; }
     .ccpp-label { display: block; margin: 0.5rem 0 0.25rem; color: var(--skb-text-muted); }
@@ -3147,7 +3147,7 @@
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.8);
-      z-index: 1000;
+      z-index: 10050;   /* above full-screen overlays such as Trezor Tools (10040) */
       justify-content: center;
       align-items: center;
       padding: 1rem;
@@ -6633,6 +6633,12 @@
                 <button type="button" class="skb-btn skb-btn--primary" id="welcome-hw-btn" style="display: none;" onclick="openHardwareSigner()">
                     Sign with Hardware Wallet
                 </button>
+                <!-- Temporary sessions only (shown with welcome-hw-btn): the Trezor
+                     section of Device Options (pair, passphrase protection, erase,
+                     recover from words) in an overlay, since there is no Dashboard. -->
+                <button type="button" class="skb-btn" id="welcome-tz-btn" style="display: none; margin-top: 0.5rem;" onclick="tzx_openTools()">
+                    Trezor Tools
+                </button>
                 <!-- Temporary sessions only: the vault was never opened, and
                      until now only a restart led back to it. Lock closes this
                      session (wiping it from memory) and returns to the unlock
@@ -7728,6 +7734,18 @@
                                 <button type="button" class="skb-btn" id="settings-trezor-log-btn" onclick="tzSettingsShowLog()">Show Trezor log</button>
                             </div>
                             <pre id="settings-trezor-log" style="display: none; margin: 0.75rem 0 0; max-height: 18rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--skb-mono); font-size: 0.75rem; line-height: 1.45; padding: 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); color: var(--skb-text-muted);"></pre>
+                            <!-- Trezor settings (tzx_*): passphrase protection, erase, recover from words -->
+                            <div id="tzx-block" style="margin-top: 1.1rem;">
+                                <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.6rem; line-height: 1.6;">
+                                    Trezor settings without Trezor Suite: turn passphrase protection on or off, erase the Trezor, or set it up from your recovery words. The Trezor asks you to confirm each change on its own screen.
+                                </p>
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    <button type="button" class="skb-btn" id="tzx-pp-btn" onclick="tzx_passphrase()">Passphrase Protection</button>
+                                    <button type="button" class="skb-btn" id="tzx-wipe-btn" onclick="tzx_openWipe()">Erase This Trezor</button>
+                                    <button type="button" class="skb-btn" id="tzx-recover-btn" onclick="tzx_openRecover()">Recover from Words</button>
+                                </div>
+                                <div id="tzx-panel" class="ccpp-panel" hidden></div>
+                            </div>
                         </div>
                         <div id="settings-seed-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Seed storage</h4>
@@ -12481,7 +12499,8 @@ window.addEventListener('DOMContentLoaded', () => {
             _devTzPinShown = false;
             if (window._devTrezor === 'absent') return { ok: false, status: 'not_connected', error: '[DEV MOCK] No Trezor found. Plug it in and try again.' };
             var unlocked = _devTzUnlocked || window._devTrezor === 'unlocked';
-            var r = { ok: true, status: 'detected', path: 'webusb:001:2', model: 'trezor_1', locked: !unlocked, passphrase_protection: false, firmware: '1.12.1' };
+            if (window._devTzState && window._devTzState.wiped) return { ok: false, status: 'no_seed', error: '[DEV MOCK] The Trezor has no seed set up.' };
+            var r = { ok: true, status: 'detected', path: 'webusb:001:2', model: 'trezor_1', locked: !unlocked, passphrase_protection: !!(window._devTzState && window._devTzState.pp), firmware: '1.12.1' };
             if (unlocked) { r.xfp = window._devTrezorXfp || 'C0FFEE01'; r.id_xpub = 'xpub-dev-mock-trezor'; }
             return r;
         },
@@ -12499,6 +12518,42 @@ window.addEventListener('DOMContentLoaded', () => {
             if (window._devTrezor === 'wrongpin') return { ok: false, status: 'wrong_pin', error: '[DEV MOCK] The Trezor did not accept that PIN. It makes you wait a little longer after each wrong try. Start the PIN entry again.' };
             _devTzUnlocked = true;
             return { ok: true, status: 'unlocked', path: path };
+        },
+        // Trezor settings / wipe / recovery (dev mock): a pretend Trezor One
+        // that asks its questions through onQuestion like the real helper.
+        //   window._devTrezor = 'refuse' (decline on the Trezor)
+        trezorSetPassphraseProtection: async function (enable, onQuestion) {
+            var st = window._devTzState = window._devTzState || {};
+            await onQuestion({ need: 'button', seq: 1 });
+            await new Promise(function (r) { setTimeout(r, 900); });
+            if (window._devTrezor === 'refuse') return { ok: false, status: 'refused', error: '[DEV MOCK] You declined on the Trezor. The setting is unchanged.' };
+            var changed = !!st.pp !== !!enable; st.pp = !!enable;
+            return { ok: true, status: 'passphrase_setting', passphrase_protection: !!enable, changed: changed };
+        },
+        trezorWipe: async function (xfp, onQuestion) {
+            var st = window._devTzState = window._devTzState || {};
+            await onQuestion({ need: 'button', seq: 1 });
+            await new Promise(function (r) { setTimeout(r, 900); });
+            if (window._devTrezor === 'refuse') return { ok: false, status: 'refused', error: '[DEV MOCK] You declined on the Trezor. Nothing was erased.' };
+            st.wiped = true; _devTzPairing = null; _devTzUnlocked = false;
+            return { ok: true, status: 'wiped' };
+        },
+        trezorRecover: async function (n, pp, onQuestion) {
+            var st = window._devTzState = window._devTzState || {};
+            if (devMode !== 'ephemeral') return { ok: false, status: 'not_temporary', error: '[DEV MOCK] Recovery runs only in a Temporary Session.' };
+            if (!st.wiped) return { ok: false, status: 'initialized', error: '[DEV MOCK] This Trezor already has a seed. Erase it first (Wipe), then recover.' };
+            var seq = 0, a;
+            a = await onQuestion({ need: 'pin', kind: 'new_first', seq: ++seq }); if (!a || a.cancel) return { ok: false, status: 'refused', error: '[DEV MOCK] Recovery canceled. The Trezor has no seed: start the recovery again.' };
+            a = await onQuestion({ need: 'pin', kind: 'new_second', seq: ++seq }); if (!a || a.cancel) return { ok: false, status: 'refused', error: '[DEV MOCK] Recovery canceled. The Trezor has no seed: start the recovery again.' };
+            var got = [];
+            for (var i = 0; i < Number(n) + 2; i++) {
+                a = await onQuestion({ need: 'word', seq: ++seq });
+                if (!a || a.cancel) return { ok: false, status: 'refused', error: '[DEV MOCK] Recovery canceled. The Trezor has no seed: start the recovery again.' };
+                got.push(a.word);
+            }
+            window._devTzWordsTyped = got;
+            st.wiped = false; st.pp = !!pp; _devTzUnlocked = true;
+            return { ok: true, status: 'recovered', xfp: 'C0FFEE01', passphrase_protection: !!pp };
         },
         trezorPair: async function (xfp) {
             _devTzPairing = { xfp: String(xfp).toUpperCase(), pairedAt: new Date().toISOString(), temporary: false };
@@ -15820,6 +15875,7 @@ function welcome_returnNoSeed() {
         if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
         var hwb = document.getElementById('welcome-hw-btn');
         if (hwb) hwb.style.display = '';
+        { const _tzb = document.getElementById('welcome-tz-btn'); if (_tzb && hwb) _tzb.style.display = hwb.style.display; }
         ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
     } catch (_) {}
 }
@@ -17092,6 +17148,7 @@ function transitionToWelcome() {
             if (vln) vln.style.display = 'none';
             const hwb = document.getElementById('welcome-hw-btn');
             if (hwb) hwb.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none';
+            { const _tzb = document.getElementById('welcome-tz-btn'); if (_tzb && hwb) _tzb.style.display = hwb.style.display; }
             ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = (window.location.hash === '#ephemeral=true') ? '' : 'none'; });
             const seedFree = !_seedKept();
             if (wb) wb.classList.toggle('welcome-actions--seedfree', seedFree);
@@ -17204,6 +17261,7 @@ function startEphemeralSession() {
         if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
         var hwb = document.getElementById('welcome-hw-btn');
         if (hwb) hwb.style.display = '';
+        { const _tzb = document.getElementById('welcome-tz-btn'); if (_tzb && hwb) _tzb.style.display = hwb.style.display; }
         ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
     } catch (e) {}
 
@@ -17405,6 +17463,7 @@ function ephemeralHotSwapSeed() {
         if (subtitle) subtitle.textContent = 'RAM-only mode. Generate or restore a seed — it will live in memory only and vanish on power-off — or sign with a hardware wallet without loading any seed. Nothing is written to disk.';
         var hwb = document.getElementById('welcome-hw-btn');
         if (hwb) hwb.style.display = '';
+        { const _tzb = document.getElementById('welcome-tz-btn'); if (_tzb && hwb) _tzb.style.display = hwb.style.display; }
         ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
     } catch (_) {}
 
@@ -19517,6 +19576,7 @@ function psbtBackToDashboard() {
             }
             const hwb = document.getElementById('welcome-hw-btn');
             if (hwb) hwb.style.display = '';
+            { const _tzb = document.getElementById('welcome-tz-btn'); if (_tzb && hwb) _tzb.style.display = hwb.style.display; }
             ['welcome-vault-btn', 'welcome-vault-note'].forEach(function (id) { var e = document.getElementById(id); if (e) e.style.display = ''; });
         } catch (_) {}
         return;
@@ -27350,6 +27410,227 @@ async function ccSettingsForget() {
 }
 
 // ===========================================================================
+// SETTINGS → TREZOR — passphrase protection, erase, recover (tzx_*)
+// ===========================================================================
+// SafeKeepOS.trezorSetPassphraseProtection / trezorWipe / trezorRecover run
+// in the Trezor helper, which asks its questions through a dialog channel:
+// 'button' (confirm on the Trezor's screen), 'pin' (the blank grid, by
+// position: _tzPinAsk) and 'word' (one recovery word, typed here). Recovery
+// runs only in a Temporary Session, so the words stay in RAM; the Trezor
+// must have no seed (erase it first). Erasing needs the fingerprint the
+// user saw, typed confirmation, and the Trezor's own confirmation.
+var _tzx = { busy: false, boxes: null, wordResolve: null, typed: 0 };
+
+function _tzxPanel(html) {
+    var p = document.getElementById('tzx-panel');
+    p.innerHTML = html;
+    p.hidden = !html;
+    return p;
+}
+function _tzxMsg(text, cls) {
+    var el = document.getElementById('tzx-msg');
+    if (el) { el.className = 'ccpp-msg' + (cls ? ' ' + cls : ''); el.textContent = text || ''; }
+}
+function _tzxBusy(on) {
+    _tzx.busy = on;
+    ['tzx-pp-btn', 'tzx-wipe-btn', 'tzx-recover-btn'].forEach(function (id) { var b = document.getElementById(id); if (b) b.disabled = on; });
+}
+function tzx_close() {
+    if (_tzx.busy) return;
+    if (_tzx.boxes) { _tzx.boxes.destroy(); _tzx.boxes = null; }
+    _tzxPanel('');
+}
+
+/* Answer the Trezor's questions (see the dialog channel above). */
+function _tzxOnQuestion(q) {
+    if (q.need === 'button') {
+        _tzxMsg('Look at the Trezor: confirm on its screen (or cancel there).');
+        return null;
+    }
+    if (q.need === 'pin') {
+        _tzxMsg(q.kind === 'new_first' ? 'Choose a new PIN on the grid.' : q.kind === 'new_second' ? 'Repeat the new PIN on the grid.' : 'Enter the Trezor’s PIN on the grid.');
+        return _tzPinAsk(q.kind).then(function (r) { return (r && r.ok && r.positions) ? { positions: r.positions } : { cancel: true }; });
+    }
+    if (q.need === 'word') return _tzxAskWord();
+    return null;
+}
+
+/* ---- Trezor Tools on the welcome screen (Temporary Session) ----
+   The Trezor section of Device Options, moved into an overlay (the way
+   Import from a COLDCARD Backup opens over the Dashboard), and put back on close. */
+var _tzxHome = null;
+function tzx_openTools() {
+    var sec = document.getElementById('settings-trezor-section');
+    if (!sec || document.getElementById('tzx-overlay')) return;
+    if (!_tzxHome) _tzxHome = { parent: sec.parentNode, next: sec.nextSibling };
+    var ov = document.createElement('div');
+    ov.id = 'tzx-overlay';
+    ov.className = 'ccb-import-overlay';
+    var box = document.createElement('div');
+    box.className = 'skb-card';
+    box.style.cssText = 'max-width: 46rem; margin: 2rem auto; padding: 1.25rem;';
+    var close = document.createElement('button');
+    close.type = 'button'; close.className = 'skb-btn'; close.id = 'tzx-overlay-close';
+    close.textContent = 'Close'; close.style.cssText = 'float: right;';
+    close.onclick = tzx_closeTools;
+    box.appendChild(close);
+    box.appendChild(sec);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    try { tzSettingsRefresh(); } catch (_) {}
+}
+function tzx_closeTools() {
+    if (_tzx.busy) return;
+    tzx_close();
+    var sec = document.getElementById('settings-trezor-section');
+    var ov = document.getElementById('tzx-overlay');
+    if (sec && _tzxHome) _tzxHome.parent.insertBefore(sec, _tzxHome.next);
+    if (ov) ov.remove();
+}
+
+/* ---- Passphrase protection ---- */
+async function tzx_passphrase() {
+    var os = window.SafeKeepOS;
+    if (_tzx.busy || !os || typeof os.trezorSetPassphraseProtection !== 'function') return;
+    if (_skvDemoActive()) { showStatus('SafeKeep demo: Trezor tools work only on the offline vault, run from its USB flash drive.', 'error'); return; }
+    _tzxPanel('<div class="ccpp-msg" id="tzx-msg"></div>');
+    _tzxBusy(true);
+    var d = await tzEnsureUnlocked(function (t) { _tzxMsg(t); });
+    _tzxBusy(false);
+    if (!d || !d.ok) { _tzxMsg((d && d.error) || 'No Trezor found.', 'bad'); return; }
+    var on = !!d.passphrase_protection;
+    _tzxPanel('<p style="margin: 0 0 0.6rem;">Passphrase protection is <strong>' + (on ? 'on' : 'off') + '</strong> on this Trezor (' + _psbtEscape(d.xfp || '') + '). ' +
+        (on ? 'It then asks for a passphrase each time it opens, and SafeKeep can sign with its passphrase wallets.' : 'Turn it on to use passphrase wallets on the Trezor (SafeKeep can then send the passphrase when signing).') + '</p>' +
+        '<div class="ccpp-row" style="gap: 0.5rem;"><button type="button" class="skb-btn skb-btn--primary" id="tzx-pp-go" onclick="tzx_passphraseSet(' + (on ? 'false' : 'true') + ')">Turn it ' + (on ? 'off' : 'on') + '</button>' +
+        '<button type="button" class="skb-btn" onclick="tzx_close()">Cancel</button></div><div class="ccpp-msg" id="tzx-msg"></div>');
+}
+
+async function tzx_passphraseSet(enable) {
+    var os = window.SafeKeepOS;
+    if (_tzx.busy) return;
+    _tzxBusy(true);
+    var go = document.getElementById('tzx-pp-go'); if (go) go.disabled = true;
+    _tzxMsg('Sending the change to the Trezor…');
+    var r;
+    try { r = await os.trezorSetPassphraseProtection(enable, _tzxOnQuestion); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    _tzxBusy(false);
+    if (r && r.ok) _tzxMsg('✔ Passphrase protection is now ' + (r.passphrase_protection ? 'on' : 'off') + '.' + (r.changed === false ? ' (It already was.)' : ''), 'ok');
+    else { _tzxMsg((r && r.error) || 'The setting was not changed.', 'bad'); if (go) go.disabled = false; }
+}
+
+/* ---- Erase ---- */
+function tzx_openWipe() {
+    if (_tzx.busy) return;
+    if (_skvDemoActive()) { showStatus('SafeKeep demo: Trezor tools work only on the offline vault, run from its USB flash drive.', 'error'); return; }
+    _tzxPanel('<p style="margin: 0 0 0.5rem; color: var(--skb-danger);"><strong>Erasing removes the seed, PIN and settings from the Trezor.</strong> Any coins it holds can then be recovered only from its recovery words.</p>' +
+        '<label class="ccpp-check"><input type="checkbox" id="tzx-wipe-have" onchange="tzx_wipeCheck()"> I have this Trezor’s recovery words, or I want to erase it anyway</label>' +
+        '<label class="ccpp-label" for="tzx-wipe-type">Type ERASE to confirm</label>' +
+        '<div class="ccpp-row"><input type="text" id="tzx-wipe-type" autocomplete="off" spellcheck="false" oninput="tzx_wipeCheck()"></div>' +
+        '<div class="ccpp-row" style="gap: 0.5rem; margin-top: 0.6rem;"><button type="button" class="skb-btn" style="border-color: var(--skb-danger); color: var(--skb-danger);" id="tzx-wipe-go" disabled onclick="tzx_wipe()">Erase the Trezor</button>' +
+        '<button type="button" class="skb-btn" onclick="tzx_close()">Cancel</button></div><div class="ccpp-msg" id="tzx-msg"></div>');
+}
+function tzx_wipeCheck() {
+    var ok = document.getElementById('tzx-wipe-have').checked && document.getElementById('tzx-wipe-type').value.trim().toUpperCase() === 'ERASE';
+    document.getElementById('tzx-wipe-go').disabled = !ok || _tzx.busy;
+}
+async function tzx_wipe() {
+    var os = window.SafeKeepOS;
+    if (_tzx.busy || !os || typeof os.trezorWipe !== 'function') return;
+    _tzxBusy(true);
+    document.getElementById('tzx-wipe-go').disabled = true;
+    // Which Trezor: its fingerprint (after unlocking), or none if it has no seed yet.
+    var d = await tzEnsureUnlocked(function (t) { _tzxMsg(t); });
+    var xfp = '';
+    if (d && d.ok) xfp = d.xfp || '';
+    else if (!(d && d.status === 'no_seed')) { _tzxBusy(false); _tzxMsg((d && d.error) || 'No Trezor found.', 'bad'); tzx_wipeCheck(); return; }
+    _tzxMsg(xfp ? 'Erasing Trezor ' + xfp + '…' : 'Erasing the Trezor (it has no seed)…');
+    var r;
+    try { r = await os.trezorWipe(xfp, _tzxOnQuestion); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    _tzxBusy(false);
+    if (r && r.ok) {
+        _tzxMsg('✔ The Trezor ' + (xfp ? '(' + xfp + ') ' : '') + 'is erased. Set it up again with Recover from Words (in a Temporary Session), or with Trezor Suite.', 'ok');
+        try { await tzSettingsRefresh(); } catch (_) {}
+    } else { _tzxMsg((r && r.error) || 'Nothing was erased.', 'bad'); tzx_wipeCheck(); }
+}
+
+/* ---- Recover from words ---- */
+function tzx_openRecover() {
+    if (_tzx.busy) return;
+    if (_skvDemoActive()) { showStatus('SafeKeep demo: Trezor tools work only on the offline vault, run from its USB flash drive.', 'error'); return; }
+    if (!(typeof _isEphemeralBoot === 'function' && _isEphemeralBoot())) {
+        _tzxPanel('<p style="margin: 0;">Recovery runs only in a <strong>Temporary Session</strong>: you type your recovery words into SafeKeep, and in a Temporary Session they stay in memory and never touch the flash drive. Restart SafeKeep, choose Temporary Session, then open Device Options → Trezor → Recover from Words.</p>' +
+            '<div class="ccpp-row" style="margin-top: 0.6rem;"><button type="button" class="skb-btn" onclick="tzx_close()">Close</button></div>');
+        return;
+    }
+    _tzxPanel('<p style="margin: 0 0 0.5rem;">Sets up a Trezor that has <strong>no seed</strong> (erase it first) from your recovery words. The Trezor shows on its own screen which word to type next, in a scrambled order, and also asks for a few words that aren’t in your seed (decoys, so nobody watching the computer learns your words): type every word it asks for, exactly as shown. It then has a new PIN.</p>' +
+        '<div class="ccpp-src" role="radiogroup" aria-label="Number of words">' +
+            [12, 18, 24].map(function (n) { return '<label><input type="radio" name="tzx-words" value="' + n + '"' + (n === 24 ? ' checked' : '') + '> ' + n + ' words</label>'; }).join('') + '</div>' +
+        '<label class="ccpp-check"><input type="checkbox" id="tzx-rec-pp"> Turn on passphrase protection too</label>' +
+        '<div class="ccpp-row" style="gap: 0.5rem; margin-top: 0.6rem;"><button type="button" class="skb-btn skb-btn--primary" id="tzx-rec-go" onclick="tzx_recover()">Start Recovery</button>' +
+        '<button type="button" class="skb-btn" id="tzx-rec-cancel" onclick="tzx_close()">Cancel</button></div>' +
+        '<div id="tzx-word" hidden style="margin-top: 0.75rem;"><label class="ccpp-label" for="tzx-word-grid">Type the word the Trezor’s screen asks for</label><div id="tzx-word-grid"></div>' +
+            '<div class="ccpp-row" style="gap: 0.5rem; margin-top: 0.5rem;"><button type="button" class="skb-btn skb-btn--primary" id="tzx-word-next" onclick="tzx_wordNext()">Next</button>' +
+            '<button type="button" class="skb-btn" onclick="tzx_wordCancel()">Cancel Recovery</button></div>' +
+            '<div class="ccpp-note" id="tzx-word-count"></div></div>' +
+        '<div class="ccpp-msg" id="tzx-msg"></div>');
+}
+
+function _tzxAskWord() {
+    var box = document.getElementById('tzx-word');
+    if (!box) return Promise.resolve({ cancel: true });
+    box.hidden = false;
+    var SF = window.ShareFlow;
+    if (_tzx.boxes) { _tzx.boxes.destroy(); _tzx.boxes = null; }
+    if (SF && SF.createWordBoxes) _tzx.boxes = SF.createWordBoxes(document.getElementById('tzx-word-grid'), { count: 1, wordlist: SF.wordlists.bip39, idPrefix: 'tzxw' });
+    document.getElementById('tzx-word-count').textContent = 'Words typed so far: ' + _tzx.typed + '. The Trezor decides the order and when it is done.';
+    _tzxMsg('Type the word the Trezor shows, then Next.');
+    setTimeout(function () { var i = document.getElementById('tzxw-word-0'); if (i) { i.focus(); i.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); tzx_wordNext(); } }; } }, 50);
+    return new Promise(function (resolve) { _tzx.wordResolve = resolve; });
+}
+function tzx_wordNext() {
+    var w = _tzx.boxes ? (_tzx.boxes.getWords()[0] || '') : '';
+    var bip = window.ShareFlow && window.ShareFlow.wordlists && window.ShareFlow.wordlists.bip39;
+    if (!w || (bip && bip.indexOf(w) < 0)) { _tzxMsg('That isn’t a word from the recovery word list. Check the Trezor’s screen.', 'bad'); return; }
+    var r = _tzx.wordResolve; _tzx.wordResolve = null;
+    _tzx.typed += 1;
+    if (_tzx.boxes) _tzx.boxes.clear();
+    document.getElementById('tzx-word').hidden = true;
+    _tzxMsg('Sent. Waiting for the Trezor…');
+    if (r) r({ word: w });
+}
+function tzx_wordCancel() {
+    var r = _tzx.wordResolve; _tzx.wordResolve = null;
+    if (_tzx.boxes) _tzx.boxes.clear();
+    document.getElementById('tzx-word').hidden = true;
+    if (r) r({ cancel: true });
+}
+
+async function tzx_recover() {
+    var os = window.SafeKeepOS;
+    if (_tzx.busy || !os || typeof os.trezorRecover !== 'function') return;
+    var n = Number((document.querySelector('input[name="tzx-words"]:checked') || {}).value || 24);
+    var pp = document.getElementById('tzx-rec-pp').checked;
+    _tzxBusy(true); _tzx.typed = 0;
+    ['tzx-rec-go', 'tzx-rec-cancel'].forEach(function (id) { document.getElementById(id).disabled = true; });
+    document.querySelectorAll('input[name="tzx-words"], #tzx-rec-pp').forEach(function (i) { i.disabled = true; });
+    _tzxMsg('Starting recovery on the Trezor… (plugged in by USB)');
+    var r;
+    try { r = await os.trezorRecover(n, pp, _tzxOnQuestion); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    _tzxBusy(false);
+    if (_tzx.boxes) { _tzx.boxes.destroy(); _tzx.boxes = null; }
+    var wb = document.getElementById('tzx-word'); if (wb) wb.hidden = true;
+    ['tzx-rec-go', 'tzx-rec-cancel'].forEach(function (id) { var b = document.getElementById(id); if (b) b.disabled = false; });
+    document.querySelectorAll('input[name="tzx-words"], #tzx-rec-pp').forEach(function (i) { i.disabled = false; });
+    if (r && r.ok) {
+        _tzxMsg('✔ Recovered. The Trezor’s fingerprint is ' + (r.xfp || '?') + (r.passphrase_protection ? ', with passphrase protection on' : '') +
+            '. Check it matches your wallet, then pair it again (Pair Trezor above).', 'ok');
+        try { await tzSettingsRefresh(); } catch (_) {}
+    } else {
+        _tzxMsg((r && r.error) || 'The recovery did not finish.', 'bad');
+    }
+}
+
+// ===========================================================================
 // SETTINGS → COLDCARD — send a passphrase (ccpp_*)
 // ===========================================================================
 // Typing a BIP-39 passphrase on a Coldcard's keys is slow. Here it's typed
@@ -27854,6 +28135,12 @@ function _tzPinKey(e) {
 async function _tzPinSubmit() {
     const os = window.SafeKeepOS;
     if (!_tzPin || _tzPin.busy || !_tzPin.positions.length) return;
+    if (_tzPin.ask) {   // a question from the Trezor (recovery / settings): hand the positions back
+        const pos = _tzPin.positions;
+        _tzPin.positions = '';
+        _tzPinClose({ ok: true, positions: pos });
+        return;
+    }
     const positions = _tzPin.positions;
     _tzPin.positions = '';               // never kept once sent
     _tzPin.busy = true;
@@ -27901,10 +28188,41 @@ function _tzPinClose(result) {
     if (p && p.resolve) p.resolve(result);
 }
 
+/* The text of the PIN overlay: unlocking (default) or a question from the Trezor. */
+function _tzPinTexts(title, intro, enterLabel) {
+    const t = document.getElementById('tz-pin-title'), e = document.getElementById('tz-pin-enter');
+    const p = document.querySelector('#tz-pin-overlay .tz-pin-modal > p');
+    if (t) t.textContent = title || 'Unlock your Trezor';
+    if (e) e.textContent = enterLabel || 'Unlock';
+    if (p) p.textContent = intro || ('Your Trezor is showing your numbers in a shuffled grid. Use the mouse: for each digit of your PIN, ' +
+        'find it on the Trezor\'s screen, then click the button in the same spot below. ' +
+        'The buttons here have no numbers on purpose, so SafeKeep never learns your PIN.');
+}
+
+/* The Trezor asks for a PIN during recovery or a settings change: the same
+   blank grid; resolves to { ok, positions } or { ok: false } (canceled). */
+function _tzPinAsk(kind) {
+    const texts = {
+        new_first: ['Choose a new PIN', 'Your Trezor shows a shuffled grid. For each digit of the NEW PIN you choose (up to 9 digits), find it on the Trezor\'s screen and click the button in the same spot below. SafeKeep never learns the PIN.', 'Next'],
+        new_second: ['Repeat the new PIN', 'The Trezor shows a new shuffled grid. Enter the same new PIN again, by position.', 'Set PIN'],
+        current: ['Enter your PIN', 'The Trezor asks for its PIN. Find each digit on its shuffled grid and click the same spot below.', 'OK'],
+    }[kind] || ['Enter the PIN', 'Find each digit on the Trezor\'s shuffled grid and click the same spot below.', 'OK'];
+    return new Promise(function (resolve) {
+        const overlay = _tzPinEls();
+        _tzPin = { path: '', positions: '', resolve: resolve, busy: false, retryOnly: false, ask: true };
+        _tzPinTexts(texts[0], texts[1], texts[2]);
+        overlay.classList.add('visible');
+        _tzPinRender('');
+        const first = overlay.querySelector('.tz-pin-cell');
+        if (first) first.focus();
+    });
+}
+
 function _tzPinOpen(path) {
     return new Promise(function (resolve) {
         const overlay = _tzPinEls();
         _tzPin = { path: path, positions: '', resolve: resolve, busy: false, retryOnly: false };
+        _tzPinTexts();
         overlay.classList.add('visible');
         _tzPinRender('');
         const first = overlay.querySelector('.tz-pin-cell');
@@ -28034,6 +28352,9 @@ async function tzSettingsRefresh() {
     if (!pairBtn) return;
     if (confirmEl) { confirmEl.style.display = 'none'; confirmEl.textContent = ''; }
     _tzPendingDetect = null;
+    // Trezor settings (passphrase protection, erase, recover): not in the online demo.
+    const tzxBlock = document.getElementById('tzx-block');
+    if (tzxBlock) tzxBlock.hidden = _skvDemoActive() || !(os && typeof os.trezorRecover === 'function');
     if (!os || typeof os.trezorGetPairing !== 'function') {
         _tzSettingsShowStatus('Trezor support is not available in this build.', true);
         pairBtn.style.display = 'none'; forgetBtn.style.display = 'none';

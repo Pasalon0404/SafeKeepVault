@@ -12,6 +12,7 @@ Optional: also check the helper against the REAL pinned HWI library (still no
 hardware): set SAFEKEEP_TEST_HWI_PYTHON to a python that has hwi 3.2.0, e.g.
     SAFEKEEP_TEST_HWI_PYTHON=/opt/safekeep-hwi/bin/python3 python3 usbbootdrive/tests/test-trezor-helper.py
 """
+import time
 import base64, json, os, subprocess, sys, tempfile, textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +59,47 @@ FAKE_TZEXC = '''
 class TrezorException(Exception): pass
 class TrezorFailure(TrezorException): pass
 class OutdatedFirmwareError(TrezorException): pass
+class Cancelled(TrezorException): pass
+'''
+
+FAKE_TZMSG = '''
+class RecoveryDeviceType:
+    ScrambledWords = 0
+    Matrix = 1
+'''
+
+# A Trezor One's settings / wipe / recovery, asking through client.ui like trezorlib does.
+FAKE_TZDEVICE = '''
+import json, os, time
+from hwilib.devices.trezorlib.exceptions import TrezorFailure
+CFG = json.loads(os.environ.get('FAKE_TZ', '{}'))
+def press():   # the person presses the button on the Trezor a moment later
+    time.sleep(0.4)
+LOG = os.environ['FAKE_TZ_LOG']
+def log(x):
+    with open(LOG, 'a') as f: f.write(x + '\\n')
+def apply_settings(client, use_passphrase=None, **kw):
+    if CFG.get('apply_pin'):
+        log('apply-pin ' + str(client.ui.get_pin(1)))
+    client.ui.button_request(None); press()
+    if CFG.get('apply') == 'decline': raise TrezorFailure('ActionCancelled: Action cancelled by user')
+    log('apply use_passphrase=%s' % use_passphrase)
+    client.features.passphrase_protection = use_passphrase
+def wipe(client):
+    client.ui.button_request(None); press()
+    if CFG.get('wipe') == 'decline': raise TrezorFailure('ActionCancelled: Action cancelled by user')
+    log('wipe')
+    client.init_device()
+def recover(client, word_count=24, passphrase_protection=False, pin_protection=True, label=None,
+            input_callback=None, type=0, **kw):
+    log('recover words=%d pp=%s pin=%s type=%s' % (word_count, passphrase_protection, pin_protection, type))
+    a = client.ui.get_pin(2); b = client.ui.get_pin(3)
+    log('new-pin %s %s' % (a, b))
+    for i in range(word_count + CFG.get('decoys', 0)):
+        w = input_callback(0)
+        log('word ' + w)
+    if CFG.get('recover') == 'badwords': raise TrezorFailure('ProcessError: Invalid mnemonic, are words in correct order?')
+    client.init_device()
 '''
 
 FAKE_TREZOR = '''
@@ -104,6 +146,7 @@ class _Key:
     def to_string(self): return self._x
 class _Inner:
     def cancel(self): log('cancel')
+    def init_device(self): log('init_device')
 
 class TrezorClient:
     def __init__(self, path, password=None, **kw):
@@ -164,6 +207,7 @@ def make_fakes(root):
         'hwilib/__init__.py': '', 'hwilib/errors.py': FAKE_ERRORS, 'hwilib/psbt.py': FAKE_PSBT,
         'hwilib/devices/__init__.py': '', 'hwilib/devices/trezor.py': FAKE_TREZOR,
         'hwilib/devices/trezorlib/__init__.py': '', 'hwilib/devices/trezorlib/exceptions.py': FAKE_TZEXC,
+        'hwilib/devices/trezorlib/messages.py': FAKE_TZMSG, 'hwilib/devices/trezorlib/device.py': FAKE_TZDEVICE,
     }
     for rel, text in files.items():
         with open(os.path.join(root, rel), 'w') as f:
@@ -184,6 +228,43 @@ def run(tmp, request, cfg=None, fakes=True, raw=None, env_extra=None):
     result = json.load(open(res))
     log = open(logf).read().split('\n') if os.path.exists(logf) else []
     return p.returncode, result, log, os.path.exists(req), p.stdout + p.stderr
+
+
+def run_dialog(tmp, request, cfg=None, answer=None, env_extra=None, temporary=True):
+    """Run the helper while a thread plays the app: it reads each question from
+    the dialog file and writes the reply that answer(question) returns."""
+    import threading
+    dialog = os.path.join(tmp, 'sig', 'TREZOR_DIALOG.json'); replies = os.path.join(tmp, 'dl')
+    os.makedirs(os.path.dirname(dialog), exist_ok=True); os.makedirs(replies, exist_ok=True)
+    for d in (dialog,):
+        if os.path.exists(d): os.remove(d)
+    for n in os.listdir(replies): os.remove(os.path.join(replies, n))
+    env = {'SAFEKEEP_TZ_DIALOG': dialog, 'SAFEKEEP_TZ_REPLY_DIR': replies, 'SAFEKEEP_TZ_TEMPORARY': '1' if temporary else '0'}
+    env.update(env_extra or {})
+    seen, stop = [], threading.Event()
+    def app():
+        last = 0
+        while not stop.is_set():
+            try:
+                q = json.load(open(dialog))
+            except Exception:
+                q = None
+            if q and q.get('seq', 0) > last:
+                last = q['seq']; seen.append(q)
+                if q['need'] in ('pin', 'word') and answer:
+                    r = answer(q)
+                    if r is not None:
+                        body = dict({'request_id': q['request_id'], 'seq': q['seq']}, **r) if 'raw' not in r else r['raw']
+                        with open(os.path.join(replies, 'TREZOR_REPLY.json.part'), 'w') as f: f.write(json.dumps(body))
+                        os.replace(os.path.join(replies, 'TREZOR_REPLY.json.part'), os.path.join(replies, 'TREZOR_REPLY.json'))
+            time.sleep(0.05)
+    t = threading.Thread(target=app, daemon=True); t.start()
+    try:
+        out = run(tmp, request, cfg, env_extra=env)
+    finally:
+        stop.set(); t.join(2)
+    left = os.listdir(replies)
+    return out + (seen, left, os.path.exists(dialog))
 
 
 def set_pairing(tmp, xfp=PAIRED_XFP, xpub=PAIRED_XPUB, raw=None):
@@ -414,6 +495,93 @@ def main():
             check('passphrase %s -> bad_request, device not opened, request gone' % name, r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log) and not left, str(r))
         rc, r, *_ = run(tmp, dict(good, passphrase='x' * 50), {'passphrase': True, 'psbt_fps': ['feedface']})
         check('50 bytes: allowed', r.get('status') == 'signed', str(r)[:120])
+
+        print('passphrase protection switch')
+        RID = 'req-pp-1'
+        rc, r, log, left, out, seen, rleft, dleft = run_dialog(tmp, {'action': 'passphrase_setting', 'enable': True, 'request_id': RID}, {'passphrase': False})
+        check('turn on: done, protection now on, changed', r.get('status') == 'passphrase_setting' and r.get('passphrase_protection') is True and r.get('changed') is True, str(r))
+        check('  ...the Trezor asked to confirm on its screen (told to the app), then applied', any(q['need'] == 'button' for q in seen) and 'apply use_passphrase=True' in log, str(seen))
+        check('  ...the dialog file is removed afterwards', not dleft)
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'passphrase_setting', 'enable': True, 'request_id': RID}, {'passphrase': True})
+        check('already on: nothing sent to the Trezor, changed false', r.get('changed') is False and not any(l.startswith('apply') for l in log), str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'passphrase_setting', 'enable': False, 'request_id': RID}, {'passphrase': True, 'apply': 'decline'})
+        check('declined on the Trezor -> refused, setting unchanged', r.get('status') == 'refused', str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'passphrase_setting', 'enable': True, 'request_id': RID}, {'locked': True})
+        check('locked -> locked (unlock with the PIN grid first)', r.get('status') == 'locked', str(r))
+        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'passphrase_setting', 'enable': True, 'request_id': RID}, {'apply_pin': True},
+                                                    answer=lambda q: {'positions': '7913'} if q['need'] == 'pin' else None)
+        check('if the Trezor asks for its PIN: a PIN grid question (current), positions passed on', r.get('status') == 'passphrase_setting' and 'apply-pin 7913' in log and any(q.get('kind') == 'current' for q in seen), str(seen))
+        rc, r, *_ = run_dialog(tmp, {'action': 'passphrase_setting', 'enable': 'yes', 'request_id': RID})
+        check('enable not a boolean -> bad_request', r.get('status') == 'bad_request', str(r))
+
+        print('wipe')
+        set_pairing(tmp)
+        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'wipe', 'expected_xfp': PAIRED_XFP, 'request_id': 'w1'})
+        check('wipe the confirmed Trezor: wiped, after a confirmation on its screen', r.get('status') == 'wiped' and 'wipe' in log and any(q['need'] == 'button' for q in seen), str(r))
+        check('  ...and its pairing is removed', read_pairing(tmp) is None)
+        set_pairing(tmp)
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'wipe', 'expected_xfp': 'deadbeef', 'request_id': 'w2'})
+        check('a different Trezor than the one confirmed -> wrong_device, nothing erased', r.get('status') == 'wrong_device' and 'wipe' not in log and read_pairing(tmp) is not None, str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'wipe', 'request_id': 'w3'})
+        check('a Trezor with a seed, no fingerprint confirmed -> wrong_device, nothing erased', r.get('status') == 'wrong_device' and 'wipe' not in log, str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'wipe', 'expected_xfp': PAIRED_XFP, 'request_id': 'w4'}, {'locked': True})
+        check('locked -> locked, nothing erased', r.get('status') == 'locked' and 'wipe' not in log, str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'wipe', 'expected_xfp': PAIRED_XFP, 'request_id': 'w5'}, {'wipe': 'decline'})
+        check('declined on the Trezor -> refused, pairing kept', r.get('status') == 'refused' and read_pairing(tmp) is not None, str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'wipe', 'request_id': 'w6'}, {'no_seed': True})
+        check('a Trezor with no seed can be wiped without a fingerprint', r.get('status') == 'wiped', str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'wipe', 'expected_xfp': 'zz; rm', 'request_id': 'w7'})
+        check('bad fingerprint -> bad_request, device not opened', r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log), str(r))
+
+        print('recover')
+        WORDS = ['legal', 'winner', 'thank', 'year', 'wave', 'sausage', 'worth', 'useful', 'legal', 'winner', 'thank', 'yellow', 'apple', 'zoo']
+        def app_answers(seq_words, pin='1597'):
+            it = iter(seq_words)
+            def a(q):
+                if q['need'] == 'pin': return {'positions': pin}
+                if q['need'] == 'word': return {'word': next(it)}
+            return a
+        set_pairing(tmp)
+        rc, r, log, left, out, seen, rleft, dleft = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': True, 'request_id': 'r1'},
+                                                             {'no_seed': True, 'decoys': 2}, answer=app_answers(WORDS))
+        check('recover: done, reports the new fingerprint', r.get('status') == 'recovered' and r.get('xfp') == PAIRED_XFP and r.get('passphrase_protection') is True, str(r))
+        check('  ...scrambled-words method, 12 words, PIN on, passphrase protection as asked', 'recover words=12 pp=True pin=True type=0' in log, str(log))
+        check('  ...new PIN asked twice on the grid (new_first, new_second)', [q.get('kind') for q in seen if q['need'] == 'pin'] == ['new_first', 'new_second'] and 'new-pin 1597 1597' in log, str(seen))
+        check('  ...every word the Trezor asked for (decoys too) passed on, in order', [l[5:] for l in log if l.startswith('word ')] == WORDS, str(log))
+        check('  ...the words are not in the result', not any(w in json.dumps(r) for w in ('sausage', 'yellow')))
+        check('  ...no answers or dialog left behind, pairing removed', not rleft and not dleft and read_pairing(tmp) is None, str(rleft))
+        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r2'},
+                                                    {'no_seed': True}, answer=app_answers(WORDS), temporary=False)
+        check('not a Temporary Session -> not_temporary, device not opened', r.get('status') == 'not_temporary' and not any(l.startswith('open') for l in log), str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r3'}, {}, answer=app_answers(WORDS))
+        check('a Trezor that has a seed -> initialized (wipe first)', r.get('status') == 'initialized' and not any(l.startswith('recover') for l in log), str(r))
+        def cancel_at_3():
+            n = {'w': 0}
+            def a(q):
+                if q['need'] == 'pin': return {'positions': '11'}
+                n['w'] += 1
+                return {'cancel': True} if n['w'] == 3 else {'word': 'abandon'}
+            return a
+        rc, r, log, left, out, seen, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r4'}, {'no_seed': True}, answer=cancel_at_3())
+        check('cancel at word 3 -> refused, no more words asked', r.get('status') == 'refused' and len([q for q in seen if q['need'] == 'word']) == 3, str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r5'}, {'no_seed': True},
+                                    answer=lambda q: {'positions': '1'} if q['need'] == 'pin' else {'word': 'Abandon'})
+        check('a word that isn\'t lower-case letters -> stopped (refused), not sent', r.get('status') == 'refused' and not any(l.startswith('word ') for l in log), str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r6'}, {'no_seed': True, 'recover': 'badwords'}, answer=app_answers(WORDS))
+        check('words that don\'t form a valid seed -> rejected, with what to do', r.get('status') == 'rejected' and 'valid seed' in r.get('error', ''), str(r))
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 13, 'passphrase_protection': False, 'request_id': 'r7'}, {'no_seed': True})
+        check('13 words -> bad_request, device not opened', r.get('status') == 'bad_request' and not any(l.startswith('open') for l in log), str(r))
+        stale = {'n': 0}
+        def stale_then_real(q):
+            if q['need'] == 'pin':
+                stale['n'] += 1
+                return {'raw': {'request_id': 'someone-else', 'seq': q['seq'], 'positions': '999'}} if stale['n'] == 1 else {'positions': '22'}
+            return {'word': 'abandon'}
+        rc, r, log, *_ = run_dialog(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r8'}, {'no_seed': True},
+                                    answer=stale_then_real, env_extra={'SAFEKEEP_TZ_STEP_TIMEOUT': '2'})
+        check('an answer for another request is ignored (then the question times out)', r.get('status') == 'timeout' and 'new-pin 999' not in ' '.join(log), str(r))
+        rc, r, *_ = run(tmp, {'action': 'recover', 'word_count': 12, 'passphrase_protection': False, 'request_id': 'r9'}, {'no_seed': True}, env_extra={'SAFEKEEP_TZ_TEMPORARY': '1'})
+        check('no dialog channel -> error (nothing hangs)', r.get('status') == 'error' and 'dialog' in r.get('error', ''), str(r))
 
         print('bad requests (nothing touches the device)')
         bad = [

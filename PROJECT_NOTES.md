@@ -35,6 +35,29 @@
   itself still shows no card. In hardware-only mode with a Trezor
   passphrase, the Trezor's standard fingerprint needn't be a key: the
   helper checks the passphrase wallet.
+- **Trezor settings without Trezor Suite** (Device Options → Trezor, and
+  *Trezor Tools* on the welcome screen in a Temporary Session, which has no
+  Dashboard): *Passphrase Protection* (on/off), *Erase This Trezor*
+  (checkbox + type ERASE; only the Trezor whose fingerprint was read after
+  unlocking), *Recover from Words* (Temporary Session only; the Trezor must
+  have no seed; 12/18/24 words, optional passphrase protection; new PIN).
+  Helper actions `passphrase_setting`, `wipe`, `recover` use trezorlib's
+  `apply_settings` / `wipe` / `recover` (ScrambledWords) with a `DialogUI`:
+  each question (`button`, `pin` new_first/new_second/current, `word`)
+  goes to `$SIGNAL_DIR/TREZOR_DIALOG.json`; the app answers with
+  `TREZOR_REPLY.json` (request id + question number; overwritten and
+  deleted by the helper, shredded by the watcher). The Trezor One asks for
+  words in a scrambled order with decoys, shown on its screen. The PIN grid
+  has an ask mode (`_tzPinAsk`); its z-index is now above full-screen
+  overlays. The pairing is removed after a wipe or a recovery. Not yet
+  tried on a real Trezor One. Tests `test-trezor-tools.mjs`,
+  `usbbootdrive/tests/test-trezor-helper.py`.
+- **File router bug (in v1.65):** the router moves any downloaded `.json`
+  containing `"passphrase"` into the Passphrase Library folder, and didn't
+  skip `COLDCARD_*` / `TREZOR_*`. So a *Send a Passphrase to the Coldcard*
+  request could be taken before the Coldcard Watcher read it (a 1 s vs 2 s
+  race): the passphrase stored in `passphrases/` as `COLDCARD_REQUEST`, and
+  the send never reaching the Coldcard. Fixed by skipping both prefixes.
 
 ## Current state (Nov 9, 2026) — v1.65
 
