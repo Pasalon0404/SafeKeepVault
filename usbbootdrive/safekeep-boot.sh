@@ -1862,7 +1862,15 @@ SSPYEOF
     # Same pattern as the Coldcard watcher above. The web app downloads
     #   TREZOR_REQUEST.json
     #     { "action": "detect" | "prompt_pin" | "send_pin" | "pair" |
-    #                 "unpair" | "sign", "request_id": ... }
+    #                 "unpair" | "sign" | "xpub" | "passphrase_setting" |
+    #                 "wipe" | "recover", "request_id": ... }
+    # Dialog (passphrase_setting / wipe / recover): while the Trezor waits,
+    # the helper writes its question to $SIGNAL_DIR/TREZOR_DIALOG.json (RAM)
+    # and reads the answer from TREZOR_REPLY*.json in the download folder
+    # (overwritten, then deleted). For "recover" those answers are recovery
+    # words: in RAM in a Temporary Session, briefly in the encrypted vault
+    # otherwise (where Seed Vault seeds are stored too). SAFEKEEP_TZ_TEMPORARY
+    # tells the helper which.
     # into $CHROMIUM_DOWNLOAD_DIR. The helper
     # (/usr/local/lib/safekeep/safekeep-trezor.py, run with the pinned HWI
     # install in /opt/safekeep-hwi) treats it as untrusted data, deletes it
@@ -1884,7 +1892,9 @@ SSPYEOF
     else
         TREZOR_PAIRING="$VAULT_MOUNT/settings/trezor-pairing.json"
     fi
-    rm -f "$TREZOR_REQUEST" "$TREZOR_RESULT" "$TREZOR_ACK" 2>/dev/null
+    TREZOR_DIALOG="$SIGNAL_DIR/TREZOR_DIALOG.json"
+    if [ "$EPHEMERAL_MODE" = "1" ]; then TREZOR_TEMPORARY=1; else TREZOR_TEMPORARY=0; fi
+    rm -f "$TREZOR_REQUEST" "$TREZOR_RESULT" "$TREZOR_ACK" "$TREZOR_DIALOG" "$CHROMIUM_DOWNLOAD_DIR"/TREZOR_REPLY*.json 2>/dev/null
     TREZOR_PY="/opt/safekeep-hwi/bin/python3"
     TREZOR_HELPER="/usr/local/lib/safekeep/safekeep-trezor.py"
 
@@ -1897,7 +1907,9 @@ SSPYEOF
                 rm -f "$TREZOR_RESULT" "$CHROMIUM_DOWNLOAD_DIR"/TREZOR_ACK*.json \
                       "$CHROMIUM_DOWNLOAD_DIR"/TREZOR_REQUEST\ \(*\).json 2>/dev/null
                 if [ -x "$TREZOR_PY" ] && [ -f "$TREZOR_HELPER" ]; then
-                    SAFEKEEP_TZ_PAIRING="$TREZOR_PAIRING" PYTHONDONTWRITEBYTECODE=1 \
+                    SAFEKEEP_TZ_PAIRING="$TREZOR_PAIRING" SAFEKEEP_TZ_DIALOG="$TREZOR_DIALOG" \
+                    SAFEKEEP_TZ_REPLY_DIR="$CHROMIUM_DOWNLOAD_DIR" SAFEKEEP_TZ_TEMPORARY="$TREZOR_TEMPORARY" \
+                    PYTHONDONTWRITEBYTECODE=1 \
                         "$TREZOR_PY" "$TREZOR_HELPER" "$TREZOR_REQUEST" "$TREZOR_RESULT" 2>>/tmp/safekeep-trezor.log
                     TZ_RC=$?
                     echo "$(date +%T) Trezor Watcher: helper finished (exit $TZ_RC)"
@@ -1905,7 +1917,11 @@ SSPYEOF
                     echo '{"ok":false,"status":"not_installed","error":"Trezor support is not installed on this SafeKeep build."}' > "$TREZOR_RESULT"
                     echo "$(date +%T) Trezor Watcher: FAILED — helper or library not installed"
                 fi
-                rm -f "$TREZOR_REQUEST"
+                rm -f "$TREZOR_REQUEST" "$TREZOR_DIALOG"
+                # Answers left over (e.g. after a cancel) may hold a word: shred them.
+                for _tzr in "$CHROMIUM_DOWNLOAD_DIR"/TREZOR_REPLY*.json; do
+                    [ -f "$_tzr" ] && { shred -u -n 1 -z "$_tzr" 2>/dev/null || rm -f "$_tzr"; }
+                done
                 if [ ! -f "$TREZOR_RESULT" ]; then
                     echo '{"ok":false,"status":"error","error":"The Trezor helper stopped unexpectedly."}' > "$TREZOR_RESULT"
                 fi
@@ -2123,10 +2139,12 @@ SSPYEOF
 
                 # Skip known system trigger/result/sentinel files
                 case "$BASENAME" in
-                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|BRIGHTNESS_*|PRINT_*|SEED_VAULT*|seed-vault*|SEED_STORAGE*|.transfer*|.backups*|.vault-sentinel*) continue ;;
+                    master-seed*|RELIQUARY_*|RESTORE_*|DISPLAY_SLEEP_*|BRIGHTNESS_*|PRINT_*|SEED_VAULT*|seed-vault*|SEED_STORAGE*|COLDCARD_*|TREZOR_*|.transfer*|.backups*|.vault-sentinel*) continue ;;
                 esac
 
-                # Check if this is a passphrase file (contains "passphrase" key)
+                # Check if this is a passphrase file (contains "passphrase" key).
+                # COLDCARD_* / TREZOR_* requests may carry a "passphrase" too
+                # (sent to the device, never saved): they are skipped above.
                 if grep -q '"passphrase"' "$JSON_FILE" 2>/dev/null; then
                     mkdir -p "$PASSPHRASE_DIR" 2>/dev/null
                     mv "$JSON_FILE" "$PASSPHRASE_DIR/$BASENAME" 2>/dev/null

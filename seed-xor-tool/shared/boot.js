@@ -2998,6 +2998,94 @@ const SafeKeepOS = (() => {
     }
   }
 
+  /**
+   * A Trezor request that asks questions while the Trezor waits
+   * (passphrase_setting / wipe / recover). The helper writes each question
+   * to TREZOR_DIALOG.json in RAM: { request_id, seq, need: 'button' | 'pin'
+   * | 'word', kind }. onQuestion(q) is told every question; for 'pin' and
+   * 'word' it returns (a promise of) the answer — { positions } / { word } /
+   * { cancel: true } — which goes back as TREZOR_REPLY.json (a protocol
+   * file; the helper overwrites and deletes it). Resolves to the result.
+   */
+  const TREZOR_DIALOG_URL = `file://${COLDCARD_SIGNAL_DIR}/TREZOR_DIALOG.json`;
+  const TREZOR_REPLY_FILE = 'TREZOR_REPLY.json';
+  async function _trezorDialogRequest(payload, maxWaitMs, onQuestion) {
+    if (!isBootDrive()) {
+      return { ok: false, status: 'unavailable',
+               error: 'Trezor tools only work when SafeKeep is running from its USB flash drive.' };
+    }
+    if (_tzInFlight) {
+      return { ok: false, status: 'in_progress', error: 'A Trezor request is already in progress.' };
+    }
+    _tzInFlight = true;
+    const requestId = _ccRequestId();
+    let lastSeq = 0;
+    try {
+      await _usbAckChain;
+      _rawBlobDownload(TREZOR_REQUEST_FILE, JSON.stringify(Object.assign({}, payload, { request_id: requestId })));
+      payload = null;
+      const deadline = Date.now() + maxWaitMs;
+      await _sleep(700);
+      while (Date.now() < deadline) {
+        try {
+          const resp = await fetch(TREZOR_RESULT_URL, { cache: 'no-store' });
+          if (resp.ok) {
+            const result = await resp.json();
+            if (result && result.request_id === requestId) {
+              _usbQueueAck(TREZOR_ACK_FILE);
+              return result;
+            }
+          }
+        } catch (e) { /* not written yet */ }
+        try {
+          const dr = await fetch(TREZOR_DIALOG_URL, { cache: 'no-store' });
+          if (dr.ok) {
+            const q = await dr.json();
+            if (q && q.request_id === requestId && Number(q.seq) > lastSeq) {
+              lastSeq = Number(q.seq);
+              let answer = null;
+              try { answer = typeof onQuestion === 'function' ? await onQuestion(q) : null; } catch (e) { answer = { cancel: true }; }
+              if (q.need === 'pin' || q.need === 'word' || q.need === 'matrix') {
+                const body = Object.assign({}, answer || { cancel: true }, { request_id: requestId, seq: q.seq });
+                _rawBlobDownload(TREZOR_REPLY_FILE, JSON.stringify(body));
+                answer = null;
+              }
+            }
+          }
+        } catch (e) { /* no question yet */ }
+        await _sleep(400);
+      }
+      return { ok: false, status: 'no_answer',
+               error: 'SafeKeep did not hear back from the Trezor helper. Unplug the Trezor, plug it back in, and try again.' };
+    } finally {
+      _tzInFlight = false;
+    }
+  }
+
+  /** Turn the Trezor's passphrase protection on or off (confirmed on the Trezor). */
+  async function trezorSetPassphraseProtection(enable, onQuestion) {
+    return _trezorDialogRequest({ action: 'passphrase_setting', enable: !!enable }, 11 * 60 * 1000, onQuestion);
+  }
+
+  /** Erase the Trezor whose fingerprint the user confirmed (confirmed on the Trezor too). */
+  async function trezorWipe(expectedXfp, onQuestion) {
+    const req = { action: 'wipe' };
+    if (expectedXfp) req.expected_xfp = String(expectedXfp).toLowerCase();
+    return _tzUpper(await _trezorDialogRequest(req, 11 * 60 * 1000, onQuestion));
+  }
+
+  /**
+   * Set a wiped Trezor up from recovery words (Temporary Session only). The
+   * Trezor asks for a new PIN and for each word (in a scrambled order, with
+   * decoys) through onQuestion. ok → { xfp }
+   */
+  // method: 'advanced' (the blank grid; default) or 'words' (typed or
+  // clicked words; only offered for a seed in SafeKeep's Seed Vault).
+  async function trezorRecover(wordCount, passphraseProtection, onQuestion, method) {
+    return _tzUpper(await _trezorDialogRequest({ action: 'recover', word_count: Number(wordCount),
+      passphrase_protection: !!passphraseProtection, method: method === 'words' ? 'words' : 'advanced' }, 46 * 60 * 1000, onQuestion));
+  }
+
   // ===================================================================
   //  PRINT — a SeedQR on a USB laser printer (Print Watcher)
   // ===================================================================
@@ -3190,11 +3278,17 @@ const SafeKeepOS = (() => {
    * Ask the paired, unlocked Trezor to sign. The user approves on the Trezor.
    * ok → { psbtBytes: Uint8Array, changed }  (helper gives up after 10 minutes)
    */
-  async function trezorSign(psbtBytes) {
+  async function trezorSign(psbtBytes, passphrase) {
     if (!(psbtBytes instanceof Uint8Array) || psbtBytes.length < 5) {
       return { ok: false, status: 'bad_request', error: 'No transaction to send to the Trezor.' };
     }
-    const r = _tzUpper(await _trezorRequest({ action: 'sign', psbt_b64: _ccToBase64(psbtBytes) }, 11 * 60 * 1000));
+    // A passphrase makes the Trezor's passphrase wallet sign; the helper
+    // checks the pairing on the standard wallet first, and that the
+    // passphrase wallet is one of the keys the transaction needs.
+    const req = { action: 'sign', psbt_b64: _ccToBase64(psbtBytes) };
+    if (typeof passphrase === 'string' && passphrase !== '') req.passphrase = passphrase;
+    const r = _tzUpper(await _trezorRequest(req, 11 * 60 * 1000));
+    if (r.ok && r.passphrase_xfp) { r.passphraseXfp = String(r.passphrase_xfp).toUpperCase(); delete r.passphrase_xfp; }
     if (r.ok && r.psbt_b64) {
       try { r.psbtBytes = _ccFromBase64(r.psbt_b64); }
       catch (e) { return { ok: false, status: 'error', error: 'The Trezor result could not be read.' }; }
@@ -3484,6 +3578,7 @@ const SafeKeepOS = (() => {
     coldcardDetect,
     coldcardSendPassphrase,
     coldcardSendSeed,
+    trezorSetPassphraseProtection, trezorWipe, trezorRecover,
     coldcardPair,
     coldcardUnpair,
     coldcardSign,

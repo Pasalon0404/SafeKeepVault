@@ -39,7 +39,7 @@ ck('only Key 1 here in a 2-of-3: no warning', box.hidden && box.innerHTML === ''
 await custody([K('5436d724'), K('B8688DF1'), K('11111111')], 3);
 ck('3-of-3 with 2 keys here: no warning (the vault alone can\'t spend)', box.hidden);
 ck('a pasted key counts too (matched by fingerprint, any case)', (await custody([K('5436d724'), K('B8688DF1'), K('11111111')], 2), !box.hidden));
-ck('the warning box sits at the top of the result, and single-sig clears it', html.includes('<div id="desc-ms-custody" class="psbt-alert warning" role="alert" hidden') && fn('async function desc_generate()').includes("if (custodyBox) { custodyBox.hidden = true; custodyBox.innerHTML = ''; }") && html.includes('#desc-ms-custody[hidden] { display: none !important; }'));
+ck('the warning box sits at the top of the result, and single-sig clears it', html.includes('<div id="desc-ms-custody" class="psbt-alert warning" role="alert" hidden') && fn('async function desc_generate()').includes("if (custodyBox) { custodyBox.hidden = true; custodyBox.innerHTML = ''; }") && /#desc-ms-custody\[hidden\][^{]*\{ display: none !important; \}/.test(html));
 ck('the multisig path runs it before showing the result', fn('async function desc_generateMulti').includes('await _descMsCustody(keyOrigins, m);'));
 
 console.log('\n2. The builder');

@@ -9,6 +9,68 @@
 
 ---
 
+## Since v1.65 (on the branch, not released)
+
+- **Trezor passphrase wallets** (PSBT Signer → co-signing card): a
+  *Use a passphrase on the Trezor* box under the Trezor button (typed
+  twice, from the Passphrase Library, or the passphrase applied on the
+  Dashboard). In a normal session it is also offered when the paired
+  Trezor isn't one of the wallet's keys but some unsigned keys are
+  unnamed. Helper `safekeep-trezor.py` `sign` takes an optional
+  `passphrase` (NFKD, at most 50 bytes, no control characters): the
+  pairing is checked on the standard wallet first, then a fresh session
+  with the passphrase (HWI's `TrezorClient(password=…)`; a Trezor One asks
+  the computer) must be one of the fingerprints the PSBT's inputs name,
+  or nothing is sent (`wrong_passphrase`). Refused if passphrase
+  protection is off (`passphrase_off`). The request is overwritten before
+  deletion. Not yet tried on a real Trezor One. Tests
+  `test-trezor-passphrase.mjs`, `usbbootdrive/tests/test-trezor-helper.py`.
+- **Hardware signing for single-sig** (PSBT Signer → co-signing card): the
+  card used to need an m-of-n multisig (`_psbtMultisigStatus`). Now
+  `_psbtSigningStatus` falls back to `_psbtSingleSigStatus` (every input
+  one key with a named origin, BIP-32 or Taproot; a 1-of-1), so the
+  Trezor (with or without a passphrase) and the Coldcard can sign
+  single-sig transactions too, in a normal or a Temporary Session. The
+  helpers never had a multisig limit. A single-sig spend SafeKeep signed
+  itself still shows no card. In hardware-only mode with a Trezor
+  passphrase, the Trezor's standard fingerprint needn't be a key: the
+  helper checks the passphrase wallet.
+- **Trezor settings without Trezor Suite** (Device Options → Trezor, and
+  *Trezor Tools* on the welcome screen in a Temporary Session, which has no
+  Dashboard): *Passphrase Protection* (on/off), *Erase This Trezor*
+  (checkbox + type ERASE; only the Trezor whose fingerprint was read after
+  unlocking), *Recover from Words* (any session; the Trezor must have no
+  seed; 12/18/24 words, optional passphrase protection; new PIN). Default
+  method "advanced" (trezorlib `RecoveryDeviceType.Matrix`): per word the
+  Trezor shows 3 grids of letter ranges, then up to 6 words (2 columns);
+  the app shows a blank number-pad grid and only the position (or "back")
+  goes back, as a `matrix` dialog question (layout 9/6, word, level 0-3).
+  Words from paper always use it. For a Seed Vault seed there is also
+  "Quicker" (method "words", scrambled words + decoys): the seed's words are
+  shown numbered to click, decoys typed. The Trezor One refuses the words
+  method for 12/18 words while its safety checks are Strict ("Advanced
+  recovery must be used", legacy/firmware/recovery.c), so the helper first
+  sets `safety_checks=PromptTemporarily` (confirmed on the Trezor; kept in
+  its RAM only, Strict again after a restart) and the app says to unplug it
+  afterwards.
+  Helper actions `passphrase_setting`, `wipe`, `recover` use trezorlib's
+  `apply_settings` / `wipe` / `recover` (ScrambledWords) with a `DialogUI`:
+  each question (`button`, `pin` new_first/new_second/current, `word`)
+  goes to `$SIGNAL_DIR/TREZOR_DIALOG.json`; the app answers with
+  `TREZOR_REPLY.json` (request id + question number; overwritten and
+  deleted by the helper, shredded by the watcher). The Trezor One asks for
+  words in a scrambled order with decoys, shown on its screen. The PIN grid
+  has an ask mode (`_tzPinAsk`); its z-index is now above full-screen
+  overlays. The pairing is removed after a wipe or a recovery. Not yet
+  tried on a real Trezor One. Tests `test-trezor-tools.mjs`,
+  `usbbootdrive/tests/test-trezor-helper.py`.
+- **File router bug (in v1.65):** the router moves any downloaded `.json`
+  containing `"passphrase"` into the Passphrase Library folder, and didn't
+  skip `COLDCARD_*` / `TREZOR_*`. So a *Send a Passphrase to the Coldcard*
+  request could be taken before the Coldcard Watcher read it (a 1 s vs 2 s
+  race): the passphrase stored in `passphrases/` as `COLDCARD_REQUEST`, and
+  the send never reaching the Coldcard. Fixed by skipping both prefixes.
+
 ## Current state (Nov 9, 2026) — v1.65
 
 **v1.65** (Nov 9) — tested on Dave's flash drive and his COLDCARD Mk4 as

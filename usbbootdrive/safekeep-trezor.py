@@ -32,10 +32,54 @@ SECURITY MODEL
                     (expected_xfp + expected_xpub) and SAVE the pairing.
       unpair     -> delete the saved pairing.
       sign       -> send a PSBT to the PAIRED Trezor and return the result.
+                    With an optional "passphrase", the Trezor's passphrase
+                    wallet signs: the pairing is checked on the standard
+                    wallet first, then the passphrase wallet is opened (the
+                    Trezor One takes its passphrase from the computer) and
+                    must be one of the keys the PSBT's inputs name, or
+                    nothing is sent. Refused if passphrase protection is off
+                    (the Trezor would quietly use its standard wallet). The
+                    passphrase is never logged or written to the result, and
+                    the request file is overwritten before it is deleted.
+      passphrase_setting -> turn the Trezor's passphrase protection on or
+                    off ("enable"). The Trezor asks for confirmation on its
+                    own screen.
+      wipe       -> erase the Trezor (its seed, PIN and settings). Only the
+                    Trezor whose fingerprint the user confirmed
+                    ("expected_xfp"); the Trezor asks for confirmation on its
+                    own screen. The pairing is removed.
+      recover    -> set a wiped Trezor up from recovery words; it also asks
+                    for a new PIN on its scrambled grid. Two methods
+                    ("method"):
+                    "advanced" (default): the Trezor shows a grid of letter
+                      ranges, then words, on its own screen; the app shows it
+                      blank and only the position clicked comes back, so the
+                      computer never learns the words. 4 steps per word.
+                    "words": the Trezor asks for the words in a scrambled
+                      order, mixed with decoys, typed on the computer. With
+                      12 or 18 words the Trezor allows this only once its
+                      safety checks are relaxed (it asks on its screen; back
+                      to Strict when it restarts). The app offers this only
+                      for a seed SafeKeep already holds (its Seed Vault).
+                    Each answer reaches this helper as a reply file in the
+                    download folder: RAM in a Temporary Session, the
+                    encrypted vault otherwise; read once, overwritten and
+                    deleted. Each question goes to the app through the
+                    dialog channel below.
       xpub       -> read the unlocked Trezor's fingerprint and its multisig
                     account key at ONE of the three BIP-48 paths
                     (m/48'/0'/0'/0', /1' or /2'), for building a multisig
                     descriptor. Read-only, no pairing needed, nothing stored.
+  * DIALOG CHANNEL (passphrase_setting, wipe, recover): while the Trezor
+    waits, each question is written to SAFEKEEP_TZ_DIALOG (RAM) as
+      { request_id, seq, need: "button" | "pin" | "word" | "matrix", kind, step, ... }
+    ("matrix" also has layout 9 | 6, word (1-based), level 0-3, of), and,
+    for "pin", "word" and "matrix", the answer is read from a
+    TREZOR_REPLY*.json in SAFEKEEP_TZ_REPLY_DIR (the download folder) as
+      { request_id, seq, positions | word | position ("1"-"9" | "back") | cancel }
+    It must name this request and question; it is read once, overwritten
+    and deleted. Words are checked to be lower-case letters (the Trezor
+    checks them against its word list); positions are digits 1-9.
   * The pairing is stored by THIS helper (path in SAFEKEEP_TZ_PAIRING: the
     vault's settings folder, or RAM in a temporary session). "sign" trusts
     only that stored pairing — never device identity sent by the browser.
@@ -55,7 +99,9 @@ Result JSON: {"ok": true/false, "status": "...", ...}
   error statuses: bad_request, not_installed, not_paired, not_connected,
                   multiple_devices, unsupported_model, no_seed, locked,
                   wrong_pin, wrong_device, outdated_firmware, refused, busy,
-                  timeout, rejected, missing_prev_tx, error
+                  timeout, rejected, missing_prev_tx, passphrase_off,
+                  wrong_passphrase, initialized, error
+  ok statuses (also): passphrase_setting, wiped, recovered
   Every result echoes the request's "request_id" (if valid) so the app can
   ignore stale results.
 """
@@ -67,6 +113,7 @@ import re
 import sys
 import threading
 import time
+import unicodedata
 
 # Trezor One: modern firmware talks WebUSB as 1209:53c1; very old firmware
 # used HID as 534c:0001. 1209:53c0 (bootloader mode) is left out on purpose:
@@ -84,6 +131,12 @@ XPUB_RE = re.compile(r'^[xt]pub[1-9A-HJ-NP-Za-km-z]{100,112}$')
 PATH_RE = re.compile(r'^(webusb|hid):[A-Za-z0-9:._/-]{1,128}$')
 PIN_POS_RE = re.compile(r'^[1-9]{1,9}$')
 REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+PASSPHRASE_MAX_BYTES = 50   # the Trezor One's limit
+WORD_RE = re.compile(r'^[a-z]{3,8}$')
+MATRIX_POS_RE = re.compile(r'^[1-9]$')
+RECOVER_METHODS = ('advanced', 'words')
+DIALOG_STEP_TIMEOUT_S = int(os.environ.get('SAFEKEEP_TZ_STEP_TIMEOUT', '600'))
+RECOVER_TIMEOUT_S = int(os.environ.get('SAFEKEEP_TZ_RECOVER_TIMEOUT', '2700'))
 DEFAULT_PAIRING = '/media/.safekeep-vault/settings/trezor-pairing.json'
 # The only paths "xpub" will read: BIP-48 multisig accounts (mainnet, account 0)
 # for P2SH (0'), P2SH-P2WSH (1') and P2WSH (2').
@@ -124,6 +177,15 @@ def load_request(path):
     except OSError:
         raise Fail('bad_request', 'Could not read the Trezor request.')
     finally:
+        # It may hold a passphrase or PIN positions: overwrite it before deleting (best effort).
+        try:
+            size = os.path.getsize(path)
+            with open(path, 'r+b') as f:
+                f.write(b'\0' * size)
+                f.flush()
+                os.fsync(f.fileno())
+        except OSError:
+            pass
         try:
             os.remove(path)
         except OSError:
@@ -194,6 +256,37 @@ def field_psbt(data):
 
 # ---------------------------------------------------------------- pairing
 
+def field_passphrase(data):
+    """'' for the standard wallet, or the passphrase (NFKD, as BIP-39 asks)."""
+    v = data.get('passphrase')
+    if v is None or v == '':
+        return ''
+    if not isinstance(v, str):
+        raise Fail('bad_request', 'The passphrase has the wrong format.')
+    v = unicodedata.normalize('NFKD', v)
+    if re.search(r'[\x00-\x1f\x7f]', v):
+        raise Fail('bad_request', 'The passphrase has characters a Trezor can\'t take (tabs, new lines).')
+    if len(v.encode('utf-8')) > PASSPHRASE_MAX_BYTES:
+        raise Fail('bad_request', 'A Trezor One takes a passphrase of at most %d bytes.' % PASSPHRASE_MAX_BYTES)
+    return v
+
+
+def psbt_fingerprints(tx):
+    """The key fingerprints the PSBT's inputs name (lower-case hex)."""
+    fps = set()
+    for inp in getattr(tx, 'inputs', []) or []:
+        for origin in (getattr(inp, 'hd_keypaths', None) or {}).values():
+            fp = getattr(origin, 'fingerprint', b'')
+            if isinstance(fp, (bytes, bytearray)) and len(fp) == 4:
+                fps.add(binascii.hexlify(bytes(fp)).decode('ascii'))
+        for entry in (getattr(inp, 'tap_bip32_paths', None) or {}).values():
+            origin = entry[1] if isinstance(entry, (tuple, list)) and len(entry) == 2 else None
+            fp = getattr(origin, 'fingerprint', b'')
+            if isinstance(fp, (bytes, bytearray)) and len(fp) == 4:
+                fps.add(binascii.hexlify(bytes(fp)).decode('ascii'))
+    return fps
+
+
 def pairing_path():
     return os.environ.get('SAFEKEEP_TZ_PAIRING') or DEFAULT_PAIRING
 
@@ -233,9 +326,12 @@ class Hwi:
             from hwilib.psbt import PSBT
             from hwilib.devices import trezor as tz
             from hwilib.devices.trezorlib import exceptions as tzexc
+            from hwilib.devices.trezorlib import device as tzdevice
+            from hwilib.devices.trezorlib import messages as tzmsg
         except ImportError:
             raise Fail('not_installed', 'Trezor support is not installed on this SafeKeep build.')
         self.errors, self.PSBT, self.tz, self.tzexc = errors, PSBT, tz, tzexc
+        self.tzdevice, self.tzmsg = tzdevice, tzmsg
 
         # No network: never probe for the Trezor simulator over UDP, and make
         # HWI's open-by-path look only at real Trezor One USB devices.
@@ -263,9 +359,10 @@ class Hwi:
                 paths.append(p)
         return paths
 
-    def client(self, path):
+    def client(self, path, passphrase=''):
         # password '' = the standard wallet (no passphrase); matches HWI's default.
-        return self.tz.TrezorClient(path, password='')
+        # A Trezor One asks the computer for the passphrase; HWI answers with it.
+        return self.tz.TrezorClient(path, password=passphrase)
 
 
 def translate(hwi, e):
@@ -282,7 +379,7 @@ def translate(hwi, e):
     if isinstance(e, E.DeviceConnectionError):
         return Fail('not_connected', MSG_NOT_CONNECTED)
     if isinstance(e, E.NoPasswordError):
-        return Fail('error', 'This Trezor asked for a passphrase, which SafeKeep does not support yet.')
+        return Fail('error', 'This Trezor asked for a passphrase SafeKeep didn\'t send. Sign again and give it in the passphrase box.')
     if isinstance(e, E.BadArgumentError) and 'find device by path' in str(e):
         return Fail('not_connected', MSG_GONE)
     if isinstance(e, E.BadArgumentError) and 'Previous transaction' in str(e):
@@ -428,32 +525,56 @@ def do_unpair(hwi, data):
 
 def do_sign(hwi, data):
     psbt_b64 = field_psbt(data)
+    passphrase = field_passphrase(data)
+    data['passphrase'] = None
     pairing = read_pairing()
     if pairing is None:
         raise Fail('not_paired', 'No Trezor is paired with SafeKeep yet. Pair it first.')
+    tx = hwi.PSBT()
+    try:
+        tx.deserialize(psbt_b64)
+    except Exception:
+        raise Fail('bad_request', 'The transaction could not be read.')
+    # The Trezor insists on the FULL previous transaction for every input
+    # (it checks the amounts itself). Check before anything reaches the
+    # device, so it is never left waiting for data SafeKeep cannot give.
+    missing = [i + 1 for i, inp in enumerate(tx.inputs) if not inp.non_witness_utxo]
+    if missing:
+        raise Fail('missing_prev_tx', MSG_MISSING_PREV_TX)
+
+    # 1. The pairing is always checked on the Trezor's standard wallet.
     client, path, info = open_unlocked(hwi)
     try:
         got_xfp, got_xpub = identity(client)
         if got_xfp != pairing['xfp']:
-            hint = (' If you use a passphrase on this Trezor, note that SafeKeep only supports the '
-                    'standard wallet (no passphrase).') if info['passphrase_protection'] else ''
+            hint = (' If this Trezor has passphrase protection on, SafeKeep pairs it by its standard '
+                    'wallet (no passphrase); a passphrase is given when signing.') if info['passphrase_protection'] else ''
             raise Fail('wrong_device', 'This Trezor (fingerprint %s) is not the one paired with SafeKeep '
                                        '(%s). Nothing was sent to it.%s'
                        % (got_xfp.upper(), pairing['xfp'].upper(), hint))
         if got_xpub != pairing['id_xpub']:
             raise Fail('wrong_device', 'This Trezor has the paired fingerprint (%s) but a different key, '
                                        'so it is not the paired device. Nothing was sent to it.' % got_xfp.upper())
-        tx = hwi.PSBT()
-        try:
-            tx.deserialize(psbt_b64)
-        except Exception:
-            raise Fail('bad_request', 'The transaction could not be read.')
-        # The Trezor insists on the FULL previous transaction for every input
-        # (it checks the amounts itself). Check before anything reaches the
-        # device, so it is never left waiting for data SafeKeep cannot give.
-        missing = [i + 1 for i, inp in enumerate(tx.inputs) if not inp.non_witness_utxo]
-        if missing:
-            raise Fail('missing_prev_tx', MSG_MISSING_PREV_TX)
+        if passphrase and not info['passphrase_protection']:
+            raise Fail('passphrase_off', 'Passphrase protection is off on this Trezor, so it would ignore the '
+                                         'passphrase and sign with its standard wallet. Turn it on with Trezor '
+                                         'Suite on another computer, or sign without a passphrase. Nothing was sent.')
+        if passphrase:
+            client.close()
+            client = None
+            # 2. A fresh session with the passphrase: the Trezor asks for it, HWI answers.
+            client = hwi.client(path, passphrase)
+            passphrase = None
+            check_trezor_one(client)
+            sign_xfp, _ = identity(client)
+            needed = psbt_fingerprints(tx)
+            if needed and sign_xfp not in needed:
+                raise Fail('wrong_passphrase', 'This passphrase opens the Trezor\'s wallet %s, but this transaction '
+                                               'needs %s. Check the passphrase (capitals and spaces count). '
+                                               'Nothing was sent to sign.'
+                           % (sign_xfp.upper(), ', '.join(sorted(x.upper() for x in needed))))
+        else:
+            sign_xfp = got_xfp
         try:
             signed = client.sign_tx(tx).serialize()   # never finalizes, never broadcasts
         except BaseException:
@@ -464,15 +585,20 @@ def do_sign(hwi, data):
                 pass
             raise
     finally:
-        client.close()
+        passphrase = None
+        if client is not None:
+            client.close()
     try:
         out = base64.b64decode(signed, validate=True)
     except (binascii.Error, ValueError, TypeError):
         raise Fail('error', 'The Trezor returned something that is not a PSBT.')
     if not out.startswith(PSBT_MAGIC):
         raise Fail('error', 'The Trezor returned something that is not a PSBT.')
-    return {'ok': True, 'status': 'signed', 'xfp': got_xfp, 'changed': signed != psbt_b64,
-            'psbt_b64': base64.b64encode(out).decode('ascii')}
+    result = {'ok': True, 'status': 'signed', 'xfp': got_xfp, 'changed': signed != psbt_b64,
+              'psbt_b64': base64.b64encode(out).decode('ascii')}
+    if sign_xfp != got_xfp:
+        result['passphrase_xfp'] = sign_xfp
+    return result
 
 
 def do_xpub(hwi, data):
@@ -492,6 +618,291 @@ def do_xpub(hwi, data):
             'passphrase_protection': info['passphrase_protection']}
 
 
+# ---------------------------------------------------------------- dialog
+
+class Dialog:
+    """Questions to the app while the Trezor waits (see DIALOG CHANNEL above)."""
+
+    def __init__(self, request_id):
+        self.request_id = request_id
+        self.seq = 0
+        self.path = os.environ.get('SAFEKEEP_TZ_DIALOG') or ''
+        self.reply_dir = os.environ.get('SAFEKEEP_TZ_REPLY_DIR') or ''
+        if not self.path or not self.reply_dir or not request_id:
+            raise Fail('error', 'This SafeKeep build cannot ask questions for the Trezor (no dialog channel).')
+
+    def _write(self, obj):
+        tmp = self.path + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(obj, f)
+        os.replace(tmp, self.path)
+
+    def say(self, need, **info):
+        """Tell the app what the Trezor is waiting for; returns the question number."""
+        self.seq += 1
+        self._write(dict({'request_id': self.request_id, 'seq': self.seq, 'need': need}, **info))
+        return self.seq
+
+    def _take_reply(self, seq):
+        try:
+            names = sorted(n for n in os.listdir(self.reply_dir) if n.startswith('TREZOR_REPLY') and n.endswith('.json'))
+        except OSError:
+            return None
+        for n in names:
+            p = os.path.join(self.reply_dir, n)
+            try:
+                with open(p, 'rb') as f:
+                    raw = f.read(4097)
+                with open(p, 'r+b') as f:      # it may hold a word or PIN positions
+                    f.write(b'\0' * len(raw))
+                    f.flush()
+                    os.fsync(f.fileno())
+            except OSError:
+                raw = b''
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+            try:
+                r = json.loads(raw.decode('utf-8')) if len(raw) <= 4096 else None
+            except Exception:
+                r = None
+            if isinstance(r, dict) and r.get('request_id') == self.request_id and r.get('seq') == seq:
+                return r
+        return None
+
+    def ask(self, need, **info):
+        seq = self.say(need, **info)
+        deadline = time.monotonic() + DIALOG_STEP_TIMEOUT_S
+        while time.monotonic() < deadline:
+            r = self._take_reply(seq)
+            if r is not None:
+                return r
+            time.sleep(0.25)
+        raise Fail('timeout', 'No answer in SafeKeep in time. The Trezor may still be waiting: unplug it to stop.')
+
+    def close(self):
+        for p in (self.path, self.path + '.tmp'):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
+class DialogUI:
+    """trezorlib's UI: PIN grids and on-device confirmations go to the app."""
+    PIN_KINDS = {1: 'current', 2: 'new_first', 3: 'new_second', 4: 'wipe_code_first', 5: 'wipe_code_second'}
+
+    def __init__(self, dialog, cancelled_exc, step=''):
+        self.dialog, self.Cancelled, self.step = dialog, cancelled_exc, step
+
+    def button_request(self, br):
+        self.dialog.say('button', step=self.step)
+
+    def get_pin(self, code=None):
+        kind = self.PIN_KINDS.get(int(code or 1), 'current')
+        r = self.dialog.ask('pin', kind=kind, step=self.step)
+        if r.get('cancel'):
+            raise self.Cancelled()
+        pos = r.get('positions')
+        if not isinstance(pos, str) or not PIN_POS_RE.match(pos):
+            raise self.Cancelled()
+        return pos
+
+    def get_passphrase(self, available_on_device=False):
+        return ''   # these steps never open a passphrase wallet
+
+
+def open_dialog_client(hwi, data, step):
+    """An unlocked-or-new Trezor One with the dialog UI, and the dialog."""
+    dialog = Dialog(data.get('request_id') if isinstance(data.get('request_id'), str) else '')
+    path = single_path(hwi)
+    client = hwi.client(path)
+    client.client.ui = DialogUI(dialog, hwi.tzexc.Cancelled, step)
+    return client, dialog
+
+
+def forget_pairing():
+    try:
+        os.remove(pairing_path())
+    except OSError:
+        pass
+
+
+def field_bool(data, key):
+    v = data.get(key)
+    if not isinstance(v, bool):
+        raise Fail('bad_request', 'Request field %s must be true or false.' % key)
+    return v
+
+
+def do_passphrase_setting(hwi, data):
+    enable = field_bool(data, 'enable')
+    client, dialog = open_dialog_client(hwi, data, 'passphrase_setting')
+    try:
+        info = check_trezor_one(client)
+        if info['locked']:
+            raise Fail('locked', MSG_LOCKED)
+        if info['passphrase_protection'] == enable:
+            return {'ok': True, 'status': 'passphrase_setting', 'passphrase_protection': enable, 'changed': False}
+        try:
+            hwi.tzdevice.apply_settings(client.client, use_passphrase=enable)
+        except hwi.tzexc.Cancelled:
+            raise Fail('refused', 'Canceled. The setting is unchanged.')
+        except hwi.tzexc.TrezorFailure as e:
+            if 'cancel' in str(e).lower():
+                raise Fail('refused', 'You declined on the Trezor. The setting is unchanged.')
+            raise
+        now = bool(client.client.features.passphrase_protection)
+    finally:
+        dialog.close()
+        client.close()
+    return {'ok': True, 'status': 'passphrase_setting', 'passphrase_protection': now, 'changed': now == enable}
+
+
+def do_wipe(hwi, data):
+    want = data.get('expected_xfp')
+    if want is not None:
+        want = field_xfp(data)
+    client, dialog = open_dialog_client(hwi, data, 'wipe')
+    try:
+        f = check_trezor_one_any(client)
+        if f['initialized']:
+            if f['locked']:
+                raise Fail('locked', MSG_LOCKED)
+            got_xfp, _ = identity(client)
+            if want is None or got_xfp != want:
+                raise Fail('wrong_device', 'This Trezor (fingerprint %s) is not the one you confirmed. Nothing was erased.'
+                           % got_xfp.upper())
+        try:
+            hwi.tzdevice.wipe(client.client)
+        except hwi.tzexc.Cancelled:
+            raise Fail('refused', 'Canceled. Nothing was erased.')
+        except hwi.tzexc.TrezorFailure as e:
+            if 'cancel' in str(e).lower():
+                raise Fail('refused', 'You declined on the Trezor. Nothing was erased.')
+            raise
+    finally:
+        dialog.close()
+        client.close()
+    pairing = read_pairing()
+    if pairing is not None and (want is None or pairing['xfp'] == want):
+        forget_pairing()
+    return {'ok': True, 'status': 'wiped'}
+
+
+def do_recover(hwi, data):
+    words = data.get('word_count')
+    if words not in (12, 18, 24):
+        raise Fail('bad_request', 'The Trezor can recover a seed of 12, 18 or 24 words.')
+    use_pp = field_bool(data, 'passphrase_protection')
+    method = data.get('method', 'advanced')
+    if method not in RECOVER_METHODS:
+        raise Fail('bad_request', 'Request field method must be "advanced" or "words".')
+    client, dialog = open_dialog_client(hwi, data, 'recover')
+    relaxed = False
+    try:
+        f = check_trezor_one_any(client)
+        if f['initialized']:
+            raise Fail('initialized', 'This Trezor already has a seed. Erase it first (Wipe), then recover.')
+
+        if method == 'words' and words < 24:
+            # A Trezor One with its safety checks on Strict (the default)
+            # refuses the words method for 12 or 18 words ("Advanced recovery
+            # must be used"): the computer sees each word, and so few words
+            # in a scrambled order could be tried in every order. Relaxed
+            # until the Trezor restarts (the firmware keeps this in memory
+            # only), after a confirmation on its own screen. The app offers
+            # this only for a seed SafeKeep already holds (its Seed Vault).
+            client.client.ui.step = 'safety_checks'
+            try:
+                hwi.tzdevice.apply_settings(client.client, safety_checks=hwi.tzmsg.SafetyCheckLevel.PromptTemporarily)
+            except hwi.tzexc.Cancelled:
+                raise Fail('refused', 'Canceled. Nothing was changed on the Trezor.')
+            except hwi.tzexc.TrezorFailure as e:
+                if 'cancel' in str(e).lower():
+                    raise Fail('refused', 'You declined on the Trezor. Nothing was changed.')
+                raise
+            relaxed = True
+            client.client.ui.step = 'recover'
+
+        pos = {'i': 0}   # mirrors the Trezor's own count: 4 steps per word
+
+        def word(kind):
+            k = int(kind or 0)
+            if method == 'words':
+                if k != 0:
+                    raise hwi.tzexc.Cancelled()
+                r = dialog.ask('word', step='recover')
+                if r.get('cancel'):
+                    raise hwi.tzexc.Cancelled()
+                w = r.get('word')
+                if not isinstance(w, str) or not WORD_RE.match(w):
+                    raise hwi.tzexc.Cancelled()
+                return w
+            # Advanced recovery: the Trezor shows a grid of letter ranges (or,
+            # at the last step of a word, up to six words); the app shows the
+            # same grid blank and sends back only the position clicked.
+            if k not in (1, 2):
+                raise hwi.tzexc.Cancelled()
+            i = pos['i']
+            if k == 2 and i % 4 != 3:   # the Trezor says it is a word's last step
+                i = (i // 4) * 4 + 3
+            r = dialog.ask('matrix', layout=6 if k == 2 else 9, word=i // 4 + 1, level=i % 4, of=words, step='recover')
+            if r.get('cancel'):
+                raise hwi.tzexc.Cancelled()
+            p = r.get('position')
+            if p == 'back':
+                pos['i'] = (i - 4 if i >= 4 else 0) if i % 4 == 0 else i - 1
+                return '\x08'
+            if not isinstance(p, str) or not MATRIX_POS_RE.match(p):
+                raise hwi.tzexc.Cancelled()
+            pos['i'] = i + 1
+            return p
+
+        rtype = hwi.tzmsg.RecoveryDeviceType.Matrix if method == 'advanced' else hwi.tzmsg.RecoveryDeviceType.ScrambledWords
+        try:
+            hwi.tzdevice.recover(client.client, word_count=words, passphrase_protection=use_pp, pin_protection=True,
+                                 label=None, input_callback=word, type=rtype)
+        except hwi.tzexc.Cancelled:
+            raise Fail('refused', 'Recovery canceled. The Trezor has no seed: start the recovery again.')
+        except hwi.tzexc.TrezorFailure as e:
+            text = str(e).lower()
+            if 'cancel' in text:
+                raise Fail('refused', 'Recovery canceled. The Trezor has no seed: start the recovery again.')
+            if 'advanced recovery' in text:
+                raise Fail('refused', 'The Trezor wants advanced recovery for a seed of fewer than 24 words. '
+                                      'Choose Advanced recovery and start again.')
+            if 'checksum' in text or 'invalid' in text or 'mnemonic' in text:
+                raise Fail('rejected', 'The Trezor did not accept those words (they don\'t form a valid seed). '
+                                       'Check them against your backup and start again.')
+            raise
+        client.client.init_device()
+        xfp, _ = identity(client)
+    except Fail as e:
+        if relaxed:
+            e.message += ' Unplug the Trezor and plug it back in to put its safety checks back to Strict.'
+            e.args = (e.message,)
+        raise
+    finally:
+        dialog.close()
+        client.close()
+    forget_pairing()
+    return {'ok': True, 'status': 'recovered', 'xfp': xfp, 'passphrase_protection': use_pp,
+            'method': method, 'safety_checks_relaxed': relaxed}
+
+
+def check_trezor_one_any(client):
+    """Like check_trezor_one, but a Trezor with no seed is fine (wipe / recover)."""
+    client._prepare_device()
+    f = client.client.features
+    if 'trezor' not in (f.vendor or '').lower():
+        raise Fail('unsupported_model', 'The connected device is not a Trezor.')
+    if f.model != '1':
+        raise Fail('unsupported_model', 'Only the Trezor One is supported for now.')
+    return {'initialized': bool(f.initialized), 'locked': bool(f.pin_protection and not f.unlocked)}
+
+
 ACTIONS = {
     'detect': (do_detect, SHORT_TIMEOUT_S),
     'prompt_pin': (do_prompt_pin, SHORT_TIMEOUT_S),
@@ -500,6 +911,9 @@ ACTIONS = {
     'unpair': (do_unpair, SHORT_TIMEOUT_S),
     'sign': (do_sign, SIGN_TIMEOUT_S),
     'xpub': (do_xpub, SHORT_TIMEOUT_S),
+    'passphrase_setting': (do_passphrase_setting, SIGN_TIMEOUT_S),
+    'wipe': (do_wipe, SIGN_TIMEOUT_S),
+    'recover': (do_recover, RECOVER_TIMEOUT_S),
 }
 
 
