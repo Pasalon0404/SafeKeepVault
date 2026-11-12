@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 9, 2026).**
+> **Start with the "Current state" section below (updated Nov 12, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,13 @@
 
 ---
 
-## Since v1.65 (on the branch, not released)
+## Current state (Nov 12, 2026) — v1.66
+
+**v1.66** (Nov 12) — Trezor work (#118), tested on Dave's flash drive as
+quick updates from the branch; Recover from Words worked on his Trezor One.
+OS files changed (`safekeep-trezor.py`: `sign` with a passphrase,
+`passphrase_setting`, `wipe`, `recover`; `safekeep-boot.sh`: the Trezor
+dialog files and the file router fix), so the release needs the full build.
 
 - **Trezor passphrase wallets** (PSBT Signer → co-signing card): a
   *Use a passphrase on the Trezor* box under the Trezor button (typed
@@ -61,8 +67,8 @@
   deleted by the helper, shredded by the watcher). The Trezor One asks for
   words in a scrambled order with decoys, shown on its screen. The PIN grid
   has an ask mode (`_tzPinAsk`); its z-index is now above full-screen
-  overlays. The pairing is removed after a wipe or a recovery. Not yet
-  tried on a real Trezor One. Tests `test-trezor-tools.mjs`,
+  overlays. The pairing is removed after a wipe or a recovery. Recovery
+  worked on Dave's Trezor One (Nov 12). Tests `test-trezor-tools.mjs`,
   `usbbootdrive/tests/test-trezor-helper.py`.
 - **File router bug (in v1.65):** the router moves any downloaded `.json`
   containing `"passphrase"` into the Passphrase Library folder, and didn't
@@ -71,7 +77,7 @@
   race): the passphrase stored in `passphrases/` as `COLDCARD_REQUEST`, and
   the send never reaching the Coldcard. Fixed by skipping both prefixes.
 
-## Current state (Nov 9, 2026) — v1.65
+## Earlier: v1.65 (Nov 9)
 
 **v1.65** (Nov 9) — tested on Dave's flash drive and his COLDCARD Mk4 as
 quick updates from the branch (#115, #116). OS files changed
@@ -925,13 +931,13 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.65:** update the website for v1.65 (download page, release
-   notes; docs for the Seed Vault, sending a passphrase or a seed to a
-   COLDCARD, multisig from Seed Vault keys, and BBQr / UR wallet imports),
-   and install `SafeKeep-Update-v1.65.tar` on a flash drive from the
-   release itself (it adds the Seed Vault Watcher and changes the COLDCARD
-   helper). If the v1.63 or v1.64 website updates haven't merged yet, fold
-   them in.
+1. **After v1.66:** update the website for v1.66 (download page, release
+   notes; docs for Trezor passphrase and single-sig signing, and the
+   Trezor settings: Passphrase Protection, Erase This Trezor, Recover from
+   Words with advanced recovery or Quicker), and install
+   `SafeKeep-Update-v1.66.tar` on a flash drive from the release itself
+   (it changes the Trezor helper and `safekeep-boot.sh`). If the v1.63,
+   v1.64 or v1.65 website updates haven't merged yet, fold them in.
 2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
