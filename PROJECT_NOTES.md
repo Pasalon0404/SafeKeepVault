@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 12, 2026).**
+> **Start with the "Current state" section below (updated Nov 13, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -11,8 +11,11 @@
 
 ## Current state (Nov 12, 2026) — v1.66
 
-**v1.66** (Nov 12) — Trezor work (#118), tested on Dave's flash drive as
-quick updates from the branch; Recover from Words worked on his Trezor One.
+**v1.66** (Nov 12, `v1.66 · build 532 · 21e285c`) — Trezor work (#118),
+tested on Dave's flash drive as quick updates from the branch; Recover from
+Words worked on his Trezor One. Website updated (Safekeep-Website #65), and
+Dave's flash drive installed `SafeKeep-Update-v1.66.tar` from the release
+(Nov 13).
 OS files changed (`safekeep-trezor.py`: `sign` with a passphrase,
 `passphrase_setting`, `wipe`, `recover`; `safekeep-boot.sh`: the Trezor
 dialog files and the file router fix), so the release needs the full build.
@@ -931,14 +934,7 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **After v1.66:** update the website for v1.66 (download page, release
-   notes; docs for Trezor passphrase and single-sig signing, and the
-   Trezor settings: Passphrase Protection, Erase This Trezor, Recover from
-   Words with advanced recovery or Quicker), and install
-   `SafeKeep-Update-v1.66.tar` on a flash drive from the release itself
-   (it changes the Trezor helper and `safekeep-boot.sh`). If the v1.63,
-   v1.64 or v1.65 website updates haven't merged yet, fold them in.
-2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
+1. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
      Drive, and the maintainer key + gpgv in the image. It ships in a
@@ -953,21 +949,21 @@ Chromium reads images or files, or a bug that affects SafeKeep).
      One earlier try failed with "Input/output error" at the first write,
      before the update log existed. It hasn't come back. If it does,
      Device Options → Show update log records why.
-3. **ZBook "restart required" (fixed Oct 20).** It wasn't a real update:
+2. **ZBook "restart required" (fixed Oct 20).** It wasn't a real update:
    `build.sh` bind-mounted the ZBook's `/run` into the build chroot, so
    installing the image's kernel there created the ZBook's own
    `/run/reboot-required` on every full build. The chroot now gets its own
    tmpfs `/run` (`test-os-lockdown.mjs` checks it); a full build after the
    change left no flag. The desktop's restart icon only clears on a restart.
-4. **Second source for the GPG fingerprint** — publish it outside GitHub
+3. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
-5. Chromium still runs with `--no-sandbox` and `--disable-web-security`
+4. Chromium still runs with `--no-sandbox` and `--disable-web-security`
    (comments in `safekeep-boot.sh` explain why). Acceptable only because
    the machine is offline and runs only our page.
-6. Not supported yet: Taproot script-path / miniscript signing, saving
+5. Not supported yet: Taproot script-path / miniscript signing, saving
    Silent Payment wallets, matching inputs whose PSBT has no derivation
    path.
-7. Legacy inputs that carry only `witnessUtxo` (no `nonWitnessUtxo`) are
+6. Legacy inputs that carry only `witnessUtxo` (no `nonWitnessUtxo`) are
    still trusted for their amount; Bitcoin Core and most wallets send
    `nonWitnessUtxo` for legacy inputs.
 
