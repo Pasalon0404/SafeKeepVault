@@ -149,7 +149,15 @@ apt-get install -y --no-install-recommends \
     autocutsel \
     util-linux \
     x11-xserver-utils \
-    python3-xdg
+    python3-xdg \
+    python3-fido2
+
+# Security keys (SECURITY_KEY_DESIGN.md): safekeep-fido2.py talks to a FIDO2
+# key with Yubico's python-fido2, from Ubuntu's archive (1.1.2 in 24.04).
+python3 -I -c "import fido2.hid, fido2.ctap2, fido2.ctap2.pin, fido2.ctap2.extensions" \
+    || { echo "FATAL: the security key library (python3-fido2) failed to import"; exit 1; }
+[ -f /usr/lib/udev/rules.d/60-fido-id.rules ] \
+    || { echo "FATAL: udev's 60-fido-id.rules is missing (security keys need it)"; exit 1; }
 
 # ============================================================================
 # Coldcard USB signing library (ckcc-protocol), hash-pinned

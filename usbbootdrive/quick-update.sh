@@ -29,7 +29,8 @@
 #     src/dist/*            (boot.html, manifest.json, …)
 #     safekeep-boot.sh, unlock-vault.sh, setup-vault.sh, safekeep-update.py,
 #     safekeep-pwcheck.py + pwcheck-lists.json, safekeep-brightness.sh, safekeep-print.py, change-passphrase.sh,
-#     passphrase-dialogs.sh, safekeep-passphrase.py, quiet-downloads/
+#     passphrase-dialogs.sh, safekeep-passphrase.py, safekeep-fido2.py, security-key-dialogs.sh,
+#     manage-security-key.sh, quiet-downloads/
 #     safekeep-session.service, config/99-hide-drives.rules
 #
 #  NOT covered — run the full `sudo bash build.sh` instead:
@@ -155,6 +156,7 @@ install -m 755 safekeep-boot.sh "$CHROOT_DIR/usr/local/bin/safekeep-boot"
 install -m 755 unlock-vault.sh  "$CHROOT_DIR/usr/local/bin/unlock-vault"
 install -m 755 setup-vault.sh   "$CHROOT_DIR/usr/local/bin/setup-vault"
 install -m 755 change-passphrase.sh "$CHROOT_DIR/usr/local/bin/change-passphrase"
+install -m 755 manage-security-key.sh "$CHROOT_DIR/usr/local/bin/manage-security-key"
 if [ -d "$CHROOT_DIR/opt/safekeep-ckcc" ]; then
     mkdir -p "$CHROOT_DIR/usr/local/lib/safekeep"
     install -m 755 safekeep-coldcard.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-coldcard.py"
@@ -172,6 +174,11 @@ mkdir -p "$CHROOT_DIR/usr/local/share/safekeep"
 install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-lists.json"
 install -m 644 passphrase-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/passphrase-dialogs.sh"
 install -m 755 safekeep-passphrase.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-passphrase.py"
+# Security keys: without python3-fido2 (a chroot from before it was added)
+# the helper still reads the vault's header, so unlocking is unchanged, but
+# a security key can't be used until a full build.sh.
+install -m 755 safekeep-fido2.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-fido2.py"
+install -m 644 security-key-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/security-key-dialogs.sh"
 install -d -m 755 "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads"
 install -m 644 quiet-downloads/manifest.json quiet-downloads/background.js "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads/"
 install -m 644 safekeep-session.service "$CHROOT_DIR/etc/systemd/system/safekeep-session.service"

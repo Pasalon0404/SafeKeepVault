@@ -28,9 +28,10 @@ export GDK_SCALE=2
 export GDK_DPI_SCALE=1.0
 
 DATA_LABEL="safekeep-data"
-DATA_MOUNT="/mnt/safekeep-data"
+# Overridable for test-security-key.mjs only.
+DATA_MOUNT="${SAFEKEEP_DATA_MOUNT:-/mnt/safekeep-data}"
 VAULT_FILE=".vault.luks"
-VAULT_MOUNT="/media/.safekeep-vault"
+VAULT_MOUNT="${SAFEKEEP_VAULT_MOUNT:-/media/.safekeep-vault}"
 MAPPER_NAME="vault"
 
 # -------------------------------------------------------------------
@@ -41,16 +42,43 @@ MAPPER_NAME="vault"
 # Device Options shows it, and the dashboard warns when it is Weak (vaults
 # set up before the check existed). Cleared on every run, so a temporary
 # session never sees an earlier session's result.
-RATING_FILE="/tmp/safekeep-signals/PASSPHRASE_RATING.json"
+SIGNALS="${SAFEKEEP_SIGNALS:-/tmp/safekeep-signals}"
+RATING_FILE="$SIGNALS/PASSPHRASE_RATING.json"
 rm -f "$RATING_FILE" 2>/dev/null || true
+
+# -------------------------------------------------------------------
+# SECURITY KEYS (SECURITY_KEY_DESIGN.md, Part 1)
+# -------------------------------------------------------------------
+# A vault can also open with a FIDO2 security key, or only with one.
+# safekeep-fido2.py reads which from the vault's header (no key needed),
+# and after unlocking only a summary is left in RAM for the app: how it
+# was unlocked, whether there is a passphrase, and each key's name and
+# date. Cleared on every run, like the rating.
+FIDO2_HELPER="${FIDO2_HELPER:-/usr/local/lib/safekeep/safekeep-fido2.py}"
+UNLOCK_SUMMARY_FILE="$SIGNALS/UNLOCK_METHODS.json"
+rm -f "$UNLOCK_SUMMARY_FILE" 2>/dev/null || true
+VAULT_STATUS=""
+VAULT_HAS_PASSPHRASE=true
+VAULT_KEY_COUNT=0
+UNLOCKED_WITH="passphrase"
+
+record_unlock_summary() {
+    [ -n "$VAULT_STATUS" ] || return 0
+    mkdir -p "$SIGNALS"
+    printf '%s' "$VAULT_STATUS" | python3 -I -c 'import json, sys
+s = json.load(sys.stdin)
+out = {"method": sys.argv[1], "passphrase": bool(s.get("passphrase")),
+       "keys": [{"name": str(k.get("name", ""))[:40], "added": str(k.get("added", ""))[:10]} for k in s.get("keys", [])][:4]}
+print(json.dumps(out))' "$UNLOCKED_WITH" > "$UNLOCK_SUMMARY_FILE" 2>/dev/null || true
+}
 
 record_passphrase_rating() {
     local result band bits
-    result=$(printf '%s' "$PASSWORD" | python3 -I /usr/local/lib/safekeep/safekeep-pwcheck.py --lines vault 2>/dev/null) || result=""
+    result=$(printf '%s' "$PASSWORD" | python3 -I "${PWCHECK:-/usr/local/lib/safekeep/safekeep-pwcheck.py}" --lines vault 2>/dev/null) || result=""
     { read -r band; read -r bits; } <<< "$result"
     case "$band" in
         weak|fair|strong)
-            mkdir -p /tmp/safekeep-signals
+            mkdir -p "$SIGNALS"
             printf '{"band":"%s","bits":%d}\n' "$band" "${bits:-0}" > "$RATING_FILE" 2>/dev/null || true
             ;;
     esac
@@ -132,9 +160,11 @@ scan_qr_passphrase() {
     fi
 }
 
-HAS_CAMERA=false
-if ls /dev/video* 1>/dev/null 2>&1; then
-    HAS_CAMERA=true
+if [ -z "${HAS_CAMERA:-}" ]; then
+    HAS_CAMERA=false
+    if ls /dev/video* 1>/dev/null 2>&1; then
+        HAS_CAMERA=true
+    fi
 fi
 
 # --- Auto-Off at the password prompt ---
@@ -166,6 +196,87 @@ idle_power_off() {
 
 PASSWORD=""
 
+# The vault's loop device (reused if it's already attached).
+attach_loop() {
+    LOOP_DEV=$(losetup -j "$DATA_MOUNT/$VAULT_FILE" 2>/dev/null | awk -F: '{print $1}' | head -1 || true)
+    if [ -z "$LOOP_DEV" ]; then
+        LOOP_DEV=$(sudo losetup --find --show "$DATA_MOUNT/$VAULT_FILE") || {
+            sudo umount "$DATA_MOUNT" 2>/dev/null || true
+            zenity --error --text="Failed to attach loop device." 2>/dev/null
+            exit 1
+        }
+    fi
+}
+
+# How this vault unlocks: passphrase, security keys, or both. If the
+# helper is missing or fails, the vault is treated as passphrase-only,
+# which is how every vault starts.
+if [ -f "$FIDO2_HELPER" ]; then
+    attach_loop
+    if VAULT_STATUS=$(sudo python3 -I "$FIDO2_HELPER" status "$LOOP_DEV" 2>/dev/null); then
+        VAULT_KEY_COUNT=$(printf '%s' "$VAULT_STATUS" | python3 -I -c 'import json,sys; print(len(json.load(sys.stdin).get("keys", [])))' 2>/dev/null || echo 0)
+        if printf '%s' "$VAULT_STATUS" | python3 -I -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("passphrase") else 1)' 2>/dev/null; then
+            VAULT_HAS_PASSPHRASE=true
+        else
+            VAULT_HAS_PASSPHRASE=false
+        fi
+    else
+        VAULT_STATUS=""
+    fi
+    [[ "$VAULT_KEY_COUNT" =~ ^[0-9]+$ ]] || VAULT_KEY_COUNT=0
+    # A vault with neither can't happen; fall back to the passphrase.
+    if [ "$VAULT_HAS_PASSPHRASE" = false ] && [ "$VAULT_KEY_COUNT" -eq 0 ]; then
+        VAULT_HAS_PASSPHRASE=true
+    fi
+fi
+
+SK_TITLE="Unlock Vault"
+SK_ZENITY_ARGS=("${AUTO_OFF_ARGS[@]}")
+sk_timed_out() { idle_power_off; }
+# shellcheck source=security-key-dialogs.sh
+source "${SAFEKEEP_SECURITY_KEY_DIALOGS:-/usr/local/lib/safekeep/security-key-dialogs.sh}"
+
+# Unlock with a security key: plug it in, its PIN, a touch. Returns 0
+# once the vault is open, 1 to go back to the method choice.
+unlock_with_key() {
+    sk_wait_for_key "Plug in your security key." || return 1
+    if [ "$(sk_probe_value pin)" != "set" ]; then
+        sk_zenity --warning --title="$SK_TITLE" --width=460 \
+            --text="This security key has no PIN, so it isn't one of this vault's keys." 2>/dev/null || true
+        return 1
+    fi
+    sk_ask_pin "Type your security key's PIN.\n\nThen touch the key when it blinks." || return 1
+    attach_loop
+    sk_run "Touch your security key now..." 'printf "%s" "$SK_PIN"' open "$LOOP_DEV" "$MAPPER_NAME"
+    local rc=$?
+    SK_PIN=""
+    if [ "$rc" -eq 0 ]; then
+        UNLOCKED_WITH="key"
+        return 0
+    fi
+    sk_error "$rc"
+    return 1
+}
+
+# The choices on the first screen, for this vault.
+METHODS=()
+METHOD_TEXT="How would you like to enter your Master Passphrase?"
+if [ "$VAULT_KEY_COUNT" -gt 0 ]; then
+    METHODS+=("Use a Security Key")
+    if [ "$VAULT_HAS_PASSPHRASE" = true ]; then
+        METHOD_TEXT="How would you like to unlock your vault?"
+    else
+        METHOD_TEXT="This vault unlocks with a security key."
+    fi
+fi
+if [ "$VAULT_HAS_PASSPHRASE" = true ]; then
+    if [ "$HAS_CAMERA" = true ]; then
+        METHODS+=("Scan QR Code")
+    fi
+    METHODS+=("Type Password")
+fi
+METHODS+=("Boot Temporary Session (RAM Only)")
+
 while true; do
     # --- Choose input method ---
     # NOTE: Option ordering and default selection mirror setup-vault.sh
@@ -180,35 +291,19 @@ while true; do
     #   the highlighted row on Enter, which IS the submit action. The
     #   first row is auto-highlighted, so a user with QR muscle memory
     #   just presses Enter and they're scanning their code.
-    if [ "$HAS_CAMERA" = true ]; then
-        INPUT_METHOD=$(zenity --list --title="Unlock Vault" "${AUTO_OFF_ARGS[@]}" \
-            --text="How would you like to enter your Master Passphrase?" \
-            --column="Method" --hide-header \
-            "Scan QR Code" \
-            "Type Password" \
-            "Boot Temporary Session (RAM Only)" 2>/dev/null)
-        ZENITY_RC=$?
-        [ "$ZENITY_RC" -eq "$ZENITY_TIMEOUT" ] && idle_power_off
+    # (No camera: no "Scan QR Code". A vault with a security key lists
+    # "Use a Security Key" first; one with no passphrase lists only that.)
+    INPUT_METHOD=$(zenity --list --title="Unlock Vault" "${AUTO_OFF_ARGS[@]}" \
+        --text="$METHOD_TEXT" \
+        --column="Method" --hide-header \
+        "${METHODS[@]}" 2>/dev/null)
+    ZENITY_RC=$?
+    [ "$ZENITY_RC" -eq "$ZENITY_TIMEOUT" ] && idle_power_off
 
-        if [ -z "$INPUT_METHOD" ]; then
-            # User clicked X / Cancel on the choice dialog → clean exit
-            sudo umount "$DATA_MOUNT" 2>/dev/null || true
-            exit 2
-        fi
-    else
-        # No camera: visible typing only (plus ephemeral bypass)
-        INPUT_METHOD=$(zenity --list --title="Unlock Vault" "${AUTO_OFF_ARGS[@]}" \
-            --text="How would you like to enter your Master Passphrase?" \
-            --column="Method" --hide-header \
-            "Type Password" \
-            "Boot Temporary Session (RAM Only)" 2>/dev/null)
-        ZENITY_RC=$?
-        [ "$ZENITY_RC" -eq "$ZENITY_TIMEOUT" ] && idle_power_off
-
-        if [ -z "$INPUT_METHOD" ]; then
-            sudo umount "$DATA_MOUNT" 2>/dev/null || true
-            exit 2
-        fi
+    if [ -z "$INPUT_METHOD" ]; then
+        # User clicked X / Cancel on the choice dialog → clean exit
+        sudo umount "$DATA_MOUNT" 2>/dev/null || true
+        exit 2
     fi
 
     # --- Intercept ephemeral bypass BEFORE any decrypt attempt ---
@@ -226,16 +321,21 @@ while true; do
     fi
 
     # --- Execute chosen method ---
-    # Only two input methods remain after the ephemeral interceptor above:
-    # QR scan (camera-equipped rigs only) and visible typing.
-    if [ "$INPUT_METHOD" = "Scan QR Code" ]; then
+    # After the ephemeral interceptor above: a security key, a QR scan
+    # (camera-equipped rigs only) or visible typing.
+    if [ "$INPUT_METHOD" = "Use a Security Key" ] && [ "$VAULT_KEY_COUNT" -gt 0 ]; then
+        if unlock_with_key; then
+            break
+        fi
+        continue
+    elif [ "$INPUT_METHOD" = "Scan QR Code" ] && [ "$VAULT_HAS_PASSPHRASE" = true ]; then
         PASSWORD=$(scan_qr_passphrase) || true
         if [ -z "$PASSWORD" ]; then
             zenity --warning "${AUTO_OFF_ARGS[@]}" --title="Scan Failed" \
                 --text="QR scan did not return a result.\nReturning to method selection." 2>/dev/null || true
             continue  # Loop back to choice dialog
         fi
-    elif [ "$INPUT_METHOD" = "Type Password" ]; then
+    elif [ "$INPUT_METHOD" = "Type Password" ] && [ "$VAULT_HAS_PASSPHRASE" = true ]; then
         # Visible entry — user can see what they're typing (for high-entropy strings).
         #
         # KEYBOARD UX (Enter-to-submit, no mouse required):
@@ -266,15 +366,7 @@ while true; do
     if [ -n "$PASSWORD" ]; then
 
         # --- ATTACH LOOP DEVICE ---
-        LOOP_DEV=$(losetup -j "$DATA_MOUNT/$VAULT_FILE" 2>/dev/null | awk -F: '{print $1}' | head -1 || true)
-
-        if [ -z "$LOOP_DEV" ]; then
-            LOOP_DEV=$(sudo losetup --find --show "$DATA_MOUNT/$VAULT_FILE") || {
-                sudo umount "$DATA_MOUNT" 2>/dev/null || true
-                zenity --error --text="Failed to attach loop device." 2>/dev/null
-                exit 1
-            }
-        fi
+        attach_loop
 
         # --- ATTEMPT DECRYPTION ---
         if printf '%s' "$PASSWORD" | sudo cryptsetup open "$LOOP_DEV" "$MAPPER_NAME" --key-file=-; then
@@ -306,6 +398,7 @@ sudo mount /dev/mapper/"$MAPPER_NAME" "$VAULT_MOUNT" || {
     exit 1
 }
 sudo chmod 700 "$VAULT_MOUNT"
+record_unlock_summary
 
 # Success — no blocking dialog. The parent script (safekeep-boot.sh)
 # will detect the mount and launch Chromium immediately.

@@ -3364,7 +3364,7 @@ except Exception as e:
         # Read the first line and trim whitespace/newlines.
         REQUESTED=$(head -n 1 "$POWER_ACTION_READ_PATH" 2>/dev/null | tr -d '[:space:]')
         case "$REQUESTED" in
-            reboot|poweroff|lock|passphrase)
+            reboot|poweroff|lock|passphrase|securitykey)
                 POWER_ACTION="$REQUESTED"
                 ;;
             *)
@@ -3457,7 +3457,9 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
     #  "passphrase" (Device Options → Change Master Passphrase) locks the same
     #  way, then the re-exec'd run shows change-passphrase before the unlock
     #  prompt (SAFEKEEP_CHANGE_PASSPHRASE=1, see UNLOCK THE VAULT below).
-    if [ "$POWER_ACTION" = "lock" ] || [ "$POWER_ACTION" = "passphrase" ]; then
+    #  "securitykey" (Device Options → Security Keys) likewise runs
+    #  manage-security-key (SAFEKEEP_MANAGE_SECURITY_KEYS=1).
+    if [ "$POWER_ACTION" = "lock" ] || [ "$POWER_ACTION" = "passphrase" ] || [ "$POWER_ACTION" = "securitykey" ]; then
         echo "Lock requested ($POWER_ACTION) — evicting vault keys and restarting the session."
         if [ -w /dev/tty1 ]; then
             {
@@ -3520,6 +3522,9 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
         echo "Lock: re-exec'ing /usr/local/bin/safekeep-boot in place → native unlock prompt."
         if [ "$POWER_ACTION" = "passphrase" ]; then
             exec env SAFEKEEP_CHANGE_PASSPHRASE=1 /usr/local/bin/safekeep-boot
+        fi
+        if [ "$POWER_ACTION" = "securitykey" ]; then
+            exec env SAFEKEEP_MANAGE_SECURITY_KEYS=1 /usr/local/bin/safekeep-boot
         fi
         exec /usr/local/bin/safekeep-boot
 
@@ -3833,6 +3838,19 @@ else
             CHANGE_EXIT=0
             change-passphrase || CHANGE_EXIT=$?
             echo "change-passphrase exited with code $CHANGE_EXIT"
+        fi
+    fi
+
+    # ---- SECURITY KEYS (Device Options) ----
+    # The same, for POWER_ACTION=securitykey: manage-security-key adds,
+    # renames or removes security keys, or removes or adds the Master
+    # Passphrase (SECURITY_KEY_DESIGN.md). The unlock prompt follows.
+    if [ "${SAFEKEEP_MANAGE_SECURITY_KEYS:-}" = "1" ]; then
+        unset SAFEKEEP_MANAGE_SECURITY_KEYS
+        if [ -x /usr/local/bin/manage-security-key ]; then
+            MANAGE_EXIT=0
+            manage-security-key || MANAGE_EXIT=$?
+            echo "manage-security-key exited with code $MANAGE_EXIT"
         fi
     fi
 

@@ -823,6 +823,18 @@ ACTION!="add", GOTO="safekeep_hid_end"
 # Only block if the lockdown flag exists (set ~30s after boot)
 TEST!="/run/safekeep-hid-locked", GOTO="safekeep_hid_end"
 
+# What happens to a USB device plugged in after the lockdown:
+#   - a Coldcard: let through (below);
+#   - a boot keyboard or mouse (HID subclass 1, as every real keyboard
+#     declares; also a YubiKey's typing "OTP" part): turned off at once;
+#   - any other HID part: kept only if Ubuntu's 60-fido-id.rules, reading
+#     its HID description, marks it a FIDO2 security token
+#     (ID_SECURITY_TOKEN=1), so a security key can unlock the vault
+#     (SECURITY_KEY_DESIGN.md). Anything else is turned off;
+#   - any keyboard or mouse input (an input device) it makes is inhibited
+#     at once, whatever it claims to be, so even a "security key" whose
+#     description hides a keyboard can't type.
+
 # Exception: Coinkite Coldcard (USB ID d13e:cc10) — the PSBT Signer talks to
 # it over USB for co-signing, and users plug it in after boot. This is safe
 # because /etc/modprobe.d/safekeep-coldcard.conf tells the kernel's HID
@@ -831,10 +843,20 @@ TEST!="/run/safekeep-hid-locked", GOTO="safekeep_hid_end"
 # helper talks to it directly through libusb and needs no kernel driver.
 ATTRS{idVendor}=="d13e", ATTRS{idProduct}=="cc10", GOTO="safekeep_hid_end"
 
-# Block USB HID interfaces (bInterfaceClass 03 = HID)
-ATTR{bInterfaceClass}=="03", RUN+="/bin/sh -c 'echo 0 > /sys$env{DEVPATH}/authorized'"
+# Block boot keyboards and mice (bInterfaceClass 03 = HID, subclass 01 = boot)
+ATTR{bInterfaceClass}=="03", ATTR{bInterfaceSubClass}=="01", RUN+="/bin/sh -c 'echo 0 > /sys$env{DEVPATH}/authorized'"
 
 LABEL="safekeep_hid_end"
+
+# Late HID parts that aren't boot keyboards: once the kernel has read what
+# they are, keep FIDO2 security tokens (marked by 60-fido-id.rules, which
+# runs first) and turn off the USB interface of anything else. The hidraw
+# node sits three levels below its USB interface.
+SUBSYSTEM=="hidraw", ACTION=="add", TEST=="/run/safekeep-hid-locked", SUBSYSTEMS=="usb", ENV{ID_SECURITY_TOKEN}!="1", RUN+="/bin/sh -c 'echo 0 > /sys$env{DEVPATH}/../../../authorized'"
+
+# Late keyboard or mouse input of any kind is inhibited before anything can
+# open it (its event node is only announced after this rule has run).
+SUBSYSTEM=="input", KERNEL=="input[0-9]*", ACTION=="add", TEST=="/run/safekeep-hid-locked", SUBSYSTEMS=="usb", ATTR{inhibited}="1"
 HID_EOF
 
 echo "  Created: /etc/udev/rules.d/85-safekeep-hid-lockdown.rules"
@@ -1033,6 +1055,16 @@ SYSCTL_EOF
 # Apply immediately in case this script is re-run post-boot.
 sysctl -p /etc/sysctl.d/10-safekeep-no-coredumps.conf 2>/dev/null || true
 echo "  Created: /etc/sysctl.d/10-safekeep-no-coredumps.conf (core_pattern=|/bin/false)"
+
+# The kernel's SysRq keys act on the kernel directly, from any keyboard,
+# before the lockdown above can turn a late one off. SafeKeep needs none
+# of them (Ubuntu leaves some on), so all of them are off.
+cat > /etc/sysctl.d/10-safekeep-no-sysrq.conf << 'SYSRQ_EOF'
+# SafeKeep: no SysRq keys (SECURITY_KEY_DESIGN.md, USB lockdown).
+kernel.sysrq=0
+SYSRQ_EOF
+sysctl -p /etc/sysctl.d/10-safekeep-no-sysrq.conf 2>/dev/null || true
+echo "  Created: /etc/sysctl.d/10-safekeep-no-sysrq.conf (kernel.sysrq=0)"
 
 # Also mask systemd-coredump — Ubuntu 24.04 routes coredumps through
 # this socket by default. Mask the socket + service so there's nowhere
@@ -1456,10 +1488,14 @@ done
     || { echo "ERROR: Coldcard library no longer imports" >&2; exit 1; }
 /opt/safekeep-hwi/bin/python3 -c "import usb1, hwilib.commands, hwilib.devices.trezor" \
     || { echo "ERROR: Trezor library no longer imports" >&2; exit 1; }
+python3 -I -c "import fido2.hid, fido2.ctap2, fido2.ctap2.pin, fido2.ctap2.extensions" \
+    || { echo "ERROR: the security key library (python3-fido2) no longer imports" >&2; exit 1; }
+[ -f /usr/lib/udev/rules.d/60-fido-id.rules ] \
+    || { echo "ERROR: 60-fido-id.rules is missing: late security keys would be turned off" >&2; exit 1; }
 if ! find /lib/modules -path '*/updates/*' -name 'facetimehd.ko*' | grep -q .; then
     echo "  Warning: FaceTime HD camera driver not found (older MacBook cameras won't work)."
 fi
-echo "  Build tools removed; X, browser, vault, camera, QR, hardware-wallet tools verified."
+echo "  Build tools removed; X, browser, vault, camera, QR, hardware-wallet and security key tools verified."
 
 
 # ============================================================================
