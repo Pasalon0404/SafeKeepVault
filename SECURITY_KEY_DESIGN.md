@@ -1,7 +1,19 @@
 # Design note: unlocking the vault with a security key
 
-Status: **design, waiting for the owner's approval** (Nov 14, 2026). Nothing
-is built yet. Not for a release until the owner says so (`CLAUDE.md`).
+Status: **approved** (Nov 14, 2026). **Part 1 is built** on the branch and
+tested with a software FIDO2 key; not yet with a real one. Part 2 is not
+built. Not for a release until the owner says so (`CLAUDE.md`).
+
+What Part 1 does differently from the text below:
+- Device Options has one **Manage Security Keys** button (Lock and
+  Manage). Adding, renaming and removing keys, and changing how the vault
+  unlocks, happen on the native screens that follow, not as separate
+  buttons in the app.
+- After adding a key, it isn't counted as tested for "Use security keys
+  only": each key opens the vault once in that flow.
+- Health doesn't warn about a single key; Device Options says it instead.
+- The vault's choice isn't stored in a token: it's read from the key
+  slots (a slot without a security key token is the passphrase's).
 
 Owner's decisions so far (Nov 14):
 - the names below;

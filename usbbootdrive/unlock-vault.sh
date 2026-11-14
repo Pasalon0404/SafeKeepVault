@@ -223,6 +223,10 @@ if [ -f "$FIDO2_HELPER" ]; then
     else
         VAULT_STATUS=""
     fi
+    # Let the vault file go again until it's opened (attach_loop below),
+    # so cancelling or a Temporary Session leaves the data partition free.
+    sudo losetup -d "$LOOP_DEV" 2>/dev/null || true
+    LOOP_DEV=""
     [[ "$VAULT_KEY_COUNT" =~ ^[0-9]+$ ]] || VAULT_KEY_COUNT=0
     # A vault with neither can't happen; fall back to the passphrase.
     if [ "$VAULT_HAS_PASSPHRASE" = false ] && [ "$VAULT_KEY_COUNT" -eq 0 ]; then

@@ -2096,10 +2096,10 @@ const SafeKeepOS = (() => {
    * to give Chromium's download layer time to flush the file to disk
    * before the process exits.
    *
-   * @param {'poweroff'|'reboot'|'lock'|'passphrase'} action
+   * @param {'poweroff'|'reboot'|'lock'|'passphrase'|'securitykey'} action
    */
   async function _submitPowerAction(action) {
-    if (action !== 'poweroff' && action !== 'reboot' && action !== 'lock' && action !== 'passphrase') {
+    if (action !== 'poweroff' && action !== 'reboot' && action !== 'lock' && action !== 'passphrase' && action !== 'securitykey') {
       throw new Error('Invalid power action: ' + action);
     }
     try {
@@ -2208,6 +2208,39 @@ const SafeKeepOS = (() => {
    */
   function changeMasterPassphrase() {
     return _submitPowerAction('passphrase');
+  }
+
+  /**
+   * Device Options → Security Keys (SECURITY_KEY_DESIGN.md). Locks as
+   * changeMasterPassphrase() does; safekeep-boot.sh then runs
+   * manage-security-key in native dialogs before the unlock prompt, so
+   * passphrases, PINs and key secrets never pass through the browser.
+   */
+  function manageSecurityKeys() {
+    return _submitPowerAction('securitykey');
+  }
+
+  /**
+   * How this session's vault unlocks, as unlock-vault.sh left it in RAM:
+   * { method: 'passphrase'|'key', passphrase: bool, keys: [{name, added}] },
+   * or null (a temporary session, the dev host, or an older build). Never
+   * a secret: only the names and dates the vault's header shows anyway.
+   */
+  async function getUnlockMethods() {
+    if (!isBootDrive()) return null;
+    try {
+      const r = await fetch('file:///tmp/safekeep-signals/UNLOCK_METHODS.json', { cache: 'no-store' });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || (j.method !== 'passphrase' && j.method !== 'key') || !Array.isArray(j.keys)) return null;
+      return {
+        method: j.method,
+        passphrase: j.passphrase !== false,
+        keys: j.keys.slice(0, 4).map((k) => ({ name: String((k && k.name) || '').slice(0, 40), added: String((k && k.added) || '').slice(0, 10) })),
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   /**
@@ -3493,6 +3526,8 @@ const SafeKeepOS = (() => {
     lock,
     changeMasterPassphrase,
     getPassphraseRating,
+    manageSecurityKeys,
+    getUnlockMethods,
 
     // Display sleep (DPMS timer)
     setDisplaySleep,

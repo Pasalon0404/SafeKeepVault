@@ -9,6 +9,48 @@
 
 ---
 
+## Since v1.66 (on the branch, not released)
+
+- **Security keys, Part 1** (`SECURITY_KEY_DESIGN.md`, approved Nov 14):
+  a FIDO2 security key (YubiKey or any other with `hmac-secret`) can
+  unlock the vault, with its PIN and a touch. Choices: Master Passphrase
+  (the default, unchanged), Passphrase or security key, Security key only.
+  "Passphrase and security key" is Part 2, not built.
+  - `safekeep-fido2.py` (root helper, `python3-fido2` from Ubuntu's
+    archive): each key gets a non-resident credential and its own LUKS2
+    key slot keyed by base64(hmac-secret output for the vault's salt, made
+    with uv + up); LUKS2 tokens `safekeep-fido2` (slot, credential ID,
+    name, date) and `safekeep-vault` (the salt). Whether there is a
+    passphrase is read from the slots: a slot with no key token is the
+    passphrase's. Changes run under `luksHeaderBackup` to `/dev/shm`, add
+    and test before removing, never remove the last way in.
+  - `unlock-vault.sh`: "Use a Security Key" (first) when the vault has
+    one; only that (plus Temporary Session) when it has no passphrase.
+    Leaves `/tmp/safekeep-signals/UNLOCK_METHODS.json` (method, passphrase,
+    key names/dates) for the app; no rating after a key unlock.
+  - `manage-security-key.sh` (power action `securitykey`, run before the
+    unlock prompt like change-passphrase): confirm the vault, then add
+    (sets a PIN if the key has none), rename, remove, Use security keys
+    only (each key must open the vault in that run; warning + checkbox;
+    one key is enough, a spare is recommended), Add a Master Passphrase.
+    Screens shared via `security-key-dialogs.sh`.
+  - USB lockdown (`85-safekeep-hid-lockdown.rules`): late boot keyboards
+    and mice still off; other late HID kept only if udev's
+    `60-fido-id.rules` marks it `ID_SECURITY_TOKEN=1`, else its interface
+    is deauthorized from the hidraw rule; any late USB input device is
+    `inhibited`. `kernel.sysrq=0`. A Trezor's U2F part may now stay on
+    (harmless; it counts as a security key in "more than one plugged in").
+  - App: Device Options → Security Keys (status + Lock and Manage);
+    Change Master Passphrase and its text hidden in a keys-only vault.
+  - Tests: `usbbootdrive/tests/test-fido2-helper.py` runs the helper's
+    real-key code against a software CTAP2 key (`tests/virtual_fido2.py`,
+    test-only) on a real LUKS2 file; `test-security-key.mjs` runs
+    unlock-vault and manage-security-key for real with it.
+  - **Needs the full build** (new package, udev rules, sysctl). A quick
+    update installs the scripts, but without `python3-fido2` in the chroot
+    a key can't be used (unlocking is unchanged). Not yet tried with a
+    real security key.
+
 ## Current state (Nov 12, 2026) — v1.66
 
 **v1.66** (Nov 12, `v1.66 · build 532 · 21e285c`) — Trezor work (#118),

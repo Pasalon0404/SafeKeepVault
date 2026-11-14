@@ -7500,7 +7500,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh(); if (this.open && typeof ssSettingsRefresh === 'function') ssSettingsRefresh(); if (this.open && typeof skbright_refresh === 'function') skbright_refresh()">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh(); if (this.open && typeof skSettingsRefresh === 'function') skSettingsRefresh(); if (this.open && typeof ssSettingsRefresh === 'function') ssSettingsRefresh(); if (this.open && typeof skbright_refresh === 'function') skbright_refresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -7797,7 +7797,7 @@
                         </div>
                         <div id="settings-passphrase-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Master Passphrase</h4>
-                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                            <p id="settings-pp-intro" style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
                                 Change the passphrase that unlocks this vault. SafeKeep locks the vault first, then asks for your current passphrase and a new one, on the same screens as setup: scan it, type it, or let SafeKeep generate one. Your vault&rsquo;s contents are not changed. Afterwards, unlock with the new passphrase.
                             </p>
                             <div id="settings-pp-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;"></div>
@@ -7811,9 +7811,27 @@
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 <button type="button" class="skb-btn" id="settings-pp-change-btn" onclick="ppSettingsStartChange()">Change Master Passphrase</button>
                             </div>
-                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.75rem; margin: 0.75rem 0 0; line-height: 1.6;">
+                            <p id="settings-pp-paper" style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.75rem; margin: 0.75rem 0 0; line-height: 1.6;">
                                 If you keep a paper copy, check it now and then: lock the vault and unlock it with <strong>Type Password</strong> and the words from your paper.
                             </p>
+                            <div id="settings-pp-keys-note" style="display: none; font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-top: 0.75rem; line-height: 1.6;"></div>
+                        </div>
+                        <div id="settings-security-key-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Security Keys</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                A security key (a YubiKey or another FIDO2 key) can unlock this vault with its PIN and a touch, instead of your Master Passphrase or as well as it. You can also make the vault open with security keys only. SafeKeep locks the vault first; then you add, rename or remove keys on the same kind of screens as the unlock prompt. Nothing is stored on the key, and your vault&rsquo;s contents are not changed.
+                            </p>
+                            <div id="settings-sk-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;"></div>
+                            <div id="settings-sk-confirm" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
+                                SafeKeep will lock now, as the Lock button does: anything you haven&rsquo;t saved is lost. Have your security key and its PIN ready, and your Master Passphrase if this vault has one.
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.65rem;">
+                                    <button type="button" class="skb-btn skb-btn--primary" id="settings-sk-go-btn" onclick="skSettingsLockAndManage()">Lock and Manage</button>
+                                    <button type="button" class="skb-btn" onclick="skSettingsCancel()">Cancel</button>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="skb-btn" id="settings-sk-manage-btn" onclick="skSettingsStart()">Manage Security Keys</button>
+                            </div>
                         </div>
                         <div id="settings-update-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Update SafeKeep</h4>
@@ -12318,6 +12336,12 @@ window.addEventListener('DOMContentLoaded', () => {
             return Promise.resolve(false);
         },
         getPassphraseRating: function () { return Promise.resolve(null); },
+        manageSecurityKeys: function () {
+            console.log('[DEV MOCK] manageSecurityKeys() intercepted — no-op on dev host.');
+            _devAnnounce('Security Keys intercepted (would lock, then run manage-security-key)');
+            return Promise.resolve(false);
+        },
+        getUnlockMethods: function () { return Promise.resolve(window._devUnlockMethods || null); },
 
         // --- Screen brightness (Brightness Watcher) ---
         setBrightness: function (pct) {
@@ -27162,6 +27186,80 @@ async function ppSettingsLockAndChange() {
 }
 
 window.addEventListener('load', function () { setTimeout(ppRefreshRating, 800); });
+
+// ===========================================================================
+// SETTINGS → SECURITY KEYS — unlocking the vault with a FIDO2 key
+// ===========================================================================
+// SECURITY_KEY_DESIGN.md, Part 1. Like Change Master Passphrase, the work
+// happens outside the app: SafeKeepOS.manageSecurityKeys() locks the vault
+// and safekeep-boot.sh runs manage-security-key in native dialogs. The app
+// only reads the summary unlock-vault.sh left in RAM: how this session
+// unlocked, whether the vault has a Master Passphrase, and each key's name
+// and date.
+async function skSettingsRefresh() {
+    const status = document.getElementById('settings-sk-status');
+    const btn = document.getElementById('settings-sk-manage-btn');
+    const ppBtn = document.getElementById('settings-pp-change-btn');
+    const ppNote = document.getElementById('settings-pp-keys-note');
+    const os = window.SafeKeepOS;
+    const onStick = !!(os && os.isBootDrive && os.isBootDrive());
+    if (btn) btn.disabled = !onStick;
+    if (!status) return;
+    if (!onStick) {
+        status.textContent = 'You can manage security keys when SafeKeep runs from its USB flash drive.';
+        status.style.color = 'var(--skb-text-muted)';
+        return;
+    }
+    const m = os && typeof os.getUnlockMethods === 'function' ? await os.getUnlockMethods() : null;
+    status.style.color = 'var(--skb-text)';
+    if (!m) {
+        status.textContent = '';
+        return;
+    }
+    const mode = !m.passphrase ? 'a security key only' : m.keys.length ? 'your Master Passphrase or a security key' : 'your Master Passphrase';
+    let text = 'This vault unlocks with ' + mode + '.';
+    if (m.keys.length) {
+        text += ' Security keys: ' + m.keys.map((k) => k.name + (k.added ? ' (added ' + k.added + ')' : '')).join(', ') + '.';
+        if (m.keys.length === 1 && !m.passphrase) {
+            text += ' Only one security key can open it: a spare, kept somewhere else, protects you if it is lost or broken.';
+        }
+    }
+    status.textContent = text;
+    // A vault with security keys only has no Master Passphrase to change.
+    for (const el of [ppBtn, document.getElementById('settings-pp-intro'), document.getElementById('settings-pp-paper')]) {
+        if (el) el.style.display = m.passphrase === false ? 'none' : '';
+    }
+    if (ppNote) {
+        ppNote.style.display = m.passphrase === false ? 'block' : 'none';
+        ppNote.textContent = m.passphrase === false
+            ? 'This vault has no Master Passphrase: it unlocks with a security key only. You can add a passphrase back under Security Keys.'
+            : '';
+    }
+}
+
+function skSettingsStart() {
+    const box = document.getElementById('settings-sk-confirm');
+    if (box) box.style.display = 'block';
+    const go = document.getElementById('settings-sk-go-btn');
+    if (go) go.focus();
+}
+
+function skSettingsCancel() {
+    const box = document.getElementById('settings-sk-confirm');
+    if (box) box.style.display = 'none';
+}
+
+async function skSettingsLockAndManage() {
+    const os = window.SafeKeepOS;
+    if (!os || typeof os.manageSecurityKeys !== 'function') return;
+    const go = document.getElementById('settings-sk-go-btn');
+    if (go) { go.disabled = true; go.textContent = 'Locking…'; }
+    // Wipe sensitive session data before the window closes, as Power Options do.
+    try { if (typeof _fullSessionWipe === 'function') _fullSessionWipe(); } catch (_) {}
+    try { await os.manageSecurityKeys(); } catch (err) { console.error('[SECURITY KEY] request failed:', err); }
+    // Still here (the dev host, or the signal didn't land): let them try again.
+    if (go) { go.disabled = false; go.textContent = 'Lock and Manage'; }
+}
 
 // ===========================================================================
 // SETTINGS → SEED STORAGE — keep the master seed on this flash drive, or not
