@@ -178,6 +178,10 @@ console.log('\n7. boot.html wiring');
     ck('meter and button use the capped count', fn('function eob_updateMeter').includes('_eobCountedBits()') && fn('function _eobCanForge').includes('_eobCountedBits() >= _targetEntropyBits'));
     ck('fallback credit matches the module', html.includes('{ diceRoll: Math.log2(6), mouseSample: 0.25, cameraFrame: 4 }'));
     ck('every reset clears the mouse credit', (html.match(/\n {4}_eobMouseBits = 0;/g) || []).length === 3);
+    const bar = html.slice(html.indexOf('id="eob-meter-bar"'), html.indexOf('<!-- Input methods'));
+    ck('the meter and Generate Seed share one bar above the sources', ['id="eob-meter-fill"', 'id="eob-meter-bits"', 'id="eob-meter-pct"', 'id="eob-forge-hint"', 'id="eob-forge-btn"'].every(x => bar.includes(x)));
+    ck('the bar sticks to the top while the sources scroll', /\.eob-meter-bar \{[^}]*position: sticky;[^}]*top: 0;/.test(html));
+    ck('the pool hash and raw pool are folded into one closed section', /<details id="eob-pool-wrap"[^>]*>[\s\S]*?id="eob-hash-display"[\s\S]*?id="eob-pool-raw"[\s\S]*?<\/details>/.test(html));
     const mouseCard = fn('function _eobRenderMouse');
     ck('the mouse card shows its bits out of half the target', html.includes('id="eob-wiggle-bits"') && mouseCard.includes('_targetEntropyBits / 2')
         && mouseCard.includes("Math.min(_eobMouseBits, cap)) + ' / ' + cap"));

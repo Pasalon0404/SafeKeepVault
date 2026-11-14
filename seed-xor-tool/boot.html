@@ -5008,7 +5008,34 @@
       color: #000;
     }
     .eob-meter-wrap {
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    /* The meter bar sticks to the top of the tool's scroll area while the
+       Advanced section is open, so it stays in view at every source. */
+    .eob-meter-bar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.6rem 0.75rem;
+      background: var(--skb-bg-card, #111);
+      border: 2px solid var(--skb-border);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+    }
+    .eob-meter-main { flex: 1; min-width: 0; }
+    .eob-meter-bar .eob-meter-header { gap: 0.75rem; }
+    .eob-meter-bar .eob-meter-bits { margin: 0 auto 0 0; }
+    .eob-forge-hint {
+      font-size: 0.75rem;
+      color: var(--skb-text-muted);
+      margin: 0.35rem 0 0;
+    }
+    .eob-forge-btn.eob-forge-btn--bar {
+      flex: none;
+      padding: 0.75rem 1.25rem;
+      font-size: 0.875rem;
     }
     .eob-meter-header {
       display: flex;
@@ -5054,8 +5081,9 @@
     .eob-meter-note {
       font-size: 0.7rem;
       color: var(--skb-text-muted);
-      margin-top: 0.25rem;
+      margin: -0.5rem 0 0.6rem;
     }
+    .eob-meter-note[hidden] { display: none; }
     .eob-mode-toggle { margin-top: 0.25rem; }
     .eob-verify-warning {
         margin: 0.6rem 0 0;
@@ -5148,7 +5176,7 @@
     .eob-words-gate[hidden] { display: none; }
     .eob-wiggle-zone {
       width: 100%;
-      height: 100px;
+      height: 80px;
       border: 2px dashed var(--skb-border);
       border-radius: 0;
       display: flex;
@@ -5166,8 +5194,9 @@
       background: rgba(247, 147, 26, 0.05);
     }
     .eob-live-hash {
-      margin-bottom: 1.25rem;
+      margin: 0.6rem 0 0.75rem;
     }
+    #eob-pool-wrap > summary .eob-hash-dot { vertical-align: middle; margin-right: 0.25rem; }
     .eob-live-hash-label {
       font-size: 0.8125rem;
       color: var(--skb-text-muted);
@@ -5206,10 +5235,6 @@
     .eob-hash-display.flash {
       border-color: #00ff41;
       box-shadow: 0 0 8px rgba(0, 255, 65, 0.2);
-    }
-    .eob-forge-area {
-      text-align: center;
-      margin-top: 0.5rem;
     }
     .eob-forge-btn {
       padding: 1rem 2rem;
@@ -9506,17 +9531,28 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <p class="eob-verify-warning"><strong>Draw the words; never choose them.</strong> Words you pick yourself, or remember, follow patterns that an attacker can guess, however random they feel. The seed is only as random as your draw and your coin.</p>
             </div>
 
-            <!-- Entropy Meter -->
-            <div class="eob-meter-wrap">
-                <div class="eob-meter-header">
-                    <span class="eob-meter-label" id="eob-meter-label">Your Entropy</span>
-                    <span class="eob-meter-pct" id="eob-meter-pct">0%</span>
+            <div class="eob-meter-note" id="eob-meter-note">The meter counts only randomness you add. The device's random number generator is always mixed in as well.</div>
+
+            <!-- Entropy meter and Generate Seed in one bar that stays at the top
+                 of the tool while the sources below are scrolled, so the meter
+                 is always in view (position: sticky in #state-entropy). -->
+            <div class="eob-meter-wrap eob-meter-bar" id="eob-meter-bar">
+                <div class="eob-meter-main">
+                    <div class="eob-meter-header">
+                        <span class="eob-meter-label" id="eob-meter-label">Your Entropy</span>
+                        <span class="eob-meter-bits" id="eob-meter-bits">0 / 128 bits from you</span>
+                        <span class="eob-meter-pct" id="eob-meter-pct">0%</span>
+                    </div>
+                    <div class="eob-meter-track">
+                        <div class="eob-meter-fill" id="eob-meter-fill"></div>
+                    </div>
+                    <p class="eob-forge-hint" id="eob-forge-hint">
+                        Collect enough entropy to enable the forge button.
+                    </p>
                 </div>
-                <div class="eob-meter-track">
-                    <div class="eob-meter-fill" id="eob-meter-fill"></div>
-                </div>
-                <div class="eob-meter-bits" id="eob-meter-bits">0 / 128 bits from you</div>
-                <div class="eob-meter-note" id="eob-meter-note">Counts only randomness you add. The device's random number generator is always mixed in as well.</div>
+                <button type="button" class="eob-forge-btn eob-forge-btn--bar" id="eob-forge-btn" disabled onclick="eob_forgeSeed()">
+                    Forge Seed
+                </button>
             </div>
 
             <!-- Input methods: physical dice, playing cards, mouse, camera -->
@@ -9626,32 +9662,20 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 </div>
             </div>
 
-            <!-- Raw pool preview (collapsed) -->
+            <!-- The pool itself (collapsed): its live SHA-256 and the raw text -->
             <details id="eob-pool-wrap" style="margin-bottom: 1rem;">
-                <summary style="font-size: 0.8rem; color: var(--skb-text-muted); cursor: pointer;">Show raw entropy pool</summary>
+                <summary style="font-size: 0.8rem; color: var(--skb-text-muted); cursor: pointer;">
+                    <span class="eob-hash-dot" id="eob-hash-dot"></span> Show the entropy pool (live SHA-256 and raw data)
+                </summary>
+                <div class="eob-live-hash" id="eob-live-hash-wrap">
+                    <div class="eob-live-hash-label">Live Pool Hash (SHA-256)</div>
+                    <div class="eob-hash-display" id="eob-hash-display">
+                        0000000000000000000000000000000000000000000000000000000000000000
+                    </div>
+                </div>
+                <div class="eob-live-hash-label">Raw pool</div>
                 <div class="eob-pool-raw" id="eob-pool-raw">—</div>
             </details>
-
-            <!-- Live Hash Visualizer -->
-            <div class="eob-live-hash" id="eob-live-hash-wrap">
-                <div class="eob-live-hash-label">
-                    <span class="eob-hash-dot" id="eob-hash-dot"></span>
-                    Live Pool Hash (SHA-256)
-                </div>
-                <div class="eob-hash-display" id="eob-hash-display">
-                    0000000000000000000000000000000000000000000000000000000000000000
-                </div>
-            </div>
-
-            <!-- Forge Button -->
-            <div class="eob-forge-area">
-                <button type="button" class="eob-forge-btn" id="eob-forge-btn" disabled onclick="eob_forgeSeed()">
-                    Forge Seed
-                </button>
-                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0.5rem 0 0;" id="eob-forge-hint">
-                    Collect enough entropy to enable the forge button.
-                </p>
-            </div>
             </details>
             <!-- /ADVANCED accordion -->
 
