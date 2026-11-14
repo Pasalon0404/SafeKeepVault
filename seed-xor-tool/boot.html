@@ -9612,7 +9612,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <div class="eob-method-card" id="eob-card-cam">
                     <h4>Video Noise</h4>
                     <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
-                        Captures sensor noise (the lowest bit of each pixel's color). A frame counts as 4 bits only if its noise changed since the last frame.
+                        Captures sensor noise (the lowest bit of each pixel's color). A frame counts as 4 bits only if its noise changed since the last frame. Each press turns the camera on for about a second, takes 5 frames, then turns it off.
                     </p>
                     <button type="button" class="skb-btn" id="eob-cam-btn" style="width: 100%; margin-bottom: 0.5rem;" onclick="eob_captureVideoNoise()">
                         Capture Video Noise
@@ -44571,7 +44571,7 @@ function eob_init(context) {
     _eobCamCount = 0;
     _eobWiggleLastX = -1;
     _eobWiggleLastY = -1;
-    _eobCamStream = null;
+    _eobStopCamera();
     _eobCamPrevLsbs = null;
     _eobDeckCards = [];
     _eobCardRank = null;
@@ -44761,11 +44761,7 @@ function eob_setEntropyMode(mode) {
     if (_eobWordsMode && !_eobWordBoxes) _eobBuildWordBoxes();
     _eobRenderFlips();
     // Only Mixed mode shows the camera card, so stop a running camera too.
-    if (!mixed && _eobCamStream) {
-        _eobCamStream.getTracks().forEach(function (t) { t.stop(); });
-        _eobCamStream = null;
-        document.getElementById('eob-cam-preview').style.display = 'none';
-    }
+    if (!mixed) _eobStopCamera();
     eob_renderDiceFairness();   // pattern advice and the confirm box depend on the mode
     eob_updateMeter();
 }
@@ -45188,7 +45184,28 @@ function eob_handleWiggle(e) {
 }
 
 // --- Method D: Webcam Noise ---
+// Turn the camera off (after each capture, and when leaving or resetting).
+function _eobStopCamera() {
+    if (_eobCamStream) {
+        _eobCamStream.getTracks().forEach(function (t) { t.stop(); });
+        _eobCamStream = null;
+    }
+    var video = document.getElementById('eob-cam-preview');
+    if (video) {
+        video.srcObject = null;
+        video.style.display = 'none';
+    }
+}
+
+var _eobCamBusy = false;
+
+// Each press turns the camera on, takes 5 frames and turns it off again,
+// so it is never left running. A press while a capture runs is ignored.
 async function eob_captureVideoNoise() {
+    if (_eobCamBusy) return;
+    _eobCamBusy = true;
+    var camBtn = document.getElementById('eob-cam-btn');
+    if (camBtn) { camBtn.disabled = true; camBtn.textContent = 'Capturing\u2026'; }
     try {
         var video = document.getElementById('eob-cam-preview');
         var canvas = document.getElementById('eob-cam-canvas');
@@ -45230,10 +45247,14 @@ async function eob_captureVideoNoise() {
         }
 
         document.getElementById('eob-cam-count').textContent = _eobCamCount;
-        showStatus(_eobCamCount + ' video frames captured.', 'success');
+        showStatus(_eobCamCount + ' video frames captured. The camera is off; press again for more.', 'success');
 
     } catch (err) {
         showStatus('Camera access failed: ' + err.message, 'error');
+    } finally {
+        _eobStopCamera();
+        _eobCamBusy = false;
+        if (camBtn) { camBtn.disabled = false; camBtn.textContent = 'Capture Video Noise'; }
     }
 }
 
@@ -45560,15 +45581,7 @@ function eob_cancel() {
 
 // --- Hardware cleanup (kills camera, detaches listeners) ---
 function eob_cleanup() {
-    if (_eobCamStream) {
-        _eobCamStream.getTracks().forEach(function(t) { t.stop(); });
-        _eobCamStream = null;
-        var video = document.getElementById('eob-cam-preview');
-        if (video) {
-            video.srcObject = null;
-            video.style.display = 'none';
-        }
-    }
+    _eobStopCamera();
     var zone = document.getElementById('eob-wiggle-zone');
     if (zone) {
         zone.onmousemove = null;
