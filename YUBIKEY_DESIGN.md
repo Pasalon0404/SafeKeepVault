@@ -144,10 +144,12 @@ Shows **How this vault unlocks** and the YubiKeys added, with:
 
 ## Safeguards
 
-1. **Two YubiKeys before relying on one.** SafeKeep won't move to YubiKey
-   only, or Passphrase and YubiKey, until two YubiKeys are added and each
-   has opened the vault in that flow. The spare is meant to be kept
-   somewhere else.
+1. **A spare YubiKey is recommended, not required** (the owner's decision,
+   Nov 14). One YubiKey is enough to move to YubiKey only, or Passphrase
+   and YubiKey. Before the move, each YubiKey has to open the vault once in
+   that flow, so a mistyped PIN or a faulty key is caught while the old way
+   still works. With only one YubiKey, the warning in 3 says so plainly,
+   and Device Options suggests adding a spare to keep somewhere else.
 2. **Never leave the vault without a way in.** Every change adds and tests
    the new key slots first, and only then removes the old ones. Before any
    change, the header is copied to RAM (`cryptsetup luksHeaderBackup`) and
@@ -157,17 +159,19 @@ Shows **How this vault unlocks** and the YubiKeys added, with:
 3. **Plain warnings at the right moments:**
    - when setting a PIN: "After 8 wrong PINs this YubiKey is locked for
      good, and can't open this vault again";
-   - before YubiKey only or Passphrase and YubiKey: "If you lose both
-     YubiKeys, or forget the passphrase with Passphrase and YubiKey, this
-     vault can't be opened. Your seed backup still restores your wallet.
+   - before YubiKey only or Passphrase and YubiKey: "If you lose your
+     YubiKey (or every YubiKey you add), or forget the passphrase with
+     Passphrase and YubiKey, this vault can't be opened. Your seed backup still restores your wallet.
      Saved wallets, the Passphrase Library and notes come back only from an
-     Encrypted Backup." with a link to make one now.
+     Encrypted Backup." with a link to make one now. With one YubiKey it
+     adds: "Only one YubiKey can open this vault. A spare kept somewhere
+     else protects you if it's lost or broken." The move goes ahead only
+     after checking a box that says you understand.
 4. **The weak-passphrase checks stay where a passphrase is used.**
    Passphrase or YubiKey and Passphrase and YubiKey keep today's strength
    check. YubiKey only has no passphrase, so the Dashboard's passphrase
    warning and the Master Passphrase rating are replaced by "This vault
-   unlocks with a YubiKey (2 added)". Health warns if only one YubiKey
-   is left.
+   unlocks with a YubiKey (1 added)".
 5. **Factory reset** is unchanged: destroying the header removes every key
    slot and token, YubiKey ones included.
 6. **A Temporary Session** never opens the vault, so it is unaffected.
@@ -234,7 +238,8 @@ Both parts add OS files, so the release that carries them needs the full
 build. They can ship in one release or two.
 
 **Testing on real hardware (the owner):**
-- A YubiKey 5 or Security Key with FIDO2, ideally two.
+- A YubiKey 5 or Security Key with FIDO2. A second one helps test adding
+  and removing a spare, but isn't needed.
 - Run through each change between choices on a test flash drive, not the
   everyday one.
 - Plug the YubiKey in before boot and after the 30-second lockdown, both
