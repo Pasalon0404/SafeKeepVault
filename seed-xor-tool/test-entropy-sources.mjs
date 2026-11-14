@@ -178,6 +178,12 @@ console.log('\n7. boot.html wiring');
     ck('meter and button use the capped count', fn('function eob_updateMeter').includes('_eobCountedBits()') && fn('function _eobCanForge').includes('_eobCountedBits() >= _targetEntropyBits'));
     ck('fallback credit matches the module', html.includes('{ diceRoll: Math.log2(6), mouseSample: 0.25, cameraFrame: 4 }'));
     ck('every reset clears the mouse credit', (html.match(/\n {4}_eobMouseBits = 0;/g) || []).length === 3);
+    const mouseCard = fn('function _eobRenderMouse');
+    ck('the mouse card shows its bits out of half the target', html.includes('id="eob-wiggle-bits"') && mouseCard.includes('_targetEntropyBits / 2')
+        && mouseCard.includes("Math.min(_eobMouseBits, cap)) + ' / ' + cap"));
+    ck('the mouse card says when the mouse has added all it can', html.includes('id="eob-wiggle-full"') && mouseCard.includes('full.hidden = _eobMouseBits < cap'));
+    ck('the meter refreshes the mouse card', fn('function eob_updateMeter').includes('_eobRenderMouse();'));
+    ck('both reset paths clear the text in the mouse zone', ['function eob_init', 'function eob_clearAll'].every(n => fn(n).includes("textContent = 'Move cursor here'")));
     const cam = fn('async function eob_captureVideoNoise');
     ck('camera samples noise bits, not every 17th byte', cam.includes('cameraFrameLsbs') && cam.includes('cameraFrameCredit') && !cam.includes('i += 17'));
     const dice = fn('function eob_handleDiceKey');

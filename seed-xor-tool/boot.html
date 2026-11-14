@@ -9601,7 +9601,10 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         Move cursor here
                     </div>
                     <div style="font-size: 0.7rem; color: var(--skb-text-muted); margin-top: 0.25rem; text-align: center;">
-                        <span id="eob-wiggle-count">0</span> samples captured
+                        <span id="eob-wiggle-count">0</span> samples captured &middot; <span id="eob-wiggle-bits">0 / 64</span> bits from the mouse
+                    </div>
+                    <div id="eob-wiggle-full" hidden style="font-size: 0.75rem; color: var(--skb-warning, #f59e0b); margin-top: 0.35rem; text-align: center; line-height: 1.5;">
+                        The mouse has added all it can for this seed. More movement is still mixed in but adds no bits: use dice, cards or camera noise for the rest. Reset clears it.
                     </div>
                 </div>
 
@@ -19225,6 +19228,8 @@ function eob_clearAll() {
     eob_renderDiceFairness();
     _eobRenderCards();
     document.getElementById('eob-wiggle-count').textContent = '0';
+    var _eobZoneReset = document.getElementById('eob-wiggle-zone');
+    if (_eobZoneReset) _eobZoneReset.textContent = 'Move cursor here';
     document.getElementById('eob-cam-count').textContent = '0';
     document.getElementById('eob-pool-raw').textContent = '\u2014';
     document.getElementById('eob-cam-preview').style.display = 'none';
@@ -44621,6 +44626,7 @@ function eob_init(context) {
     eob_renderDiceFairness();
     _eobRenderCards();
     document.getElementById('eob-wiggle-count').textContent = '0';
+    document.getElementById('eob-wiggle-zone').textContent = 'Move cursor here';
     document.getElementById('eob-cam-count').textContent = '0';
     document.getElementById('eob-pool-raw').textContent = '\u2014';
     document.getElementById('eob-cam-preview').style.display = 'none';
@@ -44848,8 +44854,22 @@ async function eob_updateLiveHash() {
     }
 }
 
+// The mouse card: samples, the bits the mouse has added out of its share
+// (half the target), and a plain note once that share is used up, since
+// the sample count keeps rising while the meter doesn't.
+function _eobRenderMouse() {
+    var cap = _targetEntropyBits / 2;
+    var cnt = document.getElementById('eob-wiggle-count');
+    if (cnt) cnt.textContent = _eobWiggleCount;
+    var bits = document.getElementById('eob-wiggle-bits');
+    if (bits) bits.textContent = Math.floor(Math.min(_eobMouseBits, cap)) + ' / ' + cap;
+    var full = document.getElementById('eob-wiggle-full');
+    if (full) full.hidden = _eobMouseBits < cap;
+}
+
 function eob_updateMeter() {
     if (_eobWordsMode) { _eobUpdateWordsMeter(); return; }
+    _eobRenderMouse();
     var needed = _eobRollsNeeded();
     var have = _eobVerifiable ? _eobDiceRolls.length : _eobCountedBits();
     var target = _eobVerifiable ? needed : _targetEntropyBits;
@@ -45149,11 +45169,10 @@ function eob_handleWiggle(e) {
     _eobWiggleLastY = y;
 
     _eobWiggleCount++;
-    document.getElementById('eob-wiggle-count').textContent = _eobWiggleCount;
 
     var zone = document.getElementById('eob-wiggle-zone');
     zone.classList.add('active');
-    zone.textContent = _eobWiggleCount + ' samples';
+    zone.textContent = _eobWiggleCount + ' samples' + (_eobMouseBits >= _targetEntropyBits / 2 ? ' \u00b7 mouse share full' : '');
     clearTimeout(zone._fadeTimer);
     zone._fadeTimer = setTimeout(function() { zone.classList.remove('active'); }, 200);
 
