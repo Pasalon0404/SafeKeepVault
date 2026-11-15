@@ -87,6 +87,13 @@ failed() {
     exit 1
 }
 
+# zenity doesn't wrap the text above a list, and at GDK_SCALE=2 a long line
+# runs off the screen and pushes the buttons out of view (as in
+# passphrase-dialogs.sh): break the lines by hand. "\n" in the text counts.
+wrap() {
+    printf '%b' "$1" | fold -s -w 62
+}
+
 # --- The vault's state, from the helper (no key needed) ---
 refresh() {
     STATUS=$(sudo python3 -I "$FIDO2_HELPER" status "$LOOP_DEV" 2>/dev/null) || STATUS=""
@@ -219,7 +226,7 @@ pick_key() {   # $1: the question. Prints the chosen slot.
     while IFS=$'\t' read -r slot name added; do
         [ -n "$slot" ] && rows+=("$slot" "$name" "${added:-}")
     done < <(st list)
-    zenity --list --title="$TITLE" --width=520 --height=400 --text="$1" \
+    zenity --list --title="$TITLE" --width=520 --height=400 --text="$(wrap "$1")" \
         --column="Slot" --column="Security key" --column="Added" --hide-column=1 --print-column=1 \
         "${rows[@]}" 2>/dev/null
 }
@@ -328,7 +335,7 @@ keys_only() {
         slot=${untested[0]}
         name=$(st name "$slot")
         choice=$(zenity --list --title="Use Security Keys Only" --width=500 --height=380 \
-            --text="Before the Master Passphrase is removed, each security key must open this vault once, so a forgotten PIN or a faulty key is caught now.\n\nNext: \"$name\"." \
+            --text="$(wrap "Before the Master Passphrase is removed, each security key must open this vault once, so a forgotten PIN or a faulty key is caught now.\n\nNext: \"$name\".")" \
             --column="Choice" --hide-header "Test \"$name\" now" "Remove \"$name\" instead" 2>/dev/null) || return
         case "$choice" in
             Test*)
@@ -350,8 +357,8 @@ keys_only() {
     if [ "$count" -eq 1 ]; then
         warning="$warning\n\nOnly one security key can open this vault. A spare kept somewhere else protects you if it's lost or broken."
     fi
-    understood=$(zenity --list --checklist --title="Use Security Keys Only" --width=560 --height=560 \
-        --text="$warning" --column="" --column="" --hide-header \
+    understood=$(zenity --list --checklist --title="Use Security Keys Only" --width=560 --height=500 \
+        --text="$(wrap "$warning")" --column="" --column="" --hide-header \
         FALSE "I understand, and want security keys only" 2>/dev/null) || return
     [ "$understood" = "I understand, and want security keys only" ] || return
     if sk_run "Removing the Master Passphrase..." 'printf "%s" "$KEY_SECRET"' remove-passphrase "$LOOP_DEV"; then
@@ -398,7 +405,7 @@ while true; do
     OPTIONS+=("Done")
     KEYS_TEXT=$(st list | awk -F'\t' '{ printf "\\n  •  %s (added %s)", $2, $3 }')
     CHOICE=$(zenity --list --title="$TITLE" --width=560 --height=560 \
-        --text="This vault unlocks with: $(mode_text)${KEYS_TEXT:+\n\nSecurity keys:$KEYS_TEXT}" \
+        --text="$(wrap "This vault unlocks with: $(mode_text)${KEYS_TEXT:+\n\nSecurity keys:$KEYS_TEXT}")" \
         --column="Action" --hide-header "${OPTIONS[@]}" 2>/dev/null) || true
     case "$CHOICE" in
         "Add a security key") add_key ;;

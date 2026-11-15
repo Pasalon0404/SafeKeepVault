@@ -173,9 +173,13 @@ runpy.run_path(sys.argv[0], run_name="__main__")
             ['0', 'I understand, and want security keys only'], OK, ['0', 'Done'], OK]);
         s = status();
         ck('keys only: the Master Passphrase is removed', m.status === 0 && s.passphrase === false && s.keys.length === 1 && !opens(PASS) && !m.left, { m, s });
+        const flat = m.log.replace(/\s+/g, ' ');
         ck('keys only: the warning names the risk, the seed backup and the Encrypted Backup',
-            m.log.includes("this vault can't be opened") && m.log.includes('Your seed backup still restores your wallet') && m.log.includes('Encrypted Backup'), m.log);
-        ck('keys only: with one key, it says so', m.log.includes('Only one security key can open this vault'));
+            flat.includes("this vault can't be opened") && flat.includes('Your seed backup still restores your wallet') && flat.includes('Encrypted Backup'), m.log);
+        ck('keys only: with one key, it says so', flat.includes('Only one security key can open this vault'));
+        const checklist = m.log.slice(m.log.indexOf('--list --checklist'), m.log.indexOf('--column=', m.log.indexOf('--list --checklist')));
+        ck('keys only: the warning is wrapped, so the window fits the screen and its buttons show',
+            checklist.split('\n').length > 5 && checklist.split('\n').slice(1).every((l) => l.length <= 62), checklist);
         ck('keys only: the box must be checked (a checklist)', m.log.includes('--list --checklist'));
         ck('keys only: the end message says how to unlock now', m.log.includes('Choose Use a Security Key'));
 
