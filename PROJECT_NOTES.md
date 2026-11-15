@@ -46,10 +46,24 @@
     real-key code against a software CTAP2 key (`tests/virtual_fido2.py`,
     test-only) on a real LUKS2 file; `test-security-key.mjs` runs
     unlock-vault and manage-security-key for real with it.
+  - **First setup offers the choice** (owner, Nov 15): after the welcome,
+    `setup-vault.sh` asks "How should this vault unlock?" (Master
+    Passphrase (recommended) / Passphrase or security key / Security key
+    only, only if `python3-fido2` and the helper are present). Key only:
+    the same warning and checkbox, the vault is made with a random key
+    nobody sees, the key is enrolled (sets a PIN if needed) and checked
+    with `secret`, a spare is offered, then `remove-passphrase` drops the
+    random slot. `.setup_complete` is now written only after all that, so
+    a key-only setup that stops early is an "interrupted setup" and is
+    made again at the next start. Passphrase or key: a failed key can be
+    skipped ("Add a security key later"). Tested end to end in
+    `test-security-key.mjs` (setup, then unlock).
+  - Tried on Dave's flash drive with his YubiKey (Nov 15): adding, unlocking
+    and security keys only work. Holding a YubiKey ~3 s makes it type a
+    one-time code (if it was plugged in before boot): a short tap is right.
   - **Needs the full build** (new package, udev rules, sysctl). A quick
     update installs the scripts, but without `python3-fido2` in the chroot
-    a key can't be used (unlocking is unchanged). Not yet tried with a
-    real security key.
+    a key can't be used (unlocking is unchanged).
 
 ## Current state (Nov 12, 2026) — v1.66
 

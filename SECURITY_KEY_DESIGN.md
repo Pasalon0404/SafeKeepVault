@@ -17,7 +17,8 @@ What Part 1 does differently from the text below:
 
 Owner's decisions so far (Nov 14):
 - the names below;
-- first setup stays passphrase-only;
+- first setup offers the choice too (changed Nov 15: at first it stayed
+  passphrase-only), with Master Passphrase first and recommended;
 - one security key is enough, and a spare is recommended, not required;
 - any FIDO2 security key is accepted, not only YubiKeys.
 
@@ -44,7 +45,8 @@ The app's wording says "security key", with "(YubiKey or another FIDO2
 key)" where a first-time reader needs it.
 
 Nothing changes for anyone who doesn't choose it:
-- first setup asks for a Master Passphrase only;
+- first setup asks "How should this vault unlock?" with the Master
+  Passphrase first and marked recommended, so the default is unchanged;
 - the unlock screen shows **Use a security key** only on a vault that has
   one;
 - every existing flash drive stays on Master Passphrase after the update.

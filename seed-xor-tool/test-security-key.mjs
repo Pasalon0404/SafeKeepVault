@@ -59,6 +59,10 @@ printf '%s' "$out"; exit "$rc"`);
         stub('mount', 'exit 0');
         stub('umount', 'exit 0');
         stub('chmod', 'exit 0');
+        stub('mkfs.ext4', 'exit 0');
+        stub('udevadm', 'exit 0');
+        stub('systemctl', 'echo "systemctl $*" >> "$ZLOG"; exit 0');
+        stub('sleep', '[ "$1" = infinity ] && exit 0; exec /bin/sleep "$@"');
         stub('mountpoint', '[ "${@: -1}" = "$VAULT_MOUNT_TEST" ] && exit 1; exit 0');
         stub('losetup', 'case "$1" in -j) exit 0;; --find) echo "$3";; -d) exit 0;; esac');
         // cryptsetup open needs device-mapper: check the key with
@@ -70,6 +74,9 @@ printf '%s' "$out"; exit "$rc"`);
   else ${realCs} open --test-passphrase "$dev" "$@" || exit 2; fi
   echo "opened $mapper $*" >> "$OPENLOG"; exit 0
 fi
+[ "$1" = close ] && exit 0
+# Tests only: a cheap key derivation for the vault setup makes.
+[ "$1" = luksFormat ] && { shift; exec ${realCs} luksFormat --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "$@"; }
 exec ${realCs} "$@"`);
         // The helper, with the software key that KEY_POINTER names "plugged in".
         const wrap = join(tmp, 'fido2-wrap.py');
@@ -95,13 +102,13 @@ runpy.run_path(sys.argv[0], run_name="__main__")
         if (r.status !== 0) throw new Error('luksFormat failed');
         const opens = (secret) => spawnSync('cryptsetup', ['open', '--test-passphrase', vfile, '--key-file=-'], { input: secret }).status === 0;
         const signals = join(tmp, 'signals');
-        const status = () => {
+        const status = (file = vfile) => {
             writeFileSync(join(tmp, 'ptr'), keyA);
-            const s = spawnSync('python3', [wrap, 'status', vfile], { env: { PATH: bin + ':' + process.env.PATH, KEY_POINTER: join(tmp, 'ptr'), SAFEKEEP_FIDO2_TEST: '1' } });
+            const s = spawnSync('python3', [wrap, 'status', file], { env: { PATH: bin + ':' + process.env.PATH, KEY_POINTER: join(tmp, 'ptr'), SAFEKEEP_FIDO2_TEST: '1' } });
             return s.status === 0 ? JSON.parse(s.stdout) : null;
         };
 
-        const run = (script, answers, plugged = keyA) => {
+        const run = (script, answers, plugged = keyA, dir = dataDir) => {
             writeFileSync(join(tmp, 'queue'), answers.map((a) => a.join('\t')).join('\n') + '\n');
             writeFileSync(join(tmp, 'zlog'), '');
             writeFileSync(join(tmp, 'opens'), '');
@@ -111,7 +118,7 @@ runpy.run_path(sys.argv[0], run_name="__main__")
                 timeout: 120000,
                 env: { PATH: bin + ':' + process.env.PATH, ZLOG: join(tmp, 'zlog'), ZQUEUE: join(tmp, 'queue'),
                     KEY_POINTER: join(tmp, 'ptr'), OPENLOG: join(tmp, 'opens'), VAULT_MOUNT_TEST: join(tmp, 'vault-mnt'),
-                    HAS_CAMERA: 'false', QR_SCAN_TIMEOUT: '1', SAFEKEEP_DATA_MOUNT: dataDir, SAFEKEEP_VAULT_MOUNT: join(tmp, 'vault-mnt'),
+                    HAS_CAMERA: 'false', QR_SCAN_TIMEOUT: '1', SAFEKEEP_DATA_MOUNT: dir, SAFEKEEP_TEST_VAULT_MB: '60', SAFEKEEP_VAULT_MOUNT: join(tmp, 'vault-mnt'),
                     SAFEKEEP_SIGNALS: signals, FIDO2_HELPER: wrap,
                     SAFEKEEP_SECURITY_KEY_DIALOGS: path('security-key-dialogs.sh'),
                     SAFEKEEP_PASSPHRASE_DIALOGS: path('passphrase-dialogs.sh'), SAFEKEEP_PASSPHRASE_HELPER: path('safekeep-passphrase.py'),
@@ -214,6 +221,59 @@ runpy.run_path(sys.argv[0], run_name="__main__")
         m = run('manage-security-key.sh', [['1', ''], ]);
         ck('manage: Cancel at the start changes nothing', m.status === 0 && !m.left, m);
         ck('manage: secrets never reach the dialogs', !/[A-Za-z0-9+/]{43}=/.test(m.log));
+
+        // --- First setup: choosing how the vault unlocks ---
+        const newDrive = () => { const d = mkdtempSync(join(tmp, 'drive-')); return { dir: d, vault: join(d, '.vault.luks'), marker: join(d, '.setup_complete') }; };
+        const BEGIN = ['0', ''], CONTINUE_NOW = ['0', 'Continue now'];
+        const keyC = newKey('keyC', {}), keyD = newKey('keyD', { pin: PIN });
+
+        let d = newDrive();
+        let su = run('setup-vault.sh', [BEGIN, ['0', 'Master Passphrase (recommended)'], ['0', 'Type Password'], ['0', PASS], ['0', PASS], CONTINUE_NOW], keyA, d.dir);
+        ck('setup: Master Passphrase works as before', su.status === 0 && existsSync(d.marker) && JSON.stringify(status(d.vault)) === '{"passphrase":true,"keys":[]}' && !su.left, su);
+        ck('setup: the choice comes after the welcome, passphrase first and recommended',
+            /How should this vault unlock\?[\s\S]*--hide-header Master Passphrase \(recommended\) Passphrase or security key Security key only/.test(su.log), su.log);
+        ck('setup: the welcome mentions the choice', su.log.replace(/\s+/g, ' ').includes('Choose how your vault unlocks'));
+
+        d = newDrive();
+        su = run('setup-vault.sh', [BEGIN, ['0', 'Security key only'], ['0', 'I understand, and want a security key only'],
+            ['0', ''], ['0', PIN], ['0', PIN], ['0', 'Continue'], CONTINUE_NOW], keyC, d.dir);
+        let sv = status(d.vault);
+        ck('setup: Security key only makes a vault that opens with the key alone',
+            su.status === 0 && existsSync(d.marker) && sv && sv.passphrase === false && sv.keys.length === 1 && sv.keys[0].name === 'Security key 1' && !su.left, { su, sv });
+        ck('setup: the key got a new PIN, with the warning', keyState(keyC).pin === PIN && su.log.includes('After 8 wrong PINs'));
+        ck('setup: the key was checked with one more touch', su.log.includes('Touch your security key once more'));
+        ck('setup: the warning is shown and wrapped', su.log.replace(/\s+/g, ' ').includes("this vault can't be opened. Your seed backup still restores your wallet")
+            && su.log.slice(su.log.indexOf('--list --checklist'), su.log.indexOf('--column=', su.log.indexOf('--list --checklist'))).split('\n').slice(1).every((l) => l.length <= 62));
+        ck('setup: the last screen says to unlock with the security key', su.log.includes('Next, unlock it with your security key'));
+        ck('setup: no passphrase screens for a key-only vault', !su.log.includes('How would you like to set your Master Passphrase?'));
+        let ul = run('unlock-vault.sh', [['0', 'Use a Security Key'], ['0', PIN]], keyC, d.dir);
+        ck('setup → unlock: the new key-only vault opens with the key', ul.status === 0 && /opened vault --key-slot \d+/.test(ul.opens)
+            && /This vault unlocks with a security key\./.test(ul.log), ul.log);
+
+        d = newDrive();
+        su = run('setup-vault.sh', [BEGIN, ['0', 'Passphrase or security key'], ['0', 'Type Password'], ['0', PASS], ['0', PASS],
+            ['0', PIN], ['0', 'Add a spare security key now'], ['0', '', keyD], ['0', PIN], ['0', 'Continue'], CONTINUE_NOW], keyA, d.dir);
+        sv = status(d.vault);
+        ck('setup: Passphrase or security key, with a spare', su.status === 0 && existsSync(d.marker) && sv && sv.passphrase === true
+            && sv.keys.map((k) => k.name).join(',') === 'Security key 1,Spare' && !su.left, { log: su.log, sv });
+        ck('setup: the passphrase opens it too', spawnSync('cryptsetup', ['open', '--test-passphrase', d.vault, '--key-file=-'], { input: PASS }).status === 0);
+
+        d = newDrive();
+        su = run('setup-vault.sh', [BEGIN, ['0', 'Passphrase or security key'], ['0', 'Type Password'], ['0', PASS], ['0', PASS],
+            ['0', '000000'], OK, ['0', 'Add a security key later'], CONTINUE_NOW], keyA, d.dir);
+        sv = status(d.vault);
+        ck('setup: a failed key can be skipped when there is a passphrase', su.status === 0 && existsSync(d.marker) && sv.passphrase && sv.keys.length === 0
+            && su.log.includes('Wrong PIN') && su.log.includes('Next, unlock it with the Master Passphrase') && !su.left, { log: su.log, sv });
+
+        d = newDrive();
+        su = run('setup-vault.sh', [BEGIN, ['0', 'Security key only'], ['0', 'I understand, and want a security key only'],
+            ['0', '000000'], OK, ['0', 'Shut down']], keyA, d.dir);
+        ck('setup: a key-only setup that stops before the key is added isn\'t finished (no marker), so it starts again',
+            !existsSync(d.marker) && existsSync(d.vault) && su.log.includes("Setup Isn't Finished") && su.log.includes('systemctl poweroff'), su.log);
+        su = run('setup-vault.sh', [OK, BEGIN, ['0', 'Security key only'], ['0', ''], ['1', ''], ['0', 'Go back to setup'], ['0', 'Master Passphrase (recommended)'],
+            ['0', 'Type Password'], ['0', PASS], ['0', PASS], CONTINUE_NOW], keyA, d.dir);
+        ck('setup: the next start remakes it; without checking the box, the choice comes back',
+            su.status === 0 && su.log.includes('Setup Was Interrupted') && existsSync(d.marker) && status(d.vault).passphrase === true && !su.left, su.log);
     }
 
     // --- 2. Wiring ---
