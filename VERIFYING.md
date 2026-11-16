@@ -106,7 +106,7 @@ The release workflow builds every release twice and requires identical bytes.
 Rebuilds on Linux match. If you rebuild on macOS or Windows, please report
 whether it matched.
 
-## 6. On the USB stick
+## 6. On the USB flash drive
 
 `sudo bash quick-update.sh` prints the full `app sha256` of the `boot.html`
 it is about to install. Before flashing, check that it equals the release's
@@ -137,7 +137,7 @@ it is about to install. Before flashing, check that it equals the release's
    ```
 4. Build the USB image on the build machine with the full build, not
    `quick-update.sh`. Use the app from the release, not a local build, so
-   the stick runs exactly the attested bytes:
+   the flash drive runs exactly the attested bytes:
    - copy the released `boot.html` into `usbbootdrive/src/dist/boot.html`;
    - check that `sha256sum src/dist/boot.html` matches `SHA256SUMS`;
    - build with the version named, so the build stops at once if the app
@@ -168,10 +168,34 @@ it is about to install. Before flashing, check that it equals the release's
    `SHA256SUMS.txt` with the image's hash only, so the website's
    `shasum -c SHA256SUMS.txt` works for people who only download the image.
    The update file needs no entry there: it carries its own signature, which
-   the stick checks. Sign `SHA256SUMS.txt`, then upload everything:
+   the flash drive checks. Sign `SHA256SUMS.txt`, then upload everything:
    ```sh
    shasum -a 256 SafeKeep-Release-v1.36.img > SHA256SUMS.txt
    gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign SHA256SUMS.txt
    zip SafeKeep-Release-v1.36.zip SafeKeep-Release-v1.36.img
    gh release upload v1.36 SafeKeep-Release-v1.36.zip SafeKeep-Update-v1.36.tar SHA256SUMS.txt SHA256SUMS.txt.asc
    ```
+7. Replace the release's description with full release notes. The workflow
+   writes only the build stamp, the `boot.html` hash and the verification
+   commands; the notes are what people read first. Follow the v1.65 release
+   as the model, in this order:
+   - `Release Date: …` and `Build: v1.36 · build N · commit · date`;
+   - one sentence on what's new, with a link to the previous release's notes;
+   - a section per feature or fix, each with an emoji heading, saying where it
+     is in the app (**Device Options → …**) and what it does, and naming the
+     hardware it was tested on (and what wasn't tested);
+   - **Update in place from v1.47 or later**: the three steps, with this
+     release's file name;
+   - **Verifying This Release**: the image's hash from `SHA256SUMS.txt`, the
+     app's hash from `SHA256SUMS`, the signing key's fingerprint, and the
+     link to this file at the release's tag.
+
+   Write it in American English and call the device a "USB flash drive" or
+   "flash drive". Then:
+   ```sh
+   gh release edit v1.36 --notes-file release-notes-v1.36.md
+   ```
+   (or paste it in with the release's edit button on GitHub).
+8. Update the website for the release (download links and hashes, release
+   notes, and docs for what's new), and install the release's update file on
+   a flash drive to check it.
