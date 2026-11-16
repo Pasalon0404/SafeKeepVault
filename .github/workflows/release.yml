@@ -65,7 +65,9 @@ jobs:
       - name: Run tests
         run: |
           for f in test-*.mjs; do
-            [ "$f" = test-entropy-built.mjs ] && continue   # needs dist/: runs after the build
+            # These two open the built app (dist/): they run after the build.
+            [ "$f" = test-entropy-built.mjs ] && continue
+            [ "$f" = test-courier-receive.mjs ] && continue
             echo "::group::$f"
             node "$f"
             echo "::endgroup::"
@@ -85,6 +87,9 @@ jobs:
 
       - name: Test seed generation in the built app
         run: CHROMIUM_BINARY="$(command -v google-chrome || command -v chromium)" node test-entropy-built.mjs
+
+      - name: Test the Courier's Receive tab in the built app
+        run: CHROMIUM_BINARY="$(command -v google-chrome || command -v chromium)" node test-courier-receive.mjs
 
       - name: Check the version stamp
         run: |
