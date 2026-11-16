@@ -311,6 +311,13 @@ runpy.run_path(sys.argv[0], run_name="__main__")
         console.log('SKIP: udevadm is not installed here, so the rules\' syntax was not checked.');
         skipped++;
     }
+    const setupSrc = read('setup-vault.sh');
+    ck('setup: the progress window doesn\'t mention a Master Passphrase for a key-only vault',
+        setupSrc.includes('echo "35"; echo "# $LOCK_MSG"') && /if \[ "\$UNLOCK_CHOICE" = "key" \]; then\n\s*LOCK_MSG="Locking the vault \(your security key is added next\)\.\.\."/.test(setupSrc)
+        && !/echo "# [^"]*Master Passphrase/.test(setupSrc));
+    const appHtml = readFileSync(new URL('./boot.html', import.meta.url), 'utf8');
+    ck('app: no message assumes the vault has a passphrase',
+        !appHtml.includes('Enter your Master Passphrase there.') && !appHtml.includes('Use your vault password') && !appHtml.includes('flash drive and its Master Passphrase still'));
     ck('unlock: the summary is cleared on every run', unlock.indexOf('rm -f "$UNLOCK_SUMMARY_FILE"') > 0 && unlock.indexOf('rm -f "$UNLOCK_SUMMARY_FILE"') < unlock.indexOf('1. CHECK IF ALREADY UNLOCKED'));
     ck('unlock: a vault without the helper stays passphrase-only', unlock.includes('if [ -f "$FIDO2_HELPER" ]; then') && unlock.includes('VAULT_HAS_PASSPHRASE=true'));
 

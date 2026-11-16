@@ -6682,7 +6682,7 @@
                 <button type="button" class="skb-btn welcome-vault-btn" id="welcome-vault-btn" style="display: none;" onclick="vaultLock()">
                     Unlock my vault instead
                 </button>
-                <p class="welcome-vault-note" id="welcome-vault-note" style="display: none;">Ends this Temporary Session and returns to the unlock screen. Enter your Master Passphrase there.</p>
+                <p class="welcome-vault-note" id="welcome-vault-note" style="display: none;">Ends this Temporary Session and returns to the unlock screen. Unlock your vault there with your Master Passphrase or security key.</p>
             </div>
 
             <!-- Shown when vault already has a seed (query param ?state=initialized) -->
@@ -7786,7 +7786,7 @@
                         <div id="settings-seed-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Seed storage</h4>
                             <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
-                                Choose whether this flash drive keeps your master seed. If it doesn&rsquo;t, unlocking opens the vault (your passphrases, saved wallets, notes and settings) but not your wallet: you scan your SeedQR or type your words each time you start, and they stay in memory until you lock or shut down. Someone who has this flash drive and its Master Passphrase still can&rsquo;t spend without your SeedQR or words.
+                                Choose whether this flash drive keeps your master seed. If it doesn&rsquo;t, unlocking opens the vault (your passphrases, saved wallets, notes and settings) but not your wallet: you scan your SeedQR or type your words each time you start, and they stay in memory until you lock or shut down. Someone who has this flash drive and can unlock it (with its Master Passphrase or security key) still can&rsquo;t spend without your SeedQR or words.
                             </p>
                             <div id="settings-seed-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;">Checking…</div>
                             <div id="settings-seed-stop" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
@@ -38181,7 +38181,7 @@ function rlq_onBackupPasswordInput() {
  */
 var RLQ_STRENGTH = {
     weak: { label: 'Weak', color: 'var(--skb-danger)', pct: 20,
-        advice: 'Too easy to guess for a backup, which can be copied to a computer and guessed quickly. Use your vault password if it came from a password manager, or 6 or more random words.' },
+        advice: 'Too easy to guess for a backup, which can be copied to a computer and guessed quickly. Use a long random password from a password manager, or 6 or more random words.' },
     fair: { label: 'Fair', color: 'var(--skb-warning, #f59e0b)', pct: 60,
         advice: 'Allowed, but a long random password from a password manager, or 6 or more random words, would be safer.' },
     strong: { label: 'Strong', color: 'var(--skb-primary)', pct: 100, advice: '' },

@@ -242,6 +242,11 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     fi
 
     # --- Create the LUKS vault ---
+    # What the progress window says about locking it, for the choice made.
+    LOCK_MSG="Locking the vault with your Master Passphrase..."
+    if [ "$UNLOCK_CHOICE" = "key" ]; then
+        LOCK_MSG="Locking the vault (your security key is added next)..."
+    fi
     (
     echo "5"; echo "# Creating your ${VAULT_MB} MB encrypted vault..."
     sudo dd if=/dev/zero of="$DATA_MOUNT/$VAULT_FILE" bs=1M count="$VAULT_MB" status=none
@@ -249,7 +254,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     echo "20"; echo "# Preparing the vault..."
     LOOP_DEV=$(sudo losetup --find --show "$DATA_MOUNT/$VAULT_FILE")
 
-    echo "35"; echo "# Locking the vault with your Master Passphrase..."
+    echo "35"; echo "# $LOCK_MSG"
     printf '%s' "$PASSWORD" | sudo cryptsetup luksFormat -q "$LOOP_DEV" --key-file=-
 
     echo "50"; echo "# Opening the vault to set it up..."
