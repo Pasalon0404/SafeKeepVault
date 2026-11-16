@@ -49,21 +49,52 @@ print("" if v is None else str(v).lower() if isinstance(v, bool) else v)' "$1" 2
 # values: bash variables can't hold NUL, so callers pass a command).
 # A pulsing progress window shows the message while it runs, since a
 # security key waits for a touch.
+# What the progress window says at each stage the helper reports
+# ("progress=..." on its stderr), so the user sees the PIN was accepted,
+# that each touch was received, and what SafeKeep is doing next.
+# Prints nothing for a stage it doesn't know (the window keeps its text).
+sk_progress_text() {
+    case "$1" in
+        touch-1-of-2) echo "PIN accepted. Touch your security key now (1 of 2).\nIt blinks while it waits." ;;
+        touch-2-of-2) echo "✓ First touch received.\nTouch your security key again (2 of 2)." ;;
+        saving)       echo "✓ Both touches received.\nAdding the key to your vault. This takes a few seconds..." ;;
+        touch-check)  echo "PIN accepted. Touch your security key now.\nIt blinks while it waits." ;;
+        checking)     echo "✓ Touch received.\nChecking that it opens your vault..." ;;
+        touch-unlock) echo "PIN accepted. Touch your security key now.\nIt blinks while it waits." ;;
+        unlocking)    echo "✓ Touch received.\nUnlocking your vault. This takes a few seconds..." ;;
+    esac
+}
+
 sk_run() {
     local message=$1 input_cmd=$2
     shift 2
     local err_file zpid
     err_file=$(mktemp /tmp/safekeep-sk-XXXXXX)
-    ( while :; do echo "# $message"; sleep 1; done ) |
+    # The window starts with $message, then follows the helper's stages.
+    # The loop stops when the helper is done ($err_file.done): it only
+    # writes when the stage changes, so it wouldn't notice the window
+    # closing, and "wait" below waits for the whole pipeline, loop included.
+    ( shown=""
+      echo "# $message"
+      while [ ! -e "$err_file.done" ]; do
+          stage=$(sed -n 's/^progress=\([a-z0-9-]*\)$/\1/p' "$err_file" 2>/dev/null | tail -n1)
+          if [ -n "$stage" ] && [ "$stage" != "$shown" ]; then
+              text=$(sk_progress_text "$stage")
+              [ -n "$text" ] && echo "# $text"
+              shown=$stage
+          fi
+          sleep 0.3
+      done ) |
         zenity --progress --pulsate --no-cancel --auto-close --title="$SK_TITLE" --width=460 \
             --text="$message" 2>/dev/null &
     zpid=$!
     SK_OUT=$(eval "$input_cmd" | sudo python3 -I "$FIDO2_HELPER" "$@" 2>"$err_file")
     SK_RC=$?
+    : > "$err_file.done"
     kill "$zpid" 2>/dev/null || true
     wait "$zpid" 2>/dev/null || true
     SK_ERR=$(head -c 400 "$err_file" 2>/dev/null || true)
-    rm -f "$err_file"
+    rm -f "$err_file" "$err_file.done"
     return "$SK_RC"
 }
 

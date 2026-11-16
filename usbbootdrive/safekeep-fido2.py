@@ -47,6 +47,12 @@
 #    19 PIN too short or refused   20 already 4 keys
 #    21 would leave no way in      22 this key is already added
 #
+#  Progress: while a key waits for a touch, the helper writes lines like
+#  "progress=touch-1-of-2" to stderr (never a secret), so the screens can
+#  say the PIN was accepted, that a touch was received, and what comes
+#  next: touch-1-of-2, touch-2-of-2, saving (adding a key); touch-check,
+#  checking (secret); touch-unlock, unlocking (open).
+#
 #  Every change first copies the LUKS header to RAM and puts it back if
 #  anything fails, adds and tests new key slots before removing old ones,
 #  and never removes the last way in (cryptsetup itself also refuses to
@@ -74,6 +80,15 @@ MAX_NAME = 40
 MIN_PIN = 6
 DEVICE_RE = re.compile(r"^/dev/loop[0-9]{1,4}$")
 MAPPER_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
+
+
+def progress(event):
+    """Tell the screens what is happening (stderr; never a secret)."""
+    try:
+        sys.stderr.write("progress=%s\n" % event)
+        sys.stderr.flush()
+    except OSError:
+        pass
 
 
 class Fail(Exception):
@@ -174,9 +189,11 @@ class RealKey:
             raise self._error(e, client_pin)
         return client_pin, token
 
-    def make_credential(self, pin, exclude):
+    def make_credential(self, pin, exclude, ready=None):
         P = self.ClientPin.PERMISSION
         client_pin, token = self._token(pin, P.MAKE_CREDENTIAL)
+        if ready:
+            progress(ready)     # the PIN is accepted; the key now waits for a touch
         cdh = hashlib.sha256(secrets.token_bytes(32)).digest()
         try:
             att = self.ctap.make_credential(
@@ -196,9 +213,11 @@ class RealKey:
             raise Fail(12, "the key made a credential without hmac-secret")
         return bytes(att.auth_data.credential_data.credential_id)
 
-    def hmac_secret(self, pin, credentials, salt):
+    def hmac_secret(self, pin, credentials, salt, ready=None):
         P = self.ClientPin.PERMISSION
         client_pin, token = self._token(pin, P.GET_ASSERTION)
+        if ready:
+            progress(ready)
         ext = self.Hmac(self.ctap, client_pin.protocol)
         try:
             ext_in = ext.process_get_input({"hmacGetSecret": {"salt1": salt}})
@@ -437,9 +456,10 @@ def do_enroll(device):
     if info["pin"] != "set":
         raise Fail(18, "the key has no PIN yet")
     exclude = [base64.b64decode(k["credential"]) for k in st["keys"] if k["credential"]]
-    credential = key.make_credential(pin, exclude)                      # touch 1
+    credential = key.make_credential(pin, exclude, ready="touch-1-of-2")       # touch 1
     salt = base64.b64decode(st["salt"]) if st["salt"] else secrets.token_bytes(32)
-    _, output = key.hmac_secret(pin, [credential], salt)                # touch 2
+    _, output = key.hmac_secret(pin, [credential], salt, ready="touch-2-of-2")  # touch 2
+    progress("saving")
     with HeaderBackup(device):
         if not st["salt"]:
             import_token(device, {"type": VAULT_TOKEN, "keyslots": [], "salt": b64(salt)})
@@ -452,13 +472,15 @@ def do_enroll(device):
     print(slot)
 
 
-def key_secret(device, pin):
+def key_secret(device, pin, ready=None, after=None):
     st = vault_state(device)
     if not st["keys"] or not st["salt"]:
         raise Fail(17, "this vault has no security keys")
     by_cred = {base64.b64decode(k["credential"]): k for k in st["keys"] if k["credential"]}
     key = security_key()
-    credential, output = key.hmac_secret(pin, list(by_cred), base64.b64decode(st["salt"]))
+    credential, output = key.hmac_secret(pin, list(by_cred), base64.b64decode(st["salt"]), ready=ready)
+    if after:
+        progress(after)
     k = by_cred.get(credential)
     if k is None:
         raise Fail(17, "this security key isn't one of this vault's keys")
@@ -470,7 +492,7 @@ def key_secret(device, pin):
 
 def do_secret(device):
     (pin,) = read_fields(1)
-    slot, secret = key_secret(device, text(pin))
+    slot, secret = key_secret(device, text(pin), ready="touch-check", after="checking")
     sys.stdout.write("%d\n%s\n" % (slot, secret.decode()))
 
 
@@ -478,7 +500,7 @@ def do_open(device, mapper):
     if not MAPPER_RE.match(mapper):
         raise Fail(1, "bad mapper name")
     (pin,) = read_fields(1)
-    slot, secret = key_secret(device, text(pin))
+    slot, secret = key_secret(device, text(pin), ready="touch-unlock", after="unlocking")
     fd = pipe_with(secret)
     try:
         r = run(["open", device, mapper, "--key-slot", str(slot), "--key-file", "/dev/fd/%d" % fd], fds=(fd,))

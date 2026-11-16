@@ -222,6 +222,11 @@ runpy.run_path(sys.argv[0], run_name="__main__")
         ck('manage: Cancel at the start changes nothing', m.status === 0 && !m.left, m);
         ck('manage: secrets never reach the dialogs', !/[A-Za-z0-9+/]{43}=/.test(m.log));
 
+        spawnSync('sleep', ['1']);
+        const leftover = spawnSync('bash', ['-c', "ps -eo args | grep '^sed -n s/^progress=' || true"]).stdout.toString().trim();
+        const leftFiles = spawnSync('bash', ['-c', 'ls /tmp/safekeep-sk-* 2>/dev/null || true']).stdout.toString().trim();
+        ck('progress: no window-update loop or file is left after the screens', leftover === '' && leftFiles === '', leftover + leftFiles);
+
         // --- First setup: choosing how the vault unlocks ---
         const newDrive = () => { const d = mkdtempSync(join(tmp, 'drive-')); return { dir: d, vault: join(d, '.vault.luks'), marker: join(d, '.setup_complete') }; };
         const BEGIN = ['0', ''], CONTINUE_NOW = ['0', 'Continue now'];
@@ -311,6 +316,15 @@ runpy.run_path(sys.argv[0], run_name="__main__")
         console.log('SKIP: udevadm is not installed here, so the rules\' syntax was not checked.');
         skipped++;
     }
+    const stageText = (stage) => spawnSync('bash', ['-c', `source ${path('security-key-dialogs.sh')}; sk_progress_text "$1"`, 'x', stage]).stdout.toString();
+    ck('progress: the window says the PIN was accepted and to touch the key (1 of 2)', stageText('touch-1-of-2').includes('PIN accepted. Touch your security key now (1 of 2)'));
+    ck('progress: a ✓ when the first touch is received, then touch again', stageText('touch-2-of-2').includes('✓ First touch received.') && stageText('touch-2-of-2').includes('(2 of 2)'));
+    ck('progress: both touches received, then adding the key', stageText('saving').includes('✓ Both touches received.'));
+    ck('progress: unlocking says the touch was received', stageText('unlocking').includes('✓ Touch received.') && stageText('unlocking').includes('Unlocking your vault'));
+    ck('progress: checking says the touch was received', stageText('checking').includes('✓ Touch received.'));
+    ck('progress: an unknown stage leaves the text as it is', stageText('something-else') === '');
+    const dialogsSrc = read('security-key-dialogs.sh');
+    ck('progress: the window follows the helper\'s stages', dialogsSrc.includes("sed -n 's/^progress=\\([a-z0-9-]*\\)$/\\1/p' \"$err_file\"") && dialogsSrc.includes('text=$(sk_progress_text "$stage")'));
     const setupSrc = read('setup-vault.sh');
     ck('setup: the progress window doesn\'t mention a Master Passphrase for a key-only vault',
         setupSrc.includes('echo "35"; echo "# $LOCK_MSG"') && /if \[ "\$UNLOCK_CHOICE" = "key" \]; then\n\s*LOCK_MSG="Locking the vault \(your security key is added next\)\.\.\."/.test(setupSrc)

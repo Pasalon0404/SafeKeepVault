@@ -183,6 +183,8 @@ ck('header: one vault token (the salt) and one key token', types == ['safekeep-f
 ck('header: the key token holds no secret, only the credential, name and date',
    all(set(t) <= {'type', 'keyslots', 'credential', 'name', 'added', 'salt'} for t in meta['tokens'].values()))
 ck('enroll: the passphrase still opens the vault', opens(vault, PASS.encode()))
+stages = [l.split('=', 1)[1] for l in r.stderr.decode().splitlines() if l.startswith('progress=')]
+ck('enroll: reports PIN accepted and each touch, in order', stages == ['touch-1-of-2', 'touch-2-of-2', 'saving'], stages)
 ck('enroll: the same key again → 22 (already added)',
    code(helper(k1, 'enroll', vault, data=PASS.encode() + b'\0' + PIN.encode() + b'\0Again')) == 22)
 
@@ -190,6 +192,7 @@ ck('enroll: the same key again → 22 (already added)',
 r, s1, sec1 = secret(k1, vault)
 ck('secret: the key gives its slot and slot key', r.returncode == 0 and s1 == slot1 and len(sec1) == 44, r.stderr)
 ck('secret: the slot key opens that slot', opens(vault, sec1, slot1))
+ck('secret: reports the touch, then the check', [l for l in r.stderr.decode().splitlines() if l.startswith('progress=')] == ['progress=touch-check', 'progress=checking'], r.stderr)
 ck('secret: the slot key is not the passphrase slot\'s key', not opens(vault, sec1, 0))
 r2, _, sec1b = secret(k1, vault)
 ck('secret: the same key gives the same slot key each time', sec1b == sec1)
@@ -207,6 +210,9 @@ log = os.path.join(tmp, 'opens.log')
 r = helper(k1, 'open', vault, 'vault', data=PIN.encode())
 ck('open: opens the vault with the key\'s own slot', r.returncode == 0 and os.path.exists(log)
    and ('opened vault --key-slot %d' % slot1) in open(log).read(), r.stderr)
+ck('open: reports the touch, then unlocking', [l for l in r.stderr.decode().splitlines() if l.startswith('progress=')] == ['progress=touch-unlock', 'progress=unlocking'], r.stderr)
+r2 = helper(k1, 'open', vault, 'vault', data=b'000000')
+ck('open: a wrong PIN reports no touch stage', not any(l.startswith('progress=') for l in r2.stderr.decode().splitlines()), r2.stderr)
 ck('open: refuses a bad mapper name', code(helper(k1, 'open', vault, '../x', data=PIN.encode())) == 1)
 ck('open: a wrong PIN doesn\'t open → 13', code(helper(k1, 'open', vault, 'vault', data=b'111111')) == 13)
 
