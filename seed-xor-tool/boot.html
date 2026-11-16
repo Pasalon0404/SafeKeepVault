@@ -5025,6 +5025,8 @@
       box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
     }
     .eob-meter-main { flex: 1; min-width: 0; }
+    /* The Courier's received text: dots until Show (Chromium). */
+    textarea.xfr-masked { -webkit-text-security: disc; }
     .eob-meter-bar .eob-meter-header { gap: 0.75rem; }
     .eob-meter-bar .eob-meter-bits { margin: 0 auto 0 0; }
     .eob-forge-hint {
@@ -9957,10 +9959,12 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     <div class="skb-card" style="margin-bottom: 1rem;">
                         <label style="font-size: 0.85rem; color: var(--skb-success, #00c896); display: block; margin-bottom: 0.5rem;">Received Data</label>
                         <div style="position: relative; margin-bottom: 0.75rem;">
-                            <input type="password" id="xfr-recv-text" readonly
-                                   style="width: 100%; box-sizing: border-box; padding: 0.6rem 2.5rem 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);">
+                            <!-- A textarea, so text with line breaks keeps them; hidden
+                                 (dots) until Show, like a password field. -->
+                            <textarea id="xfr-recv-text" class="xfr-masked" readonly rows="3" spellcheck="false"
+                                   style="width: 100%; box-sizing: border-box; padding: 0.6rem 3.5rem 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text); resize: vertical; white-space: pre-wrap;"></textarea>
                             <button type="button" onclick="xfr_togglePwd('xfr-recv-text', this)" title="Show/Hide"
-                                    style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: transparent; border: none; cursor: pointer; padding: 4px 8px; color: var(--skb-text-muted); font-size: 0.75rem; letter-spacing: 0.02em;">Show</button>
+                                    style="position: absolute; right: 6px; top: 6px; background: transparent; border: none; cursor: pointer; padding: 4px 8px; color: var(--skb-text-muted); font-size: 0.75rem; letter-spacing: 0.02em;">Show</button>
                         </div>
                         <div class="tool-grid-2">
                             <button type="button" class="skb-btn" style="background: var(--skb-primary); color: black; font-weight: 600;" onclick="xfr_copyReceived()">Copy to Clipboard</button>
@@ -36698,6 +36702,8 @@ var xfr_state = {
     recvFilename: '',
     recvExtension: '',
     recvMimeType: '',
+    recvUr: null,            // URDecoder for animated ur: codes (the Courier Tool's long text)
+    recvBbqr: null,          // { total, parts } for animated BBQr codes
     completedBlob: null
 };
 
@@ -36742,6 +36748,11 @@ function xfr_setMode(mode) {
 function xfr_togglePwd(inputId, btn) {
     var inp = document.getElementById(inputId);
     if (!inp) return;
+    if (inp.tagName === 'TEXTAREA') {
+        var masked = inp.classList.toggle('xfr-masked');
+        btn.innerHTML = masked ? 'Show' : 'Hide';
+        return;
+    }
     if (inp.type === 'password') {
         inp.type = 'text';
         btn.innerHTML = 'Hide';
@@ -37156,6 +37167,8 @@ function xfr_startReceive() {
     xfr_state.recvFilename = '';
     xfr_state.recvExtension = '';
     xfr_state.recvMimeType = '';
+    xfr_state.recvUr = null;
+    xfr_state.recvBbqr = null;
     xfr_state.completedBlob = null;
 
     // Reset UI
@@ -37193,6 +37206,13 @@ function xfr_processQR(qrData, binaryData) {
         qrData = window.QRParser.parseQRScan(qrData, binaryData);
     }
     try {
+        // Animated UR (the online Courier Tool sends long text as ur:bytes
+        // in many fountain-coded frames) and animated BBQr (its relay mode):
+        // collect every frame before showing anything. A single frame used
+        // to be shown as if it were the whole text.
+        if (/^ur:/i.test(qrData)) { xfr_receiveUrFrame(qrData); return; }
+        if (/^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(qrData)) { xfr_receiveBbqrFrame(qrData); return; }
+
         var parts = qrData.split('~');
         // Animated chunk: 6 parts with "loop/index/total" header in parts[0]
         var isAnimated = parts.length === 6 && /^\d+\/\d+\/\d+$/.test(parts[0]);
@@ -37227,18 +37247,107 @@ function xfr_processQR(qrData, binaryData) {
             }
         } else {
             // --- STATIC TEXT / PASSWORD ---
-            xfr_stopReceive();
-            document.getElementById('xfr-recv-animated').style.display = 'none';
-            document.getElementById('xfr-recv-static').style.display = 'block';
-
-            var pwdInput = document.getElementById('xfr-recv-text');
-            pwdInput.value = qrData;
-            pwdInput.type = 'password'; // auto-mask
-
-            showStatus('Static data received — ' + qrData.length + ' characters.', 'success');
+            xfr_showReceivedText(qrData, 'Static data received');
         }
     } catch (e) {
         console.error('QR parse error:', e);
+    }
+}
+
+// Show received text (hidden until Show), keeping its line breaks.
+function xfr_showReceivedText(text, what) {
+    xfr_stopReceive();
+    document.getElementById('xfr-recv-animated').style.display = 'none';
+    document.getElementById('xfr-recv-static').style.display = 'block';
+    var box = document.getElementById('xfr-recv-text');
+    box.value = text;
+    box.classList.add('xfr-masked');   // hidden until Show
+    box.rows = Math.max(3, Math.min(14, String(text).split('\n').length + 1));
+    var btn = box.parentNode && box.parentNode.querySelector('button');
+    if (btn) btn.innerHTML = 'Show';
+    showStatus(what + ' \u2014 ' + text.length + ' characters.', 'success');
+}
+
+// Hand received bytes to the save-to-Transfer-Drive screen as a file.
+function xfr_receiveAsFile(bytes, name, ext, mime) {
+    xfr_state.recvBytes = bytes;
+    xfr_state.recvFilename = name;
+    xfr_state.recvExtension = ext;
+    xfr_state.recvMimeType = mime;
+    xfr_onTransferComplete();
+}
+
+function xfr_bytesToText(bytes) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (_) { return null; }
+}
+
+function xfr_showReceiveProgress(label, pct) {
+    document.getElementById('xfr-recv-filename').textContent = label;
+    document.getElementById('xfr-recv-chunk-count').textContent = pct + '%';
+    document.getElementById('xfr-recv-progress-bar').style.width = pct + '%';
+}
+
+// One frame of an animated (or single) UR code.
+function xfr_receiveUrFrame(text) {
+    if (!window.URDecoder) { showStatus('The UR decoder isn\u2019t available.', 'error'); return; }
+    if (!xfr_state.recvUr) xfr_state.recvUr = new (window.URDecoder)();
+    try {
+        xfr_state.recvUr.receivePart(text);
+    } catch (e) {
+        // A frame from a different code, or a damaged one: start over.
+        xfr_state.recvUr = new (window.URDecoder)();
+        return;
+    }
+    var dec = xfr_state.recvUr;
+    xfr_showReceiveProgress('Animated QR code (UR)', Math.round(dec.getProgress() * 100));
+    if (!dec.isComplete()) return;
+    xfr_state.recvUr = null;
+    if (!dec.isSuccess()) { showStatus('The animated QR code didn\u2019t check out. Scan it again.', 'error'); return; }
+    var ur = dec.resultUR();
+    var type = String(ur.type || '').toLowerCase();
+    var bytes = null;
+    if (type === 'bytes' || type === 'crypto-psbt' || type === 'psbt') {
+        var raw = window.CBOR.decode(Buffer.from(ur.cbor));
+        bytes = new Uint8Array((raw instanceof Uint8Array || Buffer.isBuffer(raw)) ? raw : ur.cbor);
+    }
+    if (type === 'crypto-psbt' || type === 'psbt') {
+        xfr_receiveAsFile(bytes, 'received', 'psbt', 'application/octet-stream');
+    } else if (type === 'bytes') {
+        var t = xfr_bytesToText(bytes);
+        if (t !== null) xfr_showReceivedText(t, 'Text received');
+        else xfr_receiveAsFile(bytes, 'received', 'bin', 'application/octet-stream');
+    } else {
+        // Another kind of UR (an account, an output…): show it as one UR text.
+        xfr_showReceivedText(window.UREncoder && window.UREncoder.encodeSinglePart ? window.UREncoder.encodeSinglePart(ur) : text, 'UR (' + type + ') received');
+    }
+}
+
+// One frame of an animated (or single) BBQr code.
+async function xfr_receiveBbqrFrame(text) {
+    var total = parseInt(text.substring(4, 6), 36), n = parseInt(text.substring(6, 8), 36);
+    if (!(total >= 1 && total <= 1295) || !(n >= 0 && n < total)) return;
+    var st = xfr_state.recvBbqr;
+    if (!st || st.total !== total || st.head !== text.substring(0, 6)) {
+        st = xfr_state.recvBbqr = { total: total, head: text.substring(0, 6), parts: {} };
+    }
+    st.parts[n] = text;
+    var have = Object.keys(st.parts).length;
+    xfr_showReceiveProgress('Animated QR code (BBQr)', Math.round(have / total * 100));
+    if (have < total || st.done) return;
+    st.done = true;
+    try {
+        var frames = [];
+        for (var i = 0; i < total; i++) frames.push(st.parts[i]);
+        var res = await _bbqrDecode(frames.join(' '));
+        xfr_state.recvBbqr = null;
+        if (res.type === 'P') return xfr_receiveAsFile(res.bytes, 'received', 'psbt', 'application/octet-stream');
+        if (res.type === 'T') return xfr_showReceivedText(Array.from(res.bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join(''), 'Transaction received (hex)');
+        var t = (res.type === 'U' || res.type === 'J') ? xfr_bytesToText(res.bytes) : null;
+        if (t !== null) return xfr_showReceivedText(t, res.type === 'J' ? 'JSON received' : 'Text received');
+        xfr_receiveAsFile(res.bytes, 'received', 'bin', 'application/octet-stream');
+    } catch (e) {
+        xfr_state.recvBbqr = null;
+        showStatus('The animated QR code didn\u2019t decode: ' + e.message, 'error');
     }
 }
 
