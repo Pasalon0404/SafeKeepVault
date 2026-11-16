@@ -92,7 +92,7 @@ trap cleanup EXIT
 # config/ stops the build.
 MAINTAINER_FPR="A333EB826F70A79A736F09948EA7DD8CEDBA86C2"
 MAINTAINER_KEY="config/maintainer-pubkey.asc"
-for f in grub.cfg .disk_label .disk_label_2x "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh quiet-downloads/manifest.json quiet-downloads/background.js; do
+for f in grub.cfg .disk_label .disk_label_2x "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh safekeep-fido2.py security-key-dialogs.sh manage-security-key.sh quiet-downloads/manifest.json quiet-downloads/background.js; do
     [ -s "$f" ] || { echo "ERROR: $f is missing (rsync the whole usbbootdrive folder)." >&2; exit 1; }
 done
 
@@ -306,6 +306,8 @@ cp unlock-vault.sh "$CHROOT_DIR/usr/local/bin/unlock-vault"
 chmod +x "$CHROOT_DIR/usr/local/bin/unlock-vault"
 cp change-passphrase.sh "$CHROOT_DIR/usr/local/bin/change-passphrase"
 chmod +x "$CHROOT_DIR/usr/local/bin/change-passphrase"
+cp manage-security-key.sh "$CHROOT_DIR/usr/local/bin/manage-security-key"
+chmod +x "$CHROOT_DIR/usr/local/bin/manage-security-key"
 cp safekeep-boot.sh "$CHROOT_DIR/usr/local/bin/safekeep-boot"
 chmod +x "$CHROOT_DIR/usr/local/bin/safekeep-boot"
 cp safekeep-harden.sh "$CHROOT_DIR/usr/local/bin/safekeep-harden"
@@ -336,6 +338,11 @@ install -m 644 pwcheck-lists.json "$CHROOT_DIR/usr/local/share/safekeep/pwcheck-
 # the root helper that checks or changes the Master Passphrase.
 install -m 644 passphrase-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/passphrase-dialogs.sh"
 install -m 755 safekeep-passphrase.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-passphrase.py"
+# Security keys (SECURITY_KEY_DESIGN.md): the FIDO2 helper (needs Ubuntu's
+# python3-fido2, installed by chroot-setup.sh) and the screens shared by
+# unlock-vault and manage-security-key.
+install -m 755 safekeep-fido2.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-fido2.py"
+install -m 644 security-key-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/security-key-dialogs.sh"
 # Chromium extension that hides "Download started" for the app's request
 # files (safekeep-boot.sh loads it with --load-extension).
 install -d -m 755 "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads"

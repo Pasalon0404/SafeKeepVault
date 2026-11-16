@@ -5008,7 +5008,36 @@
       color: #000;
     }
     .eob-meter-wrap {
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    /* The meter bar sticks to the top of the tool's scroll area while the
+       Advanced section is open, so it stays in view at every source. */
+    .eob-meter-bar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.6rem 0.75rem;
+      background: var(--skb-bg-card, #111);
+      border: 2px solid var(--skb-border);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+    }
+    .eob-meter-main { flex: 1; min-width: 0; }
+    /* The Courier's received text: dots until Show (Chromium). */
+    textarea.xfr-masked { -webkit-text-security: disc; }
+    .eob-meter-bar .eob-meter-header { gap: 0.75rem; }
+    .eob-meter-bar .eob-meter-bits { margin: 0 auto 0 0; }
+    .eob-forge-hint {
+      font-size: 0.75rem;
+      color: var(--skb-text-muted);
+      margin: 0.35rem 0 0;
+    }
+    .eob-forge-btn.eob-forge-btn--bar {
+      flex: none;
+      padding: 0.75rem 1.25rem;
+      font-size: 0.875rem;
     }
     .eob-meter-header {
       display: flex;
@@ -5054,8 +5083,9 @@
     .eob-meter-note {
       font-size: 0.7rem;
       color: var(--skb-text-muted);
-      margin-top: 0.25rem;
+      margin: -0.5rem 0 0.6rem;
     }
+    .eob-meter-note[hidden] { display: none; }
     .eob-mode-toggle { margin-top: 0.25rem; }
     .eob-verify-warning {
         margin: 0.6rem 0 0;
@@ -5148,7 +5178,7 @@
     .eob-words-gate[hidden] { display: none; }
     .eob-wiggle-zone {
       width: 100%;
-      height: 100px;
+      height: 80px;
       border: 2px dashed var(--skb-border);
       border-radius: 0;
       display: flex;
@@ -5166,8 +5196,9 @@
       background: rgba(247, 147, 26, 0.05);
     }
     .eob-live-hash {
-      margin-bottom: 1.25rem;
+      margin: 0.6rem 0 0.75rem;
     }
+    #eob-pool-wrap > summary .eob-hash-dot { vertical-align: middle; margin-right: 0.25rem; }
     .eob-live-hash-label {
       font-size: 0.8125rem;
       color: var(--skb-text-muted);
@@ -5206,10 +5237,6 @@
     .eob-hash-display.flash {
       border-color: #00ff41;
       box-shadow: 0 0 8px rgba(0, 255, 65, 0.2);
-    }
-    .eob-forge-area {
-      text-align: center;
-      margin-top: 0.5rem;
     }
     .eob-forge-btn {
       padding: 1rem 2rem;
@@ -6657,7 +6684,7 @@
                 <button type="button" class="skb-btn welcome-vault-btn" id="welcome-vault-btn" style="display: none;" onclick="vaultLock()">
                     Unlock my vault instead
                 </button>
-                <p class="welcome-vault-note" id="welcome-vault-note" style="display: none;">Ends this Temporary Session and returns to the unlock screen. Enter your Master Passphrase there.</p>
+                <p class="welcome-vault-note" id="welcome-vault-note" style="display: none;">Ends this Temporary Session and returns to the unlock screen. Unlock your vault there with your Master Passphrase or security key.</p>
             </div>
 
             <!-- Shown when vault already has a seed (query param ?state=initialized) -->
@@ -7500,7 +7527,7 @@
                 </div>
 
                 <!-- ---- Settings ---- -->
-                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh(); if (this.open && typeof ssSettingsRefresh === 'function') ssSettingsRefresh(); if (this.open && typeof skbright_refresh === 'function') skbright_refresh()">
+                <details class="dash-settings" ontoggle="if (this.open && typeof ccSettingsRefresh === 'function') ccSettingsRefresh(); if (this.open && typeof tzSettingsRefresh === 'function') tzSettingsRefresh(); if (this.open && typeof updSettingsRefresh === 'function') updSettingsRefresh(); if (this.open && typeof ppSettingsRefresh === 'function') ppSettingsRefresh(); if (this.open && typeof skSettingsRefresh === 'function') skSettingsRefresh(); if (this.open && typeof ssSettingsRefresh === 'function') ssSettingsRefresh(); if (this.open && typeof skbright_refresh === 'function') skbright_refresh()">
                     <summary>Device Options</summary>
                     <div class="settings-panel">
                         <!--
@@ -7761,7 +7788,7 @@
                         <div id="settings-seed-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Seed storage</h4>
                             <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
-                                Choose whether this flash drive keeps your master seed. If it doesn&rsquo;t, unlocking opens the vault (your passphrases, saved wallets, notes and settings) but not your wallet: you scan your SeedQR or type your words each time you start, and they stay in memory until you lock or shut down. Someone who has this flash drive and its Master Passphrase still can&rsquo;t spend without your SeedQR or words.
+                                Choose whether this flash drive keeps your master seed. If it doesn&rsquo;t, unlocking opens the vault (your passphrases, saved wallets, notes and settings) but not your wallet: you scan your SeedQR or type your words each time you start, and they stay in memory until you lock or shut down. Someone who has this flash drive and can unlock it (with its Master Passphrase or security key) still can&rsquo;t spend without your SeedQR or words.
                             </p>
                             <div id="settings-seed-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;">Checking…</div>
                             <div id="settings-seed-stop" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
@@ -7797,7 +7824,7 @@
                         </div>
                         <div id="settings-passphrase-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Master Passphrase</h4>
-                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                            <p id="settings-pp-intro" style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
                                 Change the passphrase that unlocks this vault. SafeKeep locks the vault first, then asks for your current passphrase and a new one, on the same screens as setup: scan it, type it, or let SafeKeep generate one. Your vault&rsquo;s contents are not changed. Afterwards, unlock with the new passphrase.
                             </p>
                             <div id="settings-pp-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;"></div>
@@ -7811,9 +7838,27 @@
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 <button type="button" class="skb-btn" id="settings-pp-change-btn" onclick="ppSettingsStartChange()">Change Master Passphrase</button>
                             </div>
-                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.75rem; margin: 0.75rem 0 0; line-height: 1.6;">
+                            <p id="settings-pp-paper" style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.75rem; margin: 0.75rem 0 0; line-height: 1.6;">
                                 If you keep a paper copy, check it now and then: lock the vault and unlock it with <strong>Type Password</strong> and the words from your paper.
                             </p>
+                            <div id="settings-pp-keys-note" style="display: none; font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-top: 0.75rem; line-height: 1.6;"></div>
+                        </div>
+                        <div id="settings-security-key-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
+                            <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Security Keys</h4>
+                            <p style="color: var(--skb-text-muted); font-family: var(--skb-mono); font-size: 0.8125rem; margin: 0 0 0.75rem; line-height: 1.6;">
+                                A security key (a YubiKey or another FIDO2 key) can unlock this vault with its PIN and a touch, instead of your Master Passphrase or as well as it. You can also make the vault open with security keys only. SafeKeep locks the vault first; then you add, rename or remove keys on the same kind of screens as the unlock prompt. Nothing is stored on the key, and your vault&rsquo;s contents are not changed.
+                            </p>
+                            <div id="settings-sk-status" style="font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-text); margin-bottom: 0.75rem; line-height: 1.6;"></div>
+                            <div id="settings-sk-confirm" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.8125rem; line-height: 1.6;">
+                                SafeKeep will lock now, as the Lock button does: anything you haven&rsquo;t saved is lost. Have your security key and its PIN ready, and your Master Passphrase if this vault has one.
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.65rem;">
+                                    <button type="button" class="skb-btn skb-btn--primary" id="settings-sk-go-btn" onclick="skSettingsLockAndManage()">Lock and Manage</button>
+                                    <button type="button" class="skb-btn" onclick="skSettingsCancel()">Cancel</button>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="skb-btn" id="settings-sk-manage-btn" onclick="skSettingsStart()">Manage Security Keys</button>
+                            </div>
                         </div>
                         <div id="settings-update-section" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--skb-border);">
                             <h4 style="color: var(--skb-primary); margin: 0 0 0.5rem; font-family: var(--skb-mono); font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.04em;">Update SafeKeep</h4>
@@ -9488,17 +9533,28 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <p class="eob-verify-warning"><strong>Draw the words; never choose them.</strong> Words you pick yourself, or remember, follow patterns that an attacker can guess, however random they feel. The seed is only as random as your draw and your coin.</p>
             </div>
 
-            <!-- Entropy Meter -->
-            <div class="eob-meter-wrap">
-                <div class="eob-meter-header">
-                    <span class="eob-meter-label" id="eob-meter-label">Your Entropy</span>
-                    <span class="eob-meter-pct" id="eob-meter-pct">0%</span>
+            <div class="eob-meter-note" id="eob-meter-note">The meter counts only randomness you add. The device's random number generator is always mixed in as well.</div>
+
+            <!-- Entropy meter and Generate Seed in one bar that stays at the top
+                 of the tool while the sources below are scrolled, so the meter
+                 is always in view (position: sticky in #state-entropy). -->
+            <div class="eob-meter-wrap eob-meter-bar" id="eob-meter-bar">
+                <div class="eob-meter-main">
+                    <div class="eob-meter-header">
+                        <span class="eob-meter-label" id="eob-meter-label">Your Entropy</span>
+                        <span class="eob-meter-bits" id="eob-meter-bits">0 / 128 bits from you</span>
+                        <span class="eob-meter-pct" id="eob-meter-pct">0%</span>
+                    </div>
+                    <div class="eob-meter-track">
+                        <div class="eob-meter-fill" id="eob-meter-fill"></div>
+                    </div>
+                    <p class="eob-forge-hint" id="eob-forge-hint">
+                        Collect enough entropy to enable the forge button.
+                    </p>
                 </div>
-                <div class="eob-meter-track">
-                    <div class="eob-meter-fill" id="eob-meter-fill"></div>
-                </div>
-                <div class="eob-meter-bits" id="eob-meter-bits">0 / 128 bits from you</div>
-                <div class="eob-meter-note" id="eob-meter-note">Counts only randomness you add. The device's random number generator is always mixed in as well.</div>
+                <button type="button" class="eob-forge-btn eob-forge-btn--bar" id="eob-forge-btn" disabled onclick="eob_forgeSeed()">
+                    Forge Seed
+                </button>
             </div>
 
             <!-- Input methods: physical dice, playing cards, mouse, camera -->
@@ -9583,7 +9639,10 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         Move cursor here
                     </div>
                     <div style="font-size: 0.7rem; color: var(--skb-text-muted); margin-top: 0.25rem; text-align: center;">
-                        <span id="eob-wiggle-count">0</span> samples captured
+                        <span id="eob-wiggle-count">0</span> samples captured &middot; <span id="eob-wiggle-bits">0 / 64</span> bits from the mouse
+                    </div>
+                    <div id="eob-wiggle-full" hidden style="font-size: 0.75rem; color: var(--skb-warning, #f59e0b); margin-top: 0.35rem; text-align: center; line-height: 1.5;">
+                        The mouse has added all it can for this seed. More movement is still mixed in but adds no bits: use dice, cards or camera noise for the rest. Reset clears it.
                     </div>
                 </div>
 
@@ -9591,7 +9650,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <div class="eob-method-card" id="eob-card-cam">
                     <h4>Video Noise</h4>
                     <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.5rem;">
-                        Captures sensor noise (the lowest bit of each pixel's color). A frame counts as 4 bits only if its noise changed since the last frame.
+                        Captures sensor noise (the lowest bit of each pixel's color). A frame counts as 4 bits only if its noise changed since the last frame. Each press turns the camera on for about a second, takes 5 frames, then turns it off.
                     </p>
                     <button type="button" class="skb-btn" id="eob-cam-btn" style="width: 100%; margin-bottom: 0.5rem;" onclick="eob_captureVideoNoise()">
                         Capture Video Noise
@@ -9605,32 +9664,20 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 </div>
             </div>
 
-            <!-- Raw pool preview (collapsed) -->
+            <!-- The pool itself (collapsed): its live SHA-256 and the raw text -->
             <details id="eob-pool-wrap" style="margin-bottom: 1rem;">
-                <summary style="font-size: 0.8rem; color: var(--skb-text-muted); cursor: pointer;">Show raw entropy pool</summary>
+                <summary style="font-size: 0.8rem; color: var(--skb-text-muted); cursor: pointer;">
+                    <span class="eob-hash-dot" id="eob-hash-dot"></span> Show the entropy pool (live SHA-256 and raw data)
+                </summary>
+                <div class="eob-live-hash" id="eob-live-hash-wrap">
+                    <div class="eob-live-hash-label">Live Pool Hash (SHA-256)</div>
+                    <div class="eob-hash-display" id="eob-hash-display">
+                        0000000000000000000000000000000000000000000000000000000000000000
+                    </div>
+                </div>
+                <div class="eob-live-hash-label">Raw pool</div>
                 <div class="eob-pool-raw" id="eob-pool-raw">—</div>
             </details>
-
-            <!-- Live Hash Visualizer -->
-            <div class="eob-live-hash" id="eob-live-hash-wrap">
-                <div class="eob-live-hash-label">
-                    <span class="eob-hash-dot" id="eob-hash-dot"></span>
-                    Live Pool Hash (SHA-256)
-                </div>
-                <div class="eob-hash-display" id="eob-hash-display">
-                    0000000000000000000000000000000000000000000000000000000000000000
-                </div>
-            </div>
-
-            <!-- Forge Button -->
-            <div class="eob-forge-area">
-                <button type="button" class="eob-forge-btn" id="eob-forge-btn" disabled onclick="eob_forgeSeed()">
-                    Forge Seed
-                </button>
-                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0.5rem 0 0;" id="eob-forge-hint">
-                    Collect enough entropy to enable the forge button.
-                </p>
-            </div>
             </details>
             <!-- /ADVANCED accordion -->
 
@@ -9912,10 +9959,12 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                     <div class="skb-card" style="margin-bottom: 1rem;">
                         <label style="font-size: 0.85rem; color: var(--skb-success, #00c896); display: block; margin-bottom: 0.5rem;">Received Data</label>
                         <div style="position: relative; margin-bottom: 0.75rem;">
-                            <input type="password" id="xfr-recv-text" readonly
-                                   style="width: 100%; box-sizing: border-box; padding: 0.6rem 2.5rem 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text);">
+                            <!-- A textarea, so text with line breaks keeps them; hidden
+                                 (dots) until Show, like a password field. -->
+                            <textarea id="xfr-recv-text" class="xfr-masked" readonly rows="3" spellcheck="false"
+                                   style="width: 100%; box-sizing: border-box; padding: 0.6rem 3.5rem 0.6rem 0.75rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.85rem; color: var(--skb-text); resize: vertical; white-space: pre-wrap;"></textarea>
                             <button type="button" onclick="xfr_togglePwd('xfr-recv-text', this)" title="Show/Hide"
-                                    style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: transparent; border: none; cursor: pointer; padding: 4px 8px; color: var(--skb-text-muted); font-size: 0.75rem; letter-spacing: 0.02em;">Show</button>
+                                    style="position: absolute; right: 6px; top: 6px; background: transparent; border: none; cursor: pointer; padding: 4px 8px; color: var(--skb-text-muted); font-size: 0.75rem; letter-spacing: 0.02em;">Show</button>
                         </div>
                         <div class="tool-grid-2">
                             <button type="button" class="skb-btn" style="background: var(--skb-primary); color: black; font-weight: 600;" onclick="xfr_copyReceived()">Copy to Clipboard</button>
@@ -12318,6 +12367,12 @@ window.addEventListener('DOMContentLoaded', () => {
             return Promise.resolve(false);
         },
         getPassphraseRating: function () { return Promise.resolve(null); },
+        manageSecurityKeys: function () {
+            console.log('[DEV MOCK] manageSecurityKeys() intercepted — no-op on dev host.');
+            _devAnnounce('Security Keys intercepted (would lock, then run manage-security-key)');
+            return Promise.resolve(false);
+        },
+        getUnlockMethods: function () { return Promise.resolve(window._devUnlockMethods || null); },
 
         // --- Screen brightness (Brightness Watcher) ---
         setBrightness: function (pct) {
@@ -19201,6 +19256,8 @@ function eob_clearAll() {
     eob_renderDiceFairness();
     _eobRenderCards();
     document.getElementById('eob-wiggle-count').textContent = '0';
+    var _eobZoneReset = document.getElementById('eob-wiggle-zone');
+    if (_eobZoneReset) _eobZoneReset.textContent = 'Move cursor here';
     document.getElementById('eob-cam-count').textContent = '0';
     document.getElementById('eob-pool-raw').textContent = '\u2014';
     document.getElementById('eob-cam-preview').style.display = 'none';
@@ -27162,6 +27219,80 @@ async function ppSettingsLockAndChange() {
 }
 
 window.addEventListener('load', function () { setTimeout(ppRefreshRating, 800); });
+
+// ===========================================================================
+// SETTINGS → SECURITY KEYS — unlocking the vault with a FIDO2 key
+// ===========================================================================
+// SECURITY_KEY_DESIGN.md, Part 1. Like Change Master Passphrase, the work
+// happens outside the app: SafeKeepOS.manageSecurityKeys() locks the vault
+// and safekeep-boot.sh runs manage-security-key in native dialogs. The app
+// only reads the summary unlock-vault.sh left in RAM: how this session
+// unlocked, whether the vault has a Master Passphrase, and each key's name
+// and date.
+async function skSettingsRefresh() {
+    const status = document.getElementById('settings-sk-status');
+    const btn = document.getElementById('settings-sk-manage-btn');
+    const ppBtn = document.getElementById('settings-pp-change-btn');
+    const ppNote = document.getElementById('settings-pp-keys-note');
+    const os = window.SafeKeepOS;
+    const onStick = !!(os && os.isBootDrive && os.isBootDrive());
+    if (btn) btn.disabled = !onStick;
+    if (!status) return;
+    if (!onStick) {
+        status.textContent = 'You can manage security keys when SafeKeep runs from its USB flash drive.';
+        status.style.color = 'var(--skb-text-muted)';
+        return;
+    }
+    const m = os && typeof os.getUnlockMethods === 'function' ? await os.getUnlockMethods() : null;
+    status.style.color = 'var(--skb-text)';
+    if (!m) {
+        status.textContent = '';
+        return;
+    }
+    const mode = !m.passphrase ? 'a security key only' : m.keys.length ? 'your Master Passphrase or a security key' : 'your Master Passphrase';
+    let text = 'This vault unlocks with ' + mode + '.';
+    if (m.keys.length) {
+        text += ' Security keys: ' + m.keys.map((k) => k.name + (k.added ? ' (added ' + k.added + ')' : '')).join(', ') + '.';
+        if (m.keys.length === 1 && !m.passphrase) {
+            text += ' Only one security key can open it: a spare, kept somewhere else, protects you if it is lost or broken.';
+        }
+    }
+    status.textContent = text;
+    // A vault with security keys only has no Master Passphrase to change.
+    for (const el of [ppBtn, document.getElementById('settings-pp-intro'), document.getElementById('settings-pp-paper')]) {
+        if (el) el.style.display = m.passphrase === false ? 'none' : '';
+    }
+    if (ppNote) {
+        ppNote.style.display = m.passphrase === false ? 'block' : 'none';
+        ppNote.textContent = m.passphrase === false
+            ? 'This vault has no Master Passphrase: it unlocks with a security key only. You can add a passphrase back under Security Keys.'
+            : '';
+    }
+}
+
+function skSettingsStart() {
+    const box = document.getElementById('settings-sk-confirm');
+    if (box) box.style.display = 'block';
+    const go = document.getElementById('settings-sk-go-btn');
+    if (go) go.focus();
+}
+
+function skSettingsCancel() {
+    const box = document.getElementById('settings-sk-confirm');
+    if (box) box.style.display = 'none';
+}
+
+async function skSettingsLockAndManage() {
+    const os = window.SafeKeepOS;
+    if (!os || typeof os.manageSecurityKeys !== 'function') return;
+    const go = document.getElementById('settings-sk-go-btn');
+    if (go) { go.disabled = true; go.textContent = 'Locking…'; }
+    // Wipe sensitive session data before the window closes, as Power Options do.
+    try { if (typeof _fullSessionWipe === 'function') _fullSessionWipe(); } catch (_) {}
+    try { await os.manageSecurityKeys(); } catch (err) { console.error('[SECURITY KEY] request failed:', err); }
+    // Still here (the dev host, or the signal didn't land): let them try again.
+    if (go) { go.disabled = false; go.textContent = 'Lock and Manage'; }
+}
 
 // ===========================================================================
 // SETTINGS → SEED STORAGE — keep the master seed on this flash drive, or not
@@ -36571,6 +36702,8 @@ var xfr_state = {
     recvFilename: '',
     recvExtension: '',
     recvMimeType: '',
+    recvUr: null,            // URDecoder for animated ur: codes (the Courier Tool's long text)
+    recvBbqr: null,          // { total, parts } for animated BBQr codes
     completedBlob: null
 };
 
@@ -36615,6 +36748,11 @@ function xfr_setMode(mode) {
 function xfr_togglePwd(inputId, btn) {
     var inp = document.getElementById(inputId);
     if (!inp) return;
+    if (inp.tagName === 'TEXTAREA') {
+        var masked = inp.classList.toggle('xfr-masked');
+        btn.innerHTML = masked ? 'Show' : 'Hide';
+        return;
+    }
     if (inp.type === 'password') {
         inp.type = 'text';
         btn.innerHTML = 'Hide';
@@ -37029,6 +37167,8 @@ function xfr_startReceive() {
     xfr_state.recvFilename = '';
     xfr_state.recvExtension = '';
     xfr_state.recvMimeType = '';
+    xfr_state.recvUr = null;
+    xfr_state.recvBbqr = null;
     xfr_state.completedBlob = null;
 
     // Reset UI
@@ -37066,6 +37206,13 @@ function xfr_processQR(qrData, binaryData) {
         qrData = window.QRParser.parseQRScan(qrData, binaryData);
     }
     try {
+        // Animated UR (the online Courier Tool sends long text as ur:bytes
+        // in many fountain-coded frames) and animated BBQr (its relay mode):
+        // collect every frame before showing anything. A single frame used
+        // to be shown as if it were the whole text.
+        if (/^ur:/i.test(qrData)) { xfr_receiveUrFrame(qrData); return; }
+        if (/^B\$[H2Z][A-Z][0-9A-Z]{4}/.test(qrData)) { xfr_receiveBbqrFrame(qrData); return; }
+
         var parts = qrData.split('~');
         // Animated chunk: 6 parts with "loop/index/total" header in parts[0]
         var isAnimated = parts.length === 6 && /^\d+\/\d+\/\d+$/.test(parts[0]);
@@ -37100,18 +37247,107 @@ function xfr_processQR(qrData, binaryData) {
             }
         } else {
             // --- STATIC TEXT / PASSWORD ---
-            xfr_stopReceive();
-            document.getElementById('xfr-recv-animated').style.display = 'none';
-            document.getElementById('xfr-recv-static').style.display = 'block';
-
-            var pwdInput = document.getElementById('xfr-recv-text');
-            pwdInput.value = qrData;
-            pwdInput.type = 'password'; // auto-mask
-
-            showStatus('Static data received — ' + qrData.length + ' characters.', 'success');
+            xfr_showReceivedText(qrData, 'Static data received');
         }
     } catch (e) {
         console.error('QR parse error:', e);
+    }
+}
+
+// Show received text (hidden until Show), keeping its line breaks.
+function xfr_showReceivedText(text, what) {
+    xfr_stopReceive();
+    document.getElementById('xfr-recv-animated').style.display = 'none';
+    document.getElementById('xfr-recv-static').style.display = 'block';
+    var box = document.getElementById('xfr-recv-text');
+    box.value = text;
+    box.classList.add('xfr-masked');   // hidden until Show
+    box.rows = Math.max(3, Math.min(14, String(text).split('\n').length + 1));
+    var btn = box.parentNode && box.parentNode.querySelector('button');
+    if (btn) btn.innerHTML = 'Show';
+    showStatus(what + ' \u2014 ' + text.length + ' characters.', 'success');
+}
+
+// Hand received bytes to the save-to-Transfer-Drive screen as a file.
+function xfr_receiveAsFile(bytes, name, ext, mime) {
+    xfr_state.recvBytes = bytes;
+    xfr_state.recvFilename = name;
+    xfr_state.recvExtension = ext;
+    xfr_state.recvMimeType = mime;
+    xfr_onTransferComplete();
+}
+
+function xfr_bytesToText(bytes) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (_) { return null; }
+}
+
+function xfr_showReceiveProgress(label, pct) {
+    document.getElementById('xfr-recv-filename').textContent = label;
+    document.getElementById('xfr-recv-chunk-count').textContent = pct + '%';
+    document.getElementById('xfr-recv-progress-bar').style.width = pct + '%';
+}
+
+// One frame of an animated (or single) UR code.
+function xfr_receiveUrFrame(text) {
+    if (!window.URDecoder) { showStatus('The UR decoder isn\u2019t available.', 'error'); return; }
+    if (!xfr_state.recvUr) xfr_state.recvUr = new (window.URDecoder)();
+    try {
+        xfr_state.recvUr.receivePart(text);
+    } catch (e) {
+        // A frame from a different code, or a damaged one: start over.
+        xfr_state.recvUr = new (window.URDecoder)();
+        return;
+    }
+    var dec = xfr_state.recvUr;
+    xfr_showReceiveProgress('Animated QR code (UR)', Math.round(dec.getProgress() * 100));
+    if (!dec.isComplete()) return;
+    xfr_state.recvUr = null;
+    if (!dec.isSuccess()) { showStatus('The animated QR code didn\u2019t check out. Scan it again.', 'error'); return; }
+    var ur = dec.resultUR();
+    var type = String(ur.type || '').toLowerCase();
+    var bytes = null;
+    if (type === 'bytes' || type === 'crypto-psbt' || type === 'psbt') {
+        var raw = window.CBOR.decode(Buffer.from(ur.cbor));
+        bytes = new Uint8Array((raw instanceof Uint8Array || Buffer.isBuffer(raw)) ? raw : ur.cbor);
+    }
+    if (type === 'crypto-psbt' || type === 'psbt') {
+        xfr_receiveAsFile(bytes, 'received', 'psbt', 'application/octet-stream');
+    } else if (type === 'bytes') {
+        var t = xfr_bytesToText(bytes);
+        if (t !== null) xfr_showReceivedText(t, 'Text received');
+        else xfr_receiveAsFile(bytes, 'received', 'bin', 'application/octet-stream');
+    } else {
+        // Another kind of UR (an account, an output…): show it as one UR text.
+        xfr_showReceivedText(window.UREncoder && window.UREncoder.encodeSinglePart ? window.UREncoder.encodeSinglePart(ur) : text, 'UR (' + type + ') received');
+    }
+}
+
+// One frame of an animated (or single) BBQr code.
+async function xfr_receiveBbqrFrame(text) {
+    var total = parseInt(text.substring(4, 6), 36), n = parseInt(text.substring(6, 8), 36);
+    if (!(total >= 1 && total <= 1295) || !(n >= 0 && n < total)) return;
+    var st = xfr_state.recvBbqr;
+    if (!st || st.total !== total || st.head !== text.substring(0, 6)) {
+        st = xfr_state.recvBbqr = { total: total, head: text.substring(0, 6), parts: {} };
+    }
+    st.parts[n] = text;
+    var have = Object.keys(st.parts).length;
+    xfr_showReceiveProgress('Animated QR code (BBQr)', Math.round(have / total * 100));
+    if (have < total || st.done) return;
+    st.done = true;
+    try {
+        var frames = [];
+        for (var i = 0; i < total; i++) frames.push(st.parts[i]);
+        var res = await _bbqrDecode(frames.join(' '));
+        xfr_state.recvBbqr = null;
+        if (res.type === 'P') return xfr_receiveAsFile(res.bytes, 'received', 'psbt', 'application/octet-stream');
+        if (res.type === 'T') return xfr_showReceivedText(Array.from(res.bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join(''), 'Transaction received (hex)');
+        var t = (res.type === 'U' || res.type === 'J') ? xfr_bytesToText(res.bytes) : null;
+        if (t !== null) return xfr_showReceivedText(t, res.type === 'J' ? 'JSON received' : 'Text received');
+        xfr_receiveAsFile(res.bytes, 'received', 'bin', 'application/octet-stream');
+    } catch (e) {
+        xfr_state.recvBbqr = null;
+        showStatus('The animated QR code didn\u2019t decode: ' + e.message, 'error');
     }
 }
 
@@ -38054,7 +38290,7 @@ function rlq_onBackupPasswordInput() {
  */
 var RLQ_STRENGTH = {
     weak: { label: 'Weak', color: 'var(--skb-danger)', pct: 20,
-        advice: 'Too easy to guess for a backup, which can be copied to a computer and guessed quickly. Use your vault password if it came from a password manager, or 6 or more random words.' },
+        advice: 'Too easy to guess for a backup, which can be copied to a computer and guessed quickly. Use a long random password from a password manager, or 6 or more random words.' },
     fair: { label: 'Fair', color: 'var(--skb-warning, #f59e0b)', pct: 60,
         advice: 'Allowed, but a long random password from a password manager, or 6 or more random words, would be safer.' },
     strong: { label: 'Strong', color: 'var(--skb-primary)', pct: 100, advice: '' },
@@ -44468,7 +44704,7 @@ function eob_init(context) {
     _eobCamCount = 0;
     _eobWiggleLastX = -1;
     _eobWiggleLastY = -1;
-    _eobCamStream = null;
+    _eobStopCamera();
     _eobCamPrevLsbs = null;
     _eobDeckCards = [];
     _eobCardRank = null;
@@ -44523,6 +44759,7 @@ function eob_init(context) {
     eob_renderDiceFairness();
     _eobRenderCards();
     document.getElementById('eob-wiggle-count').textContent = '0';
+    document.getElementById('eob-wiggle-zone').textContent = 'Move cursor here';
     document.getElementById('eob-cam-count').textContent = '0';
     document.getElementById('eob-pool-raw').textContent = '\u2014';
     document.getElementById('eob-cam-preview').style.display = 'none';
@@ -44657,11 +44894,7 @@ function eob_setEntropyMode(mode) {
     if (_eobWordsMode && !_eobWordBoxes) _eobBuildWordBoxes();
     _eobRenderFlips();
     // Only Mixed mode shows the camera card, so stop a running camera too.
-    if (!mixed && _eobCamStream) {
-        _eobCamStream.getTracks().forEach(function (t) { t.stop(); });
-        _eobCamStream = null;
-        document.getElementById('eob-cam-preview').style.display = 'none';
-    }
+    if (!mixed) _eobStopCamera();
     eob_renderDiceFairness();   // pattern advice and the confirm box depend on the mode
     eob_updateMeter();
 }
@@ -44750,8 +44983,22 @@ async function eob_updateLiveHash() {
     }
 }
 
+// The mouse card: samples, the bits the mouse has added out of its share
+// (half the target), and a plain note once that share is used up, since
+// the sample count keeps rising while the meter doesn't.
+function _eobRenderMouse() {
+    var cap = _targetEntropyBits / 2;
+    var cnt = document.getElementById('eob-wiggle-count');
+    if (cnt) cnt.textContent = _eobWiggleCount;
+    var bits = document.getElementById('eob-wiggle-bits');
+    if (bits) bits.textContent = Math.floor(Math.min(_eobMouseBits, cap)) + ' / ' + cap;
+    var full = document.getElementById('eob-wiggle-full');
+    if (full) full.hidden = _eobMouseBits < cap;
+}
+
 function eob_updateMeter() {
     if (_eobWordsMode) { _eobUpdateWordsMeter(); return; }
+    _eobRenderMouse();
     var needed = _eobRollsNeeded();
     var have = _eobVerifiable ? _eobDiceRolls.length : _eobCountedBits();
     var target = _eobVerifiable ? needed : _targetEntropyBits;
@@ -45051,11 +45298,10 @@ function eob_handleWiggle(e) {
     _eobWiggleLastY = y;
 
     _eobWiggleCount++;
-    document.getElementById('eob-wiggle-count').textContent = _eobWiggleCount;
 
     var zone = document.getElementById('eob-wiggle-zone');
     zone.classList.add('active');
-    zone.textContent = _eobWiggleCount + ' samples';
+    zone.textContent = _eobWiggleCount + ' samples' + (_eobMouseBits >= _targetEntropyBits / 2 ? ' \u00b7 mouse share full' : '');
     clearTimeout(zone._fadeTimer);
     zone._fadeTimer = setTimeout(function() { zone.classList.remove('active'); }, 200);
 
@@ -45071,7 +45317,28 @@ function eob_handleWiggle(e) {
 }
 
 // --- Method D: Webcam Noise ---
+// Turn the camera off (after each capture, and when leaving or resetting).
+function _eobStopCamera() {
+    if (_eobCamStream) {
+        _eobCamStream.getTracks().forEach(function (t) { t.stop(); });
+        _eobCamStream = null;
+    }
+    var video = document.getElementById('eob-cam-preview');
+    if (video) {
+        video.srcObject = null;
+        video.style.display = 'none';
+    }
+}
+
+var _eobCamBusy = false;
+
+// Each press turns the camera on, takes 5 frames and turns it off again,
+// so it is never left running. A press while a capture runs is ignored.
 async function eob_captureVideoNoise() {
+    if (_eobCamBusy) return;
+    _eobCamBusy = true;
+    var camBtn = document.getElementById('eob-cam-btn');
+    if (camBtn) { camBtn.disabled = true; camBtn.textContent = 'Capturing\u2026'; }
     try {
         var video = document.getElementById('eob-cam-preview');
         var canvas = document.getElementById('eob-cam-canvas');
@@ -45113,10 +45380,14 @@ async function eob_captureVideoNoise() {
         }
 
         document.getElementById('eob-cam-count').textContent = _eobCamCount;
-        showStatus(_eobCamCount + ' video frames captured.', 'success');
+        showStatus(_eobCamCount + ' video frames captured. The camera is off; press again for more.', 'success');
 
     } catch (err) {
         showStatus('Camera access failed: ' + err.message, 'error');
+    } finally {
+        _eobStopCamera();
+        _eobCamBusy = false;
+        if (camBtn) { camBtn.disabled = false; camBtn.textContent = 'Capture Video Noise'; }
     }
 }
 
@@ -45443,15 +45714,7 @@ function eob_cancel() {
 
 // --- Hardware cleanup (kills camera, detaches listeners) ---
 function eob_cleanup() {
-    if (_eobCamStream) {
-        _eobCamStream.getTracks().forEach(function(t) { t.stop(); });
-        _eobCamStream = null;
-        var video = document.getElementById('eob-cam-preview');
-        if (video) {
-            video.srcObject = null;
-            video.style.display = 'none';
-        }
-    }
+    _eobStopCamera();
     var zone = document.getElementById('eob-wiggle-zone');
     if (zone) {
         zone.onmousemove = null;

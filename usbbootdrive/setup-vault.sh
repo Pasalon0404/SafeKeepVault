@@ -5,9 +5,12 @@
 #
 # This script runs ONCE on the very first boot:
 #
-#   PHASE 1: Create the encrypted LUKS vault (user password setup).
-#            The passphrase is typed visibly and twice, so a typo is
-#            caught before the vault is locked with it.
+#   PHASE 1: Create the encrypted LUKS vault. First the user chooses how
+#            it unlocks (SECURITY_KEY_DESIGN.md): a Master Passphrase (the
+#            default), a passphrase or a security key, or a security key
+#            only. A passphrase is typed visibly and twice, so a typo is
+#            caught before the vault is locked with it. A security key is
+#            added and checked before setup counts as finished.
 #   PHASE 2: Ask the user what to do next:
 #              - Continue now (default): exit 0. safekeep-boot.sh goes
 #                straight to the normal unlock prompt, where the user
@@ -61,9 +64,13 @@ export GDK_SCALE=2
 export GDK_DPI_SCALE=1.0
 
 DATA_LABEL="safekeep-data"
-DATA_MOUNT="/mnt/safekeep-data"
+# Overridable for test-security-key.mjs only.
+DATA_MOUNT="${SAFEKEEP_DATA_MOUNT:-/mnt/safekeep-data}"
 VAULT_FILE=".vault.luks"
-VAULT_MOUNT="/media/.safekeep-vault"
+VAULT_MOUNT="${SAFEKEEP_VAULT_MOUNT:-/media/.safekeep-vault}"
+FIDO2_HELPER="${FIDO2_HELPER:-/usr/local/lib/safekeep/safekeep-fido2.py}"
+SK_DIALOGS="${SAFEKEEP_SECURITY_KEY_DIALOGS:-/usr/local/lib/safekeep/security-key-dialogs.sh}"
+PP_DIALOGS="${SAFEKEEP_PASSPHRASE_DIALOGS:-/usr/local/lib/safekeep/passphrase-dialogs.sh}"
 MAPPER_NAME="vault"
 SETUP_MARKER=".setup_complete"
 
@@ -139,6 +146,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     AVAIL_KB=$(df -k "$DATA_MOUNT" | tail -1 | awk '{print $4}')
     AVAIL_MB=$((AVAIL_KB / 1024))
     VAULT_MB=$((AVAIL_MB - 50))  # Reserve 50MB for filesystem overhead
+    VAULT_MB=${SAFEKEEP_TEST_VAULT_MB:-$VAULT_MB}
 
     if [ "$VAULT_MB" -lt 50 ]; then
         sudo umount "$DATA_MOUNT"
@@ -169,19 +177,63 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
 
     # --- Welcome dialog ---
     until zenity --question --title="SafeKeepVault — First Boot Setup" --width=450 \
-        --text="Welcome to SafeKeepVault!\n\nThis one-time setup will:\n\n  1. Set your Master Passphrase\n  2. Create an encrypted vault for your seed words, passphrases, encrypted notes and other data\n  3. Unlock the new vault and start SafeKeepVault\n\nNetworks and the computer's own drives are already blocked.\n\nThis takes about 60 seconds. Continue?" \
+        --text="Welcome to SafeKeepVault!\n\nThis one-time setup will:\n\n  1. Choose how your vault unlocks: a Master Passphrase,\n      a security key, or either\n  2. Create an encrypted vault for your seed words, passphrases, encrypted notes and other data\n  3. Unlock the new vault and start SafeKeepVault\n\nNetworks and the computer's own drives are already blocked.\n\nThis takes about 60 seconds. Continue?" \
         --ok-label="Begin Setup" \
         --cancel-label="Cancel"; do
         setup_not_finished
     done
+
+    # --- How this vault unlocks (SECURITY_KEY_DESIGN.md) ---
+    # Offered only when the security key library is in the image. The
+    # Master Passphrase stays first and recommended; the same choices can
+    # be made later in Device Options → Security Keys.
+    UNLOCK_CHOICE="passphrase"
+    if [ -f "$FIDO2_HELPER" ] && [ -f "$SK_DIALOGS" ] && python3 -I -c 'import fido2.ctap2' 2>/dev/null; then
+        while true; do
+            CHOICE=$(zenity --list --title="SafeKeepVault — How Your Vault Unlocks" --width=520 --height=460 \
+                --text="How should this vault unlock?\n\nA security key is a YubiKey or another FIDO2 key. It unlocks the\nvault with its PIN and a touch. You can change this later\nin Device Options." \
+                --column="Choice" --hide-header \
+                "Master Passphrase (recommended)" \
+                "Passphrase or security key" \
+                "Security key only") || true
+            case "$CHOICE" in
+                "Master Passphrase"*) UNLOCK_CHOICE="passphrase"; break ;;
+                "Passphrase or security key") UNLOCK_CHOICE="either"; break ;;
+                "Security key only")
+                    # The same warning as Device Options (wrapped by hand:
+                    # zenity doesn't wrap the text above a list).
+                    UNDERSTOOD=$(zenity --list --checklist --title="Security Key Only" --width=560 --height=500 \
+                        --text="$(printf '%b' "Your vault won't have a Master Passphrase. Only your security key will open it, with its PIN and a touch.\n\nIf you lose your security key (or every security key you add), or its PIN is blocked, this vault can't be opened. Your seed backup still restores your wallet. Saved wallets, the Passphrase Library and notes come back only from an Encrypted Backup.\n\nA spare security key, kept somewhere else, protects you if one is lost or broken: setup offers to add one." | fold -s -w 62)" \
+                        --column="" --column="" --hide-header \
+                        FALSE "I understand, and want a security key only") || true
+                    if [ "$UNDERSTOOD" = "I understand, and want a security key only" ]; then
+                        UNLOCK_CHOICE="key"
+                        break
+                    fi ;;
+                *) setup_not_finished ;;
+            esac
+        done
+        SK_TITLE="SafeKeepVault — Security Key"
+        # shellcheck source=security-key-dialogs.sh
+        source "$SK_DIALOGS"
+    fi
 
     # --- Choose the Master Passphrase (passphrase-dialogs.sh) ---
     # The same screens as Device Options → Change Master Passphrase:
     # Scan QR Code, Type Password (twice), or Generate One for Me, with the
     # strength check. Closing the method choice asks setup_not_finished.
     # shellcheck source=passphrase-dialogs.sh
-    source /usr/local/lib/safekeep/passphrase-dialogs.sh
-    choose_new_passphrase setup_not_finished || true
+    source "$PP_DIALOGS"
+    if [ "$UNLOCK_CHOICE" = "key" ]; then
+        # Security key only: the vault is made with a random key nobody
+        # sees, the security key is added and checked, then the random
+        # key's slot is removed. Until then setup isn't finished: if it
+        # stops here, the next start sees an unfinished vault (no marker)
+        # and starts again.
+        PASSWORD=$(head -c 32 /dev/urandom | base64 | tr -d '\n=')
+    else
+        choose_new_passphrase setup_not_finished || true
+    fi
 
     if [ -z "$PASSWORD" ]; then
         sudo umount "$DATA_MOUNT"
@@ -190,6 +242,11 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     fi
 
     # --- Create the LUKS vault ---
+    # What the progress window says about locking it, for the choice made.
+    LOCK_MSG="Locking the vault with your Master Passphrase..."
+    if [ "$UNLOCK_CHOICE" = "key" ]; then
+        LOCK_MSG="Locking the vault (your security key is added next)..."
+    fi
     (
     echo "5"; echo "# Creating your ${VAULT_MB} MB encrypted vault..."
     sudo dd if=/dev/zero of="$DATA_MOUNT/$VAULT_FILE" bs=1M count="$VAULT_MB" status=none
@@ -197,7 +254,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     echo "20"; echo "# Preparing the vault..."
     LOOP_DEV=$(sudo losetup --find --show "$DATA_MOUNT/$VAULT_FILE")
 
-    echo "35"; echo "# Locking the vault with your Master Passphrase..."
+    echo "35"; echo "# $LOCK_MSG"
     printf '%s' "$PASSWORD" | sudo cryptsetup luksFormat -q "$LOOP_DEV" --key-file=-
 
     echo "50"; echo "# Opening the vault to set it up..."
@@ -217,11 +274,104 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
     sudo cryptsetup close "$MAPPER_NAME"
     sudo losetup -d "$LOOP_DEV"
 
-    echo "95"; echo "# Saving setup..."
+    echo "100"; echo "# Your ${VAULT_MB} MB encrypted vault is ready."
+    ) | zenity --progress --title="SafeKeepVault — Creating Your Encrypted Vault" \
+        --auto-close --no-cancel --width=450
+
+    # --- Security keys (SECURITY_KEY_DESIGN.md) ---
+    if [ "$UNLOCK_CHOICE" != "passphrase" ]; then
+        LOOP_DEV=$(sudo losetup --find --show "$DATA_MOUNT/$VAULT_FILE")
+        KEY_SECRET=""
+
+        # Add the plugged-in key, unlocking with $1 (what opens the vault
+        # now), named $2. Returns 0 once it's added (and tested by the helper).
+        setup_enroll_key() {
+            local existing=$1 name=$2
+            sk_wait_for_key "Plug in your security key." || return 1
+            if [ "$(sk_probe_value pin)" = "set" ]; then
+                sk_ask_pin "Type this security key's PIN." || return 1
+            else
+                sk_set_new_pin || return 1
+            fi
+            SETUP_EXISTING=$existing
+            SETUP_KEY_NAME=$name
+            if sk_run "Touch your security key when it blinks: twice, once to add it and once more to check it." \
+                'printf "%s\0%s\0%s" "$SETUP_EXISTING" "$SK_PIN" "$SETUP_KEY_NAME"' enroll "$LOOP_DEV"; then
+                SETUP_EXISTING=""
+                return 0
+            fi
+            SETUP_EXISTING=""
+            SK_PIN=""
+            sk_error "$SK_RC"
+            return 1
+        }
+
+        # The first key. With a passphrase too, it can be skipped and added
+        # later; with a key only, setup can't finish without it.
+        while ! setup_enroll_key "$PASSWORD" "Security key 1"; do
+            if [ "$UNLOCK_CHOICE" = "either" ]; then
+                SKIP=$(zenity --list --title="SafeKeepVault — Security Key" --width=500 --height=340 \
+                    --text="The security key wasn't added.\n\nTry again, or finish setup with your Master Passphrase\nand add a security key later in Device Options." \
+                    --column="Choice" --hide-header "Try again" "Add a security key later") || true
+                if [ "$SKIP" = "Add a security key later" ]; then
+                    UNLOCK_CHOICE="passphrase"
+                    break
+                fi
+            else
+                setup_not_finished
+            fi
+        done
+
+        if [ "$UNLOCK_CHOICE" = "key" ]; then
+            # Check the key opens the vault (one more touch), and keep its
+            # slot key to finish with.
+            while true; do
+                if [ -n "$SK_PIN" ] && sk_run "Touch your security key once more, to check it opens your vault." \
+                    'printf "%s" "$SK_PIN"' secret "$LOOP_DEV"; then
+                    KEY_SECRET=$(printf '%s\n' "$SK_OUT" | sed -n 2p)
+                    SK_OUT=""
+                    [ -n "$KEY_SECRET" ] && break
+                fi
+                [ -n "$SK_PIN" ] && sk_error "$SK_RC"
+                sk_wait_for_key "Plug in your security key." || { setup_not_finished; continue; }
+                sk_ask_pin "Type this security key's PIN." || { setup_not_finished; continue; }
+            done
+        fi
+        SK_PIN=""
+
+        # A spare, kept somewhere else (recommended, not required).
+        SPARES=0
+        while [ "$UNLOCK_CHOICE" != "passphrase" ] && [ "$SPARES" -lt 3 ]; do
+            SPARE=$(zenity --list --title="SafeKeepVault — A Spare Security Key" --width=520 --height=380 \
+                --text="Your security key is added.\n\nA spare, kept somewhere else, protects you if this one is lost\nor broken. You can also add one later in Device Options." \
+                --column="Choice" --hide-header "Add a spare security key now" "Continue") || true
+            [ "$SPARE" = "Add a spare security key now" ] || break
+            zenity --info --title="SafeKeepVault — A Spare Security Key" --width=460 \
+                --text="Unplug the security key you just added, and plug in the spare." || true
+            if setup_enroll_key "${KEY_SECRET:-$PASSWORD}" "Spare$([ "$SPARES" -gt 0 ] && echo " $((SPARES + 1))")"; then
+                SPARES=$((SPARES + 1))
+                SK_PIN=""
+            fi
+        done
+
+        if [ "$UNLOCK_CHOICE" = "key" ]; then
+            # Remove the random key's slot: from now on, only the security
+            # keys open the vault. If this fails, setup isn't finished and
+            # starts again at the next power-on.
+            until sk_run "Finishing your vault..." 'printf "%s" "$KEY_SECRET"' remove-passphrase "$LOOP_DEV"; do
+                sk_error "$SK_RC"
+                setup_not_finished
+            done
+        fi
+        KEY_SECRET=""
+        sudo losetup -d "$LOOP_DEV" 2>/dev/null || true
+    fi
 
     # Write the state lock marker to the persistent data partition.
     # This tells safekeep-boot.sh that first-boot initialization is complete.
     # On all future boots, the system skips straight to vault unlock.
+    # (Only now: a vault that is still waiting for its security key is
+    # treated as an interrupted setup and made again.)
     cat > "$DATA_MOUNT/$SETUP_MARKER" << MARKEREOF
 # SafeKeep First-Boot Initialization Complete
 # This file prevents setup-vault from running again.
@@ -230,10 +380,6 @@ timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 vault_created=true
 hardening=build-time
 MARKEREOF
-
-    echo "100"; echo "# Your ${VAULT_MB} MB encrypted vault is ready."
-    ) | zenity --progress --title="SafeKeepVault — Creating Your Encrypted Vault" \
-        --auto-close --no-cancel --width=450
 
     # Clear password from memory (best effort — bash doesn't guarantee this)
     unset PASSWORD
@@ -287,8 +433,15 @@ if [ -n "${VAULT_MB:-}" ]; then
     VAULT_DESC="${VAULT_MB} MB encrypted vault"
 fi
 
+# How to unlock it next, for the choice made above.
+NEXT_UNLOCK="Next, unlock it with the Master Passphrase you just set."
+case "${UNLOCK_CHOICE:-passphrase}" in
+    key) NEXT_UNLOCK="Next, unlock it with your security key:\nchoose Use a Security Key." ;;
+    either) NEXT_UNLOCK="Next, unlock it with your Master Passphrase or your\nsecurity key." ;;
+esac
+
 NEXT_STEP=$(zenity --list --title="SafeKeepVault — Vault Created" --width=520 --height=470 \
-    --text="Your ${VAULT_DESC} is created and locked.\n\nNext, unlock it with the Master Passphrase you just set.\n\nRestoring from a .7z backup? Choose \"Continue now\", then\n\"Unlock .7z Backup\" and \"Receive a Backup with the Courier\":\nsend it from the Courier Tool on a phone or another computer.\n\nNo camera on this computer? Choose \"Shut down\", copy the backup\nonto the flash drive's TRANSFER drive from another computer, then\nput the flash drive back and power on." \
+    --text="Your ${VAULT_DESC} is created and locked.\n\n${NEXT_UNLOCK}\n\nRestoring from a .7z backup? Choose \"Continue now\", then\n\"Unlock .7z Backup\" and \"Receive a Backup with the Courier\":\nsend it from the Courier Tool on a phone or another computer.\n\nNo camera on this computer? Choose \"Shut down\", copy the backup\nonto the flash drive's TRANSFER drive from another computer, then\nput the flash drive back and power on." \
     --column="Next step" --hide-header \
     "Continue now" \
     "Shut down to copy a backup onto the flash drive") || true

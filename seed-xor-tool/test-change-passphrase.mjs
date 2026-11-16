@@ -152,8 +152,8 @@ printf '%s' "$out"; exit "$rc"`);
     // --- 3. Wiring ---
     const boot = read('safekeep-boot.sh'), unlock = read('unlock-vault.sh'), build = read('build.sh'), quick = read('quick-update.sh');
     const change = read('change-passphrase.sh');
-    ck('boot: "passphrase" is an accepted power action', /reboot\|poweroff\|lock\|passphrase\)/.test(boot));
-    ck('boot: it locks exactly like Lock', boot.includes('if [ "$POWER_ACTION" = "lock" ] || [ "$POWER_ACTION" = "passphrase" ]; then'));
+    ck('boot: "passphrase" is an accepted power action', /reboot\|poweroff\|lock\|passphrase[|)]/.test(boot));
+    ck('boot: it locks exactly like Lock', boot.includes('if [ "$POWER_ACTION" = "lock" ] || [ "$POWER_ACTION" = "passphrase" ]'));
     ck('boot: it re-runs with SAFEKEEP_CHANGE_PASSPHRASE=1', boot.includes('exec env SAFEKEEP_CHANGE_PASSPHRASE=1 /usr/local/bin/safekeep-boot'));
     const unlockAt = boot.indexOf('# ---- UNLOCK THE VAULT ----');
     const runAt = boot.indexOf('change-passphrase || CHANGE_EXIT=$?');

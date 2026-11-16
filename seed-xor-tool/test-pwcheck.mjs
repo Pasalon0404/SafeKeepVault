@@ -163,7 +163,7 @@ ck('setup checks a typed passphrase before the confirmation',
     dialogs.indexOf('if ! passphrase_ok; then') < dialogs.indexOf('Type your ${PP_NOUN} again to confirm'));
 ck('setup passes the passphrase on stdin', dialogs.includes(`printf '%s' "$PASSWORD" | python3 -I "$PWCHECK" --lines vault`) &&
     dialogs.includes('PWCHECK=${PWCHECK:-/usr/local/lib/safekeep/safekeep-pwcheck.py}'));
-ck('setup sources the shared screens and uses them', setupOnly.includes('source /usr/local/lib/safekeep/passphrase-dialogs.sh') &&
+ck('setup sources the shared screens and uses them', setupOnly.includes('PP_DIALOGS="${SAFEKEEP_PASSPHRASE_DIALOGS:-/usr/local/lib/safekeep/passphrase-dialogs.sh}"') && setupOnly.includes('source "$PP_DIALOGS"') &&
     setupOnly.includes('choose_new_passphrase setup_not_finished'));
 const exportFn = html.slice(html.indexOf('async function rlq_export()'), html.indexOf('function rlq_showRestore()'));
 ck('backup export refuses a Weak password before writing',

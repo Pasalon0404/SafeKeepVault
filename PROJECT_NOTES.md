@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 13, 2026).**
+> **Start with the "Current state" section below (updated Nov 16, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,91 @@
 
 ---
 
-## Current state (Nov 12, 2026) — v1.66
+## Current state (Nov 16, 2026) — v1.67
+
+**v1.67** (Nov 16) — security keys, Entropy Generator and Courier fixes,
+tested on Dave's flash drive as full and quick builds from the branch: a
+YubiKey added, unlocking, Security key only, first setup with a key, the
+touch feedback, and a two-page text from the online Courier Tool. OS files
+changed (new: `safekeep-fido2.py`, `security-key-dialogs.sh`,
+`manage-security-key.sh`; changed: `unlock-vault.sh`, `setup-vault.sh`,
+`safekeep-boot.sh`, the HID lockdown udev rules, `kernel.sysrq=0`, and the
+`python3-fido2` package), so the release needs the full build.
+
+- **Security keys, Part 1** (`SECURITY_KEY_DESIGN.md`, approved Nov 14):
+  a FIDO2 security key (YubiKey or any other with `hmac-secret`) can
+  unlock the vault, with its PIN and a touch. Choices: Master Passphrase
+  (the default, unchanged), Passphrase or security key, Security key only.
+  "Passphrase and security key" is Part 2, not built.
+  - `safekeep-fido2.py` (root helper, `python3-fido2` from Ubuntu's
+    archive): each key gets a non-resident credential and its own LUKS2
+    key slot keyed by base64(hmac-secret output for the vault's salt, made
+    with uv + up); LUKS2 tokens `safekeep-fido2` (slot, credential ID,
+    name, date) and `safekeep-vault` (the salt). Whether there is a
+    passphrase is read from the slots: a slot with no key token is the
+    passphrase's. Changes run under `luksHeaderBackup` to `/dev/shm`, add
+    and test before removing, never remove the last way in.
+  - `unlock-vault.sh`: "Use a Security Key" (first) when the vault has
+    one; only that (plus Temporary Session) when it has no passphrase.
+    Leaves `/tmp/safekeep-signals/UNLOCK_METHODS.json` (method, passphrase,
+    key names/dates) for the app; no rating after a key unlock.
+  - `manage-security-key.sh` (power action `securitykey`, run before the
+    unlock prompt like change-passphrase): confirm the vault, then add
+    (sets a PIN if the key has none), rename, remove, Use security keys
+    only (each key must open the vault in that run; warning + checkbox;
+    one key is enough, a spare is recommended), Add a Master Passphrase.
+    Screens shared via `security-key-dialogs.sh`.
+  - USB lockdown (`85-safekeep-hid-lockdown.rules`): late boot keyboards
+    and mice still off; other late HID kept only if udev's
+    `60-fido-id.rules` marks it `ID_SECURITY_TOKEN=1`, else its interface
+    is deauthorized from the hidraw rule; any late USB input device is
+    `inhibited`. `kernel.sysrq=0`. A Trezor's U2F part may now stay on
+    (harmless; it counts as a security key in "more than one plugged in").
+  - App: Device Options → Security Keys (status + Lock and Manage);
+    Change Master Passphrase and its text hidden in a keys-only vault.
+  - Tests: `usbbootdrive/tests/test-fido2-helper.py` runs the helper's
+    real-key code against a software CTAP2 key (`tests/virtual_fido2.py`,
+    test-only) on a real LUKS2 file; `test-security-key.mjs` runs
+    unlock-vault and manage-security-key for real with it.
+  - **First setup offers the choice** (owner, Nov 15): after the welcome,
+    `setup-vault.sh` asks "How should this vault unlock?" (Master
+    Passphrase (recommended) / Passphrase or security key / Security key
+    only, only if `python3-fido2` and the helper are present). Key only:
+    the same warning and checkbox, the vault is made with a random key
+    nobody sees, the key is enrolled (sets a PIN if needed) and checked
+    with `secret`, a spare is offered, then `remove-passphrase` drops the
+    random slot. `.setup_complete` is now written only after all that, so
+    a key-only setup that stops early is an "interrupted setup" and is
+    made again at the next start. Passphrase or key: a failed key can be
+    skipped ("Add a security key later"). Tested end to end in
+    `test-security-key.mjs` (setup, then unlock).
+  - Tried on Dave's flash drive with his YubiKey (Nov 15): adding, unlocking
+    and security keys only work. Holding a YubiKey ~3 s makes it type a
+    one-time code (if it was plugged in before boot): a short tap is right.
+  - **Needs the full build** (new package, udev rules, sysctl). A quick
+    update installs the scripts, but without `python3-fido2` in the chroot
+    a key can't be used (unlocking is unchanged).
+  - Progress (Nov 16): the helper reports stages on stderr
+    (`progress=touch-1-of-2`, `touch-2-of-2`, `saving`, `touch-check`,
+    `checking`, `touch-unlock`, `unlocking`), and `sk_run`'s window shows
+    "PIN accepted", "✓ First touch received" and so on. Its update loop
+    stops through `$err_file.done`: `wait` waits for the whole pipeline.
+- **Entropy Generator**: the mouse card shows "N samples · X / 64 bits from
+  the mouse" and says when the mouse's share (half the target, until Reset)
+  is full; each Capture Video Noise turns the camera on, takes 5 frames and
+  turns it off (`_eobStopCamera`, busy guard); the meter and Generate Seed
+  are one sticky bar (`#eob-meter-bar`) above the sources, and the pool hash
+  and raw pool fold into one closed section. Tests in
+  `test-entropy-sources.mjs`.
+- **Courier Receive**: animated `ur:` codes (the online Courier Tool sends
+  long text as ur:bytes in 90-byte fountain frames) go to the URDecoder,
+  and `B$` BBQr frames are collected and decoded with `_bbqrDecode`; text
+  is shown, a PSBT or other binary is offered as a file. Before, the first
+  frame was shown as the whole text. The received text box is a textarea
+  (keeps line breaks), masked with `-webkit-text-security` until Show.
+  `test-courier-receive.mjs` drives the built app in Chromium.
+
+## Earlier: v1.66 (Nov 12)
 
 **v1.66** (Nov 12, `v1.66 · build 532 · 21e285c`) — Trezor work (#118),
 tested on Dave's flash drive as quick updates from the branch; Recover from
@@ -934,7 +1018,14 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-1. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
+1. **After v1.67:** update the website for v1.67 (download page, release
+   notes; docs for security keys: unlocking with a YubiKey or another FIDO2
+   key, Security key only, choosing it at first setup, Device Options →
+   Security Keys; the Entropy Generator's layout; the Courier receiving
+   long text), and install `SafeKeep-Update-v1.67.tar` on a flash drive
+   from the release itself (it adds the security key helper and package
+   and changes the unlock, setup and boot scripts).
+2. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
    - **Part 1** is merged: two OS slots, 8 GB sticks, a 2.5 GB Transfer
      Drive, and the maintainer key + gpgv in the image. It ships in a
@@ -949,21 +1040,21 @@ Chromium reads images or files, or a bug that affects SafeKeep).
      One earlier try failed with "Input/output error" at the first write,
      before the update log existed. It hasn't come back. If it does,
      Device Options → Show update log records why.
-2. **ZBook "restart required" (fixed Oct 20).** It wasn't a real update:
+3. **ZBook "restart required" (fixed Oct 20).** It wasn't a real update:
    `build.sh` bind-mounted the ZBook's `/run` into the build chroot, so
    installing the image's kernel there created the ZBook's own
    `/run/reboot-required` on every full build. The chroot now gets its own
    tmpfs `/run` (`test-os-lockdown.mjs` checks it); a full build after the
    change left no flag. The desktop's restart icon only clears on a restart.
-3. **Second source for the GPG fingerprint** — publish it outside GitHub
+4. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
-4. Chromium still runs with `--no-sandbox` and `--disable-web-security`
+5. Chromium still runs with `--no-sandbox` and `--disable-web-security`
    (comments in `safekeep-boot.sh` explain why). Acceptable only because
    the machine is offline and runs only our page.
-5. Not supported yet: Taproot script-path / miniscript signing, saving
+6. Not supported yet: Taproot script-path / miniscript signing, saving
    Silent Payment wallets, matching inputs whose PSBT has no derivation
    path.
-6. Legacy inputs that carry only `witnessUtxo` (no `nonWitnessUtxo`) are
+7. Legacy inputs that carry only `witnessUtxo` (no `nonWitnessUtxo`) are
    still trusted for their amount; Bitcoin Core and most wallets send
    `nonWitnessUtxo` for legacy inputs.
 
