@@ -1,8 +1,8 @@
 # Design note: unlocking the vault with a security key
 
-Status: **approved** (Nov 14, 2026). **Part 1 is built** on the branch and
-tested with a software FIDO2 key; not yet with a real one. Part 2 is not
-built. Not for a release until the owner says so (`CLAUDE.md`).
+Status: **approved** (Nov 14, 2026). **Part 1 is built**, tested with a
+software FIDO2 key and with the owner's YubiKey, and released in v1.67
+(Nov 16). Part 2 ("Passphrase and security key") is not built.
 
 What Part 1 does differently from the text below:
 - Device Options has one **Manage Security Keys** button (Lock and
