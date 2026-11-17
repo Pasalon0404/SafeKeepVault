@@ -187,6 +187,23 @@ const verify = (rolls, tick) => page.evaluate(({ rolls, tick }) => {
     }
     const ok = await verify(fair);
     ck('ordinary rolls are accepted', ok.btn === false && ok.confirm === false, ok.hint);
+    // The result: the words first; hex and binary closed under technical
+    // details, the hex labeled as the SHA-256 of the rolls, and equal to it.
+    const res = await page.evaluate(async () => {
+        await eob_forgeSeed();
+        const tech = document.getElementById('eob-result-tech');
+        const card = document.getElementById('eob-forge-result');
+        const order = Array.from(card.querySelectorAll('#eob-result-words, #eob-result-tech')).map((e) => e.id);
+        return { hex: document.getElementById('eob-result-hex').textContent, label: document.getElementById('eob-result-hex-label').textContent,
+                 open: tech.open, inside: tech.contains(document.getElementById('eob-result-hex')) && tech.contains(document.getElementById('eob-result-bin')),
+                 order, words: document.querySelectorAll('#eob-result-words .bip85-out-word').length };
+    });
+    ck('the result shows the 12 words first', res.words === 12 && res.order.join(',') === 'eob-result-words,eob-result-tech', JSON.stringify(res.order));
+    ck('hex and binary are under closed technical details', res.inside && res.open === false);
+    ck('the hex is labeled as the SHA-256 of the rolls', /SHA-256 of your rolls, written as one line of digits \(its first 32 hex digits\)/.test(res.label), res.label);
+    ck('…and it is: the first 16 bytes of SHA-256 of the rolls', res.hex === sha256(fair.join('')).subarray(0, 16).toString('hex'), res.hex);
+    const mixedLabel = await page.evaluate(async () => { __fresh(); __rng.restore(); eob_setEntropyMode('mixed'); await eob_generateSecureSeed(); return document.getElementById('eob-result-hex-label').textContent; });
+    ck('other seeds just say "Raw Hex"', mixedLabel === 'Raw Hex', mixedLabel);
     // A run of 8 sixes in otherwise ordinary rolls: unusual, needs confirming.
     const odd = fair.slice(0, 42).concat(Array(8).fill(6));
     const gate = await page.evaluate((r) => DiceFairness.verifiableDiceGate(r).id, odd);
