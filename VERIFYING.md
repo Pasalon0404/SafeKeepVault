@@ -191,11 +191,14 @@ it is about to install. Before flashing, check that it equals the release's
      link to this file at the release's tag.
 
    Write it in American English and call the device a "USB flash drive" or
-   "flash drive". Then:
+   "flash drive". Keep it in the repository as `release-notes/v1.36.md`
+   (each release has its file there), then apply it from that file:
    ```sh
-   gh release edit v1.36 --notes-file release-notes-v1.36.md
+   gh release edit v1.36 --notes-file release-notes/v1.36.md
    ```
-   (or paste it in with the release's edit button on GitHub).
+   Pasting into the release's edit box on GitHub works only with the raw
+   Markdown: text copied from a formatted preview loses its headings and
+   lists.
 8. Update the website for the release (download links and hashes, release
    notes, and docs for what's new), and install the release's update file on
    a flash drive to check it.

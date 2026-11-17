@@ -991,8 +991,10 @@ Sparrow's. Styling lives in `<style id="skb-polish">` inside
   on phones; the phone rule in `CLAUDE.md` doesn't apply to it).
 - **GitHub release notes:** every release's GitHub page gets full notes in
   the v1.65 style (VERIFYING.md, maintainer step 7); the workflow only writes
-  the build stamp and hashes. v1.66 and v1.67 were missed at release time
-  and written afterwards (Nov 17).
+  the build stamp and hashes. Each release's notes are kept in
+  `release-notes/vX.md` and applied with `gh release edit vX --notes-file`.
+  v1.66 and v1.67 were missed at release time and written afterwards
+  (Nov 17); earlier releases' notes exist only on GitHub.
 - Update the website only at release time (`CLAUDE.md`). Prepare it on a
   branch with TODO hashes, fill them in from the published release, then
   open a PR for Dave to merge (as for v1.47–v1.50). The v1.50 website PR
