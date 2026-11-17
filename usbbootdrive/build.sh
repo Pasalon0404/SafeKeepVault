@@ -373,7 +373,8 @@ cat > "$POLICY_DIR/safekeep.json" << 'POLICY_EOF'
     "DefaultDownloadDirectory": "/media/transfer",
     "PromptForDownloadLocation": true,
     "AutomaticDownloadsAllowedForUrls": ["file://*", "file:///*"],
-    "DefaultAutomaticDownloadsSetting": 1
+    "DefaultAutomaticDownloadsSetting": 1,
+    "ClipboardAllowedForUrls": ["file://*", "file:///*"]
 }
 POLICY_EOF
 echo "Chromium enterprise policy installed at /etc/chromium/policies/managed/safekeep.json"

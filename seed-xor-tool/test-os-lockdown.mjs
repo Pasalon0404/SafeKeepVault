@@ -223,5 +223,21 @@ const runDrop = (root, block = dropBlock) => bash('set -euo pipefail\n' + block.
   ck('build.sh passes the pin overrides into the chroot', /UC_PIN_TAG="\$\{UC_PIN_TAG:-\}" UC_EXPECTED_SHA256="\$\{UC_EXPECTED_SHA256:-\}" UC_ALLOW_UNPINNED="\$\{UC_ALLOW_UNPINNED:-\}"/.test(build));
 }
 
+// ---- 7. Chromium policy: Paste without a permission prompt ----
+// The Encrypted Notes Paste button reads the clipboard; without this
+// policy Chromium asks for permission every time. Only file:// is allowed.
+{
+  const policyIn = (text, endTag) => {
+    const m = text.match(new RegExp('safekeep\\.json"[^\\n]*<< \'?' + endTag + '\'?\\n([\\s\\S]*?)\\n' + endTag));
+    return m ? JSON.parse(m[1].replace(/\$CHROMIUM_DOWNLOAD_DIR/g, '/x')) : null;
+  };
+  for (const [file, tag] of [['safekeep-boot.sh', 'POLICYEOF'], ['build.sh', 'POLICY_EOF']]) {
+    const pol = policyIn(read(file), tag);
+    ck(`${file}: the Chromium policy is valid JSON`, !!pol);
+    ck(`${file}: clipboard reading is allowed for file:// only`, pol && JSON.stringify(pol.ClipboardAllowedForUrls) === '["file://*","file:///*"]' && !('DefaultClipboardSetting' in pol), JSON.stringify(pol));
+  }
+  ck('safekeep-boot.sh: DevTools stay disallowed', policyIn(read('safekeep-boot.sh'), 'POLICYEOF')?.DeveloperToolsAvailability === 2);
+}
+
 console.log(`\nOS LOCKDOWN: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
