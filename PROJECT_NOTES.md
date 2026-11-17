@@ -1051,9 +1051,32 @@ Chromium reads images or files, or a bug that affects SafeKeep).
    change left no flag. The desktop's restart icon only clears on a restart.
 3. **Second source for the GPG fingerprint** — publish it outside GitHub
    (e.g. X bio, keys.openpgp.org), then name it on the download page.
-4. Chromium still runs with `--no-sandbox` and `--disable-web-security`
-   (comments in `safekeep-boot.sh` explain why). Acceptable only because
-   the machine is offline and runs only our page.
+4. **Chromium's `--no-sandbox`: decided, not doing (Nov 17, 2026).**
+   `--disable-web-security` is already gone (Chromium ignored it; file
+   reads use `--allow-file-access-from-files`). `--no-sandbox` stays: the
+   kiosk session runs as root (`safekeep-session.service` `User=root`), the
+   `/usr/bin/ungoogled-chromium` wrapper adds the flag too, and the pinned
+   AppImage has no `chrome-sandbox`, so a sandbox would need a non-root
+   Chromium account plus an AppArmor profile allowing user namespaces on
+   Ubuntu 24.04. The owner has looked at this several times and keeps
+   deciding it isn't worth it:
+   - No outside code ever runs: networking is off and only our
+     `boot.html` loads, so an attacker has no way to run their own
+     JavaScript. What's left is a Chromium decoder flaw hit by a camera
+     frame or a file the user brings in.
+   - It can't protect the seeds: the account running the app must read
+     and write the vault either way. It would only stop tampering with
+     the flash drive after a break-in.
+   - Tampered Chromium, `boot.html` or updates are caught by the pinned
+     hashes and signed updates; a sandbox doesn't help there.
+   - Moving Chromium off root touches every file-saving feature (vault
+     folders, Transfer Drive, signals, downloads, camera) and can break
+     them silently.
+
+   **Revisit only if** SafeKeep ever loads outside content in Chromium: a
+   web page, a remote script, or networking on while the app runs. The
+   plan then: (1) run Chromium as its own non-root account, (2) add the
+   AppArmor user-namespace profile and drop `--no-sandbox`.
 5. Not supported yet: Taproot script-path / miniscript signing, saving
    Silent Payment wallets, matching inputs whose PSBT has no derivation
    path.
@@ -1517,12 +1540,9 @@ Worth keeping in any future LLM agent's verification loop.
 
 These came up in passing during the session but were never tackled:
 
-- **Move kiosk Chromium to non-root user** with SUID-root chrome-sandbox
-  (would let us drop `--no-sandbox`). Currently a Phase 2 task per
-  comments in `safekeep-boot.sh`.
-- **Replace `--disable-web-security`** with a tiny localhost HTTP
-  server inside the kiosk so `boot.html`'s `fetch('file://...')`
-  calls don't need the flag. Currently required for amnesia detection.
+- ~~Move kiosk Chromium to a non-root user / drop `--no-sandbox`~~ and
+  ~~replace `--disable-web-security`~~: see open item 4 (the flag is gone;
+  the sandbox was decided against on Nov 17, 2026).
 - **Update Chromium policy directory** if `ungoogled-chromium`
   reads policies from `/etc/ungoogled-chromium/policies/managed/`
   instead of `/etc/chromium/policies/managed/`. We currently
