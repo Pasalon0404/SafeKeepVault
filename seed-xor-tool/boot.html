@@ -9697,24 +9697,32 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <span>Hybrid Entropy Applied</span>
                     </div>
 
-                    <div style="margin-bottom: 1rem;">
-                        <div style="font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Raw Hex</div>
-                        <div id="eob-result-hex" style="padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.78rem; color: var(--skb-text); word-break: break-all; user-select: all;"></div>
-                    </div>
-
-                    <div style="margin-bottom: 1rem;">
-                        <div style="font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Raw Binary</div>
-                        <div id="eob-result-bin" style="padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.68rem; color: var(--skb-text); word-break: break-all; user-select: all; max-height: 5rem; overflow-y: auto;"></div>
-                    </div>
-
+                    <!-- The words are the seed and the backup, so they come first and
+                         alone. Hex and binary are the same secret in other forms,
+                         useful only for checking by hand, so they stay closed. -->
                     <div style="margin-bottom: 1rem;">
                         <div style="font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">BIP-39 Words</div>
                         <div id="eob-result-words" class="bip85-out-grid"></div>
                     </div>
 
-                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
                         <button type="button" class="skb-btn" style="flex: 1; min-width: 120px; background: var(--skb-primary); color: black; font-weight: 600;" onclick="eob_copyResult()">Copy Seed Words</button>
                     </div>
+
+                    <details id="eob-result-tech">
+                        <summary style="font-size: 0.8rem; color: var(--skb-text-muted); cursor: pointer;">Show technical details (hex and binary)</summary>
+                        <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0.6rem 0 0.75rem; line-height: 1.5;">
+                            These are the same secret as your words, in other forms, for checking by hand: for example, comparing the SHA-256 of your dice rolls in Verifiable Dice, or working out each word from its 11 bits. They are not a backup: write down the words.
+                        </p>
+                        <div style="margin-bottom: 1rem;">
+                            <div id="eob-result-hex-label" style="font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Raw Hex</div>
+                            <div id="eob-result-hex" style="padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.78rem; color: var(--skb-text); word-break: break-all; user-select: all;"></div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.78rem; color: var(--skb-text-muted); margin-bottom: 0.3rem;">Raw Binary</div>
+                            <div id="eob-result-bin" style="padding: 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); font-family: var(--skb-mono); font-size: 0.68rem; color: var(--skb-text); word-break: break-all; user-select: all; max-height: 5rem; overflow-y: auto;"></div>
+                        </div>
+                    </details>
                 </div>
             </div>
 
@@ -19266,6 +19274,8 @@ function eob_clearAll() {
     document.getElementById('eob-forge-result').style.display = 'none';
     document.getElementById('eob-result-hex').textContent = '';
     document.getElementById('eob-result-bin').textContent = '';
+    var _eobTech = document.getElementById('eob-result-tech');
+    if (_eobTech) _eobTech.open = false;
     document.getElementById('eob-result-words').innerHTML = '';
     // Reset to the 12-word default and re-sync the toggle UI (eob_setWordCount
     // sets both _targetEntropyBits and the button active-classes).
@@ -45462,9 +45472,20 @@ async function _eobFinalizeEntropy(entropy) {
     // FORGE (dashboard): display results in-place.
     _eobForgedMnemonic = mnemonic;
 
-    // Raw hex — compute BEFORE zeroizing entropy.
+    // Raw hex — compute BEFORE zeroizing entropy. In Verifiable Dice the seed
+    // is the SHA-256 of the rolls (cut to the seed's length), which is the one
+    // case the hex can be checked against something, so say so.
     var hexStr = Array.from(entropy).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
     document.getElementById('eob-result-hex').textContent = hexStr;
+    var hexLabel = document.getElementById('eob-result-hex-label');
+    if (hexLabel) {
+        hexLabel.textContent = (_eobVerifiable && _eobEntropyMode !== 'hardened')
+            ? 'Raw Hex: the SHA-256 of your rolls, written as one line of digits' + (entropy.length < 32 ? ' (its first ' + (entropy.length * 2) + ' hex digits)' : '')
+            : 'Raw Hex';
+    }
+    // The details start closed for every new seed.
+    var techBox = document.getElementById('eob-result-tech');
+    if (techBox) techBox.open = false;
 
     // Raw binary — compute BEFORE zeroizing entropy.
     var binStr = Array.from(entropy).map(function(b) { return b.toString(2).padStart(8, '0'); }).join(' ');
