@@ -1,6 +1,19 @@
 # Design note: documents in the vault
 
-Status: **approved** (Nov 18, 2026). Nothing is built yet.
+Status: **built** (Nov 18, 2026), on `main` once merged; not yet in a
+release. What the build does differently from the text below:
+- Each document is stored as `<id>.<its own extension>` (for example
+  `3f…9a.pdf`), not `<id>.doc`, so an Encrypted Backup opened with 7-Zip on
+  another computer gives back ordinary files.
+- An import is two request files, `SKDOC-<id>.skmeta` (name, size,
+  SHA-256) and `SKDOC-<id>.skbin` (the bytes); rename is `.skren` and
+  delete `.skdel`. These extensions keep them away from the notes and
+  passphrase routers, which take `*.html` and `*.json`.
+- The OS side is one helper, `usbbootdrive/safekeep-documents.py`, run by
+  the File Router; its index also carries any refusal for an ID, which is
+  how the app learns the outcome.
+- The Documents tab isn't available in the online demo.
+- Health's text is unchanged.
 
 Owner's decisions (Nov 18):
 - the vault partition grows to 900 MB;
@@ -79,17 +92,18 @@ free RAM. To check on a 4 GB laptop before release.
 
 **Where.** A new vault folder, `documents/`, next to `codex/`. Each document
 is two files:
-- `<id>.doc`: the file's bytes, unchanged;
+- `<id>.<ext>`: the file's bytes, unchanged;
 - `<id>.meta.json`: its name, detected type, size, SHA-256 and the date
   it was added.
 
 `<id>` is 16 random hex characters. The original file name is kept only in
 the metadata, so odd characters in a name never reach the file system.
 
-**Saving** works like notes. The app downloads `SKDOC-<id>.doc` and
-`SKDOC-<id>.meta.json`; Chromium drops them in `seeds/`; the watcher in
-`safekeep-boot.sh` checks the names against a fixed pattern and moves them
-to `documents/`. After the move, the app reads the file back and checks
+**Saving** works like notes. The app downloads `SKDOC-<id>.skmeta` and
+`SKDOC-<id>.skbin`; Chromium drops them in `seeds/`; the File Router in
+`safekeep-boot.sh` hands them to `safekeep-documents.py`, which checks the
+names against a fixed pattern and, once the bytes match the size and
+SHA-256, moves them to `documents/` (a rename, never a copy). After the move, the app reads the file back and checks
 its SHA-256 before saying "Saved".
 
 **Listing.** At boot, `safekeep-boot.sh` writes

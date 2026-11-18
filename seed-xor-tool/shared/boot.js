@@ -1033,6 +1033,178 @@ const SafeKeepOS = (() => {
 
 
   // =============================================
+  //  DOCUMENTS — files kept in the vault (DOCUMENTS_DESIGN.md)
+  // =============================================
+  //
+  // The app can't write or delete vault files itself. It downloads request
+  // files into the vault's download folder (seeds/); safekeep-documents.py,
+  // run by the File Router in safekeep-boot.sh, carries them out:
+  //   SKDOC-<id>.skmeta + SKDOC-<id>.skbin   import (moved only when the
+  //                                          bytes match size and SHA-256)
+  //   SKDOC-<id>.skren                       rename
+  //   SKDOC-<id>.skdel                       delete
+  // and rewrites documents/.documents-index.json (the list, free space and
+  // any refusal), which is how the app learns the outcome.
+
+  const DOCUMENTS_DIR = '/media/.safekeep-vault/documents';
+  const DOCUMENTS_URL = `file://${DOCUMENTS_DIR}`;
+  const DOC_MAX_BYTES = 100 * 1024 * 1024;
+  const DOC_SPACE_MARGIN = 20 * 1024 * 1024;
+  const DOC_ID_RE = /^[0-9a-f]{16}$/;
+  // In-memory stand-in for the website's dev server (never the boot drive).
+  const _docMem = new Map();
+  const _DOC_MEM_TOTAL = 750 * 1024 * 1024;
+
+  function _docNewId() {
+    const b = crypto.getRandomValues(new Uint8Array(8));
+    return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function _docSha256(bytes) {
+    const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    return Array.from(d, (x) => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  function _docCleanName(name) {
+    // Printable characters only (no control or format characters), trimmed.
+    const n = Array.from(String(name || '')).filter((ch) => !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(ch)).join('').trim();
+    return n.length >= 1 && n.length <= 200 ? n : '';
+  }
+
+  /**
+   * The documents in the vault, with free space.
+   * @returns {{ ok: boolean, documents: Array, free: number, total: number, errors: object, error?: string }}
+   */
+  async function listDocuments() {
+    if (!isBootDrive()) {
+      let used = 0;
+      const documents = [];
+      _docMem.forEach((d) => { used += d.size; documents.push(Object.assign({}, d.meta)); });
+      documents.sort((a, b) => (b.added || '').localeCompare(a.added || ''));
+      return { ok: true, documents, free: _DOC_MEM_TOTAL - used, total: _DOC_MEM_TOTAL, errors: {} };
+    }
+    try {
+      const resp = await fetch(`${DOCUMENTS_URL}/.documents-index.json`, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('index ' + resp.status);
+      const ix = await resp.json();
+      const documents = (Array.isArray(ix.documents) ? ix.documents : []).filter((d) => d && DOC_ID_RE.test(d.id));
+      return {
+        ok: true, documents,
+        free: Number.isFinite(ix.free) ? ix.free : 0,
+        total: Number.isFinite(ix.total) ? ix.total : 0,
+        errors: (ix.errors && typeof ix.errors === 'object') ? ix.errors : {},
+      };
+    } catch (e) {
+      return { ok: false, documents: [], free: 0, total: 0, errors: {}, error: 'The documents list couldn\'t be read from the vault.' };
+    }
+  }
+
+  // Wait until the index shows `done(list)` true, or an error for `id`.
+  async function _docAwait(id, done, timeoutMs) {
+    const until = Date.now() + timeoutMs;
+    while (Date.now() < until) {
+      await _sleep(1000);
+      const list = await listDocuments();
+      if (!list.ok) continue;
+      if (list.errors[id]) return { ok: false, error: String(list.errors[id]).slice(0, 300), list };
+      if (done(list)) return { ok: true, list };
+    }
+    return { ok: false, error: 'The vault didn\'t confirm the change in time. Check the list again in a moment.' };
+  }
+
+  /**
+   * Save a document's bytes into the vault.
+   * @param {string} name   the file's name (shown in the list; its extension is kept)
+   * @param {Uint8Array} bytes
+   * @returns {{ saved: boolean, id?: string, error?: string }}
+   */
+  async function saveDocument(name, bytes) {
+    const clean = _docCleanName(name);
+    if (!clean) return { saved: false, error: 'The document needs a name of 1 to 200 characters.' };
+    if (!(bytes instanceof Uint8Array)) bytes = new Uint8Array(bytes);
+    if (bytes.length > DOC_MAX_BYTES) return { saved: false, error: 'This file is larger than 100 MB, the most a document can be.' };
+    const list = await listDocuments();
+    if (!list.ok) return { saved: false, error: list.error };
+    if (bytes.length + DOC_SPACE_MARGIN > list.free) {
+      return { saved: false, error: 'There isn\'t room in the vault for this file. Delete some documents first.' };
+    }
+    const id = _docNewId();
+    const sha256 = await _docSha256(bytes);
+    const added = new Date().toISOString();
+    if (!isBootDrive()) {
+      const { detectKind, extOf } = window.SKDocViewer || {};
+      _docMem.set(id, {
+        size: bytes.length, bytes: bytes.slice(),
+        meta: { id, name: clean, ext: extOf ? extOf(clean) : 'bin', kind: detectKind ? detectKind(bytes, clean) : 'other', size: bytes.length, sha256, added },
+      });
+      return { saved: true, id };
+    }
+    if (!(await _isVaultMounted())) return { saved: false, error: 'The vault isn\'t mounted, so the document can\'t be saved.' };
+    const meta = JSON.stringify({ name: clean, size: bytes.length, sha256, added });
+    if (!_silentDownload(`SKDOC-${id}.skmeta`, meta) || !_silentDownload(`SKDOC-${id}.skbin`, bytes)) {
+      return { saved: false, error: 'The vault isn\'t ready for saving.' };
+    }
+    const r = await _docAwait(id, (l) => l.documents.some((d) => d.id === id), 120000);
+    if (!r.ok) return { saved: false, id, error: r.error };
+    // Read it back from the vault and check it is byte for byte what was sent.
+    const entry = r.list.documents.find((d) => d.id === id);
+    const back = await readDocument(id);
+    if (!back.ok || (await _docSha256(back.bytes)) !== sha256 || entry.sha256 !== sha256) {
+      return { saved: false, id, error: 'The saved copy didn\'t match the original. It has been kept, but import the file again to be sure.' };
+    }
+    return { saved: true, id };
+  }
+
+  /** A document's bytes. @returns {{ ok: boolean, bytes?: Uint8Array, meta?: object, error?: string }} */
+  async function readDocument(id) {
+    if (!DOC_ID_RE.test(String(id))) return { ok: false, error: 'Unknown document.' };
+    if (!isBootDrive()) {
+      const d = _docMem.get(id);
+      return d ? { ok: true, bytes: d.bytes.slice(), meta: Object.assign({}, d.meta) } : { ok: false, error: 'That document is no longer in the vault.' };
+    }
+    const list = await listDocuments();
+    const meta = list.documents.find((d) => d.id === id);
+    if (!meta) return { ok: false, error: 'That document is no longer in the vault.' };
+    const ext = /^[a-z0-9]{1,8}$/.test(meta.ext) ? meta.ext : 'bin';
+    try {
+      const resp = await fetch(`${DOCUMENTS_URL}/${id}.${ext}`, { cache: 'no-store' });
+      if (!resp.ok) throw new Error(String(resp.status));
+      return { ok: true, bytes: new Uint8Array(await resp.arrayBuffer()), meta };
+    } catch (e) {
+      return { ok: false, error: 'The document couldn\'t be read from the vault.' };
+    }
+  }
+
+  /** Rename a document. @returns {{ ok: boolean, error?: string }} */
+  async function renameDocument(id, name) {
+    const clean = _docCleanName(name);
+    if (!DOC_ID_RE.test(String(id))) return { ok: false, error: 'Unknown document.' };
+    if (!clean) return { ok: false, error: 'The name needs 1 to 200 characters.' };
+    if (!isBootDrive()) {
+      const d = _docMem.get(id);
+      if (!d) return { ok: false, error: 'That document is no longer in the vault.' };
+      d.meta.name = clean;
+      return { ok: true };
+    }
+    if (!_silentDownload(`SKDOC-${id}.skren`, JSON.stringify({ name: clean }))) return { ok: false, error: 'The vault isn\'t ready.' };
+    const r = await _docAwait(id, (l) => l.documents.some((d) => d.id === id && d.name === clean), 30000);
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
+
+  /** Delete a document from the vault. @returns {{ ok: boolean, error?: string }} */
+  async function deleteDocument(id) {
+    if (!DOC_ID_RE.test(String(id))) return { ok: false, error: 'Unknown document.' };
+    if (!isBootDrive()) {
+      _docMem.delete(id);
+      return { ok: true };
+    }
+    if (!_silentDownload(`SKDOC-${id}.skdel`, '')) return { ok: false, error: 'The vault isn\'t ready.' };
+    const r = await _docAwait(id, (l) => !l.documents.some((d) => d.id === id), 30000);
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
+
+
+  // =============================================
   //  CIPHER — Passphrase Library
   // =============================================
   //
@@ -1580,7 +1752,9 @@ const SafeKeepOS = (() => {
       cipher: false,
       seed: false,
       codexCount: 0,
-      cipherCount: 0
+      cipherCount: 0,
+      documents: false,
+      documentsCount: 0
     };
 
     if (!isBootDrive()) {
@@ -1589,6 +1763,7 @@ const SafeKeepOS = (() => {
         _reliquaryManifest.selections.forEach(function(s) { manifest[s] = true; });
         if (manifest.codex) manifest.codexCount = 3;
         if (manifest.cipher) manifest.cipherCount = 1;
+        if (manifest.documents) manifest.documentsCount = _docMem.size;
       }
       return { unlocked: true, manifest, command: extractCmd, demo: true };
     }
@@ -1653,6 +1828,8 @@ const SafeKeepOS = (() => {
             manifest.seed     = !!result.seed;
             manifest.codexCount  = result.codexCount  || 0;
             manifest.cipherCount = result.cipherCount || 0;
+            manifest.documents = !!result.documents;
+            manifest.documentsCount = result.documentsCount || 0;
             return { unlocked: true, manifest, command: extractCmd };
           } else {
             // Sanitize the daemon's raw 7z output before surfacing it
@@ -1729,7 +1906,8 @@ const SafeKeepOS = (() => {
               codex: !!result.codex, settings: !!result.settings,
               cipher: !!result.cipher, seed: !!result.seed,
               seedMatch: result.seedMatch === true ? true : (result.seedMatch === false ? false : null),
-              codexCount: result.codexCount || 0, cipherCount: result.cipherCount || 0
+              codexCount: result.codexCount || 0, cipherCount: result.cipherCount || 0,
+              documents: !!result.documents, documentsCount: result.documentsCount || 0
             };
           }
           // result.id !== id: an earlier check's answer — keep waiting
@@ -3561,6 +3739,15 @@ const SafeKeepOS = (() => {
     listNotes,
     loadNote,
     deleteNote,
+
+    // Documents (DOCUMENTS_DESIGN.md)
+    listDocuments,
+    saveDocument,
+    readDocument,
+    renameDocument,
+    deleteDocument,
+    DOCUMENTS_DIR,
+    DOC_MAX_BYTES,
 
     // Cipher — Passphrase Library
     savePassphrase,

@@ -43,7 +43,7 @@
 #   Partition 1: BIOS Boot   (2MB, raw)
 #   Partition 2: EFI System  (256MB, FAT32, label "SK-EFI")
 #   Partition 3: OS          (3584MB, ext4, label "safekeep-os", two OS slots)
-#   Partition 4: Data        (300MB, ext4, label "safekeep-data")
+#   Partition 4: Data        (900MB, ext4, label "safekeep-data")
 #   Partition 5: Transfer    (2560MB, exFAT, label "TRANSFER")
 #
 # ============================================================================
@@ -248,7 +248,7 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
         LOCK_MSG="Locking the vault (your security key is added next)..."
     fi
     (
-    echo "5"; echo "# Creating your ${VAULT_MB} MB encrypted vault..."
+    echo "5"; echo "# Creating your ${VAULT_MB} MB encrypted vault (this can take a minute or two)..."
     sudo dd if=/dev/zero of="$DATA_MOUNT/$VAULT_FILE" bs=1M count="$VAULT_MB" status=none
 
     echo "20"; echo "# Preparing the vault..."

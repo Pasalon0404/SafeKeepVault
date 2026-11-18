@@ -15,8 +15,8 @@
 #     Partition 1:  BIOS Boot    (1MB, raw)
 #     Partition 2:  EFI System   (100MB, FAT32, label "SK-EFI")
 #     Partition 3:  OS           (ext4, label "safekeep-os") — squashfs + kernel
-#     Partition 4:  Data         (300MB, ext4, label "safekeep-data") — LUKS vault
-#     Partition 5:  Transfer     (300MB, exFAT, label "TRANSFER") — airlock
+#     Partition 4:  Data         (900MB, ext4, label "safekeep-data") — LUKS vault
+#     Partition 5:  Transfer     (2560MB, exFAT, label "TRANSFER") — airlock
 #
 #   The OS must read/write partitions 3-5 on the BOOT USB. It must NEVER
 #   touch the host machine's internal drives, networks, or peripherals.
