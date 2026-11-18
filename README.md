@@ -54,7 +54,7 @@ The image is for x86-64 PCs, but you can build it in an ARM (`aarch64`) Ubuntu v
 * runs the image's x86-64 programs through QEMU, installing it if needed (`qemu-user-static`, or `qemu-user-binfmt` on Ubuntu 26.04). Rosetta for Linux works too, if your virtual machine app offers it;
 * takes the legacy-boot GRUB files from Ubuntu's `grub-pc-bin`, pinned by SHA-256, since Ubuntu has no x86-64 GRUB packages for ARM.
 
-Install Node.js 22 first, since Ubuntu's own is older (for example from NodeSource: `curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -`, then `sudo apt install -y nodejs`). The build is slower than on a PC, because the image's programs run through QEMU. To write the flash drive, connect it to the virtual machine and use `flash-new-stick.sh`, or copy `safekeep.img` to the Mac and write it with balenaEtcher.
+Install Node.js 22 first, since Ubuntu's own is older (for example from NodeSource: `curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -`, then `sudo apt install -y nodejs`). The image's programs run through QEMU, but on the Apple Silicon Mac it was tested on, the build took about as long as on an x86-64 PC. To write the flash drive, connect it to the virtual machine and use `flash-new-stick.sh`, or copy `safekeep.img` to the Mac and write it with balenaEtcher.
 
 ### 3. Flash a USB stick
 
