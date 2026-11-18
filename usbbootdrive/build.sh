@@ -483,7 +483,14 @@ if [ "$SAFEKEEP_DEV_SHELL" = "1" ]; then
     echo ""
 fi
 # UC_*: Chromium pin overrides (chroot-setup.sh); empty means its defaults.
-chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" \
+# Through a translator (arm64 build computer), apt in the chroot is stopped
+# by SIGTTOU when it finishes and tries to restore the terminal's settings,
+# and the build waits forever. The build asks nothing, so there its chroot
+# steps read from /dev/null instead of the terminal.
+chroot_step() {
+    if [ "$HOST_ARCH" != "amd64" ]; then "$@" </dev/null; else "$@"; fi
+}
+chroot_step chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" \
     UC_PIN_TAG="${UC_PIN_TAG:-}" UC_EXPECTED_SHA256="${UC_EXPECTED_SHA256:-}" UC_ALLOW_UNPINNED="${UC_ALLOW_UNPINNED:-}" \
     /bin/bash -c "/chroot-setup.sh"
 
@@ -497,7 +504,7 @@ chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" \
 # configs land in the read-only lower layer. Casper overlay resets on every
 # boot, but the squashfs layer persists — hardening is always active.
 echo "Running OS hardening in chroot..."
-chroot "$CHROOT_DIR" /bin/bash -c "safekeep-harden"
+chroot_step chroot "$CHROOT_DIR" /bin/bash -c "safekeep-harden"
 
 # Maintainer key for checking signed updates, as a binary keyring for gpgv.
 KEY_FPR=$(GNUPGHOME=$(mktemp -d) gpg --batch --with-colons --show-keys "$MAINTAINER_KEY" 2>/dev/null \

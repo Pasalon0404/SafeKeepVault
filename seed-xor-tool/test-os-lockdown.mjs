@@ -277,6 +277,9 @@ const runDrop = (root, block = dropBlock) => bash('set -euo pipefail\n' + block.
   ck('arm64 builds: the chroot gets a private /dev/pts (made private before mounting)', !!pts && build.indexOf(pts[0]) > build.indexOf('mount --bind /dev "$CHROOT_DIR/dev"'));
   const ptsUm = build.match(/umount -l "\$CHROOT_DIR\/dev\/pts"[^\n]*\n\s*umount -l "\$CHROOT_DIR\/dev" /g) || [];
   ck('/dev/pts is unmounted before /dev in both places', ptsUm.length === 2, ptsUm.length);
+  ck('arm64 builds: the chroot steps read from /dev/null (apt is stopped by SIGTTOU otherwise)',
+    /chroot_step\(\) \{\n    if \[ "\$HOST_ARCH" != "amd64" \]; then "\$@" <\/dev\/null; else "\$@"; fi\n\}/.test(build)
+    && /chroot_step chroot "\$CHROOT_DIR" \/usr\/bin\/env SAFEKEEP_DEV_SHELL/.test(build) && /chroot_step chroot "\$CHROOT_DIR" \/bin\/bash -c "safekeep-harden"/.test(build));
 }
 
 console.log(`\nOS LOCKDOWN: ${pass} passed, ${fail} failed`);
