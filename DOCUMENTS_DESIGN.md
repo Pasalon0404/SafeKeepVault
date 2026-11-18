@@ -1,7 +1,15 @@
 # Design note: documents in the vault
 
-Status: **proposal** (Nov 18, 2026). Nothing is built yet. The owner
-decides the open questions at the end before work starts.
+Status: **approved** (Nov 18, 2026). Nothing is built yet.
+
+Owner's decisions (Nov 18):
+- the vault partition grows to 900 MB;
+- 100 MB per document;
+- "Remove it from the Transfer Drive after importing" is checked by
+  default;
+- a Documents tab on the Encrypted Notes page;
+- no Word (`.docx`) previews: save it as PDF first. Word files are stored
+  and exported like any other file.
 
 ## The idea
 
@@ -11,16 +19,15 @@ encrypted vault, such as a letter of instruction for heirs, a will, recovery
 steps, account records or scans. SafeKeep shows the common types itself, so
 they can be read on the offline computer without copying them anywhere.
 
-| Type | In SafeKeep | Part |
-|---|---|---|
-| Text (`.txt`, `.md`, `.csv`) | shown as plain text | 1 |
-| Images (PNG, JPEG, GIF, WebP) | shown | 1 |
-| PDF | shown page by page (pdf.js) | 1 |
-| Word (`.docx`) | shown as simple formatted text (mammoth.js) | 2 |
-| LibreOffice (`.odt`) and anything else | stored and exported, no preview | 1 |
+| Type | In SafeKeep |
+|---|---|
+| Text (`.txt`, `.md`, `.csv`) | shown as plain text |
+| Images (PNG, JPEG, GIF, WebP) | shown |
+| PDF | shown page by page (pdf.js) |
+| Word (`.docx`), LibreOffice (`.odt`) and anything else | stored and exported, no preview |
 
 Word and LibreOffice files can be saved as PDF before importing, which
-gives an exact preview in Part 1.
+gives an exact preview.
 
 ## 1. A larger vault: 900 MB
 
@@ -155,20 +162,16 @@ vault in three ways:
    - PDF: pdf.js with `isEvalSupported: false` (fonts can't run code; the
      fix for CVE-2024-4367), no PDF scripting (the `pdf.sandbox` module
      isn't bundled), no forms or XFA, and links shown but not clickable.
-   - Word (Part 2): mammoth.js turns the file into simple HTML, DOMPurify
-     cleans it, and images stay inside the document as `data:` URLs only.
 
 **Libraries.** Pinned exact versions in `package-lock.json`, choosing
 releases at least two weeks old, bundled into `boot.html` like everything
 else:
 
-| Library | Size in the app | Part |
-|---|---|---|
-| pdf.js (`pdfjs-dist`, Apache-2.0): main module and worker | about 1.8 MB | 1 |
-| mammoth.js (BSD-2-Clause) | about 0.4 MB | 2 |
-| DOMPurify (MPL-2.0 or Apache-2.0) | about 30 KB | 2 |
+| Library | Size in the app |
+|---|---|
+| pdf.js (`pdfjs-dist`, Apache-2.0): main module and worker | about 1.8 MB |
 
-The app grows from about 4.6 MB to about 6.4 MB in Part 1. pdf.js's extra
+The app grows from about 4.6 MB to about 6.4 MB. pdf.js's extra
 font files (standard fonts, CMaps for Chinese, Japanese and Korean) aren't
 bundled at first: PDFs that rely on them may show substitute fonts.
 
@@ -199,7 +202,7 @@ zoom for PDFs.
   refuse.
 - **Viewers:** a sample of each type renders; a malformed PDF, a PDF with
   JavaScript and a PDF with a font exploit sample render or fail without
-  running code; a `.docx` with script and remote images is cleaned.
+  running code.
 - **Sealed frame:** from inside the viewer frame, `fetch` of a vault file
   and access to `parent` both fail.
 - **Backup, restore, wipe** include `documents/`.
@@ -207,20 +210,9 @@ zoom for PDFs.
 - On a flash drive: import a few real documents, back up, restore onto a
   fresh drive.
 
-## 8. Parts
+## 8. Scope
 
-- **Part 1:** the 900 MB vault, Documents with text, images and PDF,
-  import, export, rename, delete, backup, restore and wipe.
-- **Part 2:** Word (`.docx`) previews.
-- Not planned: `.odt` previews (no reliable library for the browser),
-  editing documents, or searching inside them.
-
-## Open questions for the owner
-
-1. **Vault size:** 900 MB as proposed, or 950 MB (about 790 MB usable,
-   with only about 50 MB of margin on the smallest 8 GB drives)?
-2. **Per-document limit:** 100 MB?
-3. **Remove from the Transfer Drive after importing:** checked by default?
-4. **Name and place:** a Documents tab on the Encrypted Notes page, or its
-   own card on the Dashboard?
-5. **Part 2 (`.docx`):** wanted, or is "save it as PDF first" enough?
+- **Built in one go:** the 900 MB vault, Documents with text, images and
+  PDF, import, export, rename, delete, backup, restore and wipe.
+- Not planned: `.docx` or `.odt` previews (save as PDF first), editing
+  documents, or searching inside them.
