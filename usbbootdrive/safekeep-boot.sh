@@ -857,6 +857,10 @@ launch_browser() {
     # every URL-based DevTools entry point. It cannot be re-enabled by
     # the user and persists across Chromium updates. Paired with the
     # --disable-dev-tools command-line flag below for belt-and-braces.
+    # ClipboardAllowedForUrls: the app's own Paste buttons (Encrypted
+    # Notes) read the clipboard, which Chromium otherwise asks about in a
+    # permission prompt. Only our file:// page is covered; there is no
+    # other page in the kiosk.
     sudo tee "$POLICY_DIR/safekeep.json" > /dev/null << POLICYEOF
 {
     "DownloadDirectory": "$CHROMIUM_DOWNLOAD_DIR",
@@ -864,12 +868,14 @@ launch_browser() {
     "PromptForDownloadLocation": false,
     "AutomaticDownloadsAllowedForUrls": ["file://*", "file:///*"],
     "DefaultAutomaticDownloadsSetting": 1,
+    "ClipboardAllowedForUrls": ["file://*", "file:///*"],
     "DeveloperToolsAvailability": 2
 }
 POLICYEOF
     echo "Chromium policy: downloads → $CHROMIUM_DOWNLOAD_DIR"
     echo "Chromium policy: DevTools disallowed (DeveloperToolsAvailability=2)"
     echo "Chromium policy: automatic (multiple) downloads allowed for file:// (no 'download multiple files' prompt)"
+    echo "Chromium policy: clipboard reading allowed for file:// (Paste works without a permission prompt)"
     echo "Power-action read path: $POWER_ACTION_READ_PATH"
 
     # Probe the vault for an existing master seed.

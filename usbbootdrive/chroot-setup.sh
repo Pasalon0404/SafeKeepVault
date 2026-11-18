@@ -313,6 +313,15 @@ fi
 
 chmod +x /tmp/uc.AppImage
 
+# On an arm64 build computer the chroot's programs run through QEMU, whose
+# binfmt pattern needs bytes 8-10 of an x86-64 program to be zero. An
+# AppImage puts its marker "AI\x02" there, so it gets "Exec format error".
+# Zero those 3 bytes of this already-verified copy: the runtime finds its
+# files from the rest of the header, so what it extracts is unchanged.
+if [ "${BUILD_HOST_ARCH:-amd64}" != "amd64" ]; then
+    printf '\0\0\0' | dd of=/tmp/uc.AppImage bs=1 seek=8 count=3 conv=notrunc status=none
+fi
+
 echo "Extracting AppImage to /opt/ungoogled-chromium..."
 cd /opt
 /tmp/uc.AppImage --appimage-extract > /dev/null

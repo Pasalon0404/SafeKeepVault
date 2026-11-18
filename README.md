@@ -25,7 +25,7 @@ If you do use a release, verify it first. Each release of the app (`boot.html`) 
 
 SafeKeepVault has two parts: the web app (`seed-xor-tool/`, compiled into one offline HTML file) and the bootable USB operating system (`usbbootdrive/`) that runs it. You can build the app on Mac, Windows or Linux. The USB image needs **Linux**. One Linux machine can do the whole build, no Mac needed.
 
-**What you need:** an x86-64 Linux machine (Debian or Ubuntu is easiest; `build.sh` installs its own tools with `apt-get`), `sudo`, git, **Node.js 22+** with npm, about 15 GB of free disk space, an internet connection during the build, and a USB stick of 8 GB or more.
+**What you need:** an x86-64 Linux machine (Debian or Ubuntu is easiest; `build.sh` installs its own tools with `apt-get`) or an Ubuntu virtual machine on an Apple Silicon Mac ([see below](#on-an-apple-silicon-mac)), `sudo`, git, **Node.js 22+** with npm, about 15 GB of free disk space, an internet connection during the build, and a USB stick of 8 GB or more.
 
 ### 1. Build the app from source
 
@@ -46,6 +46,15 @@ sudo bash build.sh
 ```
 
 This takes 10–20 minutes the first time. It downloads Ubuntu 24.04 packages, builds a locked-down system around the app, and writes `safekeep.img` (about 6.7 GB; it zips to about 1.3 GB). It stops immediately if `src/dist/boot.html` is missing.
+
+#### On an Apple Silicon Mac
+
+The image is for x86-64 PCs, but you can build it in an ARM (`aarch64`) Ubuntu virtual machine on an Apple Silicon Mac. This was tested with Ubuntu 26.04 in VMware Fusion, and the flash drive it made booted and worked on a PC. The steps are the same as above. `build.sh` notices the ARM computer and:
+
+* runs the image's x86-64 programs through QEMU, installing it if needed (`qemu-user-static`, or `qemu-user-binfmt` on Ubuntu 26.04). Rosetta for Linux works too, if your virtual machine app offers it;
+* takes the legacy-boot GRUB files from Ubuntu's `grub-pc-bin`, pinned by SHA-256, since Ubuntu has no x86-64 GRUB packages for ARM.
+
+Install Node.js 22 first, since Ubuntu's own is older (for example from NodeSource: `curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -`, then `sudo apt install -y nodejs`). The image's programs run through QEMU, but on the Apple Silicon Mac it was tested on, the build took about as long as on an x86-64 PC. To write the flash drive, connect it to the virtual machine and use `flash-new-stick.sh`, or copy `safekeep.img` to the Mac and write it with balenaEtcher.
 
 ### 3. Flash a USB stick
 

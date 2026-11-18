@@ -81,6 +81,7 @@ cleanup() {
     umount -l "$CHROOT_DIR/var/lib/apt/lists" 2>/dev/null || true
     umount -l "$CHROOT_DIR/var/cache/apt/archives" 2>/dev/null || true
     umount -l "$CHROOT_DIR/run" 2>/dev/null || true
+    umount -l "$CHROOT_DIR/dev/pts" 2>/dev/null || true
     umount -l "$CHROOT_DIR/dev" 2>/dev/null || true
     umount -l "$CHROOT_DIR/proc" 2>/dev/null || true
     umount -l "$CHROOT_DIR/sys" 2>/dev/null || true
@@ -160,7 +161,17 @@ command -v debootstrap >/dev/null || DEPS_NEEDED="$DEPS_NEEDED debootstrap"
 command -v mksquashfs >/dev/null || DEPS_NEEDED="$DEPS_NEEDED squashfs-tools"
 command -v sgdisk >/dev/null || DEPS_NEEDED="$DEPS_NEEDED gdisk"
 command -v gpg >/dev/null || DEPS_NEEDED="$DEPS_NEEDED gnupg"
-command -v grub-install >/dev/null || DEPS_NEEDED="$DEPS_NEEDED grub-pc-bin grub-efi-amd64-bin"
+# The image is for amd64 PCs. On an arm64 build computer (an Ubuntu VM on
+# an Apple Silicon Mac) Ubuntu has no grub-pc-bin or grub-efi-amd64-bin:
+# grub-install comes from grub2-common, and its amd64 legacy-boot files from
+# a pinned grub-pc-bin below. The chroot's amd64 programs run through a
+# translator (QEMU or Rosetta), checked further down.
+HOST_ARCH=$(dpkg --print-architecture)
+if [ "$HOST_ARCH" = "amd64" ]; then
+    command -v grub-install >/dev/null || DEPS_NEEDED="$DEPS_NEEDED grub-pc-bin grub-efi-amd64-bin"
+else
+    command -v grub-install >/dev/null || DEPS_NEEDED="$DEPS_NEEDED grub2-common"
+fi
 command -v mkfs.fat >/dev/null || DEPS_NEEDED="$DEPS_NEEDED dosfstools"
 command -v mkfs.ext4 >/dev/null || DEPS_NEEDED="$DEPS_NEEDED e2fsprogs"
 command -v mtools >/dev/null || DEPS_NEEDED="$DEPS_NEEDED mtools"
@@ -216,6 +227,53 @@ for f in "$SHIM_EFI" "$MM_EFI" "$GRUB_EFI"; do
     [ -s "$f" ] || { echo "ERROR: $f missing from the pinned packages." >&2; exit 1; }
 done
 echo "  OK: $SHIM_DEB, $SIGNED_GRUB_DEB (SHA-256 match)."
+
+# --- Building on a non-amd64 computer (e.g. an Apple Silicon Mac's VM) ---
+# 1. grub-install needs the amd64 legacy-boot (i386-pc) files, pinned like
+#    the boot files above, at the same GRUB version as the signed GRUB.
+# 2. The chroot is amd64, so the kernel must run amd64 programs through a
+#    translator registered with binfmt_misc and the F flag (so it works
+#    inside the chroot): qemu-user-static, or Rosetta for Linux.
+GRUB_BIOS_DIR=""
+if [ "$HOST_ARCH" != "amd64" ]; then
+    echo "Build computer is $HOST_ARCH: building the amd64 image through a translator."
+    GRUB_PC_DEB="grub-pc-bin_2.12-1ubuntu7.3_amd64.deb"
+    GRUB_PC_DEB_SHA256="698d80bc51c0c593fbc829758365a0e4bce96819e2c8c754ae77dfe39b0388df"
+    fetch_pinned_deb g/grub2 "$GRUB_PC_DEB" "$GRUB_PC_DEB_SHA256"
+    dpkg-deb -x "$SIGNED_BOOT/$GRUB_PC_DEB" "$SIGNED_BOOT/x"
+    GRUB_BIOS_DIR="$SIGNED_BOOT/x/usr/lib/grub/i386-pc"
+    [ -s "$GRUB_BIOS_DIR/boot.img" ] || { echo "ERROR: $GRUB_BIOS_DIR/boot.img missing from $GRUB_PC_DEB." >&2; exit 1; }
+    echo "  OK: $GRUB_PC_DEB (SHA-256 match)."
+
+    amd64_translator() {   # prints the name of an enabled amd64 handler with the F flag
+        local f
+        for f in "${BINFMT_DIR:-/proc/sys/fs/binfmt_misc}"/*; do
+            [ -f "$f" ] || continue
+            grep -q '^enabled' "$f" 2>/dev/null || continue
+            grep -q '^magic 7f454c4602010100000000000000000002003e00' "$f" 2>/dev/null || continue
+            grep -q '^flags:.*F' "$f" 2>/dev/null || continue
+            basename "$f"; return 0
+        done
+        return 1
+    }
+    if ! amd64_translator >/dev/null; then
+        # Ubuntu 24.04 has qemu-user-static; from 26.04 it is only a virtual
+        # name and the static translators come with qemu-user-binfmt.
+        echo "No amd64 translator registered: installing QEMU's..."
+        apt-get install -y qemu-user-static >/dev/null 2>&1 || apt-get install -y qemu-user-binfmt
+        systemctl restart systemd-binfmt 2>/dev/null || true
+    fi
+    if ! TRANSLATOR=$(amd64_translator); then
+        echo "ERROR: this $HOST_ARCH computer can't run the image's amd64 programs." >&2
+        echo "       Install qemu-user-static (or set up Rosetta for Linux with the" >&2
+        echo "       fix-binary flag), check /proc/sys/fs/binfmt_misc, then run again." >&2
+        exit 1
+    fi
+    echo "  OK: amd64 programs run through binfmt handler '$TRANSLATOR'."
+    # The pinned legacy-boot files are GRUB 2.12; a newer grub-install on the
+    # build computer can still write them, but say so in the log.
+    echo "  grub-install here: $(grub-install --version 2>/dev/null | head -1) (legacy-boot files: 2.12-1ubuntu7.3)"
+fi
 
 # =====================================================================
 # PHASE 2: BUILD THE UBUNTU CHROOT
@@ -279,6 +337,10 @@ fi
 # Clone pristine base into working directory
 echo "Cloning base system..."
 cp -a "$BASE_CHROOT" "$CHROOT_DIR"
+if ! chroot "$CHROOT_DIR" /bin/true; then
+    echo "ERROR: the amd64 chroot's programs won't run on this computer." >&2
+    exit 1
+fi
 
 # =====================================================================
 # PHASE 3: INJECT FILES AND CONFIGURE IN CHROOT
@@ -373,13 +435,22 @@ cat > "$POLICY_DIR/safekeep.json" << 'POLICY_EOF'
     "DefaultDownloadDirectory": "/media/transfer",
     "PromptForDownloadLocation": true,
     "AutomaticDownloadsAllowedForUrls": ["file://*", "file:///*"],
-    "DefaultAutomaticDownloadsSetting": 1
+    "DefaultAutomaticDownloadsSetting": 1,
+    "ClipboardAllowedForUrls": ["file://*", "file:///*"]
 }
 POLICY_EOF
 echo "Chromium enterprise policy installed at /etc/chromium/policies/managed/safekeep.json"
 
 # Bind-mount host systems for chroot
 mount --bind /dev "$CHROOT_DIR/dev"
+# Through a translator (arm64 build computer), apt hangs when it can't open
+# a terminal ("Can not write log (Is /dev/pts mounted?)"), so the chroot gets
+# its own /dev/pts there. --make-private first: the bind of a shared /dev
+# would otherwise pass the new mount on to the build computer's own /dev/pts.
+if [ "$HOST_ARCH" != "amd64" ]; then
+    mount --make-private "$CHROOT_DIR/dev"
+    mount -t devpts -o newinstance,ptmxmode=0666,mode=0620,gid=5 devpts "$CHROOT_DIR/dev/pts"
+fi
 # The chroot gets its own empty /run, NOT the build machine's. With the
 # host's /run bound in, package scripts inside the chroot wrote to the
 # host: installing the image's kernel created the build machine's own
@@ -412,7 +483,14 @@ if [ "$SAFEKEEP_DEV_SHELL" = "1" ]; then
     echo ""
 fi
 # UC_*: Chromium pin overrides (chroot-setup.sh); empty means its defaults.
-chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" \
+# Through a translator (arm64 build computer), apt in the chroot is stopped
+# by SIGTTOU when it finishes and tries to restore the terminal's settings,
+# and the build waits forever. The build asks nothing, so there its chroot
+# steps read from /dev/null instead of the terminal.
+chroot_step() {
+    if [ "$HOST_ARCH" != "amd64" ]; then "$@" </dev/null; else "$@"; fi
+}
+chroot_step chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" BUILD_HOST_ARCH="$HOST_ARCH" \
     UC_PIN_TAG="${UC_PIN_TAG:-}" UC_EXPECTED_SHA256="${UC_EXPECTED_SHA256:-}" UC_ALLOW_UNPINNED="${UC_ALLOW_UNPINNED:-}" \
     /bin/bash -c "/chroot-setup.sh"
 
@@ -426,7 +504,7 @@ chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" \
 # configs land in the read-only lower layer. Casper overlay resets on every
 # boot, but the squashfs layer persists — hardening is always active.
 echo "Running OS hardening in chroot..."
-chroot "$CHROOT_DIR" /bin/bash -c "safekeep-harden"
+chroot_step chroot "$CHROOT_DIR" /bin/bash -c "safekeep-harden"
 
 # Maintainer key for checking signed updates, as a binary keyring for gpgv.
 KEY_FPR=$(GNUPGHOME=$(mktemp -d) gpg --batch --with-colons --show-keys "$MAINTAINER_KEY" 2>/dev/null \
@@ -453,6 +531,7 @@ echo "Maintainer key installed ($MAINTAINER_FPR); gpgv present."
 umount -l "$CHROOT_DIR/var/lib/apt/lists" 2>/dev/null || true
 umount -l "$CHROOT_DIR/var/cache/apt/archives" 2>/dev/null || true
 umount -l "$CHROOT_DIR/run" 2>/dev/null || true
+umount -l "$CHROOT_DIR/dev/pts" 2>/dev/null || true
 umount -l "$CHROOT_DIR/dev" 2>/dev/null || true
 umount -l "$CHROOT_DIR/proc" 2>/dev/null || true
 umount -l "$CHROOT_DIR/sys" 2>/dev/null || true
@@ -645,6 +724,7 @@ printf 'SafeKeep' > "$WORKSPACE/mnt-efi/EFI/BOOT/.contentDetails"
 # dd since the serial number is baked into the filesystem.
 grub-install \
     --target=i386-pc \
+    ${GRUB_BIOS_DIR:+--directory="$GRUB_BIOS_DIR"} \
     --boot-directory="$WORKSPACE/mnt-efi/boot" \
     --recheck \
     --modules="part_gpt ext2 fat search search_label normal linux gzio test configfile" \
