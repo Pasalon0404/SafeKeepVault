@@ -81,6 +81,7 @@ cleanup() {
     umount -l "$CHROOT_DIR/var/lib/apt/lists" 2>/dev/null || true
     umount -l "$CHROOT_DIR/var/cache/apt/archives" 2>/dev/null || true
     umount -l "$CHROOT_DIR/run" 2>/dev/null || true
+    umount -l "$CHROOT_DIR/dev/pts" 2>/dev/null || true
     umount -l "$CHROOT_DIR/dev" 2>/dev/null || true
     umount -l "$CHROOT_DIR/proc" 2>/dev/null || true
     umount -l "$CHROOT_DIR/sys" 2>/dev/null || true
@@ -442,6 +443,14 @@ echo "Chromium enterprise policy installed at /etc/chromium/policies/managed/saf
 
 # Bind-mount host systems for chroot
 mount --bind /dev "$CHROOT_DIR/dev"
+# Through a translator (arm64 build computer), apt hangs when it can't open
+# a terminal ("Can not write log (Is /dev/pts mounted?)"), so the chroot gets
+# its own /dev/pts there. --make-private first: the bind of a shared /dev
+# would otherwise pass the new mount on to the build computer's own /dev/pts.
+if [ "$HOST_ARCH" != "amd64" ]; then
+    mount --make-private "$CHROOT_DIR/dev"
+    mount -t devpts -o newinstance,ptmxmode=0666,mode=0620,gid=5 devpts "$CHROOT_DIR/dev/pts"
+fi
 # The chroot gets its own empty /run, NOT the build machine's. With the
 # host's /run bound in, package scripts inside the chroot wrote to the
 # host: installing the image's kernel created the build machine's own
@@ -515,6 +524,7 @@ echo "Maintainer key installed ($MAINTAINER_FPR); gpgv present."
 umount -l "$CHROOT_DIR/var/lib/apt/lists" 2>/dev/null || true
 umount -l "$CHROOT_DIR/var/cache/apt/archives" 2>/dev/null || true
 umount -l "$CHROOT_DIR/run" 2>/dev/null || true
+umount -l "$CHROOT_DIR/dev/pts" 2>/dev/null || true
 umount -l "$CHROOT_DIR/dev" 2>/dev/null || true
 umount -l "$CHROOT_DIR/proc" 2>/dev/null || true
 umount -l "$CHROOT_DIR/sys" 2>/dev/null || true

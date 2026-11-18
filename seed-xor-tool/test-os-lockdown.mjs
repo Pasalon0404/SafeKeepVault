@@ -273,6 +273,10 @@ const runDrop = (root, block = dropBlock) => bash('set -euo pipefail\n' + block.
   ck('amd64 build computers install the same packages as before',
     /if \[ "\$HOST_ARCH" = "amd64" \]; then\n    command -v grub-install >\/dev\/null \|\| DEPS_NEEDED="\$DEPS_NEEDED grub-pc-bin grub-efi-amd64-bin"/.test(build));
   ck('the build stops if the amd64 chroot\'s programs won\'t run', /if ! chroot "\$CHROOT_DIR" \/bin\/true; then/.test(build));
+  const pts = build.match(/if \[ "\$HOST_ARCH" != "amd64" \]; then\n    mount --make-private "\$CHROOT_DIR\/dev"\n    mount -t devpts -o newinstance[^\n]*"\$CHROOT_DIR\/dev\/pts"\nfi/);
+  ck('arm64 builds: the chroot gets a private /dev/pts (made private before mounting)', !!pts && build.indexOf(pts[0]) > build.indexOf('mount --bind /dev "$CHROOT_DIR/dev"'));
+  const ptsUm = build.match(/umount -l "\$CHROOT_DIR\/dev\/pts"[^\n]*\n\s*umount -l "\$CHROOT_DIR\/dev" /g) || [];
+  ck('/dev/pts is unmounted before /dev in both places', ptsUm.length === 2, ptsUm.length);
 }
 
 console.log(`\nOS LOCKDOWN: ${pass} passed, ${fail} failed`);
