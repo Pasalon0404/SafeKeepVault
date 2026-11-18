@@ -259,7 +259,7 @@ if [ "$HOST_ARCH" != "amd64" ]; then
         # Ubuntu 24.04 has qemu-user-static; from 26.04 it is only a virtual
         # name and the static translators come with qemu-user-binfmt.
         echo "No amd64 translator registered: installing QEMU's..."
-        apt-get install -y qemu-user-static 2>/dev/null || apt-get install -y qemu-user-binfmt
+        apt-get install -y qemu-user-static >/dev/null 2>&1 || apt-get install -y qemu-user-binfmt
         systemctl restart systemd-binfmt 2>/dev/null || true
     fi
     if ! TRANSLATOR=$(amd64_translator); then
