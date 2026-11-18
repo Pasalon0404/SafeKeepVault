@@ -490,7 +490,7 @@ fi
 chroot_step() {
     if [ "$HOST_ARCH" != "amd64" ]; then "$@" </dev/null; else "$@"; fi
 }
-chroot_step chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" \
+chroot_step chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_SHELL" BUILD_HOST_ARCH="$HOST_ARCH" \
     UC_PIN_TAG="${UC_PIN_TAG:-}" UC_EXPECTED_SHA256="${UC_EXPECTED_SHA256:-}" UC_ALLOW_UNPINNED="${UC_ALLOW_UNPINNED:-}" \
     /bin/bash -c "/chroot-setup.sh"
 
