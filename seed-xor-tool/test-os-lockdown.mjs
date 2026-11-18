@@ -239,5 +239,41 @@ const runDrop = (root, block = dropBlock) => bash('set -euo pipefail\n' + block.
   ck('safekeep-boot.sh: DevTools stay disallowed', policyIn(read('safekeep-boot.sh'), 'POLICYEOF')?.DeveloperToolsAvailability === 2);
 }
 
+// ---- 8. Building on an arm64 computer (an Apple Silicon Mac's Ubuntu VM) ----
+// The chroot's amd64 programs need a binfmt translator registered with the
+// F flag (QEMU or Rosetta); legacy-boot GRUB files come from a pinned deb.
+{
+  const build = read('build.sh');
+  const fn = build.match(/\n    (amd64_translator\(\) \{[\s\S]*?\n    \})\n/);
+  ck('build.sh has the amd64 translator check', !!fn);
+  if (fn) {
+    const dir = mkdtempSync(join(tmpdir(), 'binfmt-'));
+    const X86 = 'magic 7f454c4602010100000000000000000002003e00\nmask fffffffffffefe00fffffffffffffffffeffffff\n';
+    const ARM = 'magic 7f454c460201010000000000000000000200b700\nmask ffffffffffffff00fffffffffffffffffeffffff\n';
+    const run = (entries) => {
+      rmSync(dir, { recursive: true, force: true }); mkdirSync(dir);
+      for (const [name, text] of Object.entries(entries)) writeFileSync(join(dir, name), text);
+      writeFileSync(join(dir, 'register'), ''); writeFileSync(join(dir, 'status'), 'enabled\n');
+      const r = spawnSync('bash', ['-c', fn[1].replace(/\n {4}/g, '\n') + '\namd64_translator'], { env: { ...process.env, BINFMT_DIR: dir }, encoding: 'utf8' });
+      return r.status === 0 ? r.stdout.trim() : null;
+    };
+    ck('QEMU for amd64 with the F flag is accepted', run({ 'qemu-x86_64': 'enabled\ninterpreter /usr/libexec/qemu-binfmt/x86_64-binfmt-P\nflags: POCF\noffset 0\n' + X86 }) === 'qemu-x86_64');
+    ck('Rosetta with the F flag is accepted', run({ rosetta: 'enabled\ninterpreter /media/rosetta/rosetta\nflags: OCF\noffset 0\n' + X86 }) === 'rosetta');
+    ck('a handler without the F flag is refused (it would fail inside the chroot)', run({ rosetta: 'enabled\ninterpreter /media/rosetta/rosetta\nflags: \noffset 0\n' + X86 }) === null);
+    ck('a disabled handler is refused', run({ 'qemu-x86_64': 'disabled\ninterpreter /x\nflags: F\noffset 0\n' + X86 }) === null);
+    ck('a handler for another architecture is refused', run({ 'qemu-aarch64': 'enabled\ninterpreter /x\nflags: F\noffset 0\n' + ARM }) === null);
+    ck('no handlers: refused', run({}) === null);
+    rmSync(dir, { recursive: true, force: true });
+  }
+  ck('build.sh pins grub-pc-bin at the signed GRUB\'s version, by SHA-256',
+    /GRUB_PC_DEB="grub-pc-bin_2\.12-1ubuntu7\.3_amd64\.deb"/.test(build) && /SIGNED_GRUB_DEB="grub-efi-amd64-signed_1\.202\.5\+2\.12-1ubuntu7\.3_amd64\.deb"/.test(build)
+    && /GRUB_PC_DEB_SHA256="[0-9a-f]{64}"/.test(build) && /fetch_pinned_deb g\/grub2 "\$GRUB_PC_DEB" "\$GRUB_PC_DEB_SHA256"/.test(build));
+  ck('legacy-boot grub-install uses those files only on a non-amd64 computer',
+    /--target=i386-pc \\\n    \$\{GRUB_BIOS_DIR:\+--directory="\$GRUB_BIOS_DIR"\}/.test(build) && /^GRUB_BIOS_DIR=""$/m.test(build));
+  ck('amd64 build computers install the same packages as before',
+    /if \[ "\$HOST_ARCH" = "amd64" \]; then\n    command -v grub-install >\/dev\/null \|\| DEPS_NEEDED="\$DEPS_NEEDED grub-pc-bin grub-efi-amd64-bin"/.test(build));
+  ck('the build stops if the amd64 chroot\'s programs won\'t run', /if ! chroot "\$CHROOT_DIR" \/bin\/true; then/.test(build));
+}
+
 console.log(`\nOS LOCKDOWN: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -160,7 +160,17 @@ command -v debootstrap >/dev/null || DEPS_NEEDED="$DEPS_NEEDED debootstrap"
 command -v mksquashfs >/dev/null || DEPS_NEEDED="$DEPS_NEEDED squashfs-tools"
 command -v sgdisk >/dev/null || DEPS_NEEDED="$DEPS_NEEDED gdisk"
 command -v gpg >/dev/null || DEPS_NEEDED="$DEPS_NEEDED gnupg"
-command -v grub-install >/dev/null || DEPS_NEEDED="$DEPS_NEEDED grub-pc-bin grub-efi-amd64-bin"
+# The image is for amd64 PCs. On an arm64 build computer (an Ubuntu VM on
+# an Apple Silicon Mac) Ubuntu has no grub-pc-bin or grub-efi-amd64-bin:
+# grub-install comes from grub2-common, and its amd64 legacy-boot files from
+# a pinned grub-pc-bin below. The chroot's amd64 programs run through a
+# translator (QEMU or Rosetta), checked further down.
+HOST_ARCH=$(dpkg --print-architecture)
+if [ "$HOST_ARCH" = "amd64" ]; then
+    command -v grub-install >/dev/null || DEPS_NEEDED="$DEPS_NEEDED grub-pc-bin grub-efi-amd64-bin"
+else
+    command -v grub-install >/dev/null || DEPS_NEEDED="$DEPS_NEEDED grub2-common"
+fi
 command -v mkfs.fat >/dev/null || DEPS_NEEDED="$DEPS_NEEDED dosfstools"
 command -v mkfs.ext4 >/dev/null || DEPS_NEEDED="$DEPS_NEEDED e2fsprogs"
 command -v mtools >/dev/null || DEPS_NEEDED="$DEPS_NEEDED mtools"
@@ -216,6 +226,48 @@ for f in "$SHIM_EFI" "$MM_EFI" "$GRUB_EFI"; do
     [ -s "$f" ] || { echo "ERROR: $f missing from the pinned packages." >&2; exit 1; }
 done
 echo "  OK: $SHIM_DEB, $SIGNED_GRUB_DEB (SHA-256 match)."
+
+# --- Building on a non-amd64 computer (e.g. an Apple Silicon Mac's VM) ---
+# 1. grub-install needs the amd64 legacy-boot (i386-pc) files, pinned like
+#    the boot files above, at the same GRUB version as the signed GRUB.
+# 2. The chroot is amd64, so the kernel must run amd64 programs through a
+#    translator registered with binfmt_misc and the F flag (so it works
+#    inside the chroot): qemu-user-static, or Rosetta for Linux.
+GRUB_BIOS_DIR=""
+if [ "$HOST_ARCH" != "amd64" ]; then
+    echo "Build computer is $HOST_ARCH: building the amd64 image through a translator."
+    GRUB_PC_DEB="grub-pc-bin_2.12-1ubuntu7.3_amd64.deb"
+    GRUB_PC_DEB_SHA256="698d80bc51c0c593fbc829758365a0e4bce96819e2c8c754ae77dfe39b0388df"
+    fetch_pinned_deb g/grub2 "$GRUB_PC_DEB" "$GRUB_PC_DEB_SHA256"
+    dpkg-deb -x "$SIGNED_BOOT/$GRUB_PC_DEB" "$SIGNED_BOOT/x"
+    GRUB_BIOS_DIR="$SIGNED_BOOT/x/usr/lib/grub/i386-pc"
+    [ -s "$GRUB_BIOS_DIR/boot.img" ] || { echo "ERROR: $GRUB_BIOS_DIR/boot.img missing from $GRUB_PC_DEB." >&2; exit 1; }
+    echo "  OK: $GRUB_PC_DEB (SHA-256 match)."
+
+    amd64_translator() {   # prints the name of an enabled amd64 handler with the F flag
+        local f
+        for f in "${BINFMT_DIR:-/proc/sys/fs/binfmt_misc}"/*; do
+            [ -f "$f" ] || continue
+            grep -q '^enabled' "$f" 2>/dev/null || continue
+            grep -q '^magic 7f454c4602010100000000000000000002003e00' "$f" 2>/dev/null || continue
+            grep -q '^flags:.*F' "$f" 2>/dev/null || continue
+            basename "$f"; return 0
+        done
+        return 1
+    }
+    if ! amd64_translator >/dev/null; then
+        echo "No amd64 translator registered: installing qemu-user-static..."
+        apt-get install -y qemu-user-static
+        systemctl restart systemd-binfmt 2>/dev/null || true
+    fi
+    if ! TRANSLATOR=$(amd64_translator); then
+        echo "ERROR: this $HOST_ARCH computer can't run the image's amd64 programs." >&2
+        echo "       Install qemu-user-static (or set up Rosetta for Linux with the" >&2
+        echo "       fix-binary flag), check /proc/sys/fs/binfmt_misc, then run again." >&2
+        exit 1
+    fi
+    echo "  OK: amd64 programs run through binfmt handler '$TRANSLATOR'."
+fi
 
 # =====================================================================
 # PHASE 2: BUILD THE UBUNTU CHROOT
@@ -279,6 +331,10 @@ fi
 # Clone pristine base into working directory
 echo "Cloning base system..."
 cp -a "$BASE_CHROOT" "$CHROOT_DIR"
+if ! chroot "$CHROOT_DIR" /bin/true; then
+    echo "ERROR: the amd64 chroot's programs won't run on this computer." >&2
+    exit 1
+fi
 
 # =====================================================================
 # PHASE 3: INJECT FILES AND CONFIGURE IN CHROOT
@@ -646,6 +702,7 @@ printf 'SafeKeep' > "$WORKSPACE/mnt-efi/EFI/BOOT/.contentDetails"
 # dd since the serial number is baked into the filesystem.
 grub-install \
     --target=i386-pc \
+    ${GRUB_BIOS_DIR:+--directory="$GRUB_BIOS_DIR"} \
     --boot-directory="$WORKSPACE/mnt-efi/boot" \
     --recheck \
     --modules="part_gpt ext2 fat search search_label normal linux gzio test configfile" \
