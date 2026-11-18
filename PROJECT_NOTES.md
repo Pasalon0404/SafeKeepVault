@@ -646,11 +646,16 @@ Personal values (`<PROJECT_FOLDER>`, `<ZBOOK_USER>`, `<ZBOOK_IP>`, `<HOME_LAN>`,
 | Machine | Role | Access |
 |---|---|---|
 | Dave's Mac | Source of truth (git repo, `npm run dev`, `npm run build`) | Local |
-| HP ZBook 15u G3 | Builds the OS image and writes the USB | `ssh <ZBOOK_USER>@<ZBOOK_IP>`, build folder `/home/safekeep-build` |
+| HP ZBook 15u G3 | Builds release images (and can build and write flash drives) | `ssh <ZBOOK_USER>@<ZBOOK_IP>`, build folder `/home/safekeep-build` |
+| Ubuntu VM on the Mac | Builds the OS image and writes flash drives for everyday testing (since Nov 18, 2026) | VMware Fusion, Ubuntu 26.04 arm64; its own git clone at `~/SafeKeepVault`; flash drives connect to it through VMware |
 | Patriot USB stick | The vault itself | Shows up as `/dev/sdb` (TRAN=usb) on the ZBook. `sda` is the ZBook's internal drive, NEVER write to it |
 
 - ufw on the ZBook allows SSH from <HOME_LAN> only (Tailscale is not
   installed).
+- The ZBook no longer needs to be within reach: releases run over SSH and
+  need no flash drive plugged in. It is the computer users trust for
+  release images (the image isn't reproducible yet), so it stays on
+  <HOME_LAN> and somewhere physically secure.
 - The ZBook's build uses the top-level scripts in `/home/safekeep-build/`.
   A past bug came from copying scripts into a nested folder by mistake.
   Always use the rsync commands below exactly.
@@ -706,6 +711,30 @@ them through Encrypted Backup → copy the `.7z` off → flash → restore.
 That is only needed once, for sticks set up with v1.46 or earlier: from
 v1.47 the stick updates in place from a signed update file
 (`UPDATER_DESIGN.md`; release steps in `VERIFYING.md`).
+
+### Build and flash on the Mac's VM (everyday testing)
+
+The image is x86-64; on the VM (arm64) `build.sh` runs its programs through
+QEMU (README, "On an Apple Silicon Mac"). A full build takes about as long
+as on the ZBook. In the VM's terminal:
+```
+cd ~/SafeKeepVault && git checkout main && git pull
+cd usbbootdrive && bash prepare-app.sh
+sudo bash quick-update.sh --usb /dev/sdX
+```
+- The VM's clone is separate from the Mac's repo: pull in the VM too.
+- `quick-update.sh` reuses the VM's own last full build in its `workspace/`
+  (a ZBook build can't be used for it). When it refuses because
+  `chroot-setup.sh` or `safekeep-harden.sh` changed, run
+  `sudo bash build.sh` in the VM first.
+- Connect the flash drive to the VM in VMware and check `lsblk` first: on
+  this VM the empty card-reader slots show as 0B `sda`–`sdc`. The VM
+  mounts a SafeKeep drive's TRANSFER partition when it connects; before
+  `flash-new-stick.sh`, `sudo umount` it (done that way on Nov 18).
+- A fresh drive (erased): `sudo bash flash-new-stick.sh /dev/sdX` in the
+  VM, or copy any `safekeep.img` to the Mac and write it with balenaEtcher.
+- Releases stay on the ZBook (`VERIFYING.md` steps). If it is ever
+  unavailable at release time, a VM build is fine; say so in the notes.
 
 ### Testing an update on a stick (in place)
 
