@@ -256,8 +256,10 @@ if [ "$HOST_ARCH" != "amd64" ]; then
         return 1
     }
     if ! amd64_translator >/dev/null; then
-        echo "No amd64 translator registered: installing qemu-user-static..."
-        apt-get install -y qemu-user-static
+        # Ubuntu 24.04 has qemu-user-static; from 26.04 it is only a virtual
+        # name and the static translators come with qemu-user-binfmt.
+        echo "No amd64 translator registered: installing QEMU's..."
+        apt-get install -y qemu-user-static 2>/dev/null || apt-get install -y qemu-user-binfmt
         systemctl restart systemd-binfmt 2>/dev/null || true
     fi
     if ! TRANSLATOR=$(amd64_translator); then
@@ -267,6 +269,9 @@ if [ "$HOST_ARCH" != "amd64" ]; then
         exit 1
     fi
     echo "  OK: amd64 programs run through binfmt handler '$TRANSLATOR'."
+    # The pinned legacy-boot files are GRUB 2.12; a newer grub-install on the
+    # build computer can still write them, but say so in the log.
+    echo "  grub-install here: $(grub-install --version 2>/dev/null | head -1) (legacy-boot files: 2.12-1ubuntu7.3)"
 fi
 
 # =====================================================================
