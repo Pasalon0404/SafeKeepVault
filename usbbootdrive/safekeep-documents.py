@@ -24,6 +24,9 @@
 #  and one index the app reads
 #     .documents-index.json  {"version": 1, "free": B, "total": B,
 #                             "documents": [...], "errors": {ID: text}}
+#  and, for a person opening an Encrypted Backup with 7-Zip on another
+#  computer, a plain list of which file is which document:
+#     README - document names.txt
 #
 #  Usage
 #     route   INCOMING DOCS [ERRORS]   carry out waiting requests, then index
@@ -46,6 +49,8 @@ MAX_BYTES = 100 * 1024 * 1024          # 100 MB per document
 MAX_META = 4096                        # a request's JSON
 MAX_NAME = 200
 INDEX_NAME = '.documents-index.json'
+NAMES_FILE = 'README - document names.txt'
+MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 DEFAULT_ERRORS = '/tmp/safekeep-documents-errors.json'
 REQ_RE = re.compile(r'^SKDOC-([0-9a-f]{16})\.(skmeta|skbin|skren|skdel)$')
 ID_RE = re.compile(r'^[0-9a-f]{16}$')
@@ -307,7 +312,55 @@ def write_index(docs, errors):
         'errors': dict(errors.data),
     }
     write_json_atomic(os.path.join(docs, INDEX_NAME), index)
+    write_names(docs, documents)
     return index
+
+
+def human_size(n):
+    if n < 1024:
+        return '%d bytes' % n
+    if n < 1024 * 1024:
+        return '%d KB' % max(1, round(n / 1024))
+    if n < 1024 * 1024 * 1024:
+        return ('%.1f MB' % (n / 1048576)) if n < 10485760 else '%d MB' % round(n / 1048576)
+    return '%.1f GB' % (n / 1073741824)
+
+
+def human_date(iso):
+    m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', iso or '')
+    if not m or not 1 <= int(m.group(2)) <= 12:
+        return ''
+    return '%s %d, %s' % (MONTHS[int(m.group(2)) - 1], int(m.group(3)), m.group(1))
+
+
+def write_names(docs, documents):
+    """The plain list a person reads after opening a backup with 7-Zip."""
+    lines = [
+        'SafeKeep documents',
+        '',
+        'Each file in this folder whose name is a code (like 3f9a1c2b4d5e6f70.pdf)',
+        'is one document from the SafeKeep vault, unchanged. Its real name is below.',
+        'Open it with any program that opens that kind of file. The .meta.json files',
+        'hold the same details for SafeKeep itself.',
+        '',
+    ]
+    if not documents:
+        lines.append('(No documents yet.)')
+    else:
+        width = max(len('%s.%s' % (d['id'], d['ext'])) for d in documents)
+        for d in sorted(documents, key=lambda d: d['name'].lower()):
+            details = human_size(d['size'])
+            when = human_date(d['added'])
+            if when:
+                details += ', added ' + when
+            lines.append('%s   %s   (%s)' % (('%s.%s' % (d['id'], d['ext'])).ljust(width), d['name'], details))
+    path = os.path.join(docs, NAMES_FILE)
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8', newline='\r\n') as f:
+        f.write('\n'.join(lines) + '\n')
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
 
 
 def cleanup(incoming):

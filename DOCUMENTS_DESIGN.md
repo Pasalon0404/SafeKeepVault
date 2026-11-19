@@ -13,6 +13,9 @@ release. What the build does differently from the text below:
   the File Router; its index also carries any refusal for an ID, which is
   how the app learns the outcome.
 - The Documents tab isn't available in the online demo.
+- `documents/README - document names.txt` lists each `<id>.<ext>` file
+  with its real name, size and date, so someone who opens an Encrypted
+  Backup with 7-Zip can tell which file is which.
 - Health's text is unchanged.
 
 Owner's decisions (Nov 18):

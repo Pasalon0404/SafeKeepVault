@@ -161,6 +161,7 @@ try {
   ck('the list shows it as a PDF of the right size', pdfDoc && pdfDoc.kind === 'pdf' && pdfDoc.size === PDF.length, list);
   const stored = readdirSync(DOCS).find((n) => n.endsWith('.pdf'));
   ck('the vault holds the exact bytes as <id>.pdf', stored && createHash('sha256').update(readFileSync(join(DOCS, stored))).digest('hex') === createHash('sha256').update(PDF).digest('hex'));
+  ck('documents/ has the names list for 7-Zip users, naming the PDF', /^[0-9a-f]{16}\.pdf +Letter of instruction\.pdf +\(/m.test(readFileSync(join(DOCS, 'README - document names.txt'), 'utf8')));
   ck('no request files are left in seeds/', readdirSync(SEEDS).filter((n) => n.startsWith('SKDOC-')).length === 0, readdirSync(SEEDS));
   st = await importVia('Recovery steps.txt', false);
   ck('with the box unchecked, the file stays on the Transfer Drive, and the message says so', /still on the Transfer Drive/.test(st) && (await transferNames()).includes('Recovery steps.txt'), st);

@@ -183,6 +183,23 @@ route()
 ck('delete removes its bytes and metadata', 'a' * 16 not in ids() and not any(n.startswith('a' * 16) for n in os.listdir(DOCS)))
 ck('other documents are untouched', len(ids()) == 12, len(ids()))
 
+print('3b. The names list for 7-Zip users')
+NAMES = os.path.join(DOCS, 'README - document names.txt')
+raw = open(NAMES, 'rb').read()
+names_txt = raw.decode('utf-8')
+ck('the list exists, in UTF-8 with Windows line endings', b'\r\n' in raw and b'\n' not in raw.replace(b'\r\n', b''))
+line = [l for l in names_txt.split('\r\n') if 'Letter for Mom' in l]
+ck('a deleted document is gone from it', not line, line)
+line = [l for l in names_txt.split('\r\n') if l.startswith('%016x.' % 0x104)]
+ck('each line gives the file, its real name, size and date',
+   line and 'notes.txt' in line[0] and '(%d bytes, added Nov 18, 2026)' % len(TXT) in line[0], line)
+send('7' * 16, 'Lettre à Maman.txt', 'Café ✓'.encode('utf-8'))
+route()
+ck('a new document appears in it, accents and all', 'Lettre à Maman.txt' in open(NAMES, encoding='utf-8').read())
+ck('the list never counts as a document', NAMES.rsplit('/', 1)[-1] not in [d['id'] for d in index()['documents']] and len(ids()) == 13, len(ids()))
+put('SKDOC-%s.skdel' % ('7' * 16), b'')
+route()
+
 print('4. Index, cleanup, robustness')
 os.remove(os.path.join(DOCS, '%016x.png' % 0x100))
 r = run('index', DOCS, ERR)
