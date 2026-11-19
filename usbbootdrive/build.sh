@@ -93,7 +93,7 @@ trap cleanup EXIT
 # config/ stops the build.
 MAINTAINER_FPR="A333EB826F70A79A736F09948EA7DD8CEDBA86C2"
 MAINTAINER_KEY="config/maintainer-pubkey.asc"
-for f in grub.cfg .disk_label .disk_label_2x "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh safekeep-fido2.py security-key-dialogs.sh manage-security-key.sh safekeep-documents.py quiet-downloads/manifest.json quiet-downloads/background.js; do
+for f in grub.cfg .disk_label .disk_label_2x "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh safekeep-fido2.py security-key-dialogs.sh manage-security-key.sh safekeep-documents.py grow-transfer.sh quiet-downloads/manifest.json quiet-downloads/background.js; do
     [ -s "$f" ] || { echo "ERROR: $f is missing (rsync the whole usbbootdrive folder)." >&2; exit 1; }
 done
 
@@ -408,6 +408,9 @@ install -m 644 security-key-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/secur
 # Documents in the vault (DOCUMENTS_DESIGN.md): routes the app's requests
 # into documents/ and writes its index. Run by safekeep-boot.sh.
 install -m 755 safekeep-documents.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-documents.py"
+# A larger flash drive (TRANSFER_DRIVE_DESIGN.md): first setup makes the
+# Transfer Drive fill it.
+install -m 755 grow-transfer.sh "$CHROOT_DIR/usr/local/lib/safekeep/grow-transfer.sh"
 # Chromium extension that hides "Download started" for the app's request
 # files (safekeep-boot.sh loads it with --load-extension).
 install -d -m 755 "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads"

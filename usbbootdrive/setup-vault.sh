@@ -44,7 +44,8 @@
 #   Partition 2: EFI System  (256MB, FAT32, label "SK-EFI")
 #   Partition 3: OS          (3584MB, ext4, label "safekeep-os", two OS slots)
 #   Partition 4: Data        (900MB, ext4, label "safekeep-data")
-#   Partition 5: Transfer    (2560MB, exFAT, label "TRANSFER")
+#   Partition 5: Transfer    (2560MB, exFAT, label "TRANSFER"; grown at
+#                first setup to fill a larger drive: grow-transfer.sh)
 #
 # ============================================================================
 
@@ -241,6 +242,18 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
         exit 1
     fi
 
+    # --- A larger flash drive: the Transfer Drive takes the rest of it ---
+    # (TRANSFER_DRIVE_DESIGN.md) Only while it's empty, before the vault
+    # exists. grow-transfer.sh finds the drive from $DATA_PART, changes only
+    # partition 5, and never stops setup: whatever it returns, the vault is
+    # created next. Its messages go to the boot log, not the progress window.
+    GROW_TRANSFER="${GROW_TRANSFER:-/usr/local/lib/safekeep/grow-transfer.sh}"
+    GROW_GB=""
+    if [ -x "$GROW_TRANSFER" ]; then
+        GROW_OUT=$(sudo "$GROW_TRANSFER" --check "$DATA_PART" 2>&1) && GROW_GB=$(printf '%s\n' "$GROW_OUT" | tail -1)
+        case "$GROW_GB" in ''|*[!0-9]*) echo "setup-vault: Transfer Drive not grown: $GROW_OUT"; GROW_GB="" ;; esac
+    fi
+
     # --- Create the LUKS vault ---
     # What the progress window says about locking it, for the choice made.
     LOCK_MSG="Locking the vault with your Master Passphrase..."
@@ -248,6 +261,10 @@ if [ ! -f "$DATA_MOUNT/$VAULT_FILE" ]; then
         LOCK_MSG="Locking the vault (your security key is added next)..."
     fi
     (
+    if [ -n "$GROW_GB" ]; then
+        echo "2"; echo "# Using the rest of this ${GROW_GB} GB flash drive for the Transfer Drive..."
+        sudo "$GROW_TRANSFER" "$DATA_PART" 1>&2 || echo "setup-vault: growing the Transfer Drive didn't finish (the drive still works)" 1>&2
+    fi
     echo "5"; echo "# Creating your ${VAULT_MB} MB encrypted vault (this can take a minute or two)..."
     sudo dd if=/dev/zero of="$DATA_MOUNT/$VAULT_FILE" bs=1M count="$VAULT_MB" status=none
 

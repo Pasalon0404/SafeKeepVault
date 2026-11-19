@@ -286,5 +286,12 @@ const runDrop = (root, block = dropBlock) => bash('set -euo pipefail\n' + block.
     && /chroot_step chroot "\$CHROOT_DIR" \/usr\/bin\/env SAFEKEEP_DEV_SHELL/.test(build) && /chroot_step chroot "\$CHROOT_DIR" \/bin\/bash -c "safekeep-harden"/.test(build));
 }
 
+// ---- 9. A Transfer Drive that fills a larger flash drive (TRANSFER_DRIVE_DESIGN.md) ----
+{
+  const r = spawnSync('python3', [join(OS, 'tests', 'test-grow-transfer.py')], { encoding: 'utf8', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
+  if (/^SKIP/m.test(r.stdout || '')) console.log('  (' + r.stdout.trim() + ')');
+  else ck('grow-transfer.sh passes its tests (real sgdisk on disk images)', r.status === 0, (r.stdout || '').split('\n').filter((l) => /FAIL|passed/.test(l)).join(' | ') + (r.stderr || ''));
+}
+
 console.log(`\nOS LOCKDOWN: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
