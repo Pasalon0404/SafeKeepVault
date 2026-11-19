@@ -200,6 +200,35 @@ ck('the list never counts as a document', NAMES.rsplit('/', 1)[-1] not in [d['id
 put('SKDOC-%s.skdel' % ('7' * 16), b'')
 route()
 
+print('3c. OpenDocument text (.odt)')
+import io, zipfile
+def make_zip(entries, first_stored=True):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        for i, (name, data) in enumerate(entries):
+            z.writestr(zipfile.ZipInfo(name), data, compress_type=zipfile.ZIP_STORED if (i == 0 and first_stored) else zipfile.ZIP_DEFLATED)
+    return buf.getvalue()
+ODT = make_zip([('mimetype', 'application/vnd.oasis.opendocument.text'), ('content.xml', '<office:document-content/>')])
+OTT = make_zip([('mimetype', 'application/vnd.oasis.opendocument.text-template'), ('content.xml', '<x/>')])
+DOCX = make_zip([('[Content_Types].xml', '<x/>'), ('word/document.xml', '<x/>')])
+DEFLATED_MIME = make_zip([('mimetype', 'application/vnd.oasis.opendocument.text')], first_stored=False)
+REAL = open(os.path.join(HERE, '..', '..', 'seed-xor-tool', 'test-fixtures', 'letter-of-instruction.odt'), 'rb').read()
+for i, (data, name) in enumerate([(ODT, 'a.odt'), (OTT, 'b.ott'), (DOCX, 'c.docx'), (DEFLATED_MIME, 'd.odt'), (REAL, 'Letter.odt'), (ODT, 'renamed.zip')]):
+    send('%016x' % (0x200 + i), name, data)
+route()
+kinds = {d['name']: d['kind'] for d in index()['documents']}
+ck('an .odt is recognized from its bytes (LibreOffice-made and minimal)', kinds.get('a.odt') == 'odt' and kinds.get('Letter.odt') == 'odt', kinds)
+ck('...whatever its name', kinds.get('renamed.zip') == 'odt')
+ck('a template (.ott), a .docx and a compressed mimetype are not', kinds.get('b.ott') == 'other' and kinds.get('c.docx') == 'other' and kinds.get('d.odt') == 'other', kinds)
+# A document stored before .odt was known keeps "other" in its metadata: the index looks again.
+mp = os.path.join(DOCS, '%016x.meta.json' % 0x200)
+rec = json.load(open(mp)); rec['kind'] = 'other'; json.dump(rec, open(mp, 'w'))
+run('index', DOCS, ERR)
+ck('an .odt stored as "other" earlier is shown as .odt now', {d['id']: d['kind'] for d in index()['documents']}['%016x' % 0x200] == 'odt')
+for i in range(6):
+    put('SKDOC-%016x.skdel' % (0x200 + i), b'')
+route()
+
 print('4. Index, cleanup, robustness')
 os.remove(os.path.join(DOCS, '%016x.png' % 0x100))
 r = run('index', DOCS, ERR)

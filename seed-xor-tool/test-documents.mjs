@@ -109,6 +109,45 @@ jsPdf += `xref\n0 ${jsObjs.length + 1}\n0000000000 65535 f \n` + offs.map((o) =>
 const JS_PDF = Buffer.from(jsPdf, 'latin1');
 const BAD_PDF = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(2000, 0x7f)]);
 
+// OpenDocument text: a real LibreOffice file (test-fixtures/, made from the
+// .fodt beside it) and hostile ones built here with Python's zipfile.
+const ODT_REAL = readFileSync(join(HERE, 'test-fixtures', 'letter-of-instruction.odt'));
+const ODT_DIR = mkdtempSync(join(tmpdir(), 'skdoc-odt-'));
+{
+  const py = String.raw`
+import io, sys, zipfile, os
+out = sys.argv[1]
+NS = ('xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+      'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" '
+      'xmlns:html="http://www.w3.org/1999/xhtml"')
+def doc(body):
+    return '<?xml version="1.0" encoding="UTF-8"?><office:document-content ' + NS + '><office:body><office:text>' + body + '</office:text></office:body></office:document-content>'
+def odt(name, files):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        z.writestr(zipfile.ZipInfo('mimetype'), 'application/vnd.oasis.opendocument.text', compress_type=zipfile.ZIP_STORED)
+        for n, d in files:
+            z.writestr(n, d, compress_type=zipfile.ZIP_DEFLATED)
+    open(os.path.join(out, name), 'wb').write(buf.getvalue())
+odt('bomb.odt', [('content.xml', doc('<text:p>' + ' ' * (30 * 1024 * 1024) + '</text:p>'))])
+odt('script.odt', [
+    ('content.xml', doc('<text:p>&lt;script&gt;parent.alert(1)&lt;/script&gt;</text:p>'
+        '<html:script>parent.alert(2)</html:script><text:p><html:img src="x" onerror="parent.alert(3)"/>after img</text:p>'
+        '<text:p><text:a xlink:href="javascript:parent.alert(4)">a link</text:a></text:p>'
+        '<text:p><draw:frame><draw:image xlink:href="http://example.com/x.png"/></draw:frame>'
+        '<draw:frame><draw:image xlink:href="Pictures/evil.svg"/></draw:frame></text:p>')),
+    ('Pictures/evil.svg', '<svg xmlns="http://www.w3.org/2000/svg" onload="parent.alert(5)"/>')])
+odt('deep.odt', [('content.xml', doc('<text:p>' + '<text:span>' * 300 + 'deep' + '</text:span>' * 300 + '</text:p>'))])
+odt('entities.odt', [('content.xml', '<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]>'
+    + '<office:document-content ' + NS + '><office:body><office:text><text:p>&b;</text:p></office:text></office:body></office:document-content>')])
+odt('locked.odt', [('content.xml', 'not xml: encrypted bytes'),
+    ('META-INF/manifest.xml', '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"><manifest:file-entry manifest:full-path="content.xml"><manifest:encryption-data/></manifest:file-entry></manifest:manifest>')])
+`;
+  const r = spawnSync('python3', ['-I', '-c', py, ODT_DIR], { encoding: 'utf8' });
+  if (r.status !== 0) { console.error(r.stderr); process.exit(1); }
+}
+const ODT_DAMAGED = ODT_REAL.subarray(0, 6000);
+
 const browser = await chromium.launch({ executablePath, headless: true, args: ['--allow-file-access-from-files'] });
 const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
 await ctx.addInitScript(({ from, to }) => {
@@ -230,6 +269,72 @@ try {
   await page.evaluate(() => docs_closeViewer());
   ck('Close removes the frame', !(await page.evaluate(() => !!document.querySelector('#docs-viewer-frame iframe'))));
 
+  console.log('3b. OpenDocument text (.odt)');
+  const saveDoc = (name, buf) => page.evaluate(({ name, b64 }) => SafeKeepOS.saveDocument(name, Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))), { name, b64: buf.toString('base64') });
+  const odtFiles = { 'Letter.odt': ODT_REAL, 'damaged.odt': ODT_DAMAGED };
+  for (const n of ['bomb.odt', 'script.odt', 'deep.odt', 'entities.odt', 'locked.odt']) odtFiles[n] = readFileSync(join(ODT_DIR, n));
+  for (const [n, b] of Object.entries(odtFiles)) {
+    const r = await saveDoc(n, b);
+    if (!r.saved) ck('saved ' + n, false, r);
+  }
+  const odtKinds = Object.fromEntries((await docsList()).filter((d) => d.name.endsWith('.odt')).map((d) => [d.name, d.kind]));
+  ck('every .odt is recognized as OpenDocument text', Object.keys(odtFiles).every((n) => odtKinds[n] === 'odt'), odtKinds);
+  st = await openDoc('Letter.odt');
+  fr = frameOf();
+  const odtView = await fr.evaluate(() => {
+    const q = (s) => Array.from(document.querySelectorAll(s));
+    const strong = q('.odt span').filter((e) => e.style.fontWeight === '700').map((e) => e.textContent);
+    return {
+      h1: q('.odt h1').map((e) => e.textContent), h2: q('.odt h2').map((e) => e.textContent),
+      bold: strong, italic: q('.odt span').filter((e) => e.style.fontStyle === 'italic').map((e) => e.textContent),
+      under: q('.odt span').filter((e) => e.style.textDecoration === 'underline').map((e) => e.textContent),
+      centered: q('.odt p').filter((e) => e.style.textAlign === 'center').map((e) => e.textContent),
+      ol: q('.odt ol > li').length, ul: q('.odt ul > li').map((e) => e.textContent),
+      cells: q('.odt td').map((e) => e.textContent + (e.colSpan > 1 ? '[span ' + e.colSpan + ']' : '')),
+      img: q('.odt img').map((e) => e.naturalWidth + 'x' + e.naturalHeight + ' ' + e.src.slice(0, 5)),
+      links: q('.odt .link').map((e) => e.textContent + ' → ' + e.title), anchors: q('a').length,
+      notes: q('.odt .notes').map((e) => e.textContent), text: document.querySelector('.odt').textContent,
+      markup: q('.odt b').length,
+    };
+  });
+  ck('a LibreOffice .odt opens', st === 'OpenDocument text', st);
+  ck('headings', odtView.h1[0] === 'Letter of instruction' && odtView.h2[0] === 'Steps', odtView);
+  ck('bold, italic, underline and centered text', odtView.bold.includes('seed backup') && odtView.italic.includes('safe')
+    && odtView.under.includes('nowhere else') && odtView.centered.includes('A centered line'), odtView);
+  ck('numbered and bulleted lists, nested', odtView.ol >= 3 && odtView.ul.includes('A bullet point'), odtView);
+  ck('a table, with a spanned cell', odtView.cells.join('|') === 'Account|Where|Spanned cell[span 2]', odtView.cells);
+  ck('the embedded image is shown', odtView.img.length === 1 && odtView.img[0] === '60x40 blob:', odtView.img);
+  ck('a link is shown but isn\'t a link', odtView.links[0] === 'our lawyer → https://example.com/' && odtView.anchors === 0, odtView.links);
+  ck('the footnote is listed under Notes', /A footnote\./.test(odtView.notes[0] || ''), odtView.notes);
+  ck('accents and escaped markup are plain text', odtView.text.includes('Café ✓ <b>not markup</b>') && odtView.markup === 0, odtView.text.slice(0, 200));
+  await page.screenshot({ path: join(VAULT, 'viewer-odt.png') });
+
+  st = await openDoc('script.odt');
+  fr = frameOf();
+  await sleep(1000);
+  const hostile = await fr.evaluate(() => ({
+    scripts: document.scripts.length, imgs: Array.from(document.querySelectorAll('img')).map((i) => i.getAttribute('src').slice(0, 5)),
+    anchors: document.querySelectorAll('a').length, text: document.querySelector('.odt').textContent,
+    attrs: Array.from(document.querySelectorAll('.odt *')).some((e) => Array.from(e.attributes).some((a) => /^on/i.test(a.name))),
+  }));
+  ck('script text stays text; script and img elements from the file are never created', hostile.scripts === 2 && hostile.imgs.length === 0
+    && hostile.text.includes('<script>parent.alert(1)</script>') && hostile.text.includes('after img') && !hostile.attrs, hostile);
+  ck('outside and SVG images aren\'t shown, and say so', /2 images not shown/.test(st) && (hostile.text.match(/\[image not shown\]/g) || []).length === 2, { st, t: hostile.text });
+  ck('a javascript: link isn\'t a link', hostile.anchors === 0);
+  ck('nothing ran', dialogs.length === 0, dialogs);
+  st = await openDoc('bomb.odt');
+  ck('a zip bomb (30 MB of text in 30 KB) is refused as too large', /too large to show/.test(st), st);
+  st = await openDoc('deep.odt');
+  ck('300 levels of nesting are refused', /nested too deeply/.test(st), st);
+  st = await openDoc('entities.odt');
+  ck('a DOCTYPE with entities is refused (no entity expansion)', /couldn't be opened/.test(st), st);
+  st = await openDoc('locked.odt');
+  ck('a password-protected .odt says so', /protected with a password/.test(st), st);
+  st = await openDoc('damaged.odt');
+  ck('a damaged .odt fails with a plain message', /couldn't be opened/.test(st), st);
+  await page.evaluate(() => docs_closeViewer());
+  for (const d of (await docsList()).filter((x) => x.name.endsWith('.odt'))) await page.evaluate((id) => SafeKeepOS.deleteDocument(id), d.id);
+
   console.log('4. Rename, export, delete');
   let txtDoc = (await docsList()).find((d) => d.name === 'Recovery steps.txt');
   let r = await page.evaluate((id) => SafeKeepOS.renameDocument(id, 'Steps for Mom.txt'), txtDoc.id);
@@ -275,6 +380,7 @@ try {
 } finally {
   routing = false;
   await browser.close();
+  rmSync(ODT_DIR, { recursive: true, force: true });
   if (!process.env.KEEP) rmSync(VAULT, { recursive: true, force: true });
   else console.log('  (kept ' + VAULT + ')');
 }
