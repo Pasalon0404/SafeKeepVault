@@ -1085,14 +1085,14 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-**Under discussion (Nov 19):** on flash drives larger than 8 GB,
+**Built (Nov 19), not yet released; see `TRANSFER_DRIVE_DESIGN.md`:** on flash drives larger than 8 GB,
 grow the Transfer Drive to fill the drive at first setup, while it's
 still empty (exFAT can't be resized in place, so it's re-created; skip
 it if files are already there). Discussed instead of a separate STORAGE
 partition, which would invite plugging the SafeKeep drive into everyday
-computers more often. Open question first: whether to give part of a big
-drive to the vault instead, since once the Transfer Drive fills the
-drive, the vault can't grow in place. Not designed yet.
+computers more often. Decided: the vault stays 900 MB, it's automatic,
+1 GB threshold, nothing for drives already set up. `grow-transfer.sh`,
+called by `setup-vault.sh`; needs a test on a real 16 GB+ drive.
 
 1. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).

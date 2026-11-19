@@ -1,6 +1,12 @@
 # Design note: a Transfer Drive that fills larger flash drives
 
-Status: **approved** (Nov 19, 2026). Nothing is built yet.
+Status: **built** (Nov 19, 2026), on `main` once merged; not yet in a
+release. `usbbootdrive/grow-transfer.sh`, run by `setup-vault.sh`; tests in
+`usbbootdrive/tests/test-grow-transfer.py` (also run by
+`test-os-lockdown.mjs` where `sgdisk` is installed). One addition to the
+text below: after `sgdisk`, partition 5 is read back from the table rather
+than trusting `sgdisk`'s exit code, since on the running boot drive it may
+report that the kernel kept the old table even though it wrote the new one.
 
 Owner's decisions (Nov 19):
 - the vault stays at 900 MB on every drive; all unused space goes to the
