@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 17, 2026).**
+> **Start with the "Current state" section below (updated Nov 19, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,35 @@
 
 ---
 
-## Current state (Nov 16, 2026) — v1.67
+## Current state (Nov 19, 2026) — v1.68
+
+**v1.68** (Nov 19, `v1.68 · build 583 · aa79837`) — Documents in the vault
+(#129, #130), a 900 MB vault on new flash drives, Paste without a prompt
+(#127), the Entropy Generator's words first (#126), and the image building
+on an Apple Silicon Mac (#127, #128). Image `1111322f…9ca8`, app
+`a16d959b…c7bc`. Tested on Dave's flash drive from a ZBook full build and
+quick updates of the branch: import, viewing PDFs, images, text and `.odt`,
+rename, export, delete, and an Encrypted Backup with Documents opened with
+7-Zip on the Mac. Release notes in `release-notes/v1.68.md`. Website
+updated. The first ZBook release build stopped at once because
+`src/dist/boot.html` was still a test build: the `--release` check did its
+job; the released file was copied and the build ran.
+
+- **Documents** (`DOCUMENTS_DESIGN.md`): Encrypted Notes → Documents.
+  `safekeep-documents.py` (run by the File Router) routes the app's
+  `SKDOC-<id>.skmeta/.skbin/.skren/.skdel` requests into `documents/`
+  (`<id>.<ext>` + `<id>.meta.json`), writes `.documents-index.json` and
+  `README - document names.txt`. Previews run in `shared/document-viewer.js`,
+  an iframe sandboxed with `allow-scripts` only; PDFs by pdfjs-dist 6.5.438,
+  `.odt` by our own zip + XML reader. Tests: `test-documents.mjs` (runs after
+  the build in `release.yml`) and `usbbootdrive/tests/test-documents-helper.py`.
+- **Vault partition 900 MB** (`DATA_SIZE_MB`; image 7,304 MB). Drives
+  updated in place keep 300 MB; the larger vault needs backup, new flash,
+  restore.
+- **Building on an Apple Silicon Mac**: an Ubuntu VM (tested: VMware
+  Fusion, Ubuntu 26.04 arm64) builds the image through QEMU; see the
+  machines table and "Build and flash on the Mac's VM" below. Releases stay
+  on the ZBook.
 
 **v1.67** (Nov 16, `v1.67 · build 552 · 647a5b4`) — security keys,
 Entropy Generator and Courier fixes,
@@ -1056,6 +1084,15 @@ twice a year, or sooner for a specific reason (a known hole in how
 Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
+
+**Under discussion (Nov 19):** on flash drives larger than 8 GB,
+grow the Transfer Drive to fill the drive at first setup, while it's
+still empty (exFAT can't be resized in place, so it's re-created; skip
+it if files are already there). Discussed instead of a separate STORAGE
+partition, which would invite plugging the SafeKeep drive into everyday
+computers more often. Open question first: whether to give part of a big
+drive to the vault instead, since once the Transfer Drive fills the
+drive, the vault can't grow in place. Not designed yet.
 
 1. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
