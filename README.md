@@ -45,7 +45,7 @@ To build the app by hand instead: `cd seed-xor-tool && npm ci && npm run build`,
 sudo bash build.sh
 ```
 
-This takes 10–20 minutes the first time. It downloads Ubuntu 24.04 packages, builds a locked-down system around the app, and writes `safekeep.img` (about 6.7 GB; it zips to about 1.3 GB). It stops immediately if `src/dist/boot.html` is missing.
+This takes 10–20 minutes the first time. It downloads Ubuntu 24.04 packages, builds a locked-down system around the app, and writes `safekeep.img` (about 7.3 GB; it zips to about 1.3 GB). It stops immediately if `src/dist/boot.html` is missing.
 
 #### On an Apple Silicon Mac
 

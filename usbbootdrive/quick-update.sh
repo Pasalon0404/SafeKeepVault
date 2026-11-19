@@ -29,7 +29,7 @@
 #     src/dist/*            (boot.html, manifest.json, …)
 #     safekeep-boot.sh, unlock-vault.sh, setup-vault.sh, safekeep-update.py,
 #     safekeep-pwcheck.py + pwcheck-lists.json, safekeep-brightness.sh, safekeep-print.py, change-passphrase.sh,
-#     passphrase-dialogs.sh, safekeep-passphrase.py, safekeep-fido2.py, security-key-dialogs.sh,
+#     passphrase-dialogs.sh, safekeep-passphrase.py, safekeep-fido2.py, security-key-dialogs.sh, safekeep-documents.py,
 #     manage-security-key.sh, quiet-downloads/
 #     safekeep-session.service, config/99-hide-drives.rules
 #
@@ -179,6 +179,7 @@ install -m 755 safekeep-passphrase.py "$CHROOT_DIR/usr/local/lib/safekeep/safeke
 # a security key can't be used until a full build.sh.
 install -m 755 safekeep-fido2.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-fido2.py"
 install -m 644 security-key-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/security-key-dialogs.sh"
+install -m 755 safekeep-documents.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-documents.py"
 install -d -m 755 "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads"
 install -m 644 quiet-downloads/manifest.json quiet-downloads/background.js "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads/"
 install -m 644 safekeep-session.service "$CHROOT_DIR/etc/systemd/system/safekeep-session.service"

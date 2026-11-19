@@ -3,14 +3,14 @@ set -e
 
 # =============================================================================
 # SafeKeep OS Build Script
-# Produces a 6.7GB raw disk image (.img) sized for 8GB+ USB drives.
+# Produces a 7.3GB raw disk image (.img) sized for 8GB+ USB drives.
 # Pre-baked partitions:
 #   Partition 1: BIOS Boot (2MB)          — GRUB core.img for legacy PCs
 #   Partition 2: EFI System (256MB, FAT32) — GRUB for UEFI boot
 #   Partition 3: OS (3584MB, ext4)         — two OS slots, casper-a/ and
 #                                            casper-b/ (squashfs, kernel,
 #                                            initrd), and slot.cfg
-#   Partition 4: Data (300MB, ext4)        — LUKS file-container vault
+#   Partition 4: Data (900MB, ext4)        — LUKS file-container vault
 #   Partition 5: Transfer (2560MB, exFAT)  — Airlock for Mac/Win file exchange
 #
 # The OS goes into slot A; slot B stays empty until the first update
@@ -35,10 +35,10 @@ OUTPUT_IMG="safekeep.img"
 # Partition sizes in MB
 EFI_SIZE_MB=256
 OS_SIZE_MB=3584       # two OS slots (~1.3GB each today) with room to grow
-DATA_SIZE_MB=300      # LUKS vault file container
+DATA_SIZE_MB=900      # LUKS vault file container (notes, documents; DOCUMENTS_DESIGN.md)
 TRANSFER_SIZE_MB=2560 # exFAT airlock partition (Mac/Win readable); holds an update file
 # 1MB before partition 1 + the partitions + 1MB for the backup GPT.
-# 6704MB fits the smallest real "8GB" sticks (about 7,400MB usable).
+# 7304MB fits the smallest real "8GB" sticks (about 7,400MB usable).
 TOTAL_SIZE_MB=$(( 1 + 2 + EFI_SIZE_MB + OS_SIZE_MB + DATA_SIZE_MB + TRANSFER_SIZE_MB + 1 ))
 
 echo ""
@@ -93,7 +93,7 @@ trap cleanup EXIT
 # config/ stops the build.
 MAINTAINER_FPR="A333EB826F70A79A736F09948EA7DD8CEDBA86C2"
 MAINTAINER_KEY="config/maintainer-pubkey.asc"
-for f in grub.cfg .disk_label .disk_label_2x "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh safekeep-fido2.py security-key-dialogs.sh manage-security-key.sh quiet-downloads/manifest.json quiet-downloads/background.js; do
+for f in grub.cfg .disk_label .disk_label_2x "$MAINTAINER_KEY" safekeep-pwcheck.py pwcheck-lists.json passphrase-dialogs.sh safekeep-passphrase.py change-passphrase.sh safekeep-fido2.py security-key-dialogs.sh manage-security-key.sh safekeep-documents.py quiet-downloads/manifest.json quiet-downloads/background.js; do
     [ -s "$f" ] || { echo "ERROR: $f is missing (rsync the whole usbbootdrive folder)." >&2; exit 1; }
 done
 
@@ -405,6 +405,9 @@ install -m 755 safekeep-passphrase.py "$CHROOT_DIR/usr/local/lib/safekeep/safeke
 # unlock-vault and manage-security-key.
 install -m 755 safekeep-fido2.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-fido2.py"
 install -m 644 security-key-dialogs.sh "$CHROOT_DIR/usr/local/lib/safekeep/security-key-dialogs.sh"
+# Documents in the vault (DOCUMENTS_DESIGN.md): routes the app's requests
+# into documents/ and writes its index. Run by safekeep-boot.sh.
+install -m 755 safekeep-documents.py "$CHROOT_DIR/usr/local/lib/safekeep/safekeep-documents.py"
 # Chromium extension that hides "Download started" for the app's request
 # files (safekeep-boot.sh loads it with --load-extension).
 install -d -m 755 "$CHROOT_DIR/usr/local/lib/safekeep/quiet-downloads"

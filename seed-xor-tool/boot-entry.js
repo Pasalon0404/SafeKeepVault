@@ -148,6 +148,16 @@ import './shared/coldcard-backup.js';
 // qr-draw.js exposes window.QrDraw: the SeedQR tool's Draw my SeedQR
 // (light box at the template's real size, square by square).
 import './shared/qr-draw.js';
+// Documents in the vault (DOCUMENTS_DESIGN.md): the sealed viewer, and
+// pdf.js as text for it. pdf.js never runs in the app's own page: the
+// viewer hands its code to an opaque-origin sandboxed frame.
+import { openViewer, detectKind, kindLabel, extOf, VIEWABLE } from './shared/document-viewer.js';
+import pdfjsLibSource from 'pdfjs-dist/build/pdf.min.mjs?raw';
+import pdfjsWorkerSource from 'pdfjs-dist/build/pdf.worker.min.mjs?raw';
+window.SKDocViewer = Object.freeze({
+  openViewer, detectKind, kindLabel, extOf, VIEWABLE,
+  pdfjs: Object.freeze({ lib: pdfjsLibSource, worker: pdfjsWorkerSource }),
+});
 // core-import.js exposes window.CoreImport — the Descriptor tool's Bitcoin Core
 // importdescriptors (watch-only) export.
 import './shared/core-import.js';

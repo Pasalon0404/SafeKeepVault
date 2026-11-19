@@ -123,6 +123,7 @@ console.log('3. build.sh');
   const total = 1 + 2 + efi + os + data + tr + 1;
   ck('TOTAL_SIZE_MB is computed from the partitions', b.includes('TOTAL_SIZE_MB=$(( 1 + 2 + EFI_SIZE_MB + OS_SIZE_MB + DATA_SIZE_MB + TRANSFER_SIZE_MB + 1 ))'));
   ck(`image (${total} MB) fits a real 8 GB stick (7,400 MB)`, total <= 7400);
+  ck(`vault partition (${data} MB) is the 900 MB of DOCUMENTS_DESIGN.md`, data === 900);
   ck(`OS partition (${os} MB) holds two 1,600 MB slots`, os >= 2 * 1600 + 160);
   ck(`Transfer Drive (${tr} MB) holds a 1,600 MB update file`, tr >= 1600 + 512);
   ck('build refuses if two OS copies do not fit', b.includes('if [ $(( OS_CONTENT_SIZE * 2 + 160 )) -gt "$OS_SIZE_MB" ]; then'));

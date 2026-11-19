@@ -553,6 +553,10 @@ launch_browser() {
         # chmod 700 keeps the secrets dir as tight as seeds/.
         mkdir -p "$VAULT_MOUNT/twofa"
         chmod 700 "$VAULT_MOUNT/twofa"
+        # Documents (DOCUMENTS_DESIGN.md): files imported from the Transfer
+        # Drive. safekeep-documents.py routes them here and keeps the index.
+        mkdir -p "$VAULT_MOUNT/documents"
+        chmod 700 "$VAULT_MOUNT/documents"
 
         # ── Write the Vault Sentinel ──
         # This file proves to the browser that the REAL LUKS partition is mounted,
@@ -779,6 +783,17 @@ launch_browser() {
         echo "]"
     ) > "$CODEX_INDEX"
     echo "Codex index: $(wc -l < "$CODEX_INDEX") lines"
+
+    # --- Documents: finish any import that fully arrived before the last
+    # shutdown, drop half-arrived requests, then write the index the app
+    # reads (DOCUMENTS_DESIGN.md). Fixed logic in the helper; no request
+    # content is ever run.
+    DOCUMENTS_HELPER="/usr/local/lib/safekeep/safekeep-documents.py"
+    if [ "$EPHEMERAL_MODE" != "1" ] && [ -f "$DOCUMENTS_HELPER" ]; then
+        python3 -I "$DOCUMENTS_HELPER" route "$SEED_DIR" "$VAULT_MOUNT/documents"
+        python3 -I "$DOCUMENTS_HELPER" cleanup "$SEED_DIR"
+        python3 -I "$DOCUMENTS_HELPER" index "$VAULT_MOUNT/documents"
+    fi
 
     # --- Generate Passphrase Index for boot-time cipher loading ---
     # Same approach: pre-generate a JSON index of all passphrase files
@@ -1008,7 +1023,7 @@ POLICYEOF
                 #    Uses sudo + explicit verification. If any deletion fails,
                 #    Phase 2 LUKS destruction covers it — without keyslots the
                 #    data is cryptographically unrecoverable.
-                for dir in codex passphrases twofa settings; do
+                for dir in codex passphrases twofa settings documents; do
                     VAULT_SUBDIR="$VAULT_MOUNT/$dir"
                     if [ -d "$VAULT_SUBDIR" ]; then
                         echo "SafeKeep Wipe Watcher: rm -rf $VAULT_SUBDIR ..."
@@ -1200,6 +1215,7 @@ BACKUP_DIRS = {
     'cipher': 'passphrases',
     'twofa': 'twofa',
     'seed': 'seeds',
+    'documents': 'documents',
 }
 
 def fail(msg):
@@ -2082,6 +2098,7 @@ SSPYEOF
     CODEX_DIR="$VAULT_MOUNT/codex"
     PASSPHRASE_DIR="$VAULT_MOUNT/passphrases"
     TWOFA_DIR="$VAULT_MOUNT/twofa"
+    DOCUMENTS_DIR="$VAULT_MOUNT/documents"
 
     (
         while true; do
@@ -2310,6 +2327,15 @@ SSPYEOF
                     echo "]"
                 ) > "$PASSPHRASE_DIR/.passphrase-index.json"
                 echo "File Router: rebuilt .passphrase-index.json ($(wc -c < "$PASSPHRASE_DIR/.passphrase-index.json") bytes)"
+            fi
+
+            # ── Documents: SKDOC-<id>.skmeta/.skbin/.skren/.skdel from
+            # seeds/ (DOCUMENTS_DESIGN.md). The helper checks every name
+            # against a fixed pattern, moves an import's bytes into
+            # documents/ only when their size and SHA-256 match, and
+            # rewrites documents/.documents-index.json for the app.
+            if compgen -G "$SEED_DIR/SKDOC-*" >/dev/null; then
+                python3 -I /usr/local/lib/safekeep/safekeep-documents.py route "$SEED_DIR" "$DOCUMENTS_DIR"
             fi
 
             sleep 2
@@ -2695,21 +2721,23 @@ try:
         raise RuntimeError("7z extraction failed (code %d): %s" % (p.returncode, " ".join(msg.split())[-300:]))
     root = None
     for c in (work + vault_mount, work, os.path.join(work, ".safekeep-vault")):
-        if any(os.path.isdir(os.path.join(c, d)) for d in ("codex", "passphrases", "settings", "seeds")):
+        if any(os.path.isdir(os.path.join(c, d)) for d in ("codex", "passphrases", "settings", "seeds", "documents")):
             root = c
             break
     if root is None:
         for dp, dns, _ in os.walk(work):
-            if "codex" in dns or "passphrases" in dns:
+            if "codex" in dns or "passphrases" in dns or "documents" in dns:
                 root = dp
                 break
     if root is None:
-        raise RuntimeError("This backup holds no vault data: no notes, saved passphrases, settings or seed.")
+        raise RuntimeError("This backup holds no vault data: no notes, documents, saved passphrases, settings or seed.")
     isdir = lambda d: os.path.isdir(os.path.join(root, d))
     out.update(ok=True, codex=isdir("codex"), settings=isdir("settings"),
                cipher=isdir("passphrases"), seed=False, seedMatch=None,
                codexCount=len([f for f in os.listdir(os.path.join(root, "codex")) if f.endswith(".html")]) if isdir("codex") else 0,
-               cipherCount=len(os.listdir(os.path.join(root, "passphrases"))) if isdir("passphrases") else 0)
+               cipherCount=len(os.listdir(os.path.join(root, "passphrases"))) if isdir("passphrases") else 0,
+               documents=isdir("documents"),
+               documentsCount=len([f for f in os.listdir(os.path.join(root, "documents")) if f.endswith(".meta.json")]) if isdir("documents") else 0)
     seed_file = os.path.join(root, "seeds", "master-seed.json")
     if os.path.isfile(seed_file):
         try:
@@ -2840,7 +2868,7 @@ except Exception as e:
                     "$RELIQUARY_TMP/.safekeep-vault" \
                     ; do
                     if [ -d "$CANDIDATE/codex" ] || [ -d "$CANDIDATE/passphrases" ] || \
-                       [ -d "$CANDIDATE/settings" ] || [ -d "$CANDIDATE/seeds" ]; then
+                       [ -d "$CANDIDATE/settings" ] || [ -d "$CANDIDATE/seeds" ] || [ -d "$CANDIDATE/documents" ]; then
                         PROBE_ROOT="$CANDIDATE"
                         break
                     fi
@@ -2849,7 +2877,7 @@ except Exception as e:
                 # Fallback: search the tree for any 'codex' or 'passphrases' dir
                 if [ -z "$PROBE_ROOT" ]; then
                     echo "Restore Watcher: known candidates failed, searching tree..."
-                    FOUND_DIR=$(find "$RELIQUARY_TMP" -maxdepth 5 -type d \( -name codex -o -name passphrases \) -print -quit 2>/dev/null)
+                    FOUND_DIR=$(find "$RELIQUARY_TMP" -maxdepth 5 -type d \( -name codex -o -name passphrases -o -name documents \) -print -quit 2>/dev/null)
                     if [ -n "$FOUND_DIR" ]; then
                         PROBE_ROOT=$(dirname "$FOUND_DIR")
                         echo "Restore Watcher: found vault dir at $FOUND_DIR → PROBE_ROOT=$PROBE_ROOT"
@@ -2858,7 +2886,7 @@ except Exception as e:
 
                 if [ -z "$PROBE_ROOT" ]; then
                     echo "Restore Watcher: FATAL — no vault directories found anywhere in extraction"
-                    echo "{\"ok\":false,\"error\":\"This backup holds no vault data: no notes, saved passphrases, settings or seed.\"}" > "$RESTORE_INSPECT_RESULT"
+                    echo "{\"ok\":false,\"error\":\"This backup holds no vault data: no notes, documents, saved passphrases, settings or seed.\"}" > "$RESTORE_INSPECT_RESULT"
                     rm -f "$RESTORE_INSPECT_TRIGGER"
                     rm -rf "$RELIQUARY_TMP"
                     sleep 1
@@ -2867,13 +2895,17 @@ except Exception as e:
 
                 echo "Restore Watcher: PROBE_ROOT resolved → $PROBE_ROOT"
 
-                HAS_CODEX=false; HAS_SETTINGS=false; HAS_CIPHER=false; HAS_SEED=false
-                CODEX_COUNT=0; CIPHER_COUNT=0
+                HAS_CODEX=false; HAS_SETTINGS=false; HAS_CIPHER=false; HAS_SEED=false; HAS_DOCS=false
+                CODEX_COUNT=0; CIPHER_COUNT=0; DOCS_COUNT=0
 
                 [ -d "$PROBE_ROOT/codex" ] && HAS_CODEX=true
                 [ -d "$PROBE_ROOT/settings" ] && HAS_SETTINGS=true
                 [ -d "$PROBE_ROOT/passphrases" ] && HAS_CIPHER=true
                 [ -d "$PROBE_ROOT/seeds" ] && HAS_SEED=true
+                if [ -d "$PROBE_ROOT/documents" ]; then
+                    HAS_DOCS=true
+                    DOCS_COUNT=$(ls "$PROBE_ROOT/documents/"*.meta.json 2>/dev/null | wc -l)
+                fi
 
                 if [ "$HAS_CODEX" = "true" ]; then
                     CODEX_COUNT=$(ls "$PROBE_ROOT/codex/"*.html 2>/dev/null | wc -l)
@@ -2882,7 +2914,7 @@ except Exception as e:
                     CIPHER_COUNT=$(ls "$PROBE_ROOT/passphrases/" 2>/dev/null | wc -l)
                 fi
 
-                echo "{\"ok\":true,\"codex\":$HAS_CODEX,\"settings\":$HAS_SETTINGS,\"cipher\":$HAS_CIPHER,\"seed\":$HAS_SEED,\"codexCount\":$CODEX_COUNT,\"cipherCount\":$CIPHER_COUNT}" > "$RESTORE_INSPECT_RESULT"
+                echo "{\"ok\":true,\"codex\":$HAS_CODEX,\"settings\":$HAS_SETTINGS,\"cipher\":$HAS_CIPHER,\"seed\":$HAS_SEED,\"codexCount\":$CODEX_COUNT,\"cipherCount\":$CIPHER_COUNT,\"documents\":$HAS_DOCS,\"documentsCount\":$DOCS_COUNT}" > "$RESTORE_INSPECT_RESULT"
                 rm -f "$RESTORE_INSPECT_TRIGGER"
                 echo "Restore Watcher: inspect SUCCESS — codex=$HAS_CODEX settings=$HAS_SETTINGS cipher=$HAS_CIPHER seed=$HAS_SEED"
 
@@ -2992,7 +3024,7 @@ except Exception:
                     done
 
                     if [ -z "$PROBE_ROOT" ]; then
-                        FOUND_DIR=$(find "$RELIQUARY_TMP" -maxdepth 5 -type d \( -name codex -o -name passphrases \) -print -quit 2>/dev/null)
+                        FOUND_DIR=$(find "$RELIQUARY_TMP" -maxdepth 5 -type d \( -name codex -o -name passphrases -o -name documents \) -print -quit 2>/dev/null)
                         if [ -n "$FOUND_DIR" ]; then
                             PROBE_ROOT=$(dirname "$FOUND_DIR")
                         fi
@@ -3038,7 +3070,7 @@ except Exception as e:
 
                 # Log what the archive actually contains (including dotfiles)
                 echo "Restore Watcher: archive contents at PROBE_ROOT (including dotfiles):"
-                for VDIR in codex passphrases twofa settings seeds; do
+                for VDIR in codex passphrases twofa settings seeds documents; do
                     if [ -d "$PROBE_ROOT/$VDIR" ]; then
                         echo "  $VDIR/: $(ls -la "$PROBE_ROOT/$VDIR/" 2>/dev/null | grep -c '^-') files"
                         ls -la "$PROBE_ROOT/$VDIR/" 2>/dev/null | head -10
@@ -3048,12 +3080,12 @@ except Exception as e:
                 COMMIT_EXIT=0
                 if [ "$COMMIT_MODE" = "overwrite" ]; then
                     echo "Restore Watcher: OVERWRITE — wiping vault dirs then copying..."
-                    sudo rm -rf "$VAULT_MOUNT/codex" "$VAULT_MOUNT/settings" "$VAULT_MOUNT/passphrases" "$VAULT_MOUNT/twofa" "$VAULT_MOUNT/seeds"
+                    sudo rm -rf "$VAULT_MOUNT/codex" "$VAULT_MOUNT/settings" "$VAULT_MOUNT/passphrases" "$VAULT_MOUNT/twofa" "$VAULT_MOUNT/seeds" "$VAULT_MOUNT/documents"
                 fi
 
                 # Copy each vault subdirectory individually with /. syntax
                 # to force inclusion of ALL files including dotfiles
-                for VDIR in codex passphrases twofa settings seeds; do
+                for VDIR in codex passphrases twofa settings seeds documents; do
                     if [ -d "$PROBE_ROOT/$VDIR" ]; then
                         sudo mkdir -p "$VAULT_MOUNT/$VDIR"
                         sudo cp -a "$PROBE_ROOT/$VDIR/." "$VAULT_MOUNT/$VDIR/" 2>&1 || COMMIT_EXIT=$?
@@ -3074,9 +3106,15 @@ except Exception as e:
                 # Clean up temp extraction
                 rm -rf "$RELIQUARY_TMP"
 
+                # Documents: rebuild the index from what was restored (the
+                # restored index may be from another vault, with its free
+                # space and errors).
+                mkdir -p "$VAULT_MOUNT/documents" && chmod 700 "$VAULT_MOUNT/documents"
+                python3 -I /usr/local/lib/safekeep/safekeep-documents.py index "$VAULT_MOUNT/documents" 2>&1 || true
+
                 # Post-copy verification: explicitly check dotfiles survived
                 echo "Restore Watcher: post-copy dotfile verification:"
-                for VDIR in codex passphrases twofa settings seeds; do
+                for VDIR in codex passphrases twofa settings seeds documents; do
                     if [ -d "$VAULT_MOUNT/$VDIR" ]; then
                         DOTCOUNT=$(ls -la "$VAULT_MOUNT/$VDIR/" 2>/dev/null | grep '^\-.*\.' | grep -c '^\-')
                         echo "  $VDIR/: $(ls -la "$VAULT_MOUNT/$VDIR/" 2>/dev/null)"

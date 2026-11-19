@@ -10012,7 +10012,7 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
             <div class="tool-hero">
                 <h2 class="tool-hero-title">Encrypted<span>Notes</span></h2>
                 <p class="tool-hero-subtitle">Vault Notes</p>
-                <p class="tool-hero-desc">Store plaintext notes inside the encrypted vault. No secondary passwords needed — the full-disk encryption protects everything. Keep recovery instructions, multisig coordination details, or configuration notes.</p>
+                <p class="tool-hero-desc">Keep notes, and documents such as a letter of instruction, a will or account records, inside the encrypted vault. No secondary passwords needed — the vault's encryption protects everything.</p>
                 <p class="tool-hero-recovery-badge"><strong>Recoverable with</strong><span>This USB only</span></p>
             </div>
 
@@ -10022,6 +10022,13 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 <div style="font-size: 0.75rem; color: #8b5cf6; opacity: 0.8; margin-top: 0.15rem;">Encrypted Notes is running in RAM only. Notes cannot be saved to the encrypted vault. Use the editor as a temporary scratchpad.</div>
             </div>
 
+            <div class="tool-tabs" id="codex-tabs">
+                <button type="button" class="tool-tab-btn active" id="codex-tab-btn-notes" onclick="docs_switchTab('notes')">Notes</button>
+                <button type="button" class="tool-tab-btn" id="codex-tab-btn-documents" onclick="docs_switchTab('documents')">Documents</button>
+            </div>
+
+            <!-- ======== NOTES TAB ======== -->
+            <div id="codex-tab-notes">
             <!-- Stacked layout: Editor (full width) on top, Archive directly below -->
             <div style="display: flex; flex-direction: column; gap: 1rem;">
 
@@ -10114,6 +10121,58 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                 </div>
 
             </div>
+            </div>
+
+            <!-- ======== DOCUMENTS TAB (DOCUMENTS_DESIGN.md) ======== -->
+            <div id="codex-tab-documents" style="display: none;">
+                <div id="docs-unavailable" class="skb-card" style="display: none; padding: 1rem; text-align: center; color: var(--skb-text-muted); font-size: 0.85rem;"></div>
+                <div id="docs-main" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="skb-card" style="padding: 0.75rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                            <div style="flex: 1 1 18rem; min-width: 0;">
+                                <div style="font-size: 0.85rem; font-weight: 600;">Documents in the vault</div>
+                                <div style="font-size: 0.78rem; color: var(--skb-text-muted); margin-top: 0.15rem;">Bring in a file from the Transfer Drive: PDFs, images and text files can be read here; any other file is kept and can be exported. Up to 100 MB each.</div>
+                                <div id="docs-space-bar" style="height: 6px; background: var(--skb-border); border-radius: 3px; margin-top: 0.6rem; overflow: hidden;"><div id="docs-space-fill" style="height: 100%; width: 0%; background: var(--skb-primary);"></div></div>
+                                <div id="docs-space-text" style="font-size: 0.75rem; color: var(--skb-text-muted); margin-top: 0.3rem;"></div>
+                            </div>
+                            <button type="button" class="skb-btn" id="docs-import-btn" onclick="docs_openImport()" style="flex: 0 0 auto; background: var(--skb-primary); color: black; font-weight: 600; border: 2px solid var(--skb-primary); padding: 0.6rem 1rem;">Import from Transfer Drive</button>
+                        </div>
+                    </div>
+
+                    <div id="docs-status" style="display: none;"></div>
+
+                    <div id="docs-import-panel" class="skb-card" style="display: none; padding: 0.75rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+                            <div style="font-size: 0.85rem; font-weight: 600;">Choose a file on the Transfer Drive</div>
+                            <button type="button" class="skb-btn" onclick="docs_closeImport()" style="padding: 0.3rem 0.8rem;">Cancel</button>
+                        </div>
+                        <div id="docs-import-list" style="max-height: 260px; overflow-y: auto;"></div>
+                        <label style="display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 0.75rem; font-size: 0.8rem; cursor: pointer;">
+                            <input type="checkbox" id="docs-remove-after" checked style="margin-top: 0.15rem;">
+                            <span><strong>Remove it from the Transfer Drive after importing.</strong>
+                            <span style="display: block; color: var(--skb-text-muted); margin-top: 0.15rem;">The Transfer Drive isn't encrypted. Removing the file there is not a secure erase, so copy a truly sensitive file onto the Transfer Drive from a computer you trust, and delete it there too.</span></span>
+                        </label>
+                    </div>
+
+                    <div id="docs-viewer" class="skb-card" style="display: none; padding: 0.75rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem;">
+                            <div style="min-width: 0;">
+                                <div id="docs-viewer-name" style="font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+                                <div id="docs-viewer-status" style="font-size: 0.75rem; color: var(--skb-text-muted);"></div>
+                            </div>
+                            <button type="button" class="skb-btn" onclick="docs_closeViewer()" style="flex: 0 0 auto; padding: 0.3rem 0.8rem;">Close</button>
+                        </div>
+                        <div id="docs-viewer-frame" style="height: 70vh; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;"></div>
+                    </div>
+
+                    <div class="skb-card" style="padding: 0.75rem;">
+                        <h3 style="margin: 0 0 0.75rem; font-size: 0.85rem; font-weight: 700; color: var(--skb-text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Stored documents</h3>
+                        <div id="docs-list">
+                            <div style="font-size: 0.8rem; color: var(--skb-text-dim); padding: 1rem 0; text-align: center;">No documents yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- ============================================
@@ -10148,6 +10207,15 @@ bitcoin-cli -rpcwallet=safekeep-watch importdescriptors "$(cat SAFEKEEP-CORE-IMP
                         <div>
                             <div style="font-size: 0.85rem; font-weight: 600;">Encrypted Notes</div>
                             <div style="font-size: 0.72rem; color: var(--skb-text-dim);">Vault notes stored in Encrypted Notes</div>
+                        </div>
+                    </label>
+
+                    <!-- Documents (DOCUMENTS_DESIGN.md) -->
+                    <label class="rlq-check-item" id="rlq-item-documents" style="display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.75rem; margin-bottom: 0.35rem; cursor: pointer;">
+                        <input type="checkbox" id="rlq-chk-documents" value="documents" onchange="rlq_onCheck()">
+                        <div>
+                            <div style="font-size: 0.85rem; font-weight: 600;">Documents</div>
+                            <div style="font-size: 0.72rem; color: var(--skb-text-dim);">Files kept in Encrypted Notes → Documents (can make the backup large)</div>
                         </div>
                     </label>
 
@@ -37608,7 +37676,366 @@ function _codexUpdateToolbar() {
  * Initialize The Codex when it opens.
  * Checks amnesia mode, refreshes the archive list.
  */
+// ============================================================
+// DOCUMENTS TAB (DOCUMENTS_DESIGN.md)
+// ============================================================
+// Files imported from the Transfer Drive and kept in the vault's
+// documents/ folder. Saving, renaming and deleting go through
+// SafeKeepOS (shared/boot.js) and safekeep-documents.py on the OS side.
+// Previews open in the sealed viewer (shared/document-viewer.js): an
+// opaque-origin sandboxed frame that can't read the vault or this page.
+// Names from documents are only ever set with textContent.
+var _docsTab = 'notes';
+var _docsViewer = null;
+var _docsBusy = false;
+
+function _docsEl(tag, style, text) {
+    var e = document.createElement(tag);
+    if (style) e.style.cssText = style;
+    if (text != null) e.textContent = text;
+    return e;
+}
+
+function _docsSize(n) {
+    if (!(n >= 0)) return '';
+    if (n < 1024) return n + ' bytes';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
+    if (n < 1024 * 1048576) return (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB';
+    return (n / 1073741824).toFixed(1) + ' GB';
+}
+
+function _docsDate(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/** Why Documents can't be used right now, or '' when it can. */
+function _docsUnavailableReason() {
+    if (window.SKV_DEMO) return 'Documents are kept in the encrypted vault on a SafeKeep flash drive, so they aren\'t part of the online demo.';
+    var amnesia = typeof isAmnesiaMode === 'function' && isAmnesiaMode();
+    var idLabel = ((document.getElementById('dash-identity-label') || {}).textContent || '').toLowerCase();
+    if (amnesia || idLabel.indexOf('temporary') >= 0) {
+        return 'Documents are kept in the encrypted vault, so they aren\'t available in a Temporary Session.';
+    }
+    if (!window.SafeKeepOS || !window.SafeKeepOS.listDocuments || !window.SKDocViewer) return 'Documents aren\'t available in this build.';
+    return '';
+}
+
+function docs_showStatus(text, type) {
+    var el = document.getElementById('docs-status');
+    if (!el) return;
+    if (!text) { el.style.display = 'none'; el.textContent = ''; return; }
+    var colors = { success: 'var(--skb-success, #22c55e)', error: 'var(--skb-danger, #ff3c3c)', info: 'var(--skb-text-muted)' };
+    el.style.cssText = 'display: block; padding: 0.6rem 0.8rem; border-radius: var(--skb-radius-sm); font-size: 0.8rem; border: 1px solid ' +
+        (colors[type] || colors.info) + '; color: ' + (colors[type] || colors.info) + ';';
+    el.textContent = '';
+    // Callers pass plain text only (names included), so no markup is parsed.
+    el.textContent = text;
+}
+
+function docs_switchTab(tab) {
+    _docsTab = tab === 'documents' ? 'documents' : 'notes';
+    var notesBtn = document.getElementById('codex-tab-btn-notes');
+    var docsBtn = document.getElementById('codex-tab-btn-documents');
+    if (notesBtn) notesBtn.classList.toggle('active', _docsTab === 'notes');
+    if (docsBtn) docsBtn.classList.toggle('active', _docsTab === 'documents');
+    document.getElementById('codex-tab-notes').style.display = _docsTab === 'notes' ? 'block' : 'none';
+    document.getElementById('codex-tab-documents').style.display = _docsTab === 'documents' ? 'block' : 'none';
+    if (_docsTab === 'documents') docs_onPageOpen();
+    else docs_closeViewer();
+}
+
+/** Called when Encrypted Notes opens, and when the Documents tab is chosen. */
+function docs_onPageOpen() {
+    var reason = _docsUnavailableReason();
+    var un = document.getElementById('docs-unavailable');
+    var main = document.getElementById('docs-main');
+    if (!un || !main) return;
+    un.textContent = reason;
+    un.style.display = reason ? 'block' : 'none';
+    main.style.display = reason ? 'none' : 'flex';
+    if (!reason && _docsTab === 'documents') docs_refresh();
+    if (reason) docs_closeViewer();
+}
+
+async function docs_refresh() {
+    var listEl = document.getElementById('docs-list');
+    if (!listEl || _docsUnavailableReason()) return;
+    var res = await window.SafeKeepOS.listDocuments();
+    var used = 0;
+    (res.documents || []).forEach(function (d) { used += d.size || 0; });
+    var fill = document.getElementById('docs-space-fill');
+    var txt = document.getElementById('docs-space-text');
+    if (res.ok && res.total > 0) {
+        var pct = Math.min(100, Math.round(((res.total - res.free) / res.total) * 100));
+        if (fill) { fill.style.width = pct + '%'; fill.style.background = pct >= 90 ? 'var(--skb-danger, #ff3c3c)' : 'var(--skb-primary)'; }
+        if (txt) txt.textContent = 'Documents use ' + _docsSize(used) + '. The vault has ' + _docsSize(res.free) + ' free of ' + _docsSize(res.total) + '.';
+    } else if (txt) {
+        txt.textContent = res.error || '';
+    }
+    listEl.textContent = '';
+    if (!res.ok) {
+        listEl.appendChild(_docsEl('div', 'font-size: 0.8rem; color: var(--skb-danger, #ff3c3c); padding: 1rem 0; text-align: center;', res.error));
+        return;
+    }
+    if (!res.documents.length) {
+        listEl.appendChild(_docsEl('div', 'font-size: 0.8rem; color: var(--skb-text-dim); padding: 1rem 0; text-align: center;', 'No documents yet'));
+        return;
+    }
+    var V = window.SKDocViewer;
+    res.documents.forEach(function (d) {
+        var row = _docsEl('div', 'display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--skb-border); flex-wrap: wrap;');
+        row.setAttribute('data-doc-id', d.id);
+        var info = _docsEl('div', 'flex: 1 1 16rem; min-width: 0;');
+        info.appendChild(_docsEl('div', 'font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;', d.name));
+        info.appendChild(_docsEl('div', 'font-size: 0.75rem; color: var(--skb-text-muted);',
+            V.kindLabel(d.kind) + ' · ' + _docsSize(d.size) + (d.added ? ' · added ' + _docsDate(d.added) : '')));
+        row.appendChild(info);
+        var btns = _docsEl('div', 'display: flex; gap: 0.4rem; flex-wrap: wrap;');
+        function btn(label, fn, danger) {
+            var b = _docsEl('button', 'padding: 0.3rem 0.7rem; font-size: 0.78rem;' + (danger ? ' color: var(--skb-danger, #ff3c3c); border-color: var(--skb-danger, #ff3c3c);' : ''), label);
+            b.type = 'button'; b.className = 'skb-btn'; b.onclick = fn;
+            btns.appendChild(b);
+            return b;
+        }
+        if (V.VIEWABLE.indexOf(d.kind) >= 0) btn('Open', function () { docs_open(d.id, d.name); });
+        btn('Rename', function () { docs_startRename(row, d); });
+        btn('Export', function () { docs_confirmExport(row, d); });
+        btn('Delete', function () { docs_confirmDelete(row, d); }, true);
+        row.appendChild(btns);
+        listEl.appendChild(row);
+    });
+}
+
+// ---- Import from the Transfer Drive ----
+
+async function _docsTransferHandle() {
+    if (!window.vaultTransferDriveHandle && typeof _transferAutoMount === 'function') {
+        try { await _transferAutoMount(); } catch (e) { /* shown below */ }
+    }
+    return window.vaultTransferDriveHandle || null;
+}
+
+async function docs_openImport() {
+    if (_docsUnavailableReason()) return;
+    docs_showStatus('');
+    var panel = document.getElementById('docs-import-panel');
+    var list = document.getElementById('docs-import-list');
+    panel.style.display = 'block';
+    list.textContent = '';
+    list.appendChild(_docsEl('div', 'font-size: 0.8rem; color: var(--skb-text-muted); padding: 0.5rem 0;', 'Reading the Transfer Drive…'));
+    var drive = await _docsTransferHandle();
+    list.textContent = '';
+    if (!drive) {
+        list.appendChild(_docsEl('div', 'font-size: 0.8rem; color: var(--skb-danger, #ff3c3c); padding: 0.5rem 0;',
+            'The Transfer Drive isn\'t available. Return to the Dashboard and mount it, then try again.'));
+        return;
+    }
+    var files = [];
+    try {
+        for await (var fh of drive.values()) {
+            if (fh.kind === 'file' && fh.name.charAt(0) !== '.') files.push({ name: fh.name, size: (fh._meta && fh._meta.size) || 0 });
+        }
+    } catch (e) {
+        list.appendChild(_docsEl('div', 'font-size: 0.8rem; color: var(--skb-danger, #ff3c3c); padding: 0.5rem 0;', 'The Transfer Drive couldn\'t be read: ' + (e && e.message || e)));
+        return;
+    }
+    files.sort(function (a, b) { return a.name.localeCompare(b.name); });
+    if (!files.length) {
+        list.appendChild(_docsEl('div', 'font-size: 0.8rem; color: var(--skb-text-muted); padding: 0.5rem 0;',
+            'The Transfer Drive has no files. Copy a file onto it from your computer, then try again.'));
+        return;
+    }
+    files.forEach(function (f) {
+        var row = _docsEl('div', 'display: flex; align-items: center; gap: 0.75rem; padding: 0.45rem 0; border-bottom: 1px solid var(--skb-border);');
+        var nm = _docsEl('div', 'flex: 1; min-width: 0; font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;', f.name);
+        var sz = _docsEl('div', 'font-size: 0.75rem; color: var(--skb-text-muted); flex: 0 0 auto;', _docsSize(f.size));
+        var b = _docsEl('button', 'padding: 0.3rem 0.8rem; font-size: 0.78rem; flex: 0 0 auto;', 'Import');
+        b.type = 'button'; b.className = 'skb-btn';
+        if (f.size > window.SafeKeepOS.DOC_MAX_BYTES) { b.disabled = true; b.textContent = 'Over 100 MB'; }
+        b.onclick = function () { docs_import(f.name); };
+        row.appendChild(nm); row.appendChild(sz); row.appendChild(b);
+        list.appendChild(row);
+    });
+}
+
+function docs_closeImport() {
+    var panel = document.getElementById('docs-import-panel');
+    if (panel) panel.style.display = 'none';
+}
+
+async function docs_import(name) {
+    if (_docsBusy) return;
+    _docsBusy = true;
+    var removeAfter = !!(document.getElementById('docs-remove-after') || {}).checked;
+    try {
+        var drive = await _docsTransferHandle();
+        if (!drive) { docs_showStatus('The Transfer Drive isn\'t available.', 'error'); return; }
+        docs_showStatus('Reading "' + name + '" from the Transfer Drive…', 'info');
+        var file = await (await drive.getFileHandle(name)).getFile();
+        if (file.size > window.SafeKeepOS.DOC_MAX_BYTES) { docs_showStatus('"' + name + '" is larger than 100 MB, the most a document can be.', 'error'); return; }
+        var bytes = new Uint8Array(await file.arrayBuffer());
+        docs_showStatus('Saving "' + name + '" into the vault…' + (bytes.length > 10485760 ? ' A large file can take a minute.' : ''), 'info');
+        var res = await window.SafeKeepOS.saveDocument(name, bytes);
+        if (!res.saved) { docs_showStatus('"' + name + '" wasn\'t saved: ' + res.error, 'error'); await docs_refresh(); return; }
+        docs_closeImport();
+        var msg = '"' + name + '" is saved in the vault.';
+        if (removeAfter) {
+            try {
+                await drive.removeEntry(name);
+                msg += ' It was removed from the Transfer Drive.';
+            } catch (e) {
+                msg += ' It couldn\'t be removed from the Transfer Drive, so delete it there yourself.';
+            }
+        } else {
+            msg += ' A copy is still on the Transfer Drive, which isn\'t encrypted.';
+        }
+        docs_showStatus(msg, 'success');
+        await docs_refresh();
+    } catch (e) {
+        docs_showStatus('"' + name + '" couldn\'t be imported: ' + (e && e.message || e), 'error');
+    } finally {
+        _docsBusy = false;
+    }
+}
+
+// ---- Viewing ----
+
+function _docsTheme() {
+    var cs = getComputedStyle(document.documentElement);
+    var v = function (n, d) { var x = cs.getPropertyValue(n).trim(); return x || d; };
+    return { bg: v('--skb-bg', '#0a0a0b'), fg: v('--skb-text', '#e5e5e5'), muted: v('--skb-text-muted', '#9a9a9a'),
+             border: v('--skb-border', '#2a2a2a'), accent: v('--skb-primary', '#f7931a') };
+}
+
+async function docs_open(id, name) {
+    docs_closeViewer();
+    docs_showStatus('');
+    var panel = document.getElementById('docs-viewer');
+    var frameBox = document.getElementById('docs-viewer-frame');
+    var stat = document.getElementById('docs-viewer-status');
+    document.getElementById('docs-viewer-name').textContent = name;
+    stat.textContent = 'Reading it from the vault…';
+    panel.style.display = 'block';
+    var res = await window.SafeKeepOS.readDocument(id);
+    if (!res.ok) { stat.textContent = res.error; return; }
+    var V = window.SKDocViewer;
+    _docsViewer = V.openViewer(frameBox, {
+        name: name, bytes: res.bytes, lib: V.pdfjs.lib, worker: V.pdfjs.worker, theme: _docsTheme(),
+        onStatus: function (s) { stat.textContent = s.text; },
+    });
+    stat.textContent = 'Opening…';
+    try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* cosmetic */ }
+}
+
+function docs_closeViewer() {
+    if (_docsViewer) { try { _docsViewer.destroy(); } catch (e) { /* gone */ } _docsViewer = null; }
+    var panel = document.getElementById('docs-viewer');
+    if (panel) panel.style.display = 'none';
+    var box = document.getElementById('docs-viewer-frame');
+    if (box) box.textContent = '';
+}
+
+// ---- Rename, export, delete (each confirmed inline, in the row) ----
+
+function _docsInlinePanel(row, build) {
+    var old = row.querySelector('.docs-inline');
+    if (old) old.remove();
+    var p = _docsEl('div', 'flex: 1 1 100%; padding: 0.5rem 0 0.2rem;');
+    p.className = 'docs-inline';
+    build(p, function () { p.remove(); });
+    row.appendChild(p);
+    return p;
+}
+
+function docs_startRename(row, d) {
+    _docsInlinePanel(row, function (p, close) {
+        var wrap = _docsEl('div', 'display: flex; gap: 0.5rem; align-items: center;');
+        var input = _docsEl('input', 'flex: 1; min-width: 0; padding: 0.4rem 0.6rem; background: var(--skb-bg-input); border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); color: var(--skb-text); font-size: 0.82rem;');
+        input.type = 'text'; input.value = d.name; input.maxLength = 200; input.setAttribute('aria-label', 'New name');
+        var save = _docsEl('button', 'padding: 0.35rem 0.8rem; font-size: 0.78rem;', 'Save name'); save.type = 'button'; save.className = 'skb-btn';
+        var cancel = _docsEl('button', 'padding: 0.35rem 0.8rem; font-size: 0.78rem;', 'Cancel'); cancel.type = 'button'; cancel.className = 'skb-btn';
+        cancel.onclick = close;
+        save.onclick = async function () {
+            save.disabled = true; save.textContent = 'Saving…';
+            var r = await window.SafeKeepOS.renameDocument(d.id, input.value);
+            if (!r.ok) { save.disabled = false; save.textContent = 'Save name'; docs_showStatus('The name wasn\'t changed: ' + r.error, 'error'); return; }
+            docs_showStatus('Renamed to "' + input.value.trim() + '".', 'success');
+            await docs_refresh();
+        };
+        input.onkeydown = function (e) { if (e.key === 'Enter') save.onclick(); if (e.key === 'Escape') close(); };
+        wrap.appendChild(input); wrap.appendChild(save); wrap.appendChild(cancel);
+        p.appendChild(wrap);
+        setTimeout(function () { input.focus(); input.select(); }, 0);
+    });
+}
+
+function _docsExportName(name, taken) {
+    if (taken.indexOf(name) < 0) return name;
+    var dot = name.lastIndexOf('.');
+    var stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+    for (var i = 2; i < 1000; i++) {
+        var n = stem + ' (' + i + ')' + ext;
+        if (taken.indexOf(n) < 0) return n;
+    }
+    return stem + ' (' + Date.now() + ')' + ext;
+}
+
+function docs_confirmExport(row, d) {
+    _docsInlinePanel(row, function (p, close) {
+        p.appendChild(_docsEl('div', 'font-size: 0.8rem; color: var(--skb-warning, #f59e0b); margin-bottom: 0.5rem;',
+            'The copy on the Transfer Drive won\'t be encrypted: anyone with the flash drive can read it there. Delete it from the Transfer Drive once you\'ve copied it where you need it.'));
+        var go = _docsEl('button', 'padding: 0.35rem 0.8rem; font-size: 0.78rem;', 'Export to Transfer Drive'); go.type = 'button'; go.className = 'skb-btn';
+        var cancel = _docsEl('button', 'padding: 0.35rem 0.8rem; font-size: 0.78rem; margin-left: 0.5rem;', 'Cancel'); cancel.type = 'button'; cancel.className = 'skb-btn';
+        cancel.onclick = close;
+        go.onclick = async function () {
+            go.disabled = true; go.textContent = 'Exporting…';
+            try {
+                var drive = await _docsTransferHandle();
+                if (!drive) throw new Error('the Transfer Drive isn\'t available');
+                var res = await window.SafeKeepOS.readDocument(d.id);
+                if (!res.ok) throw new Error(res.error);
+                var taken = [];
+                for await (var k of drive.keys()) taken.push(k);
+                var out = _docsExportName(d.name.replace(/[\/\\]/g, '_').replace(/^\.+/, ''), taken);
+                var fh = await drive.getFileHandle(out, { create: true });
+                var w = await fh.createWritable();
+                await w.write(res.bytes);
+                await w.close();
+                close();
+                docs_showStatus('Exported to the Transfer Drive as "' + out + '". Remember to delete it there when you\'re done.', 'success');
+            } catch (e) {
+                go.disabled = false; go.textContent = 'Export to Transfer Drive';
+                docs_showStatus('"' + d.name + '" couldn\'t be exported: ' + (e && e.message || e), 'error');
+            }
+        };
+        p.appendChild(go); p.appendChild(cancel);
+    });
+}
+
+function docs_confirmDelete(row, d) {
+    _docsInlinePanel(row, function (p, close) {
+        p.appendChild(_docsEl('div', 'font-size: 0.8rem; margin-bottom: 0.5rem;',
+            'Delete "' + d.name + '" from the vault? This can\'t be undone, except from an Encrypted Backup that includes Documents.'));
+        var go = _docsEl('button', 'padding: 0.35rem 0.8rem; font-size: 0.78rem; color: var(--skb-danger, #ff3c3c); border-color: var(--skb-danger, #ff3c3c);', 'Delete it');
+        go.type = 'button'; go.className = 'skb-btn';
+        var cancel = _docsEl('button', 'padding: 0.35rem 0.8rem; font-size: 0.78rem; margin-left: 0.5rem;', 'Cancel'); cancel.type = 'button'; cancel.className = 'skb-btn';
+        cancel.onclick = close;
+        go.onclick = async function () {
+            go.disabled = true; go.textContent = 'Deleting…';
+            if (_docsViewer && document.getElementById('docs-viewer-name').textContent === d.name) docs_closeViewer();
+            var r = await window.SafeKeepOS.deleteDocument(d.id);
+            if (!r.ok) { go.disabled = false; go.textContent = 'Delete it'; docs_showStatus('"' + d.name + '" wasn\'t deleted: ' + r.error, 'error'); return; }
+            docs_showStatus('"' + d.name + '" was deleted from the vault.', 'success');
+            await docs_refresh();
+        };
+        p.appendChild(go); p.appendChild(cancel);
+    });
+}
+
 async function codex_init() {
+    docs_onPageOpen();
     // Amnesia Mode check
     var amnesia = typeof isAmnesiaMode === 'function' && isAmnesiaMode();
     var banner = document.getElementById('codex-amnesia-banner');
@@ -38555,6 +38982,7 @@ async function rlq_export() {
 
     var selections = [];
     if (document.getElementById('rlq-chk-codex').checked) selections.push('codex');
+    if (document.getElementById('rlq-chk-documents') && document.getElementById('rlq-chk-documents').checked) selections.push('documents');
     if (document.getElementById('rlq-chk-settings').checked) selections.push('settings');
     if (document.getElementById('rlq-chk-cipher').checked) selections.push('cipher');
     if (document.getElementById('rlq-chk-twofa') && document.getElementById('rlq-chk-twofa').checked) selections.push('twofa');
@@ -39176,6 +39604,7 @@ function rlq_renderCheckResult(filename, r) {
         row('var(--skb-text-muted)', 'No Master Seed in this backup');
     }
     if (r.codex) row('var(--skb-text)', 'Encrypted Notes: ' + esc(r.codexCount));
+    if (r.documents) row('var(--skb-text)', 'Documents: ' + esc(r.documentsCount));
     if (r.cipher) row('var(--skb-text)', 'Saved Passphrases: ' + esc(r.cipherCount));
     if (r.settings) row('var(--skb-text)', 'Application Settings');
     var border = r.seedMatch === false ? WARN : GOOD;
@@ -39195,6 +39624,8 @@ function rlq_init() {
     document.getElementById('rlq-restore-panel').style.display = 'none';
     // Reset checkboxes
     document.getElementById('rlq-chk-codex').checked = false;
+    var docsChk = document.getElementById('rlq-chk-documents');
+    if (docsChk) docsChk.checked = false;
     document.getElementById('rlq-chk-settings').checked = false;
     document.getElementById('rlq-chk-cipher').checked = false;
     var twofaChk = document.getElementById('rlq-chk-twofa');
@@ -39281,6 +39712,7 @@ async function rlq_unlock() {
         var html = '';
         var items = [
             { key: 'codex', label: 'Encrypted Notes', count: m.codexCount },
+            { key: 'documents', label: 'Documents', count: m.documentsCount },
             { key: 'settings', label: 'Application Settings', count: null },
             { key: 'cipher', label: 'Saved Passphrases', count: m.cipherCount },
             { key: 'seed', label: 'Master Seed', count: null }
