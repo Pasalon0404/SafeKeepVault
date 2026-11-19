@@ -1,7 +1,15 @@
 # Design note: a Transfer Drive that fills larger flash drives
 
-Status: **proposal** (Nov 19, 2026). Nothing is built yet. The owner
-decides the open questions at the end before work starts.
+Status: **approved** (Nov 19, 2026). Nothing is built yet.
+
+Owner's decisions (Nov 19):
+- the vault stays at 900 MB on every drive; all unused space goes to the
+  Transfer Drive;
+- it happens automatically at first setup, with a line in the progress
+  window (no question);
+- the threshold is 1 GB of unused space;
+- no Part 2: drives already set up aren't grown (a re-flash and first
+  setup do it).
 
 ## The idea
 
@@ -94,8 +102,8 @@ exists, the vault partition could also grow (ext4 can be grown in place),
 with the Transfer Drive moved to start after it. After first setup, with the
 Transfer Drive filling the drive, the vault can't grow in place any more.
 
-**Recommendation: keep the vault at 900 MB and give all the rest to the
-Transfer Drive.** A bigger vault runs into two limits that are about the
+**Decided: keep the vault at 900 MB and give all the rest to the Transfer
+Drive.** A bigger vault runs into two limits that are about the
 rest of SafeKeep, not the drive:
 - **An Encrypted Backup** has to fit on the Transfer Drive. With the
   Transfer Drive filling a large drive this stops being a limit, but it
@@ -109,7 +117,9 @@ each. If a bigger vault is wanted later, the restore should first unpack to
 disk instead of memory; then a design for "vault up to N GB on large
 drives" can follow, done at the same first-setup moment.
 
-## Later: drives already set up (optional, Part 2)
+## Not planned: drives already set up (was Part 2)
+
+Decided against on Nov 19. What it would have been:
 
 **Device Options → Transfer Drive → Use the rest of this flash drive**, shown
 only when there is at least 1 GB unused and the Transfer Drive has no files.
@@ -142,14 +152,3 @@ after moving files off the Transfer Drive.
   - first setup, then a Mac and Windows both showing one large TRANSFER;
   - a `.tar` update afterwards, with the size kept;
   - an 8 GB drive unchanged.
-
-## Open questions for the owner
-
-1. **Vault size on large drives:** keep 900 MB, as recommended, or also grow
-   the vault?
-2. **Automatic, or asked?** As proposed it happens on its own with a line
-   in the progress window, since a fresh drive has nothing to lose. Or
-   setup could ask first.
-3. **The 1 GB threshold:** below it, nothing is done.
-4. **Part 2** (Device Options, for drives already set up): wanted now,
-   later, or not at all?
