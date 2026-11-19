@@ -13,6 +13,16 @@ release. What the build does differently from the text below:
   the File Router; its index also carries any refusal for an ID, which is
   how the app learns the outcome.
 - The Documents tab isn't available in the online demo.
+- **OpenDocument text (`.odt`) is shown too** (added Nov 19, 2026, after
+  the owner asked): a reading view of the text, headings, bold, italic,
+  underline, alignment, lists, tables, footnotes and embedded images, not
+  the page layout. The zip is read by our own code and unpacked with the
+  browser's DecompressionStream; the XML by a small reader of our own, not
+  DOMParser (Chromium's XML parser is C code). No DOCTYPE or entity
+  expansion; limits of 20 MB per XML file, 100 MB unpacked in all, 20 MB
+  per image and 256 levels of nesting. Links aren't clickable; only PNG,
+  JPEG, GIF and WebP images from inside the file are shown. `.odt` files
+  stored earlier show up as viewable without being imported again.
 - `documents/README - document names.txt` lists each `<id>.<ext>` file
   with its real name, size and date, so someone who opens an Encrypted
   Backup with 7-Zip can tell which file is which.
@@ -40,7 +50,8 @@ they can be read on the offline computer without copying them anywhere.
 | Text (`.txt`, `.md`, `.csv`) | shown as plain text |
 | Images (PNG, JPEG, GIF, WebP) | shown |
 | PDF | shown page by page (pdf.js) |
-| Word (`.docx`), LibreOffice (`.odt`) and anything else | stored and exported, no preview |
+| OpenDocument text (`.odt`) | shown as a reading view (text, headings, lists, tables, images) |
+| Word (`.docx`) and anything else | stored and exported, no preview |
 
 Word and LibreOffice files can be saved as PDF before importing, which
 gives an exact preview.
@@ -231,5 +242,5 @@ zoom for PDFs.
 
 - **Built in one go:** the 900 MB vault, Documents with text, images and
   PDF, import, export, rename, delete, backup, restore and wipe.
-- Not planned: `.docx` or `.odt` previews (save as PDF first), editing
+- Not planned: `.docx` previews (save as PDF first), editing
   documents, or searching inside them.

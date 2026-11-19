@@ -57,6 +57,7 @@ ID_RE = re.compile(r'^[0-9a-f]{16}$')
 EXT_RE = re.compile(r'^[a-z0-9]{1,8}$')
 SHA_RE = re.compile(r'^[0-9a-f]{64}$')
 TEXT_EXTS = {'txt', 'md', 'csv', 'log', 'json'}
+KINDS = ('pdf', 'png', 'jpeg', 'gif', 'webp', 'text', 'odt')
 # A request older than this with its partner missing is given up on.
 STALE_SECONDS = 15 * 60
 
@@ -96,6 +97,8 @@ def detect_kind(path, ext):
         return 'gif'
     if head[:4] == b'RIFF' and head[8:12] == b'WEBP':
         return 'webp'
+    if is_odt(head):
+        return 'odt'
     if ext in TEXT_EXTS and b'\x00' not in head:
         try:
             head.decode('utf-8')
@@ -105,6 +108,23 @@ def detect_kind(path, ext):
             if e.start >= len(head) - 3:
                 return 'text'
     return 'other'
+
+
+ODT_MIME = b'application/vnd.oasis.opendocument.text'
+
+
+def is_odt(head):
+    """An OpenDocument text file: a zip whose first entry is an uncompressed
+    "mimetype" holding the ODF text type (the ODF standard requires this)."""
+    if len(head) < 30 or head[:4] != b'PK\x03\x04':
+        return False
+    method = int.from_bytes(head[8:10], 'little')
+    name_len = int.from_bytes(head[26:28], 'little')
+    extra_len = int.from_bytes(head[28:30], 'little')
+    if method != 0 or head[30:30 + name_len] != b'mimetype':
+        return False
+    start = 30 + name_len + extra_len
+    return head[start:start + len(ODT_MIME)] == ODT_MIME and head[start + len(ODT_MIME):start + len(ODT_MIME) + 1] != b'-'
 
 
 def sha256_file(path):
@@ -293,11 +313,16 @@ def write_index(docs, errors):
         data_path = os.path.join(docs, '%s.%s' % (doc_id, ext))
         if not os.path.isfile(data_path):
             continue                      # metadata without its document
+        kind = record.get('kind') if record.get('kind') in KINDS else 'other'
+        if kind == 'other':
+            # Stored before SafeKeep could show this kind (an .odt added
+            # before .odt previews): look at its bytes again.
+            kind = detect_kind(data_path, ext)
         documents.append({
             'id': doc_id,
             'name': clean_name(record.get('name')) or doc_id,
             'ext': ext,
-            'kind': record.get('kind') if record.get('kind') in ('pdf', 'png', 'jpeg', 'gif', 'webp', 'text') else 'other',
+            'kind': kind,
             'size': os.path.getsize(data_path),
             'sha256': record.get('sha256') if isinstance(record.get('sha256'), str) and SHA_RE.match(record.get('sha256')) else '',
             'added': record.get('added') if isinstance(record.get('added'), str) else '',
