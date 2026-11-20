@@ -344,6 +344,20 @@ const save = async (name, desc) => { el('desc-save-name').value = name; vm.runIn
   ck('...and the tab count follows', el('desc-saved-count').textContent === ' (1)');
 }
 
+// ======== 3a. The page: tabs and the wallet's makeup ========
+console.log('The Output Descriptor page:');
+{
+  const fn = (name) => { const i = SRC.indexOf('function ' + name + '('); return i < 0 ? '' : SRC.slice(i, SRC.indexOf('\n}\n', i)); };
+  ck('Saved Wallets is a tab of its own', /id="desc-mode-saved" class="tool-tab-btn"[^>]*onclick="desc_setMode\('saved'\)">Saved Wallets<span id="desc-saved-count">/.test(SRC));
+  ck('the tab row is a plain .tool-tabs row (no boxed, clipped row)', /<div id="desc-mode-tabs" class="tool-tabs" style="display: flex;">/.test(SRC));
+  ck('tabs are exempt from the app-wide rounded corners (no curved underline ends)', /:not\(canvas\):not\(\.tool-tab-btn\):not\(\.tool-tabs\) \{\s*border-radius: var\(--skb-ui-radius, 8px\) !important;/.test(SRC));
+  ck('"How this wallet is built" is drawn wherever the card is filled (generate x2, Silent Payments, opened or imported)', (SRC.match(/try \{ _descRenderComposition\((?:finalDescriptor|spDescriptor|descriptor)\); \}/g) || []).length === 4);
+  const comp = fn('_descRenderComposition');
+  ck('...from the descriptor alone, with textContent only (no innerHTML)', /_wrecParseDescriptor\(descriptor\)/.test(comp) && !/innerHTML/.test(comp));
+  ck('...naming M of N and whether key order matters', /keys must sign/.test(comp) && /sortedmulti/.test(comp) && /fixed order \(multi\)/.test(comp));
+  ck('the card has Close', /id="desc-close-btn" onclick="desc_closeOutput\(\)"/.test(SRC) && /desc_state\.currentDescriptor = '';/.test(fn('desc_closeOutput')));
+}
+
 // ======== 3b. Open fills the Multisig form (so Generate rebuilds the wallet) ========
 console.log('Open a saved multisig wallet: the form:');
 {
