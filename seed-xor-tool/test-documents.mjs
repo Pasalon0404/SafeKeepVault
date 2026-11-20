@@ -59,7 +59,7 @@ console.log('1. OS scripts');
   ck('build.sh and quick-update.sh install the helper',
     /install -m 755 safekeep-documents\.py "\$CHROOT_DIR\/usr\/local\/lib\/safekeep\/safekeep-documents\.py"/.test(build)
     && /install -m 755 safekeep-documents\.py "\$CHROOT_DIR\/usr\/local\/lib\/safekeep\/safekeep-documents\.py"/.test(qu)
-    && / safekeep-documents\.py quiet-downloads\/manifest\.json/.test(build));
+    && /^for f in [^\n]* safekeep-documents\.py[ \n]/m.test(build));
   ck('the vault partition is 900 MB', /^DATA_SIZE_MB=900\b/m.test(build));
   const viewer = readFileSync(join(HERE, 'shared', 'document-viewer.js'), 'utf8');
   ck('viewer: sandbox="allow-scripts" only (no allow-same-origin)', /frame\.setAttribute\('sandbox', 'allow-scripts'\);/.test(viewer) && !/allow-same-origin/.test(viewer.replace(/^\s*\*.*$/gm, '')));
