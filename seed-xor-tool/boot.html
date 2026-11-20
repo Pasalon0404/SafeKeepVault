@@ -49608,6 +49608,14 @@ function tfa_renderTable() {
     @media screen {
       :root { color-scheme: dark; }
       :root[data-theme="light"] { color-scheme: light; }
+      /* A dropdown's open list: the kiosk's Chromium drew it white while
+         the options took the theme's light text, so in dark mode they were
+         nearly unreadable. Give the options the theme's colors. */
+      select option, select optgroup {
+        background-color: var(--skb-bg-input, var(--skb-bg));
+        color: var(--skb-text);
+      }
+      select option:disabled { color: var(--skb-text-muted); }
     }
     :where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--skb-primary); }
 
