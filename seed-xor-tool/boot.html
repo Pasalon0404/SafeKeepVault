@@ -2390,7 +2390,7 @@
 .desc-pp-confirm__note.is-bad { color: var(--skb-danger); }
 
 /* ---- Output Descriptor: saved wallets ---- */
-.desc-saved-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
+.desc-saved-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
 .desc-saved-row:first-child { border-top: none; padding-top: 0; }
 .desc-saved-info { flex: 1; min-width: 0; }
 .desc-saved-name { font-size: 0.875rem; font-weight: 600; color: var(--skb-text); overflow-wrap: anywhere; }
@@ -8753,12 +8753,13 @@
                 <button type="button" id="desc-mode-single" class="tool-tab-btn active" style="flex: 1;" onclick="desc_setMode('single')">Build Single</button>
                 <button type="button" id="desc-mode-multi" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('multi')">Build Multi</button>
                 <button type="button" id="desc-mode-verify" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('verify')">Import</button>
+                <button type="button" id="desc-mode-saved" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('saved')">Saved Wallets<span id="desc-saved-count"></span></button>
             </div>
 
-            <!-- ======== SAVED WALLETS (shown when the vault holds any) ======== -->
+            <!-- ======== SAVED WALLETS TAB ======== -->
             <div class="skb-card" id="desc-saved-wallets" style="display: none; margin-bottom: 1rem;">
                 <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.25rem;">Saved Wallets</div>
-                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.75rem; line-height: 1.5;">The PSBT Signer checks every transaction against these: which wallet it spends from, and whether its change comes back to one of them.</p>
+                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.75rem; line-height: 1.5;">Watch-only wallets kept in the vault. The PSBT Signer checks every transaction against these: which wallet it spends from, and whether its change comes back to one of them. Show an Address can use them too.</p>
                 <div id="desc-saved-list"></div>
             </div>
 
@@ -19596,7 +19597,13 @@ function showState(stateId) {
         bip85_autoFillMasterSeed();
     } else if (stateId === 'state-descriptor') {
         desc_autoFillMasterSeed();
-        savedWallets_load();
+        // The first time the page opens: Saved Wallets when there are any,
+        // Build Single when there aren't. After that, the tab last used.
+        savedWallets_load().then(function () {
+            if (_descTabChosen) return;
+            _descTabChosen = true;
+            if (_savedWallets.length && desc_state.mode === 'single') desc_setMode('saved');
+        });
     } else if (stateId === 'state-seedqr') {
         sqr_autoFillMasterSeed();
     } else if (stateId === 'state-armory') {
@@ -31684,7 +31691,7 @@ var _descCosignerXpubs = {};      // preserved xpub values keyed by cosigner ind
 // =============================================
 // MODE TOGGLE: Single vs Multi
 // =============================================
-function desc_setMode(mode) {
+function desc_setMode(mode, keepOutput) {
     // Save co-signer xpubs before switching away from multi
     if (desc_state.mode === 'multi' && mode !== 'multi') {
         desc_saveCosignerXpubs();
@@ -31693,11 +31700,15 @@ function desc_setMode(mode) {
     document.getElementById('desc-mode-single').className = 'tool-tab-btn' + (mode === 'single' ? ' active' : '');
     document.getElementById('desc-mode-multi').className = 'tool-tab-btn' + (mode === 'multi' ? ' active' : '');
     document.getElementById('desc-mode-verify').className = 'tool-tab-btn' + (mode === 'verify' ? ' active' : '');
+    var savedTab = document.getElementById('desc-mode-saved');
+    if (savedTab) savedTab.className = 'tool-tab-btn' + (mode === 'saved' ? ' active' : '');
     document.getElementById('desc-single-section').style.display = mode === 'single' ? 'block' : 'none';
     document.getElementById('desc-multi-section').style.display = mode === 'multi' ? 'block' : 'none';
     document.getElementById('desc-verify-section').style.display = mode === 'verify' ? 'block' : 'none';
-    document.getElementById('desc-output').style.display = 'none';
-    document.getElementById('desc-generate-btn').style.display = (mode === 'verify') ? 'none' : '';
+    var savedCard = document.getElementById('desc-saved-wallets');
+    if (savedCard) savedCard.style.display = mode === 'saved' ? 'block' : 'none';
+    if (!keepOutput) document.getElementById('desc-output').style.display = 'none';
+    document.getElementById('desc-generate-btn').style.display = (mode === 'verify' || mode === 'saved') ? 'none' : '';
     if (mode === 'multi') {
         desc_updateMultisigUI();
     }
@@ -35074,6 +35085,7 @@ function _descLoadWatchOnly(descriptor, p, message, note) {
 // by deriving the wallet's address at each input's and output's path.
 var _savedWallets = [];   // [{ name, descriptor, added }], as stored
 var _savedWalletsLoading = null;   // set while the PSBT Signer reads the list
+var _descTabChosen = false;        // the page's first tab has been picked
 
 /* Descriptor without its #checksum, to spot the same wallet saved twice. */
 function _savedWalletBody(descriptor) {
@@ -35093,6 +35105,20 @@ function _savedWalletParse(descriptor) {
 
 function _savedWalletSummary(p) {
     return p.script + (p.isMulti ? ' · ' + p.msM + '-of-' + p.msN + ' multisig' : '');
+}
+
+/* Why `name` can't be used for a saved wallet ('' if it can). Same rule as
+   the vault's Wallets Watcher: 1-64 characters, no control characters, and
+   not the name of another saved wallet (except the one at index `except`). */
+function _savedWalletNameError(name, except) {
+    if (!name) return 'Give the wallet a name first.';
+    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) return 'Use a name of up to 64 characters.';
+    for (var i = 0; i < _savedWallets.length; i++) {
+        if (i !== except && _savedWallets[i].name.toLowerCase() === name.toLowerCase()) {
+            return 'A saved wallet is already called “' + _savedWallets[i].name + '”. Choose another name.';
+        }
+    }
+    return '';
 }
 
 /* Read the list from the vault (or memory off the boot drive) and redraw. */
@@ -35122,7 +35148,12 @@ function _descRenderSavedWallets() {
     var card = document.getElementById('desc-saved-wallets');
     var listEl = document.getElementById('desc-saved-list');
     if (!card || !listEl) return;
-    card.style.display = _savedWallets.length ? 'block' : 'none';
+    var count = document.getElementById('desc-saved-count');
+    if (count) count.textContent = _savedWallets.length ? ' (' + _savedWallets.length + ')' : '';
+    if (!_savedWallets.length) {
+        listEl.innerHTML = '<div class="desc-saved-meta" style="padding: 0.75rem 0;">No saved wallets yet. Build a wallet on Build Single or Build Multi, or check one on Import, then use <b>Save this wallet</b>.</div>';
+        return;
+    }
     listEl.innerHTML = _savedWallets.map(function(w, i) {
         var r = _savedWalletParse(w.descriptor);
         var meta = r.parsed ? _savedWalletSummary(r.parsed) : 'Can’t be read: ' + r.error;
@@ -35134,6 +35165,7 @@ function _descRenderSavedWallets() {
                 (addr ? '<div class="desc-saved-addr">' + _wrecEscape(addr) + '</div>' : '') +
             '</div>' +
             (r.parsed ? '<button type="button" class="skb-btn" onclick="desc_openSavedWallet(' + i + ')">Open</button>' : '') +
+            '<button type="button" class="skb-btn" onclick="desc_startRenameSavedWallet(' + i + ')">Rename</button>' +
             '<button type="button" class="skb-btn" onclick="desc_removeSavedWallet(' + i + ')">Remove</button>' +
         '</div>';
     }).join('');
@@ -35178,7 +35210,8 @@ async function _descSaveAs(descriptorIn, nameEl, report, btnId) {
     var descriptor = String(descriptorIn || '').replace(/[\r\n]+/g, '').trim();
     if (!descriptor) { _descSaveResult('bad', 'No descriptor yet. Generate or load one first.'); return false; }
     if (!name) { _descSaveResult('bad', 'Give the wallet a name first.'); if (nameEl) nameEl.focus(); return false; }
-    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) { _descSaveResult('bad', 'Use a name of up to 64 characters.'); return false; }
+    var nameErr = _savedWalletNameError(name, -1);
+    if (nameErr && nameErr.indexOf('already called') === -1) { _descSaveResult('bad', nameErr); return false; }
     var r = _savedWalletParse(descriptor);
     if (r.error) { _descSaveResult('bad', 'Not saved: ' + r.error); return false; }
     if (descriptor.indexOf('#') === -1) descriptor += '#' + desc_checksum(descriptor);
@@ -35203,7 +35236,7 @@ async function _descSaveAs(descriptorIn, nameEl, report, btnId) {
     try {
         var res = await _savedWalletsStore(_savedWallets.concat([{ name: name, descriptor: descriptor, added: new Date().toISOString() }]));
         if (res.saved) {
-            _descSaveResult('ok', 'Saved as “' + name + '”. The PSBT Signer will now check transactions against it.');
+            _descSaveResult('ok', 'Saved as “' + name + '”. The PSBT Signer will now check transactions against it. It’s on the Saved Wallets tab.');
             return true;
         }
         _descSaveResult('bad', 'Not saved: ' + (res.error || 'unknown error.'));
@@ -35225,13 +35258,16 @@ async function desc_openSavedWallet(i) {
     if (r.parsed.isMulti) {
         var others = r.parsed.msN === 2 ? 'Key 2' : 'Keys 2–' + r.parsed.msN;
         note = fill.filled
-            ? ' ' + others + (r.parsed.msN === 2 ? ' is' : ' are') + ' filled in above from it, so Generate Descriptor rebuilds this wallet.'
-            : ' ' + others + (r.parsed.msN === 2 ? ' wasn’t' : ' weren’t') + ' filled in: ' + fill.reason;
+            ? ' On Build Multi, ' + others + (r.parsed.msN === 2 ? ' is' : ' are') + ' filled in from it, so Generate Descriptor there rebuilds this wallet.'
+            : ' On Build Multi, ' + others + (r.parsed.msN === 2 ? ' wasn’t' : ' weren’t') + ' filled in: ' + fill.reason;
     } else {
         note = fill.filled
-            ? ' The form above is set to it, so Generate Descriptor rebuilds this wallet.'
-            : ' ' + fill.reason;
+            ? ' Build Single is set to it, so Generate Descriptor there rebuilds this wallet.'
+            : ' ' + fill.reason.replace('The form above', 'Build Single');
     }
+    // Filling the form switched to its tab: come back to Saved Wallets, and
+    // show the wallet's card (Receive, exports, QR, Print) below the list.
+    desc_setMode('saved', true);
     _descLoadWatchOnly(w.descriptor, r.parsed, 'Opened saved wallet “' + w.name + '”: ', note);
 }
 
@@ -35330,6 +35366,62 @@ async function _descFillMultisigForm(p) {
         slot++;
     });
     return { filled: true };
+}
+
+/* Rename: an inline box in the wallet's row. Show an Address keeps its
+   address counters by the descriptor's checksum, so a new name loses nothing. */
+function desc_startRenameSavedWallet(i) {
+    var w = _savedWallets[i];
+    var rows = document.querySelectorAll('#desc-saved-list .desc-saved-row');
+    var row = rows[i];
+    if (!w || !row) return;
+    var old = row.querySelector('.desc-saved-rename');
+    if (old) { old.remove(); return; }
+    var box = document.createElement('div');
+    box.className = 'desc-saved-rename';
+    box.style.cssText = 'flex: 1 1 100%; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; padding-top: 0.4rem;';
+    var input = document.createElement('input');
+    input.type = 'text'; input.className = 'skb-input'; input.maxLength = 64; input.value = w.name;
+    input.spellcheck = false; input.autocomplete = 'off'; input.setAttribute('aria-label', 'New name');
+    input.style.cssText = 'flex: 1 1 14rem; min-width: 0;';
+    var save = document.createElement('button');
+    save.type = 'button'; save.className = 'skb-btn'; save.textContent = 'Save name';
+    var cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'skb-btn'; cancel.textContent = 'Cancel';
+    var msg = document.createElement('div');
+    msg.className = 'desc-saved-meta'; msg.style.cssText = 'flex: 1 1 100%; display: none;';
+    cancel.onclick = function () { box.remove(); };
+    save.onclick = async function () { await desc_renameSavedWallet(i, input.value, msg, save); };
+    input.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); save.onclick(); }
+        if (e.key === 'Escape') box.remove();
+    };
+    box.appendChild(input); box.appendChild(save); box.appendChild(cancel); box.appendChild(msg);
+    row.appendChild(box);
+    setTimeout(function () { input.focus(); input.select(); }, 0);
+}
+
+async function desc_renameSavedWallet(i, newName, msgEl, btn) {
+    var w = _savedWallets[i];
+    var say = function (text) {
+        if (msgEl) { msgEl.textContent = text; msgEl.style.display = text ? 'block' : 'none'; msgEl.style.color = 'var(--skb-danger, #ff3c3c)'; }
+        else if (text) showStatus(text, 'error');
+    };
+    if (!w) return false;
+    var name = String(newName || '').trim();
+    if (name === w.name) { _descRenderSavedWallets(); return true; }
+    var err = _savedWalletNameError(name, i);
+    if (err) { say(err); return false; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    var list = _savedWallets.map(function (x, j) { return j === i ? { name: name, descriptor: x.descriptor, added: x.added } : x; });
+    var res = await _savedWalletsStore(list);
+    if (!res.saved) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save name'; }
+        say('Not renamed: ' + (res.error || 'unknown error.'));
+        return false;
+    }
+    showStatus('Renamed “' + w.name + '” to “' + name + '”.', 'success');
+    return true;
 }
 
 async function desc_removeSavedWallet(i) {

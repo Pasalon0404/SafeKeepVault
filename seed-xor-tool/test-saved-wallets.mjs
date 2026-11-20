@@ -106,7 +106,7 @@ vm.runInContext([
       '_descNormalizeXpub', '_wrecEscape', '_wrecSplitArgs', '_wrecCall', '_wrecParseDescriptor', '_wrecIndexZeroPubkey', '_wrecCompareBytes',
       '_wrecFirstAddress', '_wrecAddressFromPubkeys', '_descChainNodes', '_descImportPrivateCheck',
       '_savedWalletBody', '_savedWalletParse', '_savedWalletSummary', 'savedWallets_load', '_savedWalletsStore', '_descRenderSavedWallets', '_descSaveResult',
-      'desc_saveWallet', '_descSaveAs', 'desc_saveImported', 'desc_openSavedWallet', 'desc_removeSavedWallet', '_descFillMultisigForm', '_descSetSingleForm', '_descClearCosigners', 'desc_arraysEqual'].map((n) => extract(n)),
+      'desc_saveWallet', '_descSaveAs', 'desc_saveImported', 'desc_openSavedWallet', 'desc_removeSavedWallet', '_savedWalletNameError', 'desc_renameSavedWallet', '_descFillMultisigForm', '_descSetSingleForm', '_descClearCosigners', 'desc_arraysEqual'].map((n) => extract(n)),
   'var _descCosignerXpubs = {};',
 ].join('\n'), ctx);
 const cs = (body) => body + '#' + ctx.desc_checksum(body);
@@ -312,11 +312,36 @@ const save = async (name, desc) => { el('desc-save-name').value = name; vm.runIn
     await ctx.desc_removeSavedWallet(memStore.list.length - 1);
     ck("Import: test wallet removed again", memStore.list.length === before);
   }
+  // Rename (in the row; the descriptor and date stay)
+  {
+    const msg = { textContent: '', style: {} };
+    const daily = memStore.list.findIndex((w) => w.name === 'Daily');
+    const before = { ...memStore.list[daily] };
+    ck('the Saved Wallets tab shows the count', el('desc-saved-count').textContent === ' (2)', el('desc-saved-count').textContent);
+    let ok = await ctx.desc_renameSavedWallet(daily, '  Spending  ', msg, null);
+    ck('Rename: the new name is stored (trimmed), the descriptor and date unchanged',
+      ok && memStore.list[daily].name === 'Spending' && memStore.list[daily].descriptor === before.descriptor && memStore.list[daily].added === before.added && memStore.list.length === 2, JSON.stringify(memStore.list[daily]));
+    ck('Rename: the list shows the new name', /Spending/.test(el('desc-saved-list').innerHTML) && !/Daily/.test(el('desc-saved-list').innerHTML));
+    ok = await ctx.desc_renameSavedWallet(daily, 'FAMILY VAULT', msg, null);
+    ck('Rename: another wallet\'s name (any case) is refused', !ok && /already called “Family Vault”/.test(msg.textContent) && memStore.list[daily].name === 'Spending', msg.textContent);
+    ok = await ctx.desc_renameSavedWallet(daily, 'x'.repeat(65), msg, null);
+    ck('Rename: over 64 characters is refused', !ok && /64/.test(msg.textContent));
+    ok = await ctx.desc_renameSavedWallet(daily, '   ', msg, null);
+    ck('Rename: a blank name is refused', !ok && /name/.test(msg.textContent) && memStore.list[daily].name === 'Spending');
+    ok = await ctx.desc_renameSavedWallet(daily, 'Tab\there', msg, null);
+    ck('Rename: control characters are refused (as the vault\'s watcher does)', !ok && memStore.list[daily].name === 'Spending');
+    ok = await ctx.desc_renameSavedWallet(daily, 'SPENDING', msg, null);
+    ck('Rename: changing only its own name\'s case is fine', ok && memStore.list[daily].name === 'SPENDING');
+    ok = await ctx.desc_renameSavedWallet(daily, '<img src=x onerror=alert(1)>', msg, null);
+    ck('Rename: a name is escaped in the list', ok && !el('desc-saved-list').innerHTML.includes('<img') && el('desc-saved-list').innerHTML.includes('&lt;img'));
+    await ctx.desc_renameSavedWallet(daily, 'Daily', msg, null);
+  }
   ctx.desc_setMode = ctx.desc_setScript = () => {};
   await ctx.desc_openSavedWallet(1);
   ck('Open loads the saved descriptor as watch-only', statuses.some((s) => s.startsWith('open:Opened saved wallet “Daily”') && s.includes(cs(noCs))));
   await ctx.desc_removeSavedWallet(0);
   ck('Remove deletes only that wallet', memStore.list.length === 1 && memStore.list[0].name === 'Daily');
+  ck('...and the tab count follows', el('desc-saved-count').textContent === ' (1)');
 }
 
 // ======== 3b. Open fills the Multisig form (so Generate rebuilds the wallet) ========
@@ -339,22 +364,22 @@ console.log('Open a saved multisig wallet: the form:');
   // This seed listed second, as another wallet app may export it
   reset();
   let st = await open(cs(`wsh(sortedmulti(2,${k(co1, P2)},${k(me, P2)},${k(co2, P2)}))`));
-  ck('switches the form to Multisig, 2-of-3, Native SegWit', calls.join(',') === 'mode:multi,type:84,ui:2-of-3', calls.join(','));
+  ck('fills the Multisig form (2-of-3, Native SegWit), then comes back to the Saved Wallets tab', calls.join(',') === 'mode:multi,type:84,ui:2-of-3,mode:saved', calls.join(','));
   ck('Keys 2 and 3 are the other two keys, in the wallet\'s order', el('desc-ms-xpub-2').value === formKey(co1, P2) && el('desc-ms-xpub-3').value === formKey(co2, P2), el('desc-ms-xpub-2').value);
   ck('their fingerprints are filled in', el('desc-ms-fp-2').value === fpHex(co1) && el('desc-ms-fp-3').value === fpHex(co2), el('desc-ms-fp-2').value);
   ck('keys left from another wallet are dropped', ctx._descCosignerXpubs[7] === undefined && ctx._descCosignerXpubs[2].fp === fpHex(co1), JSON.stringify(ctx._descCosignerXpubs));
-  ck('the message says the form is filled', /Keys 2–3 are filled in above/.test(st), st);
+  ck('the message says the form is filled', /On Build Multi, Keys 2–3 are filled in from it/.test(st), st);
 
   // Nested SegWit 2-of-2
   reset();
   st = await open(cs(`sh(wsh(sortedmulti(2,${k(me, P1)},${k(co2, P1)})))`));
-  ck('Nested SegWit 2-of-2: type 49, Key 2 filled', calls.join(',') === 'mode:multi,type:49,ui:2-of-2' && el('desc-ms-xpub-2').value === formKey(co2, P1), calls.join(','));
-  ck('2-of-2 message: "Key 2 is filled in"', /Key 2 is filled in above/.test(st), st);
+  ck('Nested SegWit 2-of-2: type 49, Key 2 filled', calls.join(',') === 'mode:multi,type:49,ui:2-of-2,mode:saved' && el('desc-ms-xpub-2').value === formKey(co2, P1), calls.join(','));
+  ck('2-of-2 message: "Key 2 is filled in"', /On Build Multi, Key 2 is filled in from it/.test(st), st);
 
   // Not this seed's wallet
   reset();
   st = await open(cs(`wsh(sortedmulti(2,${k(co1, P2)},${k(co2, P2)},${k(att, P2)}))`));
-  ck('a wallet without this seed\'s key: its 2-of-3 shape, Keys 2–3 empty, reason given', calls.join(',') === 'mode:multi,type:84,ui:2-of-3' && keysEmpty() && /Keys 2–3 weren’t filled in: none of its keys is this seed’s key/.test(st) && /73c5da0a/.test(st), st);
+  ck('a wallet without this seed\'s key: its 2-of-3 shape, Keys 2–3 empty, reason given', calls.join(',') === 'mode:multi,type:84,ui:2-of-3,mode:saved' && keysEmpty() && /Keys 2–3 weren’t filled in: none of its keys is this seed’s key/.test(st) && /73c5da0a/.test(st), st);
   // This seed at another account: Generate would build a different wallet
   reset();
   st = await open(cs(`wsh(sortedmulti(2,${k(me, "48'/0'/1'/2'")},${k(co2, P2)}))`));
@@ -367,21 +392,21 @@ console.log('Open a saved multisig wallet: the form:');
   // multi(): the form only builds sortedmulti
   reset();
   st = await open(cs(`wsh(multi(2,${k(me, P2)},${k(co2, P2)}))`));
-  ck('multi() (fixed key order): its shape, keys empty, reason given', calls.join(',') === 'mode:multi,type:84,ui:2-of-2' && keysEmpty() && /multi\(\) with a fixed key order/.test(st), st);
+  ck('multi() (fixed key order): its shape, keys empty, reason given', calls.join(',') === 'mode:multi,type:84,ui:2-of-2,mode:saved' && keysEmpty() && /multi\(\) with a fixed key order/.test(st), st);
   // Single-sig after a multisig: Single-Sig form, its address type, no keys left from the multisig
   reset();
   await open(cs(`wsh(sortedmulti(2,${k(co1, P2)},${k(me, P2)},${k(co2, P2)}))`));
   calls.length = 0; statuses.length = 0;
   st = await open(SS);
-  ck('single-sig after a multisig: Single-Sig form, Native SegWit', calls.join(',') === 'mode:single,script:84', calls.join(','));
+  ck('single-sig after a multisig: Single-Sig form, Native SegWit', calls.join(',') === 'mode:single,script:84,mode:saved', calls.join(','));
   ck('single-sig after a multisig: the multisig\'s Keys 2–3 are cleared', keysEmpty(), JSON.stringify(ctx._descCosignerXpubs));
-  ck('single-sig of this seed: the message says Generate rebuilds it', /The form above is set to it/.test(st), st);
+  ck('single-sig of this seed: the message says Generate rebuilds it', /Build Single is set to it/.test(st), st);
   reset();
   st = await open(cs(`tr(${acct(me, "86'/0'/0'")}/<0;1>/*)`));
-  ck('Taproot single-sig: script 86', calls.join(',') === 'mode:single,script:86' && /set to it/.test(st), calls.join(',') + ' ' + st);
+  ck('Taproot single-sig: script 86', calls.join(',') === 'mode:single,script:86,mode:saved' && /set to it/.test(st), calls.join(',') + ' ' + st);
   reset();
   st = await open(cs(`wpkh(${acct(co1, "84'/0'/0'")}/<0;1>/*)`));
-  ck('single-sig of another seed: set to its type, says Generate would build a different wallet', calls.join(',') === 'mode:single,script:84' && /isn’t this seed’s key at m\/84’\/0’\/0’ \(fingerprint 73c5da0a\)/.test(st), st);
+  ck('single-sig of another seed: set to its type, says Generate would build a different wallet', calls.join(',') === 'mode:single,script:84,mode:saved' && /isn’t this seed’s key at m\/84’\/0’\/0’ \(fingerprint 73c5da0a\)/.test(st), st);
   reset();
   el('desc-passphrase').value = 'TREZOR';
   st = await open(SS);
