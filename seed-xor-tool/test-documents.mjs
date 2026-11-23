@@ -47,7 +47,8 @@ console.log('1. OS scripts');
     /if \[ "\$EPHEMERAL_MODE" != "1" \] && \[ -f "\$DOCUMENTS_HELPER" \]; then\n\s+python3 -I "\$DOCUMENTS_HELPER" route "\$SEED_DIR" "\$VAULT_MOUNT\/documents"\n\s+python3 -I "\$DOCUMENTS_HELPER" cleanup "\$SEED_DIR"\n\s+python3 -I "\$DOCUMENTS_HELPER" index/.test(boot));
   ck('boot: the File Router hands SKDOC-* requests to the helper', /if compgen -G "\$SEED_DIR\/SKDOC-\*" >\/dev\/null; then\n\s+python3 -I \/usr\/local\/lib\/safekeep\/safekeep-documents\.py route "\$SEED_DIR" "\$DOCUMENTS_DIR"/.test(boot));
   ck('backup: documents is a backup item', /'documents': 'documents',/.test(boot));
-  ck('restore: documents is copied, overwritten and counted', (boot.match(/for VDIR in codex passphrases twofa settings seeds documents; do/g) || []).length === 3
+  ck('restore: documents is copied, overwritten and counted', (boot.match(/for VDIR in codex passphrases twofa settings seeds documents; do/g) || []).length === 2
+    && /DIRS = \['codex', 'passphrases', 'twofa', 'settings', 'seeds', 'documents'\]/.test(boot)
     && /"\$VAULT_MOUNT\/seeds" "\$VAULT_MOUNT\/documents"/.test(boot) && /\\"documentsCount\\":\$DOCS_COUNT/.test(boot) && /documentsCount=len\(/.test(boot));
   ck('restore: the documents index is rebuilt afterwards', /safekeep-documents\.py index "\$VAULT_MOUNT\/documents"/.test(boot));
   ck('wipe: documents is wiped with the other vault folders', /for dir in codex passphrases twofa settings documents; do/.test(boot));
@@ -59,7 +60,7 @@ console.log('1. OS scripts');
   ck('build.sh and quick-update.sh install the helper',
     /install -m 755 safekeep-documents\.py "\$CHROOT_DIR\/usr\/local\/lib\/safekeep\/safekeep-documents\.py"/.test(build)
     && /install -m 755 safekeep-documents\.py "\$CHROOT_DIR\/usr\/local\/lib\/safekeep\/safekeep-documents\.py"/.test(qu)
-    && / safekeep-documents\.py quiet-downloads\/manifest\.json/.test(build));
+    && /^for f in [^\n]* safekeep-documents\.py[ \n]/m.test(build));
   ck('the vault partition is 900 MB', /^DATA_SIZE_MB=900\b/m.test(build));
   const viewer = readFileSync(join(HERE, 'shared', 'document-viewer.js'), 'utf8');
   ck('viewer: sandbox="allow-scripts" only (no allow-same-origin)', /frame\.setAttribute\('sandbox', 'allow-scripts'\);/.test(viewer) && !/allow-same-origin/.test(viewer.replace(/^\s*\*.*$/gm, '')));

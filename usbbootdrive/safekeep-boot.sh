@@ -2668,6 +2668,15 @@ SSPYEOF
     # Both phases use the same trigger-file watcher pattern as the
     # Reliquary export (RELIQUARY_TRIGGER.json) and Factory Reset
     # (WIPE_TRIGGER.txt) watchers.
+    # A backup's name, from the app's request: a .7z in the Transfer Drive's
+    # top folder (no "/", no leading ".", no control characters), as the
+    # Python check below requires too.
+    _rlq_name_ok() {
+        case "$1" in ""|*/*|.*) return 1 ;; esac
+        case "${1,,}" in *.7z) ;; *) return 1 ;; esac
+        [ "$(printf '%s' "$1" | LC_ALL=C tr -d '\000-\037\177')" = "$1" ] || return 1
+        return 0
+    }
     RESTORE_INSPECT_TRIGGER="$SEED_DIR/RESTORE_INSPECT.json"
     RESTORE_INSPECT_RESULT="$SEED_DIR/RESTORE_INSPECT_RESULT.json"
     RESTORE_INSPECT_ACK="$SEED_DIR/RESTORE_INSPECT_ACK.json"
@@ -2809,8 +2818,8 @@ except Exception as e:
                 ARCHIVE_FILE=$(echo "$INSPECT_DATA" | sed -n '1p')
                 ARCHIVE_PW=$(echo "$INSPECT_DATA" | sed -n '2p')
 
-                if [ -z "$ARCHIVE_FILE" ]; then
-                    echo '{"ok":false,"error":"Trigger file missing filename."}' > "$RESTORE_INSPECT_RESULT"
+                if [ -z "$ARCHIVE_FILE" ] || ! _rlq_name_ok "$ARCHIVE_FILE"; then
+                    echo '{"ok":false,"error":"Not a .7z backup name."}' > "$RESTORE_INSPECT_RESULT"
                     rm -f "$RESTORE_INSPECT_TRIGGER"
                     sleep 1
                     continue
@@ -2918,12 +2927,11 @@ except Exception as e:
                 rm -f "$RESTORE_INSPECT_TRIGGER"
                 echo "Restore Watcher: inspect SUCCESS — codex=$HAS_CODEX settings=$HAS_SETTINGS cipher=$HAS_CIPHER seed=$HAS_SEED"
 
-                # Persist metadata for COMMIT phase:
-                # - The resolved PROBE_ROOT so commit copies from the right place
-                # - Archive path + password for re-extraction fallback
+                # Persist the resolved PROBE_ROOT so commit copies from the
+                # right place. (The password is not kept: a commit carries its
+                # own and re-extracts if the unpacked copy is gone.)
                 echo "$PROBE_ROOT" > "$RELIQUARY_TMP/.probe_root"
-                echo "$ARCHIVE_PATH" > "$RELIQUARY_TMP/.archive_path"
-                echo "$ARCHIVE_PW" > "$RELIQUARY_TMP/.archive_pw"
+                ARCHIVE_PW=""
 
                 # Wait for ACK, then clean up result file
                 ACK_WAIT=0
@@ -2945,6 +2953,13 @@ except Exception as e:
                 if [ "$ACK_SEEN" != true ]; then
                     rm -rf "$RELIQUARY_TMP"
                     echo "Restore Watcher: no Restore within 120 s — unpacked backup deleted"
+                else
+                    # Shown but not restored: delete it after 10 minutes too,
+                    # unless a newer inspect or a commit has replaced it.
+                    INSPECT_TOKEN="$(date +%s%N)"
+                    echo "$INSPECT_TOKEN" > "$RELIQUARY_TMP/.inspect_token"
+                    ( sleep 600; [ "$(cat "$RELIQUARY_TMP/.inspect_token" 2>/dev/null)" = "$INSPECT_TOKEN" ] \
+                        && rm -rf "$RELIQUARY_TMP" && echo "Restore Watcher: not restored within 10 min — unpacked backup deleted" ) &
                 fi
                 echo "Restore Watcher: inspect phase done"
                 echo "Restore Watcher: PROBE_ROOT still exists = $([ -d "$PROBE_ROOT" ] && echo YES || echo NO)"
@@ -2977,7 +2992,7 @@ except Exception:
 " 2>/dev/null)
                     CM_FILE=$(echo "$CM_DATA" | sed -n '1p')
                     CM_PW=$(echo "$CM_DATA" | sed -n '2p')
-                    if [ -n "$CM_FILE" ] && command -v 7z >/dev/null 2>&1; then
+                    if [ -n "$CM_FILE" ] && _rlq_name_ok "$CM_FILE" && command -v 7z >/dev/null 2>&1; then
                         CM_USB=$(find_transfer_drive)
                         CM_PATH="$CM_USB/$CM_FILE"
                         if [ -n "$CM_USB" ] && [ -f "$CM_PATH" ]; then
@@ -3083,25 +3098,90 @@ except Exception as e:
                     sudo rm -rf "$VAULT_MOUNT/codex" "$VAULT_MOUNT/settings" "$VAULT_MOUNT/passphrases" "$VAULT_MOUNT/twofa" "$VAULT_MOUNT/seeds" "$VAULT_MOUNT/documents"
                 fi
 
-                # Copy each vault subdirectory individually with /. syntax
-                # to force inclusion of ALL files including dotfiles
-                for VDIR in codex passphrases twofa settings seeds documents; do
-                    if [ -d "$PROBE_ROOT/$VDIR" ]; then
-                        sudo mkdir -p "$VAULT_MOUNT/$VDIR"
-                        sudo cp -a "$PROBE_ROOT/$VDIR/." "$VAULT_MOUNT/$VDIR/" 2>&1 || COMMIT_EXIT=$?
-                        echo "Restore Watcher: copied $VDIR/ (exit=$COMMIT_EXIT)"
-                    fi
-                done
+                # Copy back DATA only. A backup is just files; it must never
+                # be able to drop a request (seeds/ is also where the app's
+                # requests land: a WIPE_TRIGGER.txt there starts a factory
+                # reset), a link, or a device into the vault. So: plain files
+                # only, no links or special files, never writing through a
+                # link already in the vault; from seeds/ only master-seed.json;
+                # elsewhere nothing named like a request; nothing from the
+                # archive's top level (our backups never put files there).
+                python3 -I - "$PROBE_ROOT" "$VAULT_MOUNT" <<'RESTORE_COPY_PY' || COMMIT_EXIT=$?
+import os, re, shutil, stat, sys
+src_root, vault = sys.argv[1], sys.argv[2]
+DIRS = ['codex', 'passphrases', 'twofa', 'settings', 'seeds', 'documents']
+SEEDS_KEEP = {'master-seed.json'}
+REQUEST = re.compile(r'^(WIPE_|RELIQUARY_|RESTORE_|POWER_ACTION|DISPLAY_SLEEP|BRIGHTNESS_|PRINT_|'
+                     r'COLDCARD_|TREZOR_|UPDATE_|SKXFER-|SKDOC-|SAVED_WALLETS|SEED_VAULT|SEED_STORAGE)'
+                     r'|\.crdownload$|^Unconfirmed ')
+copied, skipped, failed = 0, [], 0
 
-                # Also copy any root-level files (master-seed.json, etc.)
-                # Using a bash subshell with dotglob to catch hidden root files
-                (
-                    shopt -s dotglob
-                    for F in "$PROBE_ROOT"/*; do
-                        [ -f "$F" ] && sudo cp -a "$F" "$VAULT_MOUNT/" 2>&1
-                    done
-                )
-                echo "Restore Watcher: root-level files copied (with dotglob)"
+def skip(rel, why):
+    skipped.append('%s (%s)' % (rel, why))
+
+def safe_dir(path):
+    """Make path a real directory inside the vault, replacing a link."""
+    if os.path.islink(path):
+        os.unlink(path)
+    os.makedirs(path, mode=0o700, exist_ok=True)
+
+for d in DIRS:
+    src = os.path.join(src_root, d)
+    if not os.path.isdir(src):
+        continue
+    if os.path.islink(src):
+        skip(d + '/', 'a link')
+        continue
+    for here, dirs, files in os.walk(src, followlinks=False):
+        rel_dir = os.path.relpath(here, src_root)
+        for sub in list(dirs):
+            if os.path.islink(os.path.join(here, sub)):
+                skip(os.path.join(rel_dir, sub) + '/', 'a link')
+                dirs.remove(sub)
+        if d == 'seeds' and here != src:
+            dirs[:] = []
+            continue
+        for name in files:
+            rel = os.path.join(rel_dir, name)
+            path = os.path.join(here, name)
+            st = os.lstat(path)
+            if not stat.S_ISREG(st.st_mode):
+                skip(rel, 'not a plain file')
+                continue
+            if d == 'seeds' and name not in SEEDS_KEEP:
+                skip(rel, 'not seed data')
+                continue
+            if REQUEST.search(name):
+                skip(rel, 'named like a request')
+                continue
+            dest_dir = os.path.join(vault, rel_dir)
+            try:
+                # Every folder on the way must be a real folder in the vault.
+                parts = os.path.relpath(dest_dir, vault).split(os.sep)
+                cur = vault
+                for part in parts:
+                    cur = os.path.join(cur, part)
+                    safe_dir(cur)
+                dest = os.path.join(dest_dir, name)
+                if os.path.islink(dest) or (os.path.exists(dest) and not os.path.isfile(dest)):
+                    if os.path.isdir(dest) and not os.path.islink(dest):
+                        skip(rel, 'a folder is in the way')
+                        continue
+                    os.unlink(dest)
+                tmp = dest + '.restoring'
+                shutil.copyfile(path, tmp, follow_symlinks=False)
+                os.chmod(tmp, 0o600)
+                os.replace(tmp, dest)
+                copied += 1
+            except OSError as e:
+                failed += 1
+                print('Restore Watcher: could not copy %s: %s' % (rel, e))
+print('Restore Watcher: copied %d file(s), skipped %d' % (copied, len(skipped)))
+for item in skipped[:50]:
+    print('Restore Watcher:   skipped ' + item)
+sys.exit(1 if failed else 0)
+RESTORE_COPY_PY
+                echo "Restore Watcher: copy finished (exit=$COMMIT_EXIT)"
 
                 # Clean up temp extraction
                 rm -rf "$RELIQUARY_TMP"
@@ -3643,10 +3723,30 @@ chromium_elapsed_s: ${CHROMIUM_ELAPSED:-?}"
     fi
 }
 
-# Already unlocked from a previous session? (e.g., user relaunched Chromium)
+# Still unlocked from a previous run? Nothing reaches this point with the vault
+# open on purpose: Lock unmounts it before re-running this script, and first
+# setup mounts it further down. So the last session ended without locking:
+# the session crashed and systemd restarted it (Restart=on-failure). Lock it
+# now and ask for the passphrase again, rather than reopen the vault for
+# whoever is at the computer.
 if mountpoint -q "$VAULT_MOUNT" 2>/dev/null; then
-    echo "Vault already mounted. Launching browser..."
-    launch_browser
+    echo "Vault still mounted from a session that ended without locking — locking it before the unlock prompt."
+    sync
+    sudo umount "$VAULT_MOUNT" 2>/dev/null || sudo umount -l "$VAULT_MOUNT" 2>/dev/null || true
+    for _lk in 1 2 3 4 5; do
+        sudo cryptsetup close "$MAPPER_NAME" 2>/dev/null && break
+        sleep 0.4
+    done
+    if mountpoint -q "$VAULT_MOUNT" 2>/dev/null; then
+        # Can't lock it: don't hand the open vault to the browser. Halt
+        # where nothing can read it; a restart clears it.
+        echo "ERROR: the vault from the last session couldn't be unmounted. Halting; restart the computer."
+        export DISPLAY="${DISPLAY:-:0}"
+        export XAUTHORITY="${XAUTHORITY:-/root/.Xauthority}"
+        zenity --error --width=480 --title="SafeKeep" \
+            --text="SafeKeep closed unexpectedly and couldn't lock the vault on its own.\n\nPlease restart the computer." 2>/dev/null || true
+        exec sleep infinity
+    fi
 fi
 
 # ── Soft-lock teardown safety net ──

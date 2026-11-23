@@ -275,6 +275,17 @@ install qmi_wwan /bin/false
 blacklist thunderbolt_net
 install thunderbolt_net /bin/false
 
+# --- FireWire controllers: a FireWire device can read and write memory
+# directly (DMA), so a plugged-in device could read the unlocked vault's
+# keys. Nothing in SafeKeep uses FireWire. (Thunderbolt stays: USB-C docks
+# need it, and without the bolt daemon new devices get no DMA access.)
+blacklist firewire_ohci
+blacklist firewire_sbp2
+blacklist firewire_core
+install firewire_ohci /bin/false
+install firewire_sbp2 /bin/false
+install firewire_core /bin/false
+
 # --- Virtual / tunnel interfaces ---
 # Prevent software-defined networking even if someone gets a shell.
 blacklist tun
@@ -992,6 +1003,38 @@ systemctl mask autovt@.service 2>/dev/null || true
 systemctl mask serial-getty@.service 2>/dev/null || true
 echo "  Masked: getty@tty1..6, getty.target, autovt@, serial-getty@"
 
+# --- 5a2. No sleep or hibernation ---
+# A sleeping computer keeps the unlocked vault's key in memory, and the
+# app's Auto-Lock and Auto-Off timers stop counting while it sleeps: wake
+# it hours later and the vault is open. So SafeKeep never sleeps. Closing
+# the lid or pressing a sleep key does nothing; the timers keep running
+# and lock the vault, then power off, as set in Device Options.
+# (Hibernation would also write memory to disk; there's no swap, and it's
+# blocked here too.)
+cat > /etc/systemd/logind.conf.d/20-safekeep-no-sleep.conf << 'NOSLEEP_EOF'
+# SafeKeep: the computer never sleeps or hibernates (the vault stays
+# unlocked in memory while asleep; Auto-Lock and Auto-Off would pause).
+[Login]
+HandleSuspendKey=ignore
+HandleHibernateKey=ignore
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+IdleAction=ignore
+NOSLEEP_EOF
+mkdir -p /etc/systemd/sleep.conf.d
+cat > /etc/systemd/sleep.conf.d/10-safekeep-no-sleep.conf << 'SLEEPCONF_EOF'
+[Sleep]
+AllowSuspend=no
+AllowHibernation=no
+AllowSuspendThenHibernate=no
+AllowHybridSleep=no
+SLEEPCONF_EOF
+for _t in sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target; do
+    systemctl mask "$_t" 2>/dev/null || true
+done
+echo "  Disabled sleep and hibernation (logind ignores the lid and sleep keys; sleep targets masked)"
+
 # --- 5b. Apport + coredumps ---
 # Mask every apport-related unit. apport.service is the crash
 # forwarder; apport-autoreport and apport-forward are periodic timers
@@ -1512,13 +1555,39 @@ echo ""
 echo "[7/7] REBUILDING INITRAMFS"
 echo "-------------------------------------------"
 
+# Never turn on swap. casper's casper-bottom/13swap runs `swapon` on every
+# swap partition it finds on /dev/sd*, /dev/hd* and /dev/vd* disks (a USB
+# drive plugged in at startup, for one), and casper 1.498 has no `noswap`
+# option to stop it: grub.cfg's noswap does nothing. A script of the same
+# name in /etc/initramfs-tools/scripts replaces casper's in the initramfs
+# (mkinitramfs copies /etc's scripts after /usr/share's). build.sh checks the
+# initramfs holds this one. safekeep-boot.sh's `swapoff -a`, before the
+# unlock prompt, stays as the second line; swap.target is masked as a third.
+mkdir -p /etc/initramfs-tools/scripts/casper-bottom
+cat > /etc/initramfs-tools/scripts/casper-bottom/13swap << 'NOSWAP_EOF'
+#!/bin/sh
+# SafeKeep: replaces casper's 13swap. Swap is never turned on: memory could
+# be written to a disk and outlive the session.
+PREREQ=""
+case $1 in
+prereqs)
+    echo "$PREREQ"
+    exit 0
+    ;;
+esac
+exit 0
+NOSWAP_EOF
+chmod 755 /etc/initramfs-tools/scripts/casper-bottom/13swap
+systemctl mask swap.target 2>/dev/null || true
+echo "  Swap: casper's startup swap script replaced by one that does nothing; swap.target masked"
+
 # Copy blacklist files into initramfs hook directory so they're baked
 # into the initial ramdisk and effective from the earliest boot stage.
 mkdir -p /etc/initramfs-tools/conf.d
 
 # update-initramfs reads /etc/modprobe.d/ automatically when run.
 if command -v update-initramfs &>/dev/null; then
-    update-initramfs -u -k all 2>/dev/null || echo "  Warning: initramfs rebuild failed (may be normal in chroot)"
+    update-initramfs -u -k all 2>/dev/null || echo "  Warning: initramfs rebuild failed (build.sh checks the result and stops the build if the blocks are missing)"
     echo "  Initramfs rebuilt with module blacklists."
 else
     echo "  Warning: update-initramfs not found — blacklists will apply after next manual rebuild."

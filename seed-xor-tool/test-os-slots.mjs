@@ -108,7 +108,7 @@ console.log('2. grub.cfg');
   ck('boots the slot with live-media-path', g.includes('linux /casper-${slot}/vmlinuz boot=casper live-media-path=casper-${slot}'));
   ck('initrd from the same slot', (g.match(/initrd \/casper-\$\{slot\}\/initrd/g) || []).length === 2);
   ck('"previous version" only when the other slot has a kernel', /if \[ -f \/casper-\$\{other\}\/vmlinuz \]; then\s+menuentry "SafeKeepVault \(previous version/.test(g));
-  ck('keeps the boot options of the old config', (g.match(/nopersistent noprompt/g) || []).length === 3 && g.includes('usbhid.quirks=0xd13e:0xcc10:0x4'));
+  ck('keeps the boot options of the old config', (g.match(/nopersistent noswap noprompt/g) || []).length === 3 && g.includes('usbhid.quirks=0xd13e:0xcc10:0x4'));
   const chk = spawnSync('grub-script-check', [join(OS, 'grub.cfg')], { encoding: 'utf8' });
   if (chk.error) console.log('  (grub-script-check not installed: syntax check skipped)');
   else ck('grub-script-check accepts it', chk.status === 0, chk.stderr);

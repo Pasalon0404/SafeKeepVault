@@ -200,5 +200,11 @@ console.log('7. Seed Management passphrase check and descriptor');
       .every((f) => extract(f).includes('_armPassphrase()') && !extract(f).includes("getElementById('arm-passphrase').value")) &&
     extract('arm_print').includes("_descPassphraseConfirmed('arm-passphrase')"));
 }
+// Dark mode: a dropdown's open list (Send a Seed to the Coldcard → Choose a
+// seed, and every other <select>) was white with the theme's light text.
+{
+  ck('dropdown options get the theme\'s colors (readable open lists in dark mode)',
+    /select option, select optgroup \{\s*background-color: var\(--skb-bg-input, var\(--skb-bg\)\);\s*color: var\(--skb-text\);\s*\}/.test(SRC));
+}
 console.log(`\nREVIEW REGRESSIONS: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

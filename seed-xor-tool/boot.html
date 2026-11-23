@@ -2162,6 +2162,9 @@
     }
 
     .tool-tab-btn {
+      /* Square: with the app's rounded buttons the active underline showed
+         only its two curved ends ("carets") wherever it was clipped. */
+      border-radius: 0;
       font-family: var(--skb-mono);
       font-size: 0.75rem;
       font-weight: 700;
@@ -2390,7 +2393,16 @@
 .desc-pp-confirm__note.is-bad { color: var(--skb-danger); }
 
 /* ---- Output Descriptor: saved wallets ---- */
-.desc-saved-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
+.desc-composition { margin: 0 0 1rem; padding: 0.75rem; background: var(--skb-bg-input); border-radius: var(--skb-radius-sm); }
+.desc-composition h4 { margin: 0 0 0.35rem; font-size: 0.875rem; color: var(--skb-text); }
+.desc-composition .desc-comp-sum { font-size: 0.8rem; color: var(--skb-text-muted); margin: 0 0 0.6rem; line-height: 1.5; }
+.desc-composition table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+.desc-composition th { text-align: left; color: var(--skb-text-muted); font-weight: 600; padding: 0.25rem 0.5rem 0.25rem 0; border-bottom: 1px solid var(--skb-border); }
+.desc-composition td { padding: 0.35rem 0.5rem 0.35rem 0; vertical-align: middle; border-bottom: 1px solid var(--skb-border); }
+.desc-composition td.mono { font-family: var(--skb-mono); overflow-wrap: anywhere; }
+.desc-composition .desc-comp-mine { color: var(--skb-primary); font-weight: 600; margin-left: 0.35rem; }
+.desc-composition button { font-size: 0.7rem; padding: 0.15rem 0.5rem; }
+.desc-saved-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--skb-border); }
 .desc-saved-row:first-child { border-top: none; padding-top: 0; }
 .desc-saved-info { flex: 1; min-width: 0; }
 .desc-saved-name { font-size: 0.875rem; font-weight: 600; color: var(--skb-text); overflow-wrap: anywhere; }
@@ -3132,7 +3144,9 @@
     /* Redesign (2026-11): one corner radius everywhere (was 0, square).
        QR codes and canvases stay square. Set --skb-ui-radius to 0 to go
        back to square corners. */
-    .boot-screen *:not(.eob-hash-dot):not(.dot):not(input[type="checkbox"]):not(input[type="radio"]):not(.amnesia-switch-track):not(.amnesia-switch-thumb):not(canvas) {
+    /* Tabs (.tool-tabs / .tool-tab-btn) stay square: rounded, their
+       active underline showed only its two curved ends. */
+    .boot-screen *:not(.eob-hash-dot):not(.dot):not(input[type="checkbox"]):not(input[type="radio"]):not(.amnesia-switch-track):not(.amnesia-switch-thumb):not(canvas):not(.tool-tab-btn):not(.tool-tabs) {
       border-radius: var(--skb-ui-radius, 8px) !important;
     }
 
@@ -8286,8 +8300,8 @@
                                 <div style="margin-bottom: 1rem;">
                                     <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Count</label>
                                     <div style="display: flex; gap: 0.5rem;">
-                                        <button type="button" class="skb-btn" id="pp-wc-4" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setWordCount(4)">4 Words</button>
-                                        <button type="button" class="skb-btn" id="pp-wc-6" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(6)">6 Words</button>
+                                        <button type="button" class="skb-btn" id="pp-wc-4" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(4)">4 Words</button>
+                                        <button type="button" class="skb-btn" id="pp-wc-6" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setWordCount(6)">6 Words</button>
                                         <button type="button" class="skb-btn" id="pp-wc-8" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(8)">8 Words</button>
                                     </div>
                                 </div>
@@ -8749,16 +8763,17 @@
             </div>
 
             <!-- ======== MODE TOGGLE: Single vs Multi vs Verify ======== -->
-            <div id="desc-mode-tabs" style="display: flex; gap: 0; margin-bottom: 1rem; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm); overflow: hidden;">
+            <div id="desc-mode-tabs" class="tool-tabs" style="display: flex;">
                 <button type="button" id="desc-mode-single" class="tool-tab-btn active" style="flex: 1;" onclick="desc_setMode('single')">Build Single</button>
                 <button type="button" id="desc-mode-multi" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('multi')">Build Multi</button>
                 <button type="button" id="desc-mode-verify" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('verify')">Import</button>
+                <button type="button" id="desc-mode-saved" class="tool-tab-btn" style="flex: 1;" onclick="desc_setMode('saved')">Saved Wallets<span id="desc-saved-count"></span></button>
             </div>
 
-            <!-- ======== SAVED WALLETS (shown when the vault holds any) ======== -->
+            <!-- ======== SAVED WALLETS TAB ======== -->
             <div class="skb-card" id="desc-saved-wallets" style="display: none; margin-bottom: 1rem;">
                 <div style="font-size: 0.875rem; font-weight: 600; color: var(--skb-text); margin-bottom: 0.25rem;">Saved Wallets</div>
-                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.75rem; line-height: 1.5;">The PSBT Signer checks every transaction against these: which wallet it spends from, and whether its change comes back to one of them.</p>
+                <p style="font-size: 0.75rem; color: var(--skb-text-muted); margin: 0 0 0.75rem; line-height: 1.5;">Watch-only wallets kept in the vault. The PSBT Signer checks every transaction against these: which wallet it spends from, and whether its change comes back to one of them. Show an Address can use them too.</p>
                 <div id="desc-saved-list"></div>
             </div>
 
@@ -9074,6 +9089,7 @@
                         <div style="display: flex; gap: 0.5rem;">
                             <button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="desc_copyDescriptor()">Copy</button>
                             <button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" id="desc-qr-toggle-btn" onclick="desc_toggleQR()">Show QR</button>
+                            <button type="button" class="skb-btn" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" id="desc-close-btn" onclick="desc_closeOutput()" title="Put this wallet away">Close</button>
                         </div>
                     </div>
                     <div id="desc-descriptor-text" style="background: var(--skb-bg-input); font-family: var(--skb-mono); font-size: 0.8125rem; color: var(--skb-primary); padding: 0.75rem; border-radius: var(--skb-radius-sm); border: 1px solid var(--skb-primary); word-break: break-all; line-height: 1.6; margin-bottom: 1rem; font-weight: 600;"></div>
@@ -9094,6 +9110,9 @@
                         </div>
                         <canvas id="desc-qr-canvas" style="max-width: 400px; width: 100%; height: auto; border: 1px solid var(--skb-border); border-radius: var(--skb-radius-sm);"></canvas>
                     </div>
+
+                    <!-- How this wallet is built: read from the descriptor itself -->
+                    <div id="desc-composition" class="desc-composition" hidden></div>
 
                     <div>
                         <label style="font-size: 0.875rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Address Verification (first 5 receive)</label>
@@ -11734,6 +11753,20 @@ window.skbIdleTimers = (function _installIdleTimers() {
         _autoLockTimerId = setTimeout(_fireAutoLock, ms);
     }
 
+    // Wall-clock backstop. setTimeout counts only while the computer runs,
+    // so if it ever slept (SafeKeep turns sleep off, but firmware can still
+    // force it) the timer would resume where it paused and the vault would
+    // stay open on wake. Every 5 s, compare the real time since the last
+    // activity with the Auto-Lock setting; past it, lock now.
+    function _checkAutoLockDeadline() {
+        if (state.autoLockMinutes <= 0 || !_lastActivity) return;
+        if (Date.now() - _lastActivity >= state.autoLockMinutes * 60 * 1000) {
+            _lastActivity = Date.now();   // once per deadline, not every 5 s
+            _clearAutoLockTimer();
+            _fireAutoLock();
+        }
+    }
+
     function _fireAutoLock() {
         // Skip auto-lock if there's nothing to lock — no seed loaded, or
         // we're already on the welcome / unlock screen. Defensive check
@@ -11877,9 +11910,11 @@ window.skbIdleTimers = (function _installIdleTimers() {
         _restore();
         _syncInputsToState();
         _attachActivityListeners();
+        _lastActivity = Date.now();
         _scheduleAutoLockTimer();
         _scheduleAutoOffTimer();
         _applyDisplaySleepToOS();
+        setInterval(_checkAutoLockDeadline, 5000);
     }
 
     if (document.readyState === 'loading') {
@@ -11896,6 +11931,7 @@ window.skbIdleTimers = (function _installIdleTimers() {
         onAutoLockInput:     onAutoLockInput,
         onAutoOffInput:      onAutoOffInput,
         stayOn:              function() { _lastActivity = Date.now(); _scheduleAutoLockTimer(); _scheduleAutoOffTimer(); },
+        _checkAutoLockDeadline: _checkAutoLockDeadline,   // tests
         getState:            function() { return { displaySleepMinutes: state.displaySleepMinutes, autoLockMinutes: state.autoLockMinutes, autoOffMinutes: state.autoOffMinutes }; }
     };
 })();
@@ -19596,7 +19632,13 @@ function showState(stateId) {
         bip85_autoFillMasterSeed();
     } else if (stateId === 'state-descriptor') {
         desc_autoFillMasterSeed();
-        savedWallets_load();
+        // The first time the page opens: Saved Wallets when there are any,
+        // Build Single when there aren't. After that, the tab last used.
+        savedWallets_load().then(function () {
+            if (_descTabChosen) return;
+            _descTabChosen = true;
+            if (_savedWallets.length && desc_state.mode === 'single') desc_setMode('saved');
+        });
     } else if (stateId === 'state-seedqr') {
         sqr_autoFillMasterSeed();
     } else if (stateId === 'state-armory') {
@@ -29817,7 +29859,7 @@ const WORDLIST = window.BtcMath?.wordlist || [];
 // separators, capitalization, and optional number/symbol suffixes.
 
 var pp_config = {
-    wordCount: 4,
+    wordCount: 6,     // 66 bits; 4 words (44 bits) is too few to stand against a guessing attack on a stolen wallet
     separator: '-',
     capitalization: 'lower',  // 'lower' | 'title' | 'upper'
     lastPassphrase: '',
@@ -31684,7 +31726,7 @@ var _descCosignerXpubs = {};      // preserved xpub values keyed by cosigner ind
 // =============================================
 // MODE TOGGLE: Single vs Multi
 // =============================================
-function desc_setMode(mode) {
+function desc_setMode(mode, keepOutput) {
     // Save co-signer xpubs before switching away from multi
     if (desc_state.mode === 'multi' && mode !== 'multi') {
         desc_saveCosignerXpubs();
@@ -31693,11 +31735,15 @@ function desc_setMode(mode) {
     document.getElementById('desc-mode-single').className = 'tool-tab-btn' + (mode === 'single' ? ' active' : '');
     document.getElementById('desc-mode-multi').className = 'tool-tab-btn' + (mode === 'multi' ? ' active' : '');
     document.getElementById('desc-mode-verify').className = 'tool-tab-btn' + (mode === 'verify' ? ' active' : '');
+    var savedTab = document.getElementById('desc-mode-saved');
+    if (savedTab) savedTab.className = 'tool-tab-btn' + (mode === 'saved' ? ' active' : '');
     document.getElementById('desc-single-section').style.display = mode === 'single' ? 'block' : 'none';
     document.getElementById('desc-multi-section').style.display = mode === 'multi' ? 'block' : 'none';
     document.getElementById('desc-verify-section').style.display = mode === 'verify' ? 'block' : 'none';
-    document.getElementById('desc-output').style.display = 'none';
-    document.getElementById('desc-generate-btn').style.display = (mode === 'verify') ? 'none' : '';
+    var savedCard = document.getElementById('desc-saved-wallets');
+    if (savedCard) savedCard.style.display = mode === 'saved' ? 'block' : 'none';
+    if (!keepOutput) document.getElementById('desc-output').style.display = 'none';
+    document.getElementById('desc-generate-btn').style.display = (mode === 'verify' || mode === 'saved') ? 'none' : '';
     if (mode === 'multi') {
         desc_updateMultisigUI();
     }
@@ -32769,6 +32815,7 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
         desc_state.currentDescriptor = spDescriptor;
         desc_state.imported = null;
         document.getElementById('desc-descriptor-text').textContent = spDescriptor;
+        if (typeof _descRenderComposition === 'function') { try { _descRenderComposition(spDescriptor); } catch (e) { /* the makeup is extra: never block the card */ } }
         // Address verification override: ONE static sp1q address (no m/0/i
         // chain, so there's no path/index label — the row is just the bare
         // address. Earlier versions prefixed an "sp1q" path-style marker that
@@ -32795,6 +32842,7 @@ async function desc_generateSingle(bip39, wordlist, HDKey, btcSigner) {
     desc_state.imported = null;
 
     document.getElementById('desc-descriptor-text').textContent = finalDescriptor;
+    if (typeof _descRenderComposition === 'function') { try { _descRenderComposition(finalDescriptor); } catch (e) { /* the makeup is extra: never block the card */ } }
 
     // Address verification
     var addrHtml = '';
@@ -32993,6 +33041,7 @@ async function desc_generateMulti(bip39, wordlist, HDKey, btcSigner) {
     desc_state.imported = null;
 
     document.getElementById('desc-descriptor-text').textContent = finalDescriptor;
+    if (typeof _descRenderComposition === 'function') { try { _descRenderComposition(finalDescriptor); } catch (e) { /* the makeup is extra: never block the card */ } }
 
     // === Address verification ===
     var addrHtml = '';
@@ -35043,10 +35092,91 @@ function desc_useVerified() {
 }
 
 /* Show a parsed descriptor in the output card as a watch-only wallet. */
+/*
+ * "How this wallet is built", read from the descriptor alone (so it is
+ * complete whatever seed is loaded): address type, how many keys sign and
+ * whether their order matters, and each key's fingerprint, path and xpub.
+ * A key whose fingerprint is the loaded seed's is marked "this seed".
+ * Everything is set with textContent.
+ */
+function _descRenderComposition(descriptor) {
+    var box = document.getElementById('desc-composition');
+    if (!box) return;
+    box.textContent = '';
+    box.hidden = true;
+    var p;
+    try { p = _wrecParseDescriptor(descriptor); } catch (e) { return; }
+    if (!p || !p.ok || !p.keys || !p.keys.length) return;
+    var make = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    box.appendChild(make('h4', null, 'How this wallet is built'));
+    var sum;
+    if (p.kind === 'sp') sum = p.script + ': a Silent Payment wallet, with a scan key and a spend key.';
+    else if (p.isMulti) sum = p.script + ' · ' + p.msM + ' of ' + p.msN + ' keys must sign · ' +
+        (p.sorted ? 'the keys can be listed in any order (sortedmulti)' : 'the keys are used in this fixed order (multi)');
+    else sum = p.script + ' · one key signs';
+    box.appendChild(make('p', 'desc-comp-sum', sum));
+    var mine = '';
+    try {
+        var M = window.BtcMath;
+        var mnemonic = desc_state.loadedSeed || (window.SeedSession && window.SeedSession.get ? (window.SeedSession.get() || {}).mnemonic : '');
+        if (M && mnemonic) {
+            // Without a passphrase: the fingerprint a key's origin names.
+            var fpKey = 'fp:' + mnemonic;
+            if (_descCompFpCache.key !== fpKey) {
+                var root = M.HDKey.fromMasterSeed(M.bip39.mnemonicToSeedSync(mnemonic, ''));
+                _descCompFpCache = { key: fpKey, fp: root.fingerprint.toString(16).padStart(8, '0') };
+            }
+            mine = _descCompFpCache.fp;
+        }
+    } catch (e) { mine = ''; }
+    var table = make('table');
+    var head = make('tr');
+    ['Key', 'Fingerprint', 'Path', 'Extended public key', ''].forEach(function (h) { head.appendChild(make('th', null, h)); });
+    table.appendChild(head);
+    p.keys.forEach(function (k, i) {
+        var tr = make('tr');
+        var label = make('td', null, p.kind === 'sp' ? (i === 0 ? 'Scan' : 'Spend') : String(i + 1));
+        tr.appendChild(label);
+        var fpCell = make('td', 'mono', k.fingerprint || '(none given)');
+        if (mine && k.fingerprint && k.fingerprint.toLowerCase() === mine) fpCell.appendChild(make('span', 'desc-comp-mine', 'this seed'));
+        tr.appendChild(fpCell);
+        tr.appendChild(make('td', 'mono', k.path ? 'm/' + k.path.replace(/h/g, '\u2019') : '(none given)'));
+        var x = String(k.xpub || '');
+        var xc = make('td', 'mono', x.length > 30 ? x.slice(0, 14) + '\u2026' + x.slice(-10) : x);
+        xc.title = x;
+        tr.appendChild(xc);
+        var bc = make('td');
+        if (x) {
+            var b = make('button', 'skb-btn', 'Copy');
+            b.type = 'button';
+            b.onclick = function () {
+                var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1200); };
+                try { navigator.clipboard.writeText(x).then(done, function () {}); } catch (e) { /* no clipboard */ }
+            };
+            bc.appendChild(b);
+        }
+        tr.appendChild(bc);
+        table.appendChild(tr);
+    });
+    box.appendChild(table);
+    box.hidden = false;
+}
+var _descCompFpCache = { key: '', fp: '' };
+
+/* Close the wallet's card (opened, imported or generated). */
+function desc_closeOutput() {
+    document.getElementById('desc-output').style.display = 'none';
+    var box = document.getElementById('desc-composition');
+    if (box) { box.textContent = ''; box.hidden = true; }
+    desc_state.currentDescriptor = '';
+    if (typeof desc_recvReset === 'function') desc_recvReset();
+}
+
 function _descLoadWatchOnly(descriptor, p, message, note) {
     desc_state.currentDescriptor = descriptor;
     desc_state.imported = { isMulti: !!p.isMulti };
     document.getElementById('desc-descriptor-text').textContent = descriptor;
+    if (typeof _descRenderComposition === 'function') { try { _descRenderComposition(descriptor); } catch (e) { /* the makeup is extra: never block the card */ } }
 
     var addrHtml = p.kind === 'sp'
         ? '<div style="margin-bottom: 0.3rem; word-break: break-all;">' + p.firstAddress + '</div>'
@@ -35074,6 +35204,7 @@ function _descLoadWatchOnly(descriptor, p, message, note) {
 // by deriving the wallet's address at each input's and output's path.
 var _savedWallets = [];   // [{ name, descriptor, added }], as stored
 var _savedWalletsLoading = null;   // set while the PSBT Signer reads the list
+var _descTabChosen = false;        // the page's first tab has been picked
 
 /* Descriptor without its #checksum, to spot the same wallet saved twice. */
 function _savedWalletBody(descriptor) {
@@ -35093,6 +35224,20 @@ function _savedWalletParse(descriptor) {
 
 function _savedWalletSummary(p) {
     return p.script + (p.isMulti ? ' · ' + p.msM + '-of-' + p.msN + ' multisig' : '');
+}
+
+/* Why `name` can't be used for a saved wallet ('' if it can). Same rule as
+   the vault's Wallets Watcher: 1-64 characters, no control characters, and
+   not the name of another saved wallet (except the one at index `except`). */
+function _savedWalletNameError(name, except) {
+    if (!name) return 'Give the wallet a name first.';
+    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) return 'Use a name of up to 64 characters.';
+    for (var i = 0; i < _savedWallets.length; i++) {
+        if (i !== except && _savedWallets[i].name.toLowerCase() === name.toLowerCase()) {
+            return 'A saved wallet is already called “' + _savedWallets[i].name + '”. Choose another name.';
+        }
+    }
+    return '';
 }
 
 /* Read the list from the vault (or memory off the boot drive) and redraw. */
@@ -35122,7 +35267,12 @@ function _descRenderSavedWallets() {
     var card = document.getElementById('desc-saved-wallets');
     var listEl = document.getElementById('desc-saved-list');
     if (!card || !listEl) return;
-    card.style.display = _savedWallets.length ? 'block' : 'none';
+    var count = document.getElementById('desc-saved-count');
+    if (count) count.textContent = _savedWallets.length ? ' (' + _savedWallets.length + ')' : '';
+    if (!_savedWallets.length) {
+        listEl.innerHTML = '<div class="desc-saved-meta" style="padding: 0.75rem 0;">No saved wallets yet. Build a wallet on Build Single or Build Multi, or check one on Import, then use <b>Save this wallet</b>.</div>';
+        return;
+    }
     listEl.innerHTML = _savedWallets.map(function(w, i) {
         var r = _savedWalletParse(w.descriptor);
         var meta = r.parsed ? _savedWalletSummary(r.parsed) : 'Can’t be read: ' + r.error;
@@ -35134,6 +35284,7 @@ function _descRenderSavedWallets() {
                 (addr ? '<div class="desc-saved-addr">' + _wrecEscape(addr) + '</div>' : '') +
             '</div>' +
             (r.parsed ? '<button type="button" class="skb-btn" onclick="desc_openSavedWallet(' + i + ')">Open</button>' : '') +
+            '<button type="button" class="skb-btn" onclick="desc_startRenameSavedWallet(' + i + ')">Rename</button>' +
             '<button type="button" class="skb-btn" onclick="desc_removeSavedWallet(' + i + ')">Remove</button>' +
         '</div>';
     }).join('');
@@ -35178,7 +35329,8 @@ async function _descSaveAs(descriptorIn, nameEl, report, btnId) {
     var descriptor = String(descriptorIn || '').replace(/[\r\n]+/g, '').trim();
     if (!descriptor) { _descSaveResult('bad', 'No descriptor yet. Generate or load one first.'); return false; }
     if (!name) { _descSaveResult('bad', 'Give the wallet a name first.'); if (nameEl) nameEl.focus(); return false; }
-    if (name.length > 64 || /[\x00-\x1f\x7f]/.test(name)) { _descSaveResult('bad', 'Use a name of up to 64 characters.'); return false; }
+    var nameErr = _savedWalletNameError(name, -1);
+    if (nameErr && nameErr.indexOf('already called') === -1) { _descSaveResult('bad', nameErr); return false; }
     var r = _savedWalletParse(descriptor);
     if (r.error) { _descSaveResult('bad', 'Not saved: ' + r.error); return false; }
     if (descriptor.indexOf('#') === -1) descriptor += '#' + desc_checksum(descriptor);
@@ -35203,7 +35355,7 @@ async function _descSaveAs(descriptorIn, nameEl, report, btnId) {
     try {
         var res = await _savedWalletsStore(_savedWallets.concat([{ name: name, descriptor: descriptor, added: new Date().toISOString() }]));
         if (res.saved) {
-            _descSaveResult('ok', 'Saved as “' + name + '”. The PSBT Signer will now check transactions against it.');
+            _descSaveResult('ok', 'Saved as “' + name + '”. The PSBT Signer will now check transactions against it. It’s on the Saved Wallets tab.');
             return true;
         }
         _descSaveResult('bad', 'Not saved: ' + (res.error || 'unknown error.'));
@@ -35225,13 +35377,16 @@ async function desc_openSavedWallet(i) {
     if (r.parsed.isMulti) {
         var others = r.parsed.msN === 2 ? 'Key 2' : 'Keys 2–' + r.parsed.msN;
         note = fill.filled
-            ? ' ' + others + (r.parsed.msN === 2 ? ' is' : ' are') + ' filled in above from it, so Generate Descriptor rebuilds this wallet.'
-            : ' ' + others + (r.parsed.msN === 2 ? ' wasn’t' : ' weren’t') + ' filled in: ' + fill.reason;
+            ? ' On Build Multi, ' + others + (r.parsed.msN === 2 ? ' is' : ' are') + ' filled in from it, so Generate Descriptor there rebuilds this wallet.'
+            : ' On Build Multi, ' + others + (r.parsed.msN === 2 ? ' wasn’t' : ' weren’t') + ' filled in: ' + fill.reason;
     } else {
         note = fill.filled
-            ? ' The form above is set to it, so Generate Descriptor rebuilds this wallet.'
-            : ' ' + fill.reason;
+            ? ' Build Single is set to it, so Generate Descriptor there rebuilds this wallet.'
+            : ' ' + fill.reason.replace('The form above', 'Build Single');
     }
+    // Filling the form switched to its tab: come back to Saved Wallets, and
+    // show the wallet's card (Receive, exports, QR, Print) below the list.
+    desc_setMode('saved', true);
     _descLoadWatchOnly(w.descriptor, r.parsed, 'Opened saved wallet “' + w.name + '”: ', note);
 }
 
@@ -35330,6 +35485,62 @@ async function _descFillMultisigForm(p) {
         slot++;
     });
     return { filled: true };
+}
+
+/* Rename: an inline box in the wallet's row. Show an Address keeps its
+   address counters by the descriptor's checksum, so a new name loses nothing. */
+function desc_startRenameSavedWallet(i) {
+    var w = _savedWallets[i];
+    var rows = document.querySelectorAll('#desc-saved-list .desc-saved-row');
+    var row = rows[i];
+    if (!w || !row) return;
+    var old = row.querySelector('.desc-saved-rename');
+    if (old) { old.remove(); return; }
+    var box = document.createElement('div');
+    box.className = 'desc-saved-rename';
+    box.style.cssText = 'flex: 1 1 100%; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; padding-top: 0.4rem;';
+    var input = document.createElement('input');
+    input.type = 'text'; input.className = 'skb-input'; input.maxLength = 64; input.value = w.name;
+    input.spellcheck = false; input.autocomplete = 'off'; input.setAttribute('aria-label', 'New name');
+    input.style.cssText = 'flex: 1 1 14rem; min-width: 0;';
+    var save = document.createElement('button');
+    save.type = 'button'; save.className = 'skb-btn'; save.textContent = 'Save name';
+    var cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'skb-btn'; cancel.textContent = 'Cancel';
+    var msg = document.createElement('div');
+    msg.className = 'desc-saved-meta'; msg.style.cssText = 'flex: 1 1 100%; display: none;';
+    cancel.onclick = function () { box.remove(); };
+    save.onclick = async function () { await desc_renameSavedWallet(i, input.value, msg, save); };
+    input.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); save.onclick(); }
+        if (e.key === 'Escape') box.remove();
+    };
+    box.appendChild(input); box.appendChild(save); box.appendChild(cancel); box.appendChild(msg);
+    row.appendChild(box);
+    setTimeout(function () { input.focus(); input.select(); }, 0);
+}
+
+async function desc_renameSavedWallet(i, newName, msgEl, btn) {
+    var w = _savedWallets[i];
+    var say = function (text) {
+        if (msgEl) { msgEl.textContent = text; msgEl.style.display = text ? 'block' : 'none'; msgEl.style.color = 'var(--skb-danger, #ff3c3c)'; }
+        else if (text) showStatus(text, 'error');
+    };
+    if (!w) return false;
+    var name = String(newName || '').trim();
+    if (name === w.name) { _descRenderSavedWallets(); return true; }
+    var err = _savedWalletNameError(name, i);
+    if (err) { say(err); return false; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    var list = _savedWallets.map(function (x, j) { return j === i ? { name: name, descriptor: x.descriptor, added: x.added } : x; });
+    var res = await _savedWalletsStore(list);
+    if (!res.saved) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save name'; }
+        say('Not renamed: ' + (res.error || 'unknown error.'));
+        return false;
+    }
+    showStatus('Renamed “' + w.name + '” to “' + name + '”.', 'success');
+    return true;
 }
 
 async function desc_removeSavedWallet(i) {
@@ -49414,6 +49625,14 @@ function tfa_renderTable() {
     @media screen {
       :root { color-scheme: dark; }
       :root[data-theme="light"] { color-scheme: light; }
+      /* A dropdown's open list: the kiosk's Chromium drew it white while
+         the options took the theme's light text, so in dark mode they were
+         nearly unreadable. Give the options the theme's colors. */
+      select option, select optgroup {
+        background-color: var(--skb-bg-input, var(--skb-bg));
+        color: var(--skb-text);
+      }
+      select option:disabled { color: var(--skb-text-muted); }
     }
     :where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--skb-primary); }
 

@@ -293,5 +293,64 @@ const runDrop = (root, block = dropBlock) => bash('set -euo pipefail\n' + block.
   else ck('grow-transfer.sh passes its tests (real sgdisk on disk images)', r.status === 0, (r.stdout || '').split('\n').filter((l) => /FAIL|passed/.test(l)).join(' | ') + (r.stderr || ''));
 }
 
+// ---- 10. Restore brings back data only (requests, links and devices never) ----
+{
+  const r = spawnSync('python3', [join(OS, 'tests', 'test-restore-copy.py')], { encoding: 'utf8', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
+  ck('Restore copies data only: no requests, links or special files (test-restore-copy.py)', r.status === 0, (r.stdout || '').split('\n').filter((l) => /FAIL|passed/.test(l)).join(' | ') + (r.stderr || ''));
+  const boot = read('safekeep-boot.sh');
+  ck('Restore no longer uses cp -a or copies top-level files', !/sudo cp -a "\$PROBE_ROOT\/\$VDIR\/\." /.test(boot) && !/root-level files copied/.test(boot));
+}
+
+// ---- 11. Audit fixes (Nov 2026): swap, DMA, sleep, crash restart, build checks ----
+{
+  const grub = readFileSync(join(OS, 'grub.cfg'), 'utf8');
+  const lines = grub.split('\n').filter((l) => /^\s*linux\s/.test(l));
+  ck('every boot entry turns swap off (noswap)', lines.length === 3 && lines.every((l) => / noswap /.test(l)), lines.join(' | '));
+  ck('FireWire controllers are blocked (a FireWire device can read memory directly)',
+    ['firewire_ohci', 'firewire_sbp2', 'firewire_core'].every((m) => new RegExp('^blacklist ' + m + '$', 'm').test(harden) && new RegExp('^install ' + m + ' /bin/false$', 'm').test(harden)));
+  ck('the computer never sleeps or hibernates',
+    /HandleLidSwitch=ignore/.test(harden) && /HandleSuspendKey=ignore/.test(harden) && /AllowSuspend=no/.test(harden) && /AllowHibernation=no/.test(harden)
+    && /for _t in sleep\.target suspend\.target hibernate\.target hybrid-sleep\.target suspend-then-hibernate\.target; do\n    systemctl mask "\$_t"/.test(harden));
+  const swapScript = harden.match(/cat > \/etc\/initramfs-tools\/scripts\/casper-bottom\/13swap << 'NOSWAP_EOF'\n([\s\S]*?)\nNOSWAP_EOF\n/);
+  ck('casper\'s startup swap script is replaced by one that turns nothing on', !!swapScript && !/swapon/.test(swapScript[1]) && /exit 0\s*$/.test(swapScript[1])
+    && harden.indexOf('NOSWAP_EOF') < harden.indexOf('update-initramfs -u -k all') && /systemctl mask swap\.target/.test(harden));
+  if (swapScript) {
+    const r1 = spawnSync('sh', ['-c', swapScript[1], 'sh', 'prereqs'], { encoding: 'utf8' });
+    const r2 = spawnSync('sh', ['-c', swapScript[1]], { encoding: 'utf8' });
+    ck('  it answers initramfs-tools\' prereqs call and exits cleanly', r1.status === 0 && r1.stdout.trim() === '' && r2.status === 0);
+  }
+  const build = read('build.sh');
+  ck('the build unpacks the initramfs and stops if it would still turn on swap',
+    /chroot "\$CHROOT_DIR" unmkinitramfs/.test(build) && /grep -q "SafeKeep: replaces casper's 13swap" "\$SK_SWAP" \|\| grep -q swapon "\$SK_SWAP"/.test(build));
+  const chk = build.indexOf('INITRD_IN_CHROOT=');
+  ck('the build checks the initramfs (no network drivers, has the module blocks) after hardening',
+    chk > build.indexOf('chroot_step chroot "$CHROOT_DIR" /bin/bash -c "safekeep-harden"') && chk < build.indexOf('mksquashfs "$CHROOT_DIR"')
+    && /lsinitramfs/.test(build) && /drivers\/net\|drivers\/bluetooth\|net\/wireless\|net\/bluetooth/.test(build) && /safekeep-no-host-storage\.conf' \\\n    \|\| \{ echo "ERROR/.test(build));
+  ck('the build stops if the firewall isn\'t installed, set to drop, and enabled',
+    /\[ -x "\$CHROOT_DIR\/usr\/sbin\/nft" \] \|\| \{ echo "ERROR/.test(build) && /policy drop;' "\$CHROOT_DIR\/etc\/nftables\.conf"/.test(build) && /nftables\.service >\/dev\/null 2>&1 \\\n    \|\| \{ echo "ERROR/.test(build));
+  ck('the ruleset the build looks for is the one hardening writes', harden.includes('type filter hook output priority 0; policy drop;'));
+  const boot = read('safekeep-boot.sh');
+  const crash = between(boot, '# Still unlocked from a previous run?', '\nfi\n');
+  ck('a restart after a crash locks the vault instead of reopening it',
+    !/Vault already mounted\. Launching browser/.test(boot) && !/launch_browser/.test(crash) && /sudo cryptsetup close "\$MAPPER_NAME"/.test(crash) && /exec sleep infinity/.test(crash));
+  ck('that check comes before first setup and the unlock prompt',
+    boot.indexOf('# Still unlocked from a previous run?') < boot.indexOf('Vault mounted after setup') && boot.indexOf('# Still unlocked from a previous run?') < boot.indexOf('unlock-vault || UNLOCK_EXIT=$?'));
+  const nameFn = boot.match(/\n\s*(_rlq_name_ok\(\) \{[\s\S]*?\n\s*\})\n/);
+  ck('Restore checks the backup\'s file name', !!nameFn);
+  if (nameFn) {
+    const okName = (n) => spawnSync('bash', ['-c', nameFn[1] + '\n_rlq_name_ok "$1"', '_', n]).status === 0;
+    ck('  accepts backup names', okName('SafeKeep-Backup-2026-11-23.7z') && okName('my backup.7Z'));
+    ck('  refuses paths, hidden files, other types and control characters',
+      !okName('../etc/x.7z') && !okName('a/b.7z') && !okName('.hidden.7z') && !okName('backup.zip') && !okName('') && !okName('bad\nname.7z'));
+  }
+  ck('Restore leaves no password or path file behind', !/\.archive_pw/.test(boot) && !/\.archive_path/.test(boot));
+  ck('an inspected backup that is never restored is cleared after 10 minutes', /\.inspect_token/.test(boot) && /sleep 600/.test(boot), 'expects .inspect_token and sleep 600');
+  const app = readFileSync(join(HERE, 'boot.html'), 'utf8');
+  ck('passphrase generator: 6 words by default, shown as selected',
+    /var pp_config = \{\n    wordCount: 6,/.test(app) && /id="pp-wc-6" style="flex: 1; background: var\(--skb-primary\)/.test(app) && /id="pp-wc-4" style="flex: 1; background: var\(--skb-bg-input\);"/.test(app));
+  ck('Auto-Lock also checks the real time (a timer pauses while a computer sleeps)',
+    /function _checkAutoLockDeadline\(\) \{/.test(app) && /setInterval\(_checkAutoLockDeadline, 5000\)/.test(app));
+}
+
 console.log(`\nOS LOCKDOWN: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
