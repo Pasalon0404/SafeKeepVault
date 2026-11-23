@@ -11,7 +11,7 @@
 #  Usage (on any computer with npm and Python 3):
 #     npm pack zxcvbn@4.4.2 && tar xzf zxcvbn-4.4.2.tgz
 #     python3 make-pwcheck-lists.py package/lib/frequency_lists.js \
-#         ../seed-xor-tool/node_modules/@scure/bip39/wordlists/english.js
+#         ../app/node_modules/@scure/bip39/wordlists/english.js
 # =====================================================================
 import json
 import re

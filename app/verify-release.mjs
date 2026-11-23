@@ -16,7 +16,7 @@
  * number and cannot match. Exit codes: 0 match, 1 mismatch, 2 could not check.
  */
 
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
@@ -67,7 +67,8 @@ let rebuilt;
 try {
     console.log(`\nRebuilding in ${work} …`);
     git('worktree', 'add', '--detach', work, commit);
-    const app = join(work, 'seed-xor-tool');
+    // The app's folder was seed-xor-tool/ until Nov 2026; releases from before then still have it.
+    const app = existsSync(join(work, 'app', 'package.json')) ? join(work, 'app') : join(work, 'seed-xor-tool');
     const run = (cmd, args) => execFileSync(cmd, args, { cwd: app, stdio: ['ignore', 'inherit', 'inherit'] });
     run('npm', ['ci', '--no-audit', '--no-fund']);
     run('npm', ['run', 'build']);

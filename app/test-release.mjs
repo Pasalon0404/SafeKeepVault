@@ -108,7 +108,7 @@ else {
     const checkout = job.steps.find((s) => s.uses?.startsWith('actions/checkout@'));
     ck('full-history checkout (build number = commit count)', checkout?.with?.['fetch-depth'] === 0);
     ck('checkout does not persist credentials', checkout?.with?.['persist-credentials'] === false);
-    ck('Node version from .nvmrc', job.steps.some((s) => s.with?.['node-version-file'] === 'seed-xor-tool/.nvmrc'));
+    ck('Node version from .nvmrc', job.steps.some((s) => s.with?.['node-version-file'] === 'app/.nvmrc'));
     ck('tag must equal v$(cat VERSION)', run.includes('want="v$(cat VERSION)"') && run.includes('"$TAG" != "$want"'));
     ck('npm ci', run.includes('npm ci'));
     ck('runs every test-*.mjs', run.includes('for f in test-*.mjs') && run.includes('node "$f"'));
