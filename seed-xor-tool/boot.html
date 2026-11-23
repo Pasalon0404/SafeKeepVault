@@ -8300,8 +8300,8 @@
                                 <div style="margin-bottom: 1rem;">
                                     <label style="font-size: 0.8125rem; color: var(--skb-text-muted); display: block; margin-bottom: 0.5rem;">Word Count</label>
                                     <div style="display: flex; gap: 0.5rem;">
-                                        <button type="button" class="skb-btn" id="pp-wc-4" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setWordCount(4)">4 Words</button>
-                                        <button type="button" class="skb-btn" id="pp-wc-6" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(6)">6 Words</button>
+                                        <button type="button" class="skb-btn" id="pp-wc-4" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(4)">4 Words</button>
+                                        <button type="button" class="skb-btn" id="pp-wc-6" style="flex: 1; background: var(--skb-primary); color: black; font-weight: 600;" onclick="pp_setWordCount(6)">6 Words</button>
                                         <button type="button" class="skb-btn" id="pp-wc-8" style="flex: 1; background: var(--skb-bg-input);" onclick="pp_setWordCount(8)">8 Words</button>
                                     </div>
                                 </div>
@@ -11753,6 +11753,20 @@ window.skbIdleTimers = (function _installIdleTimers() {
         _autoLockTimerId = setTimeout(_fireAutoLock, ms);
     }
 
+    // Wall-clock backstop. setTimeout counts only while the computer runs,
+    // so if it ever slept (SafeKeep turns sleep off, but firmware can still
+    // force it) the timer would resume where it paused and the vault would
+    // stay open on wake. Every 5 s, compare the real time since the last
+    // activity with the Auto-Lock setting; past it, lock now.
+    function _checkAutoLockDeadline() {
+        if (state.autoLockMinutes <= 0 || !_lastActivity) return;
+        if (Date.now() - _lastActivity >= state.autoLockMinutes * 60 * 1000) {
+            _lastActivity = Date.now();   // once per deadline, not every 5 s
+            _clearAutoLockTimer();
+            _fireAutoLock();
+        }
+    }
+
     function _fireAutoLock() {
         // Skip auto-lock if there's nothing to lock — no seed loaded, or
         // we're already on the welcome / unlock screen. Defensive check
@@ -11896,9 +11910,11 @@ window.skbIdleTimers = (function _installIdleTimers() {
         _restore();
         _syncInputsToState();
         _attachActivityListeners();
+        _lastActivity = Date.now();
         _scheduleAutoLockTimer();
         _scheduleAutoOffTimer();
         _applyDisplaySleepToOS();
+        setInterval(_checkAutoLockDeadline, 5000);
     }
 
     if (document.readyState === 'loading') {
@@ -11915,6 +11931,7 @@ window.skbIdleTimers = (function _installIdleTimers() {
         onAutoLockInput:     onAutoLockInput,
         onAutoOffInput:      onAutoOffInput,
         stayOn:              function() { _lastActivity = Date.now(); _scheduleAutoLockTimer(); _scheduleAutoOffTimer(); },
+        _checkAutoLockDeadline: _checkAutoLockDeadline,   // tests
         getState:            function() { return { displaySleepMinutes: state.displaySleepMinutes, autoLockMinutes: state.autoLockMinutes, autoOffMinutes: state.autoOffMinutes }; }
     };
 })();
@@ -29842,7 +29859,7 @@ const WORDLIST = window.BtcMath?.wordlist || [];
 // separators, capitalization, and optional number/symbol suffixes.
 
 var pp_config = {
-    wordCount: 4,
+    wordCount: 6,     // 66 bits; 4 words (44 bits) is too few to stand against a guessing attack on a stolen wallet
     separator: '-',
     capitalization: 'lower',  // 'lower' | 'title' | 'upper'
     lastPassphrase: '',

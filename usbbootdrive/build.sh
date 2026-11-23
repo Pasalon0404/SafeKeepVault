@@ -512,6 +512,30 @@ chroot_step chroot "$CHROOT_DIR" /usr/bin/env SAFEKEEP_DEV_SHELL="$SAFEKEEP_DEV_
 echo "Running OS hardening in chroot..."
 chroot_step chroot "$CHROOT_DIR" /bin/bash -c "safekeep-harden"
 
+# Check what will ship, not what hardening meant to do. A failed initramfs
+# rebuild or nftables install only prints a warning there.
+#  - The startup image (initramfs) loads drivers before the system starts:
+#    it must hold no network or Bluetooth driver and must carry the module
+#    blocks (so FireWire and the host-disk drivers stay off from the start).
+#  - The firewall must be installed, enabled, and drop by default.
+INITRD_IN_CHROOT=$(cd "$CHROOT_DIR" && ls boot/initrd.img-* 2>/dev/null | sort -V | tail -1)
+[ -n "$INITRD_IN_CHROOT" ] || { echo "ERROR: no initramfs in the chroot." >&2; exit 1; }
+INITRD_LIST=$(chroot "$CHROOT_DIR" lsinitramfs "/$INITRD_IN_CHROOT" 2>/dev/null) \
+    || { echo "ERROR: can't list the initramfs (/$INITRD_IN_CHROOT)." >&2; exit 1; }
+if printf '%s\n' "$INITRD_LIST" | grep -Eq '/kernel/(drivers/net|drivers/bluetooth|net/wireless|net/bluetooth|net/mac80211)/.*\.ko'; then
+    echo "ERROR: the initramfs still holds network or Bluetooth drivers:" >&2
+    printf '%s\n' "$INITRD_LIST" | grep -E '/kernel/(drivers/net|drivers/bluetooth|net/wireless|net/bluetooth|net/mac80211)/' | head -5 >&2
+    exit 1
+fi
+printf '%s\n' "$INITRD_LIST" | grep -q 'modprobe.d/safekeep-no-host-storage.conf' \
+    || { echo "ERROR: the initramfs lacks SafeKeep's module blocks (was it rebuilt after hardening?)." >&2; exit 1; }
+[ -x "$CHROOT_DIR/usr/sbin/nft" ] || { echo "ERROR: nftables (the firewall) isn't installed." >&2; exit 1; }
+grep -q 'type filter hook output priority 0; policy drop;' "$CHROOT_DIR/etc/nftables.conf" 2>/dev/null \
+    || { echo "ERROR: /etc/nftables.conf isn't SafeKeep's drop-everything ruleset." >&2; exit 1; }
+ls "$CHROOT_DIR"/etc/systemd/system/*.wants/nftables.service >/dev/null 2>&1 \
+    || { echo "ERROR: nftables.service isn't enabled." >&2; exit 1; }
+echo "Checked: initramfs has no network drivers and has the module blocks; the firewall is installed and enabled."
+
 # Maintainer key for checking signed updates, as a binary keyring for gpgv.
 KEY_FPR=$(GNUPGHOME=$(mktemp -d) gpg --batch --with-colons --show-keys "$MAINTAINER_KEY" 2>/dev/null \
     | awk -F: '$1=="fpr" {print $10; exit}')

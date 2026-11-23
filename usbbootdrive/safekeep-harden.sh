@@ -275,6 +275,17 @@ install qmi_wwan /bin/false
 blacklist thunderbolt_net
 install thunderbolt_net /bin/false
 
+# --- FireWire controllers: a FireWire device can read and write memory
+# directly (DMA), so a plugged-in device could read the unlocked vault's
+# keys. Nothing in SafeKeep uses FireWire. (Thunderbolt stays: USB-C docks
+# need it, and without the bolt daemon new devices get no DMA access.)
+blacklist firewire_ohci
+blacklist firewire_sbp2
+blacklist firewire_core
+install firewire_ohci /bin/false
+install firewire_sbp2 /bin/false
+install firewire_core /bin/false
+
 # --- Virtual / tunnel interfaces ---
 # Prevent software-defined networking even if someone gets a shell.
 blacklist tun
@@ -992,6 +1003,38 @@ systemctl mask autovt@.service 2>/dev/null || true
 systemctl mask serial-getty@.service 2>/dev/null || true
 echo "  Masked: getty@tty1..6, getty.target, autovt@, serial-getty@"
 
+# --- 5a2. No sleep or hibernation ---
+# A sleeping computer keeps the unlocked vault's key in memory, and the
+# app's Auto-Lock and Auto-Off timers stop counting while it sleeps: wake
+# it hours later and the vault is open. So SafeKeep never sleeps. Closing
+# the lid or pressing a sleep key does nothing; the timers keep running
+# and lock the vault, then power off, as set in Device Options.
+# (Hibernation would also write memory to disk; there's no swap, and it's
+# blocked here too.)
+cat > /etc/systemd/logind.conf.d/20-safekeep-no-sleep.conf << 'NOSLEEP_EOF'
+# SafeKeep: the computer never sleeps or hibernates (the vault stays
+# unlocked in memory while asleep; Auto-Lock and Auto-Off would pause).
+[Login]
+HandleSuspendKey=ignore
+HandleHibernateKey=ignore
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+IdleAction=ignore
+NOSLEEP_EOF
+mkdir -p /etc/systemd/sleep.conf.d
+cat > /etc/systemd/sleep.conf.d/10-safekeep-no-sleep.conf << 'SLEEPCONF_EOF'
+[Sleep]
+AllowSuspend=no
+AllowHibernation=no
+AllowSuspendThenHibernate=no
+AllowHybridSleep=no
+SLEEPCONF_EOF
+for _t in sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target; do
+    systemctl mask "$_t" 2>/dev/null || true
+done
+echo "  Disabled sleep and hibernation (logind ignores the lid and sleep keys; sleep targets masked)"
+
 # --- 5b. Apport + coredumps ---
 # Mask every apport-related unit. apport.service is the crash
 # forwarder; apport-autoreport and apport-forward are periodic timers
@@ -1518,7 +1561,7 @@ mkdir -p /etc/initramfs-tools/conf.d
 
 # update-initramfs reads /etc/modprobe.d/ automatically when run.
 if command -v update-initramfs &>/dev/null; then
-    update-initramfs -u -k all 2>/dev/null || echo "  Warning: initramfs rebuild failed (may be normal in chroot)"
+    update-initramfs -u -k all 2>/dev/null || echo "  Warning: initramfs rebuild failed (build.sh checks the result and stops the build if the blocks are missing)"
     echo "  Initramfs rebuilt with module blacklists."
 else
     echo "  Warning: update-initramfs not found — blacklists will apply after next manual rebuild."
