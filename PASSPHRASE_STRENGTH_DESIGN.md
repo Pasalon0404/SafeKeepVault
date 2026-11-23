@@ -86,7 +86,7 @@ Built Oct 22, 2026, and tested on a stick. Item 3 below (the unlock
 warning) was built with Part 3.
 
 **The estimator.** One small, cautious estimator, written twice:
-`seed-xor-tool/shared/pwcheck.js` draws the bar in the app, and
+`app/shared/pwcheck.js` draws the bar in the app, and
 `usbbootdrive/safekeep-pwcheck.py`, a line-by-line port, enforces the
 rule on the stick. `test-pwcheck.mjs` runs both on about 2,800 passwords
 and requires the same bits, band, reasons and message, so they can't

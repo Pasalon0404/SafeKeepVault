@@ -156,7 +156,7 @@ async function buildOfflineSuite() {
     // ------------------------------------------------------------------
     // VERSION STAMP — automatic, nothing to edit per build
     // ------------------------------------------------------------------
-    // Release number: seed-xor-tool/VERSION (bump it by hand for a release).
+    // Release number: app/VERSION (bump it by hand for a release).
     // Build number:   the git commit count (goes up by one with every commit).
     // Commit:         short git hash, so any stick traces to one exact commit.
     // "+ local changes" marks a build made from uncommitted app source,

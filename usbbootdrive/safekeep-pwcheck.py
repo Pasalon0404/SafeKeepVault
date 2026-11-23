@@ -2,7 +2,7 @@
 # =====================================================================
 #  safekeep-pwcheck.py — password strength check (on the stick)
 # =====================================================================
-#  A line-by-line port of seed-xor-tool/shared/pwcheck.js, which explains
+#  A line-by-line port of app/shared/pwcheck.js, which explains
 #  the method. That copy draws the bar in the app; this one enforces the
 #  rule: setup-vault.sh refuses a Weak Master Passphrase, and the backup
 #  watcher in safekeep-boot.sh refuses a Weak Encrypted Backup password.

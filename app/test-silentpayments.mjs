@@ -2,7 +2,7 @@
  * BIP-352 Silent Payments — Phase 1 test harness
  * ==============================================
  *
- * Run from inside seed-xor-tool/ (so @noble/@scure resolve):
+ * Run from inside app/ (so @noble/@scure resolve):
  *     node test-silentpayments.mjs
  *
  * Two layers of testing:
@@ -348,7 +348,7 @@ const vectorPath = candidates.find((p) => existsSync(p));
 console.log('\n=== Official BIP-352 "Sending" vectors ===\n');
 if (!vectorPath) {
   console.log('  (skipped) send_and_receive_test_vectors.json not found.');
-  console.log('  Drop the official file into seed-xor-tool/ to run the spec suite.');
+  console.log('  Drop the official file into app/ to run the spec suite.');
   console.log('  Searched:');
   for (const c of candidates) console.log('    - ' + c);
 } else {

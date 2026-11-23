@@ -50,7 +50,7 @@ console.log('3. Wiring');
   ck('result goes to RAM', boot.includes('UPDATE_RESULT="$SIGNAL_DIR/UPDATE_RESULT.json"'));
   ck('bash -n safekeep-boot.sh', sh('bash', ['-n', join(OS, 'safekeep-boot.sh')]).status === 0);
   ck('bash -n make-update.sh', sh('bash', ['-n', join(OS, 'make-update.sh')]).status === 0);
-  const js = read('seed-xor-tool/shared/boot.js');
+  const js = read('app/shared/boot.js');
   ck('app: UPDATE_REQUEST / UPDATE_ACK are system trigger files', js.includes("'UPDATE_REQUEST', 'UPDATE_ACK'"));
   ck('app: reads UPDATE_RESULT from RAM', js.includes('/UPDATE_RESULT.json'));
   ck('app: exports updateCheck and updateInstall', /updateCheck,\s*\n\s*updateInstall,/.test(js));
@@ -333,7 +333,7 @@ sign(U1, MFPR);
 }
 
 {
-  const ui = read('seed-xor-tool/boot.html');
+  const ui = read('app/boot.html');
   ck('Device Options has Show update log, reading the RAM log', ui.includes('onclick="updSettingsShowLog()">Show update log</button>') && ui.includes("read('file:///tmp/safekeep-update.log')"));
 }
 

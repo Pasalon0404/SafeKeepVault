@@ -4,12 +4,12 @@
 # =====================================================================
 #
 #  For building SafeKeep OS from a fresh clone of the repo on a single
-#  Linux machine. It compiles seed-xor-tool from source and puts the
+#  Linux machine. It compiles app from source and puts the
 #  result in usbbootdrive/src/dist, where build.sh and quick-update.sh
 #  expect it. (The usual Mac → rsync workflow does not need this.)
 #
 #  It always rebuilds from source — it never reuses an existing
-#  seed-xor-tool/dist.
+#  app/dist.
 #
 #  Needs: git, Node.js 22+ and npm. Run WITHOUT sudo, from usbbootdrive/:
 #     bash prepare-app.sh
@@ -20,7 +20,7 @@ set -euo pipefail
 die() { echo ""; echo "ERROR: $*" >&2; exit 1; }
 
 cd "$(dirname "$0")"
-APP_DIR="../seed-xor-tool"
+APP_DIR="../app"
 
 [ -f build.sh ] || die "run this from the usbbootdrive folder of a repo checkout."
 [ -f "$APP_DIR/package.json" ] || die "$APP_DIR not found — this needs a full clone of the repo."

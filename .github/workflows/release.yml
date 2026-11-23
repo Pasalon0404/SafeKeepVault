@@ -36,7 +36,7 @@ jobs:
       attestations: write   # store the attestation
     defaults:
       run:
-        working-directory: seed-xor-tool
+        working-directory: app
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -47,7 +47,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version-file: seed-xor-tool/.nvmrc
+          node-version-file: app/.nvmrc
 
       - name: Tag must match VERSION
         env:
@@ -55,7 +55,7 @@ jobs:
         run: |
           want="v$(cat VERSION)"
           if [ "$TAG" != "$want" ]; then
-            echo "::error::Tag $TAG does not match seed-xor-tool/VERSION ($want)."
+            echo "::error::Tag $TAG does not match app/VERSION ($want)."
             exit 1
           fi
 

@@ -212,7 +212,7 @@ ODT = make_zip([('mimetype', 'application/vnd.oasis.opendocument.text'), ('conte
 OTT = make_zip([('mimetype', 'application/vnd.oasis.opendocument.text-template'), ('content.xml', '<x/>')])
 DOCX = make_zip([('[Content_Types].xml', '<x/>'), ('word/document.xml', '<x/>')])
 DEFLATED_MIME = make_zip([('mimetype', 'application/vnd.oasis.opendocument.text')], first_stored=False)
-REAL = open(os.path.join(HERE, '..', '..', 'seed-xor-tool', 'test-fixtures', 'letter-of-instruction.odt'), 'rb').read()
+REAL = open(os.path.join(HERE, '..', '..', 'app', 'test-fixtures', 'letter-of-instruction.odt'), 'rb').read()
 for i, (data, name) in enumerate([(ODT, 'a.odt'), (OTT, 'b.ott'), (DOCX, 'c.docx'), (DEFLATED_MIME, 'd.odt'), (REAL, 'Letter.odt'), (ODT, 'renamed.zip')]):
     send('%016x' % (0x200 + i), name, data)
 route()

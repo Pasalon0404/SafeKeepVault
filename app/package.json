@@ -1,5 +1,5 @@
 {
-  "name": "seed-xor-tool",
+  "name": "safekeepvault-app",
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",

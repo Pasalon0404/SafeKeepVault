@@ -576,7 +576,7 @@ Generate One for Me, Change Master Passphrase.
 
 v1.50 (Oct 21, `v1.50 · build 315 · ff1e6c3`) made seed generation safer
 (see "Seed entropy" below). v1.47 and later sticks install each release in
-place from Device Options → Update SafeKeep. `seed-xor-tool/VERSION` says
+place from Device Options → Update SafeKeep. `app/VERSION` says
 1.58: features merge to `main` without a bump, and builds from `main` are
 for the owner's own use until the owner says it's release time (see
 `CLAUDE.md`).
@@ -694,10 +694,10 @@ On the Mac:
 ```
 cd "<PROJECT_FOLDER>"
 git checkout main && git pull
-cd seed-xor-tool
+cd app
 npm run build
 cd ..
-rsync -av --delete --exclude '* (1)*' seed-xor-tool/dist/ <ZBOOK_USER>@<ZBOOK_IP>:/home/safekeep-build/src/dist/
+rsync -av --delete --exclude '* (1)*' app/dist/ <ZBOOK_USER>@<ZBOOK_IP>:/home/safekeep-build/src/dist/
 rsync -av --exclude 'workspace/' --exclude '*.img' --exclude '* (1)*' --exclude '.DS_Store' usbbootdrive/ <ZBOOK_USER>@<ZBOOK_IP>:/home/safekeep-build/
 ```
 The second rsync is only needed when something in `usbbootdrive/` changed
@@ -713,7 +713,7 @@ from a `vX.Y` tag; see `VERIFYING.md` for checking and signing them.
 building from a fresh clone on one Linux machine runs `bash prepare-app.sh`
 (no sudo) in `usbbootdrive/` instead of the first rsync: it runs `npm ci` +
 `npm run build` and copies the result into `usbbootdrive/src/dist/`.
-`seed-xor-tool/.npmrc` sets `legacy-peer-deps=true` because
+`app/.npmrc` sets `legacy-peer-deps=true` because
 `vite-plugin-node-polyfills@0.25.0` doesn't declare Vite 8 support yet;
 without it a clean `npm ci` fails. Don't run `npm audit fix --force`.
 
@@ -794,7 +794,7 @@ How every change to the boot scripts or the OS was tested on Oct 20
 
 ### Dev testing (no USB)
 
-- On the Mac: `cd seed-xor-tool && npm run dev`, then open
+- On the Mac: `cd app && npm run dev`, then open
   `http://localhost:5173/boot.html?devMode=seeded`
   (also `normal`, `ephemeral`, `amnesia`). In seeded mode the vault holds
   the 24-word `abandon … art` seed (fingerprint `5436d724`). The Dev Drawer
@@ -804,7 +804,7 @@ How every change to the boot scripts or the OS was tested on Oct 20
   sandbox after `npm ci` (the old "rolldown binding missing" problem is
   gone). Playwright with the preinstalled Chromium can drive the dev server
   for screenshots at laptop size (1366×900).
-- Tests: `node <file>` for each `seed-xor-tool/test-*.mjs` — **53 files**,
+- Tests: `node <file>` for each `app/test-*.mjs` — **53 files**,
   all passing on Linux (Oct 28; `test-restore-check.mjs` needs `7z`
   (p7zip-full) for its archive cases and says SKIP without it; `test-entropy-built.mjs` needs
   `CHROMIUM_BINARY=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`). `test-change-passphrase.mjs`
@@ -813,7 +813,7 @@ How every change to the boot scripts or the OS was tested on Oct 20
   (GNU `sed`) and `test-updater.mjs` (`gpgv`). Nothing runs tests on push —
   only the release workflow, after the tag is pushed — so before tagging,
   run them on the ZBook (Node 22): clone the repo into `/tmp`, `npm ci` in
-  `seed-xor-tool`, then run each file. They extract real functions from `boot.html` (or
+  `app`, then run each file. They extract real functions from `boot.html` (or
   `shared/boot.js`) into a Node VM and check them against official vectors
   and real PSBTs built with `@scure/btc-signer`. Some also run the Python
   embedded in `safekeep-boot.sh` (Settings and Wallets watchers).
@@ -826,7 +826,7 @@ How every change to the boot scripts or the OS was tested on Oct 20
 
 ### Git rules
 
-- Commit **source only**. Never stage `seed-xor-tool/dist/`.
+- Commit **source only**. Never stage `app/dist/`.
 - The repo sits on a slow mount and sometimes leaves stale lock files:
   `rm -f .git/index.lock .git/HEAD.lock`, then add/commit.
 - A broken duplicate ref `.git/refs/heads/main (1)` makes `git log --all`
@@ -1224,7 +1224,7 @@ at a fully self-contained `boot.html` containing the wallet tools.
 
 Two distinct codebases live in this repo:
 
-- **`seed-xor-tool/`** — the Vite-built single-page web app. All
+- **`app/`** — the Vite-built single-page web app. All
   Bitcoin-related tools live in `boot.html` and its sibling files
   in `shared/`. This is what runs in the kiosk browser.
 - **`usbbootdrive/`** — the OS image build pipeline. Bash scripts
@@ -1250,11 +1250,11 @@ build, ~5 minutes on rebuilds (the debootstrap base is cached at
 ### Rebuild just the web app (without re-rolling the OS)
 
 ```bash
-cd seed-xor-tool/
+cd app/
 node build-offline.mjs
 ```
 
-Outputs to `seed-xor-tool/dist/`. Smoke-test the result by opening
+Outputs to `app/dist/`. Smoke-test the result by opening
 `dist/boot.html` directly in a desktop browser; the dev mock at the
 bottom of `shared/boot.js` simulates the SafeKeepOS bridge so the
 tools work without a real LUKS vault.
@@ -1269,7 +1269,7 @@ Or use Rufus (DD mode) / balenaEtcher on Windows/macOS.
 
 ### Test in dev mode (no USB needed)
 
-Open `seed-xor-tool/boot.html` directly in Chromium. The DEV_MODE
+Open `app/boot.html` directly in Chromium. The DEV_MODE
 auto-detection (top of `boot.html`, ~line 15) flips on when the
 URL is `file://` and not on the boot drive, exposing a Dev Drawer
 and a mock SafeKeepOS bridge with realistic dummy data. This lets
@@ -1331,7 +1331,7 @@ you iterate on UI without rebuilding the image.
 entire website folder/                  ← project root
 ├── PROJECT_NOTES.md                    ← this file
 ├── developer-pubkey.asc                ← maintainer's GPG public key
-├── seed-xor-tool/                      ← the web app (Vite)
+├── app/                      ← the web app (Vite)
 │   ├── boot.html                       ← THE single-file UI
 │   ├── boot-entry.js                   ← Vite entry that gets inlined
 │   ├── build-offline.mjs               ← custom Vite build (inlines everything)
@@ -1348,7 +1348,7 @@ entire website folder/                  ← project root
 │   └── public/                         ← static assets
 └── usbbootdrive/                       ← the OS image builder
     ├── build.sh                        ← Phase-by-phase build orchestrator
-    ├── prepare-app.sh                  ← builds seed-xor-tool from source into src/dist (fresh-clone builds)
+    ├── prepare-app.sh                  ← builds app from source into src/dist (fresh-clone builds)
     ├── chroot-setup.sh                 ← runs INSIDE the chroot (apt, configs)
     ├── safekeep-boot.sh                ← runtime boot orchestrator (lives at /usr/local/bin/safekeep-boot)
     ├── safekeep-harden.sh              ← hardening sweep (module blacklists, polkit, dconf, masked services)
@@ -1520,7 +1520,7 @@ partition) before any shutdown. The user can pull the USB and
 read the log on another machine post-mortem.
 
 ### 5. dist/boot.html drift
-The built distribution `seed-xor-tool/dist/boot.html` lags the
+The built distribution `app/dist/boot.html` lags the
 source until `node build-offline.mjs` runs. If the kiosk seems
 to ignore your fix, you forgot to rebuild. Add this to your
 verification routine: compare the fix's distinguishing string
@@ -1562,11 +1562,11 @@ Worth keeping in any future LLM agent's verification loop.
 ## Common workflows
 
 ### Fix a UI bug in boot.html
-1. Open `seed-xor-tool/boot.html` in a desktop browser
+1. Open `app/boot.html` in a desktop browser
 2. Reproduce the bug (DEV_MODE auto-enables for `file://`)
 3. Edit, reload, test
 4. `node build-offline.mjs` to roll the dist
-5. Smoke-test `seed-xor-tool/dist/boot.html`
+5. Smoke-test `app/dist/boot.html`
 6. `cd usbbootdrive && sudo bash build.sh` to roll the OS
 7. Flash, boot, verify
 

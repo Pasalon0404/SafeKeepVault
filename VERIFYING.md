@@ -83,7 +83,7 @@ and Node.js 22:
 
 ```sh
 git clone https://github.com/Pasalon0404/SafeKeepVault.git   # a full clone, not --depth 1
-cd SafeKeepVault/seed-xor-tool
+cd SafeKeepVault/app
 npm run verify-release -- /path/to/boot.html --sums /path/to/SHA256SUMS
 ```
 
@@ -116,7 +116,7 @@ it is about to install. Before flashing, check that it equals the release's
 
 ## For the maintainer: making a release
 
-1. Bump `seed-xor-tool/VERSION` (e.g. `1.36`), commit and push to `main`.
+1. Bump `app/VERSION` (e.g. `1.36`), commit and push to `main`.
 2. Tag the commit and push the tag. The tag must match `VERSION`:
    ```sh
    git tag v1.36 && git push origin v1.36
@@ -131,7 +131,7 @@ it is about to install. Before flashing, check that it equals the release's
 3. Check the release yourself, then sign it offline:
    ```sh
    gh release download v1.36 --pattern boot.html --pattern SHA256SUMS
-   (cd /path/to/SafeKeepVault/seed-xor-tool && npm run verify-release -- "$OLDPWD/boot.html" --sums "$OLDPWD/SHA256SUMS")
+   (cd /path/to/SafeKeepVault/app && npm run verify-release -- "$OLDPWD/boot.html" --sums "$OLDPWD/SHA256SUMS")
    gpg --local-user A333EB826F70A79A736F09948EA7DD8CEDBA86C2 --armor --detach-sign SHA256SUMS
    gh release upload v1.36 SHA256SUMS.asc
    ```
