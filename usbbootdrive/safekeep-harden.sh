@@ -1555,6 +1555,32 @@ echo ""
 echo "[7/7] REBUILDING INITRAMFS"
 echo "-------------------------------------------"
 
+# Never turn on swap. casper's casper-bottom/13swap runs `swapon` on every
+# swap partition it finds on /dev/sd*, /dev/hd* and /dev/vd* disks (a USB
+# drive plugged in at startup, for one), and casper 1.498 has no `noswap`
+# option to stop it: grub.cfg's noswap does nothing. A script of the same
+# name in /etc/initramfs-tools/scripts replaces casper's in the initramfs
+# (mkinitramfs copies /etc's scripts after /usr/share's). build.sh checks the
+# initramfs holds this one. safekeep-boot.sh's `swapoff -a`, before the
+# unlock prompt, stays as the second line; swap.target is masked as a third.
+mkdir -p /etc/initramfs-tools/scripts/casper-bottom
+cat > /etc/initramfs-tools/scripts/casper-bottom/13swap << 'NOSWAP_EOF'
+#!/bin/sh
+# SafeKeep: replaces casper's 13swap. Swap is never turned on: memory could
+# be written to a disk and outlive the session.
+PREREQ=""
+case $1 in
+prereqs)
+    echo "$PREREQ"
+    exit 0
+    ;;
+esac
+exit 0
+NOSWAP_EOF
+chmod 755 /etc/initramfs-tools/scripts/casper-bottom/13swap
+systemctl mask swap.target 2>/dev/null || true
+echo "  Swap: casper's startup swap script replaced by one that does nothing; swap.target masked"
+
 # Copy blacklist files into initramfs hook directory so they're baked
 # into the initial ramdisk and effective from the earliest boot stage.
 mkdir -p /etc/initramfs-tools/conf.d

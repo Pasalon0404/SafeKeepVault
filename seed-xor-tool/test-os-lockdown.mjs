@@ -311,7 +311,17 @@ const runDrop = (root, block = dropBlock) => bash('set -euo pipefail\n' + block.
   ck('the computer never sleeps or hibernates',
     /HandleLidSwitch=ignore/.test(harden) && /HandleSuspendKey=ignore/.test(harden) && /AllowSuspend=no/.test(harden) && /AllowHibernation=no/.test(harden)
     && /for _t in sleep\.target suspend\.target hibernate\.target hybrid-sleep\.target suspend-then-hibernate\.target; do\n    systemctl mask "\$_t"/.test(harden));
+  const swapScript = harden.match(/cat > \/etc\/initramfs-tools\/scripts\/casper-bottom\/13swap << 'NOSWAP_EOF'\n([\s\S]*?)\nNOSWAP_EOF\n/);
+  ck('casper\'s startup swap script is replaced by one that turns nothing on', !!swapScript && !/swapon/.test(swapScript[1]) && /exit 0\s*$/.test(swapScript[1])
+    && harden.indexOf('NOSWAP_EOF') < harden.indexOf('update-initramfs -u -k all') && /systemctl mask swap\.target/.test(harden));
+  if (swapScript) {
+    const r1 = spawnSync('sh', ['-c', swapScript[1], 'sh', 'prereqs'], { encoding: 'utf8' });
+    const r2 = spawnSync('sh', ['-c', swapScript[1]], { encoding: 'utf8' });
+    ck('  it answers initramfs-tools\' prereqs call and exits cleanly', r1.status === 0 && r1.stdout.trim() === '' && r2.status === 0);
+  }
   const build = read('build.sh');
+  ck('the build unpacks the initramfs and stops if it would still turn on swap',
+    /chroot "\$CHROOT_DIR" unmkinitramfs/.test(build) && /grep -q "SafeKeep: replaces casper's 13swap" "\$SK_SWAP" \|\| grep -q swapon "\$SK_SWAP"/.test(build));
   const chk = build.indexOf('INITRD_IN_CHROOT=');
   ck('the build checks the initramfs (no network drivers, has the module blocks) after hardening',
     chk > build.indexOf('chroot_step chroot "$CHROOT_DIR" /bin/bash -c "safekeep-harden"') && chk < build.indexOf('mksquashfs "$CHROOT_DIR"')

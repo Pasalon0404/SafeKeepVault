@@ -529,12 +529,24 @@ if printf '%s\n' "$INITRD_LIST" | grep -Eq '/kernel/(drivers/net|drivers/bluetoo
 fi
 printf '%s\n' "$INITRD_LIST" | grep -q 'modprobe.d/safekeep-no-host-storage.conf' \
     || { echo "ERROR: the initramfs lacks SafeKeep's module blocks (was it rebuilt after hardening?)." >&2; exit 1; }
+printf '%s\n' "$INITRD_LIST" | grep -q 'scripts/casper-bottom/13swap$' \
+    || { echo "ERROR: the initramfs has no casper-bottom/13swap (casper changed?)." >&2; exit 1; }
+SK_UNPACK=$(mktemp -d "$CHROOT_DIR/tmp/sk-initrd.XXXXXX")
+chroot "$CHROOT_DIR" unmkinitramfs "/$INITRD_IN_CHROOT" "/tmp/$(basename "$SK_UNPACK")" >/dev/null 2>&1 \
+    || { rm -rf "$SK_UNPACK"; echo "ERROR: can't unpack the initramfs to check it." >&2; exit 1; }
+SK_SWAP=$(find "$SK_UNPACK" -path '*/scripts/casper-bottom/13swap' -type f | head -1)
+if [ -z "$SK_SWAP" ] || ! grep -q "SafeKeep: replaces casper's 13swap" "$SK_SWAP" || grep -q swapon "$SK_SWAP"; then
+    rm -rf "$SK_UNPACK"
+    echo "ERROR: the initramfs still turns on swap (casper's 13swap wasn't replaced)." >&2
+    exit 1
+fi
+rm -rf "$SK_UNPACK"
 [ -x "$CHROOT_DIR/usr/sbin/nft" ] || { echo "ERROR: nftables (the firewall) isn't installed." >&2; exit 1; }
 grep -q 'type filter hook output priority 0; policy drop;' "$CHROOT_DIR/etc/nftables.conf" 2>/dev/null \
     || { echo "ERROR: /etc/nftables.conf isn't SafeKeep's drop-everything ruleset." >&2; exit 1; }
 ls "$CHROOT_DIR"/etc/systemd/system/*.wants/nftables.service >/dev/null 2>&1 \
     || { echo "ERROR: nftables.service isn't enabled." >&2; exit 1; }
-echo "Checked: initramfs has no network drivers and has the module blocks; the firewall is installed and enabled."
+echo "Checked: initramfs has no network drivers, has the module blocks and never turns on swap; the firewall is installed and enabled."
 
 # Maintainer key for checking signed updates, as a binary keyring for gpgv.
 KEY_FPR=$(GNUPGHOME=$(mktemp -d) gpg --batch --with-colons --show-keys "$MAINTAINER_KEY" 2>/dev/null \
