@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 19, 2026).**
+> **Start with the "Current state" section below (updated Nov 24, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,7 +9,80 @@
 
 ---
 
-## Current state (Nov 19, 2026) — v1.68
+## Current state (Nov 24, 2026) — v1.68, plus work on `main`
+
+**On `main`, not yet released** (owner's flash drive runs
+`v1.68 · build 603 · f42f434`, from a ZBook full build + quick update,
+Nov 24). The next release needs the full build: `safekeep-harden.sh`,
+`build.sh` and `grub.cfg` changed.
+
+- **Security audit and fixes** (#134, Nov 23). The owner asked for a full
+  audit: networking, disk access, Bluetooth, any way in to the vault, and
+  the cryptography (Chromium's `--no-sandbox` excluded, already decided).
+  Found no network or radio path in and no cryptographic errors. Fixed:
+  1. **Restore copied everything** in a backup into the vault, so a crafted
+     `.7z` could bring in request files the root watchers act on
+     (`seeds/WIPE_TRIGGER.txt` starts a factory reset) or links out of the
+     vault. Now a Python block in `safekeep-boot.sh` (`RESTORE_COPY_PY`)
+     copies only regular files from codex, passphrases, twofa, settings,
+     documents and `seeds/master-seed.json`; skips request names, links,
+     FIFOs and top-level files; turns a link in the vault back into a real
+     folder; writes via `.restoring` + `os.replace`, mode 0600. Test:
+     `usbbootdrive/tests/test-restore-copy.py`. Also `_rlq_name_ok` checks
+     the backup's name, the unused `.archive_pw`/`.archive_path` files are
+     gone, and an inspected backup never restored is deleted from
+     `/tmp/reliquary` after 10 minutes (`.inspect_token`). The password
+     is still on 7z's argv (root-only; accepted).
+  2. **Passphrase generator** defaults to 6 words (66 bits); 4 and 8 stay.
+  3. **No sleep or hibernation**: logind ignores the lid and sleep keys
+     (`logind.conf.d/20-safekeep-no-sleep.conf`), `sleep.conf.d` allows
+     none, the sleep targets are masked. Reason: asleep, the vault key
+     stays in memory and `setTimeout` (Auto-Lock, Auto-Off) pauses. The app
+     also checks Auto-Lock against `Date.now()` every 5 s
+     (`_checkAutoLockDeadline`). Tested: closing the lid leaves it on.
+  4. **Swap.** casper 1.498 (noble) has **no `noswap` option**: its
+     `casper-bottom/13swap` swapons every swap partition on `/dev/sd*`,
+     `/dev/hd*`, `/dev/vd*` at startup (a USB drive plugged in at boot,
+     for one). Hardening puts a do-nothing `13swap` in
+     `/etc/initramfs-tools/scripts/casper-bottom/` (mkinitramfs copies
+     /etc's scripts after /usr/share's, so it replaces casper's) and masks
+     `swap.target`; `swapoff -a` before the unlock prompt stays. `noswap`
+     is in `grub.cfg` anyway (harmless). Nothing updates `grub.cfg` after
+     flashing (not `quick-update.sh`, not the signed updater), which is why
+     the fix lives in the initramfs: updates carry it.
+  5. **FireWire** `firewire_ohci`, `firewire_sbp2`, `firewire_core` blocked
+     (DMA). Thunderbolt not blocked (USB-C docks; no bolt daemon, so new
+     devices get no DMA access).
+  6. **Build checks** in `build.sh`, right after hardening: `lsinitramfs`
+     shows no `drivers/net`, `drivers/bluetooth`, `net/wireless`,
+     `net/bluetooth`, `net/mac80211` modules and has
+     `modprobe.d/safekeep-no-host-storage.conf`; `unmkinitramfs` shows our
+     `13swap`; `/usr/sbin/nft` exists, `/etc/nftables.conf` drops by
+     default, `nftables.service` is enabled. It prints "Checked: initramfs
+     has no network drivers, has the module blocks and never turns on
+     swap; …". Before, a failed `update-initramfs` or nftables install only
+     printed a warning.
+  7. **Crash restart locks**: if the session starts with the vault still
+     mounted (only after a crash; Lock unmounts before re-running), it
+     unmounts and closes it and shows the unlock prompt; if it can't, it
+     halts with a "restart the computer" message.
+
+  Lockdown checks: `test-os-lockdown.mjs` section 11. Not fixed (process
+  only): the update signing key lives on the everyday Mac.
+- **Folder rename** (#135, Nov 24): `seed-xor-tool/` → `app/`, so the
+  repository reads clearly to outsiders. `verify-release` still rebuilds
+  older releases from `seed-xor-tool/`. The npm package is
+  `safekeepvault-app`. Links on GitHub pinned to a tag keep working; links
+  to `main` under `seed-xor-tool/` broke (prompt given for the website
+  session). On the Mac, the old folder (`node_modules`, `dist`) was left
+  behind by `git pull` and deleted by hand.
+- **Output Descriptor**: Saved Wallets is its own tab with Rename; the
+  tabs' underline is straight (exempted from `.boot-screen`'s radius rule);
+  "How this wallet is built" panel; Close (#134).
+- **Dark mode**: dropdown lists readable (`select option` colors) (#134).
+- **Transfer Drive fills larger flash drives** (#133, see "Open items").
+
+## v1.68 (Nov 19, 2026)
 
 **v1.68** (Nov 19, `v1.68 · build 583 · aa79837`) — Documents in the vault
 (#129, #130), a 900 MB vault on new flash drives, Paste without a prompt
@@ -1085,14 +1158,15 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-**Built (Nov 19), not yet released; see `TRANSFER_DRIVE_DESIGN.md`:** on flash drives larger than 8 GB,
+**Merged (#133, Nov 19), not yet released; see `TRANSFER_DRIVE_DESIGN.md`:** on flash drives larger than 8 GB,
 grow the Transfer Drive to fill the drive at first setup, while it's
 still empty (exFAT can't be resized in place, so it's re-created; skip
 it if files are already there). Discussed instead of a separate STORAGE
 partition, which would invite plugging the SafeKeep drive into everyday
 computers more often. Decided: the vault stays 900 MB, it's automatic,
 1 GB threshold, nothing for drives already set up. `grow-transfer.sh`,
-called by `setup-vault.sh`; needs a test on a real 16 GB+ drive.
+called by `setup-vault.sh`. Tested on Dave's backup flash drive: the
+Transfer Drive filled the drive. Not yet tried: Windows, and an 8 GB drive.
 
 1. **Updater** — see `UPDATER_DESIGN.md`. Live since v1.48: Dave's stick
    went v1.47 → v1.48 → builds 303–307 in place (Oct 20).
