@@ -1,6 +1,6 @@
 # SafeKeep Vault — Project Notes
 
-> **Start with the "Current state" section below (updated Nov 24, 2026).**
+> **Start with the "Current state" section below (updated Nov 27, 2026).**
 > Everything after the line marked *"Historical notes (May 2026)"* is the
 > original pickup guide. It is still useful for architecture and gotchas,
 > but parts of it are out of date. Where the two disagree, trust the
@@ -9,12 +9,17 @@
 
 ---
 
-## Current state (Nov 24, 2026) — v1.68, plus work on `main`
+## Current state (Nov 27, 2026) — v1.69
 
-**On `main`, not yet released** (owner's flash drive runs
-`v1.68 · build 603 · f42f434`, from a ZBook full build + quick update,
-Nov 24). The next release needs the full build: `safekeep-harden.sh`,
-`build.sh` and `grub.cfg` changed.
+**v1.69** (Nov 27, `v1.69 · build 607 · 91e3dfe`) — the security audit
+fixes, a Transfer Drive that fills larger flash drives, the Saved Wallets
+tab, dark dropdowns (#133–#137). Image `69396cac…b4e6`, app
+`7aa90c9f…93f2`. The first release built from `app/`; the workflow passed
+first time. Full `build.sh --release 1.69` on the ZBook. Tested before the
+release on Dave's flash drive at build 603 (same code but the version
+bump). Release notes in `release-notes/v1.69.md`.
+
+What's in it:
 
 - **Security audit and fixes** (#134, Nov 23). The owner asked for a full
   audit: networking, disk access, Bluetooth, any way in to the vault, and
@@ -81,6 +86,8 @@ Nov 24). The next release needs the full build: `safekeep-harden.sh`,
   "How this wallet is built" panel; Close (#134).
 - **Dark mode**: dropdown lists readable (`select option` colors) (#134).
 - **Transfer Drive fills larger flash drives** (#133, see "Open items").
+- **Not tried yet**: booting the v1.69 release image itself, and
+  installing `SafeKeep-Update-v1.69.tar` in place.
 
 ## v1.68 (Nov 19, 2026)
 
@@ -1158,7 +1165,7 @@ Chromium reads images or files, or a bug that affects SafeKeep).
 
 ### Open items / next steps
 
-**Merged (#133, Nov 19), not yet released; see `TRANSFER_DRIVE_DESIGN.md`:** on flash drives larger than 8 GB,
+**Released in v1.69 (#133); see `TRANSFER_DRIVE_DESIGN.md`:** on flash drives larger than 8 GB,
 grow the Transfer Drive to fill the drive at first setup, while it's
 still empty (exFAT can't be resized in place, so it's re-created; skip
 it if files are already there). Discussed instead of a separate STORAGE
